@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "repairOrders": {
+      "title": "Repair Order",
+      "description": "Vehicle repair orders and service tickets tracked across the dealership",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "vehicle": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "advisorId": { "type": "string" },
+        "advisorName": { "type": "string" },
+        "techId": { "type": "string" },
+        "techName": { "type": "string" },
+        "bay": { "type": "string" },
+        "status": { "type": "string" },
+        "isUrgent": { "type": "boolean" },
+        "primaryConcern": { "type": "string" },
+        "parts": { "type": "array" },
+        "messages": { "type": "array" },
+        "history": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "customerName", "status", "advisorName"]
+    },
+    "users": {
+      "title": "User",
+      "description": "Dealership employees, technicians, advisors, managers, and parts specialists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "title": { "type": "string" },
+        "avatar": { "type": "string" },
+        "bayNumber": { "type": "string" },
+        "phone": { "type": "string" },
+        "pin": { "type": "string" },
+        "password": { "type": "string" },
+        "isDeactivated": { "type": "boolean" }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "notifications": {
+      "title": "Notification",
+      "description": "Urgent notifications, dispatch alerts, and parts updates across staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roId": { "type": "string" },
+        "roNumber": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isUrgent": { "type": "boolean" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "title", "message", "timestamp"]
+    },
+    "shopSettings": {
+      "title": "Shop Settings",
+      "description": "Global shop metadata, name, and wizard status",
+      "type": "object",
+      "properties": {
+        "shopName": { "type": "string" },
+        "isSetupCompleted": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["shopName"]
+    }
+  },
+  "firestore": {
+    "/repairOrders/{roId}": {
+      "schema": "#/entities/repairOrders",
+      "description": "Repair order document"
+    },
+    "/users/{userId}": {
+      "schema": "#/entities/users",
+      "description": "Staff employee document"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "#/entities/notifications",
+      "description": "Urgent alerts document"
+    },
+    "/settings/shop": {
+      "schema": "#/entities/shopSettings",
+      "description": "Shop configuration document"
+    }
+  }
+}

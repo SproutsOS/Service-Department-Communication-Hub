@@ -1,0 +1,8 @@
+{
+  "name": "Remix Service Department Communication \u0026 RO Hub",
+  "description": "Centralized communication and real-time Repair Order tracking with role-based access for Service Managers, Advisors, Technicians, and Parts Specialists.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
