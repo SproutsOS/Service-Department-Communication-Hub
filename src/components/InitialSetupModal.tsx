@@ -36,50 +36,7 @@ interface InitialStaffDraft {
   phone?: string;
 }
 
-const DEFAULT_INITIAL_STAFF: InitialStaffDraft[] = [
-  {
-    tempId: 't1',
-    name: 'Carlos Ramirez',
-    email: 'c.ramirez@precisionauto.com',
-    password: 'tech123',
-    pin: '1234',
-    role: 'TECHNICIAN',
-    title: 'Master Diagnostic Technician',
-    bayNumber: 'Bay 3 - Diagnostics',
-    phone: '(555) 302-8831'
-  },
-  {
-    tempId: 't2',
-    name: 'Jake Miller',
-    email: 'j.miller@precisionauto.com',
-    password: 'tech123',
-    pin: '1234',
-    role: 'TECHNICIAN',
-    title: 'Drivetrain & Engine Specialist',
-    bayNumber: 'Bay 5 - Heavy Line',
-    phone: '(555) 302-8832'
-  },
-  {
-    tempId: 'a1',
-    name: 'Sarah Jenkins',
-    email: 's.jenkins@precisionauto.com',
-    password: 'advisor123',
-    pin: '1234',
-    role: 'SERVICE_ADVISOR',
-    title: 'Senior Service Advisor',
-    phone: '(555) 302-8824'
-  },
-  {
-    tempId: 'p1',
-    name: 'Ray Chen',
-    email: 'r.chen@precisionauto.com',
-    password: 'parts123',
-    pin: '1234',
-    role: 'PARTS_SPECIALIST',
-    title: 'Parts Manager & Procurement',
-    phone: '(555) 302-8840'
-  }
-];
+const DEFAULT_INITIAL_STAFF: InitialStaffDraft[] = [];
 
 export const InitialSetupModal: React.FC = () => {
   const { 
@@ -94,13 +51,13 @@ export const InitialSetupModal: React.FC = () => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: Shop & Manager
-  const [shopNameInput, setShopNameInput] = useState(existingShopName || 'Precision Auto Care');
-  const [mgrName, setMgrName] = useState(currentUser.role === 'SERVICE_MANAGER' ? currentUser.name : 'Marcus Vance');
-  const [mgrEmail, setMgrEmail] = useState(currentUser.role === 'SERVICE_MANAGER' ? currentUser.email : 'admin@precisionauto.com');
+  const [shopNameInput, setShopNameInput] = useState(existingShopName || 'My Service Department');
+  const [mgrName, setMgrName] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.name !== 'Service Manager' ? currentUser.name : '');
+  const [mgrEmail, setMgrEmail] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.email !== 'admin@precisionauto.com' ? currentUser.email : '');
   const [mgrPassword, setMgrPassword] = useState(currentUser.password || 'admin123');
   const [mgrPin, setMgrPin] = useState(currentUser.pin || '1234');
-  const [mgrTitle, setMgrTitle] = useState(currentUser.title || 'Service Director / General Manager');
-  const [mgrPhone, setMgrPhone] = useState(currentUser.phone || '(555) 302-8811');
+  const [mgrTitle, setMgrTitle] = useState(currentUser.title || 'Service Manager');
+  const [mgrPhone, setMgrPhone] = useState(currentUser.phone || '');
   const [showMgrPassword, setShowMgrPassword] = useState(false);
 
   // Step 2: Staff Roster by Category

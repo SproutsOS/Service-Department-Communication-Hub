@@ -220,19 +220,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore
     }
-    return [
-      {
-        id: 'notif_init_1',
-        roId: 'RO-10482',
-        roNumber: 'RO-10482',
-        title: 'Hot Shot Parts Assigned',
-        message: 'Ford HV Battery Coolant Pump in transit. ETA 1:45 PM today.',
-        timestamp: new Date().toISOString(),
-        isUrgent: true,
-        type: 'PARTS_UPDATE',
-        read: false,
-      }
-    ];
+    return [];
   });
 
   const [selectedROId, setSelectedROId] = useState<string | null>(null);
@@ -280,10 +268,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Subscribe to real-time Repair Orders
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
-      if (cloudROs.length > 0) {
-        setRepairOrders(cloudROs);
-        setIsCloudSynced(true);
-      }
+      setRepairOrders(cloudROs);
+      setIsCloudSynced(true);
     });
 
     // Subscribe to real-time Users
