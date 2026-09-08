@@ -10,7 +10,8 @@ import {
   Calendar, 
   Send,
   Smartphone,
-  Truck
+  Truck,
+  Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG } from '../data/mockData';
@@ -49,17 +50,15 @@ export const TechDashboard: React.FC = () => {
       <div className="bg-slate-800 text-white rounded-xl p-5 sm:p-6 border border-slate-700 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <img 
-              src={currentUser.avatar} 
-              alt={currentUser.name} 
-              className="w-12 h-12 rounded-full object-cover ring-2 ring-blue-400 shrink-0"
-              referrerPolicy="no-referrer"
-            />
+            <div className="w-12 h-12 rounded-full bg-blue-600 ring-2 ring-blue-400 text-white font-bold text-base flex items-center justify-center shrink-0">
+              {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'T'}
+            </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-black tracking-tight">{currentUser.name}</h1>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
-                  {currentUser.bayNumber || 'Service Bay'}
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                  <Award className="w-3 h-3 text-blue-400" />
+                  <span>{currentUser.certificationLevel || currentUser.bayNumber || 'Technician'}</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5 font-medium">

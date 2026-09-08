@@ -14,7 +14,8 @@ import {
   LayoutGrid,
   ListFilter,
   Check,
-  Calendar
+  Calendar,
+  Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -202,15 +203,15 @@ export const ManagerDashboard: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <img 
-                      src={tech.avatar} 
-                      alt={tech.name} 
-                      className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200"
-                      referrerPolicy="no-referrer"
-                    />
+                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                      {tech.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'T'}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-slate-900 truncate">{tech.name}</div>
-                      <div className="text-[10px] text-emerald-700 font-semibold truncate">{tech.bayNumber || 'Stall unassigned'}</div>
+                      <div className="text-[10px] text-blue-700 font-semibold truncate flex items-center gap-1">
+                        <Award className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                        <span className="truncate">{tech.certificationLevel || tech.bayNumber || 'Technician'}</span>
+                      </div>
                     </div>
                   </div>
 

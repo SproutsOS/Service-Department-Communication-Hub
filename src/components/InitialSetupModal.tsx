@@ -19,7 +19,8 @@ import {
   Sparkles, 
   Layers, 
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole } from '../types';
@@ -32,6 +33,7 @@ interface InitialStaffDraft {
   pin?: string;
   role: UserRole;
   title: string;
+  certificationLevel?: string;
   bayNumber?: string;
   phone?: string;
 }
@@ -75,6 +77,7 @@ export const InitialSetupModal: React.FC = () => {
           pin: u.pin || '1234',
           role: u.role,
           title: u.title,
+          certificationLevel: u.certificationLevel || u.bayNumber,
           bayNumber: u.bayNumber,
           phone: u.phone
         }));
@@ -86,7 +89,7 @@ export const InitialSetupModal: React.FC = () => {
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('1234');
-  const [newStaffBay, setNewStaffBay] = useState('Bay 1');
+  const [newStaffCert, setNewStaffCert] = useState('ASE Master Tech');
   const [isAddingInline, setIsAddingInline] = useState(false);
 
   // Step 3: Initial State
@@ -112,13 +115,15 @@ export const InitialSetupModal: React.FC = () => {
       pin: '1234',
       role: staffCategory,
       title: defaultTitle,
-      bayNumber: staffCategory === 'TECHNICIAN' ? newStaffBay.trim() : undefined,
+      certificationLevel: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : undefined,
+      bayNumber: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : undefined,
     };
 
     setStaffDrafts(prev => [...prev, newDraft]);
     setNewStaffName('');
     setNewStaffEmail('');
     setNewStaffPassword('1234');
+    setNewStaffCert('ASE Master Tech');
     setIsAddingInline(false);
   };
 
@@ -148,7 +153,8 @@ export const InitialSetupModal: React.FC = () => {
       pin: draft.pin || '1234',
       role: draft.role,
       title: draft.title,
-      bayNumber: draft.bayNumber,
+      certificationLevel: draft.certificationLevel,
+      bayNumber: draft.certificationLevel || draft.bayNumber,
       phone: draft.phone,
       avatar: draft.role === 'SERVICE_ADVISOR' 
         ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
@@ -477,9 +483,9 @@ export const InitialSetupModal: React.FC = () => {
                     {staffCategory === 'TECHNICIAN' && (
                       <input
                         type="text"
-                        placeholder="Bay Assignment (e.g. Bay 2 - Brakes)"
-                        value={newStaffBay}
-                        onChange={(e) => setNewStaffBay(e.target.value)}
+                        placeholder="Certification Level (e.g. Master Tech, ASE A-Level, L1)"
+                        value={newStaffCert}
+                        onChange={(e) => setNewStaffCert(e.target.value)}
                         className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900"
                       />
                     )}
@@ -519,9 +525,10 @@ export const InitialSetupModal: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-slate-900">{draft.name}</span>
-                          {draft.bayNumber && (
-                            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
-                              {draft.bayNumber}
+                          {(draft.certificationLevel || draft.bayNumber) && (
+                            <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Award className="w-3 h-3 text-blue-600" />
+                              <span>{draft.certificationLevel || draft.bayNumber}</span>
                             </span>
                           )}
                         </div>

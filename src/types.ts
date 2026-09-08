@@ -12,7 +12,8 @@ export interface User {
   pin?: string; // 4-digit PIN or password for individual login
   role: UserRole;
   avatar: string;
-  bayNumber?: string;
+  certificationLevel?: string; // e.g. 'Master Certified', 'ASE Master Tech', 'A-Level Tech', 'B-Level Tech', 'L1 Advanced Diagnostics'
+  bayNumber?: string; // Kept for backwards compatibility if needed
   title: string;
   phone?: string;
   activeROCount?: number;

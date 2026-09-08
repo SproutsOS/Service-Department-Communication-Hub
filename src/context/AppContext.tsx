@@ -818,7 +818,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRepairOrders([]);
     setNotifications([]);
     setSelectedROId(null);
+    try {
+      localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_WIPE_PERFORMED, 'true');
+    } catch {
+      // ignore
+    }
     clearAllROsFromFirestore();
+    syncShopSettings({ cleanSlateInitialized: true, seededDemoData: false });
   };
 
   const loginWithCredentials = (emailOrId: string, passwordOrPin: string): { success: boolean; user?: User; message?: string } => {

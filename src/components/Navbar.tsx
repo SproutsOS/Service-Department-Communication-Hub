@@ -281,12 +281,9 @@ export const Navbar: React.FC = () => {
               {currentUser.role === 'PARTS_SPECIALIST' && 'Parts Specialist'}
             </span>
           </div>
-          <img 
-            src={currentUser.avatar} 
-            alt={currentUser.name} 
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-slate-500 group-hover:border-blue-400 transition-colors"
-            referrerPolicy="no-referrer"
-          />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-blue-600 border-2 border-slate-500 group-hover:border-blue-400 text-white font-bold text-xs flex items-center justify-center transition-colors">
+            {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+          </div>
         </button>
 
         {/* Re-run Setup Wizard */}
