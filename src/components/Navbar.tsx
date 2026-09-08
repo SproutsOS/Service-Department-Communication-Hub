@@ -8,13 +8,15 @@ import {
   Laptop, 
   Plus, 
   RotateCcw, 
+  Trash2,
+  Settings,
   ChevronDown, 
   AlertCircle,
   Clock,
   ShieldCheck,
   Users,
   Cloud,
-  CloudCheck
+  CheckCircle2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -35,6 +37,7 @@ export const Navbar: React.FC = () => {
     setIsSetupWizardOpen,
     shopName,
     isCloudSynced,
+    resetAllDataToCleanSlateHandler,
     resetToDemoData,
     requestPushPermission,
     setSelectedRO,
@@ -286,18 +289,28 @@ export const Navbar: React.FC = () => {
           />
         </button>
 
-        {/* Reset Demo Data */}
+        {/* Re-run Setup Wizard */}
         <button
-          id="reset-demo-data-btn"
+          id="navbar-setup-wizard-btn"
+          onClick={() => setIsSetupWizardOpen(true)}
+          className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
+          title="Open Initial Setup Wizard (Configure Shop & Roster)"
+        >
+          <Settings className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Wipe to Clean Slate Button */}
+        <button
+          id="clear-all-data-btn"
           onClick={() => {
-            if (window.confirm('Reset all repair orders, parts data, and chat logs back to dealership defaults?')) {
-              resetToDemoData();
+            if (window.confirm('Wipe all sample tickets, employees, and notifications to start with a pure clean slate (0 tickets)?')) {
+              resetAllDataToCleanSlateHandler();
             }
           }}
-          className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
-          title="Reset to sample dealership data"
+          className="p-1.5 text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 rounded-lg transition-colors"
+          title="Wipe to Clean Slate (0 tickets, fresh shop setup)"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
 
       </div>

@@ -47,7 +47,7 @@ const MainContent: React.FC = () => {
   const inRepair = repairOrders.filter(r => r.status === 'IN_BAY' || r.status === 'IN_REPAIR').length;
   const partsTrackingCount = repairOrders.flatMap(r => r.parts.filter(p => p.status === 'IN_TRANSIT' || p.status === 'ORDERED')).length;
   const assignedCount = repairOrders.filter(r => r.status === 'DISPATCHED' || (r.techId && r.status !== 'COMPLETED')).length;
-  const efficiency = Math.min(Math.round(((inRepair + 2) / 8) * 100), 100);
+  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / 8) * 100), 100);
 
   const handleSelectRole = (role: UserRole) => {
     setIsStaffManagementOpen(false);

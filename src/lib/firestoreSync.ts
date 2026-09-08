@@ -4,6 +4,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
   onSnapshot,
   getDocs,
   writeBatch,
@@ -71,6 +72,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 export interface ShopSettings {
   shopName: string;
   isSetupCompleted: boolean;
+  cleanSlateInitialized?: boolean;
+  seededDemoData?: boolean;
   updatedAt?: string;
 }
 
@@ -224,9 +227,57 @@ export async function clearAllROsFromFirestore() {
   }
 }
 
-// Seed initial data to Firestore if empty
+// Completely reset Firestore to clean slate with initial manager user
+export async function resetAllDataToCleanSlate(cleanManager: User, shopName: string) {
+  try {
+    // 1. Delete all repair orders
+    const roSnap = await getDocs(collection(db, REPAIR_ORDERS_COL));
+    const roBatch = writeBatch(db);
+    roSnap.forEach(d => roBatch.delete(d.ref));
+    await roBatch.commit();
+
+    // 2. Delete all notifications
+    const notifSnap = await getDocs(collection(db, NOTIFICATIONS_COL));
+    const notifBatch = writeBatch(db);
+    notifSnap.forEach(d => notifBatch.delete(d.ref));
+    await notifBatch.commit();
+
+    // 3. Reset users to just the single clean manager
+    const usersSnap = await getDocs(collection(db, USERS_COL));
+    const usersBatch = writeBatch(db);
+    usersSnap.forEach(d => usersBatch.delete(d.ref));
+    const mgrDoc = doc(db, USERS_COL, cleanManager.id);
+    usersBatch.set(mgrDoc, cleanManager);
+    await usersBatch.commit();
+
+    // 4. Reset shop settings with cleanSlateInitialized = true to prevent auto-re-seeding
+    const settingsDoc = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
+    await setDoc(settingsDoc, {
+      shopName: shopName || 'My Service Department',
+      isSetupCompleted: false,
+      cleanSlateInitialized: true,
+      seededDemoData: false,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, USERS_COL);
+  }
+}
+
+// Seed initial data to Firestore if empty, unless clean slate was requested
 export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: RepairOrder[], defaultShopName: string) {
   try {
+    const settingsDoc = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
+    const settingsSnap = await getDoc(settingsDoc);
+
+    // If shop settings exist and mark this as an intentionally clean slate, do NOT re-seed sample tickets
+    if (settingsSnap.exists()) {
+      const data = settingsSnap.data() as ShopSettings;
+      if (data.cleanSlateInitialized) {
+        return;
+      }
+    }
+
     const usersSnap = await getDocs(collection(db, USERS_COL));
     if (usersSnap.empty) {
       console.log('Seeding initial users to Firestore...');
@@ -249,10 +300,11 @@ export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: R
       await batch.commit();
     }
 
-    const settingsDoc = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
     await setDoc(settingsDoc, {
       shopName: defaultShopName,
       isSetupCompleted: false,
+      cleanSlateInitialized: false,
+      seededDemoData: true,
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {

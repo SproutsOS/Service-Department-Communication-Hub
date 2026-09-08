@@ -177,88 +177,94 @@ export const ManagerDashboard: React.FC = () => {
             </h2>
           </div>
           <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-            4 active technician stalls
+            {technicians.length} technician stall{technicians.length === 1 ? '' : 's'}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {technicians.map(tech => {
-            const activeJobs = repairOrders.filter(r => r.techId === tech.id && r.status !== 'COMPLETED');
-            const currentJob = activeJobs[0];
+        {technicians.length === 0 ? (
+          <div className="p-6 text-center border border-dashed border-slate-200 rounded-lg text-slate-400 text-xs">
+            No technicians registered yet. Open the Setup Wizard or Staff Directory to add technicians and assign bay numbers.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {technicians.map(tech => {
+              const activeJobs = repairOrders.filter(r => r.techId === tech.id && r.status !== 'COMPLETED');
+              const currentJob = activeJobs[0];
 
-            return (
-              <div 
-                key={tech.id}
-                onClick={() => currentJob && setSelectedRO(currentJob)}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  currentJob 
-                    ? 'border-slate-200 bg-slate-50/60 hover:border-blue-400 hover:bg-white cursor-pointer shadow-2xs' 
-                    : 'border-dashed border-slate-200 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <img 
-                    src={tech.avatar} 
-                    alt={tech.name} 
-                    className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-slate-900 truncate">{tech.name}</div>
-                    <div className="text-[10px] text-emerald-700 font-semibold truncate">{tech.bayNumber}</div>
+              return (
+                <div 
+                  key={tech.id}
+                  onClick={() => currentJob && setSelectedRO(currentJob)}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    currentJob 
+                      ? 'border-slate-200 bg-slate-50/60 hover:border-blue-400 hover:bg-white cursor-pointer shadow-2xs' 
+                      : 'border-dashed border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <img 
+                      src={tech.avatar} 
+                      alt={tech.name} 
+                      className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-900 truncate">{tech.name}</div>
+                      <div className="text-[10px] text-emerald-700 font-semibold truncate">{tech.bayNumber || 'Stall unassigned'}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 text-xs">
+                    {currentJob ? (
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold text-blue-600 text-[11px]">{currentJob.id}</span>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${
+                            STATUS_CONFIG[currentJob.status]?.badgeClass || 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {STATUS_CONFIG[currentJob.status]?.label || currentJob.status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 truncate mt-1">
+                          {currentJob.vehicle.year} {currentJob.vehicle.make} {currentJob.vehicle.model}
+                        </div>
+
+                        {/* Diagnostic Status helper in Bay card */}
+                        {currentJob.status === 'WAITING_DIAGNOSIS' && (
+                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-amber-700 font-medium">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              Waiting Diag ({formatDurationSince(currentJob.waitingDiagnosisAt)})
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startDiagnosis(currentJob.id);
+                              }}
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-1.5 py-0.5 rounded text-[9px] shadow-2xs transition-colors"
+                            >
+                              Start Diag
+                            </button>
+                          </div>
+                        )}
+                        {(currentJob.status === 'BEING_DIAGNOSED' || currentJob.status === 'IN_BAY') && (
+                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center gap-1 text-[10px] text-blue-700 font-medium">
+                            <Wrench className="w-3 h-3 text-blue-600" />
+                            <span>Diagnosing: {formatDurationSince(currentJob.diagnosisStartedAt)} active</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-slate-400 text-[11px] italic">
+                        Bay idle • Ready for assignment
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="mt-2.5 pt-2 border-t border-slate-100 text-xs">
-                  {currentJob ? (
-                    <div>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-bold text-blue-600 text-[11px]">{currentJob.id}</span>
-                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${
-                          STATUS_CONFIG[currentJob.status]?.badgeClass || 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {STATUS_CONFIG[currentJob.status]?.label || currentJob.status.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-600 truncate mt-1">
-                        {currentJob.vehicle.year} {currentJob.vehicle.make} {currentJob.vehicle.model}
-                      </div>
-
-                      {/* Diagnostic Status helper in Bay card */}
-                      {currentJob.status === 'WAITING_DIAGNOSIS' && (
-                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-amber-700 font-medium">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            Waiting Diag ({formatDurationSince(currentJob.waitingDiagnosisAt)})
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startDiagnosis(currentJob.id);
-                            }}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-1.5 py-0.5 rounded text-[9px] shadow-2xs transition-colors"
-                          >
-                            Start Diag
-                          </button>
-                        </div>
-                      )}
-                      {(currentJob.status === 'BEING_DIAGNOSED' || currentJob.status === 'IN_BAY') && (
-                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center gap-1 text-[10px] text-blue-700 font-medium">
-                          <Wrench className="w-3 h-3 text-blue-600" />
-                          <span>Diagnosing: {formatDurationSince(currentJob.diagnosisStartedAt)} active</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-slate-400 text-[11px] italic">
-                      Bay idle • Ready for assignment
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Live Parts Tracking & ETA Strip */}

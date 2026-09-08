@@ -22,6 +22,7 @@ import {
   markAllNotificationsReadDocs,
   syncShopSettings,
   clearAllROsFromFirestore,
+  resetAllDataToCleanSlate,
   seedInitialDataIfEmpty,
 } from '../lib/firestoreSync';
 
@@ -97,18 +98,20 @@ interface AppContextType {
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
   clearAllRepairOrders: () => void;
+  resetAllDataToCleanSlateHandler: () => void;
   resetToDemoData: () => void;
   
   // Filter helper
   getFilteredROs: () => RepairOrder[];
 }
 
-const STORAGE_KEY_ROS = 'precision_auto_service_ros_v5';
-const STORAGE_KEY_USER = 'precision_auto_active_user_v2';
-const STORAGE_KEY_USERS = 'precision_auto_users_v3';
-const STORAGE_KEY_NOTIFS = 'precision_auto_notifs_v2';
-const STORAGE_KEY_SHOP_NAME = 'precision_auto_shop_name_v1';
-const STORAGE_KEY_SETUP_DONE = 'precision_auto_setup_completed_v1';
+const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
+const STORAGE_KEY_USER = 'precision_auto_active_user_v6_clean';
+const STORAGE_KEY_USERS = 'precision_auto_users_v6_clean';
+const STORAGE_KEY_NOTIFS = 'precision_auto_notifs_v6_clean';
+const STORAGE_KEY_SHOP_NAME = 'precision_auto_shop_name_v6_clean';
+const STORAGE_KEY_SETUP_DONE = 'precision_auto_setup_completed_v6_clean';
+const STORAGE_KEY_WIPE_PERFORMED = 'precision_auto_wipe_performed_v6_clean';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -119,9 +122,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Dealership/Shop Name
   const [shopName, setShopNameState] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_SHOP_NAME) || 'Precision Auto Care';
+      return localStorage.getItem(STORAGE_KEY_SHOP_NAME) || 'My Service Department';
     } catch {
-      return 'Precision Auto Care';
+      return 'My Service Department';
     }
   });
 
@@ -196,13 +199,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_USERS[0];
   });
 
-  // Repair orders state
+  // Repair orders state - defaults to empty if a wipe was performed or if no saved data
   const [repairOrders, setRepairOrders] = useState<RepairOrder[]>(() => {
     try {
+      const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
+      if (isWiped) {
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEY_ROS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -263,8 +270,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Real-time Firestore Cloud Subscriptions
   useEffect(() => {
-    // Seed initial data if Firestore is currently brand new
-    seedInitialDataIfEmpty(INITIAL_USERS, INITIAL_REPAIR_ORDERS, shopName);
+    // Check if user has explicitly wiped to clean slate
+    const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
+    if (!isWiped) {
+      // Seed initial data if Firestore is currently brand new
+      seedInitialDataIfEmpty(INITIAL_USERS, INITIAL_REPAIR_ORDERS, shopName);
+    }
 
     // Subscribe to real-time Repair Orders
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
@@ -875,7 +886,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (config.startWithEmptyROs) {
       clearAllRepairOrders();
+      try {
+        localStorage.setItem(STORAGE_KEY_WIPE_PERFORMED, 'true');
+      } catch {
+        // ignore
+      }
     } else {
+      try {
+        localStorage.removeItem(STORAGE_KEY_WIPE_PERFORMED);
+      } catch {
+        // ignore
+      }
       setRepairOrders(INITIAL_REPAIR_ORDERS);
       INITIAL_REPAIR_ORDERS.forEach(ro => syncRepairOrder(ro));
     }
@@ -886,6 +907,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncShopSettings({
       shopName: trimmedShop,
       isSetupCompleted: true,
+      cleanSlateInitialized: config.startWithEmptyROs,
+      seededDemoData: !config.startWithEmptyROs,
     });
   };
 
@@ -893,7 +916,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsLoginModalOpen(true);
   };
 
+  const resetAllDataToCleanSlateHandler = () => {
+    const cleanManager: User = {
+      id: `usr_mgr_${Date.now()}`,
+      name: 'Service Manager',
+      email: 'admin@precisionauto.com',
+      password: 'admin',
+      pin: '1234',
+      role: 'SERVICE_MANAGER',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      title: 'Service Manager',
+      phone: '',
+    };
+
+    setUsers([cleanManager]);
+    setCurrentUserState(cleanManager);
+    setRepairOrders([]);
+    setNotifications([]);
+    setSelectedROId(null);
+    setShopNameState('My Service Department');
+    setIsInitialSetupCompleted(false);
+    setIsSetupWizardOpen(true);
+
+    try {
+      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify([cleanManager]));
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cleanManager));
+      localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_SHOP_NAME, 'My Service Department');
+      localStorage.setItem(STORAGE_KEY_SETUP_DONE, 'false');
+      localStorage.setItem(STORAGE_KEY_WIPE_PERFORMED, 'true');
+    } catch {
+      // ignore
+    }
+
+    resetAllDataToCleanSlate(cleanManager, 'My Service Department');
+  };
+
   const resetToDemoData = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_WIPE_PERFORMED);
+    } catch {
+      // ignore
+    }
+
     setUsers(INITIAL_USERS);
     INITIAL_USERS.forEach(u => syncUser(u));
 
@@ -976,6 +1042,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markNotificationRead,
         markAllNotificationsRead,
         clearAllRepairOrders,
+        resetAllDataToCleanSlateHandler,
         resetToDemoData,
         getFilteredROs,
       }}
