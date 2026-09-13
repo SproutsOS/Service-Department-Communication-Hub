@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { 
   Users, 
   UserPlus, 
-  Trash2, 
+  UserX,
+  ShieldAlert, 
   Edit3, 
   ShieldCheck, 
   Briefcase, 
@@ -23,7 +24,9 @@ import {
   Info,
   Camera,
   Check,
-  Award
+  Award,
+  LogIn,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole } from '../types';
@@ -32,6 +35,7 @@ export const StaffManagement: React.FC = () => {
   const { 
     users, 
     currentUser, 
+    setCurrentUser,
     addUser, 
     updateUser, 
     removeUser, 
@@ -47,6 +51,7 @@ export const StaffManagement: React.FC = () => {
 
   const [activeCategory, setActiveCategory] = useState<'ALL' | UserRole>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const isManager = currentUser.role === 'SERVICE_MANAGER';
   
   // Modal states
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -73,7 +78,7 @@ export const StaffManagement: React.FC = () => {
 
   // Auto-save any field change directly to the employee record
   const triggerAutoSave = (updates: Partial<User>) => {
-    if (!editingUserId) return;
+    if (!editingUserId || !isManager) return;
     setAutoSaveStatus('saving');
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -91,11 +96,16 @@ export const StaffManagement: React.FC = () => {
   };
 
   const togglePinVisibility = (userId: string) => {
+    if (!isManager && currentUser.id !== userId) return;
     setVisiblePins(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
   // Open modal to add a new employee
   const handleOpenAdd = () => {
+    if (!isManager) {
+      showFeedback('Permission Denied: Only the Service Manager has permission to add staff.', 'error');
+      return;
+    }
     setEditingUserId(null);
     setNameInput('');
     setEmailInput('');
@@ -117,6 +127,10 @@ export const StaffManagement: React.FC = () => {
 
   // Open modal to edit employee (clicking card or edit button)
   const handleOpenEdit = (user: User) => {
+    if (!isManager) {
+      showFeedback('Permission Denied: Only the Service Manager has permission to modify employee profiles.', 'error');
+      return;
+    }
     setEditingUserId(user.id);
     setNameInput(user.name);
     setEmailInput(user.email);
@@ -135,6 +149,10 @@ export const StaffManagement: React.FC = () => {
   // Save add/edit
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isManager) {
+      showFeedback('Permission Denied: Only the Service Manager has permission to save employee changes.', 'error');
+      return;
+    }
     if (!nameInput.trim()) {
       showFeedback('Employee name is required', 'error');
       return;
@@ -159,9 +177,32 @@ export const StaffManagement: React.FC = () => {
         phone: phoneInput.trim() || undefined,
         avatar: avatarInput || undefined,
       });
+
+      // If updating the active user, or if this is the only user, or if updating to Service Manager while active user is stale:
+      if (
+        editingUserId === currentUser.id ||
+        users.length <= 1 ||
+        roleInput === 'SERVICE_MANAGER'
+      ) {
+        setCurrentUser({
+          ...currentUser,
+          id: editingUserId,
+          name: nameInput.trim(),
+          email: emailInput.trim().toLowerCase(),
+          role: roleInput,
+          title: titleInput.trim(),
+          password: passwordInput.trim() || '1234',
+          pin: pinInput.trim() || '1234',
+          certificationLevel: roleInput === 'TECHNICIAN' ? certValue : undefined,
+          bayNumber: roleInput === 'TECHNICIAN' ? certValue : undefined,
+          phone: phoneInput.trim() || undefined,
+          avatar: avatarInput || currentUser.avatar,
+        });
+      }
+
       showFeedback(`Profile for ${nameInput.trim()} saved.`);
     } else {
-      addUser({
+      const createdUser = addUser({
         name: nameInput.trim(),
         email: emailInput.trim().toLowerCase(),
         role: roleInput,
@@ -173,6 +214,12 @@ export const StaffManagement: React.FC = () => {
         phone: phoneInput.trim() || undefined,
         avatar: avatarInput || getRoleDefaultAvatar(roleInput),
       });
+
+      // If adding a Service Manager and current user is stale or default:
+      if (roleInput === 'SERVICE_MANAGER' || !users.some(u => u.id === currentUser.id)) {
+        setCurrentUser(createdUser);
+      }
+
       showFeedback(`Added new employee: ${nameInput.trim()} (${getRoleLabel(roleInput)})`);
     }
 
@@ -181,7 +228,7 @@ export const StaffManagement: React.FC = () => {
 
   // Handle remove confirmation
   const handleConfirmRemove = () => {
-    if (!userToDelete) return;
+    if (!userToDelete || !isManager) return;
     const result = removeUser(userToDelete.id);
     if (result.success) {
       showFeedback(`Removed employee ${userToDelete.name} from the shop.`);
@@ -315,68 +362,55 @@ export const StaffManagement: React.FC = () => {
 
           {/* Top Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              id="open-shop-setup-wizard-btn"
-              onClick={() => setIsSetupWizardOpen(true)}
-              className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              title="Open dealership & shop onboarding wizard"
-            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Shop Setup Wizard</span>
-            </button>
+            {isManager ? (
+              <>
+                <button
+                  id="open-shop-setup-wizard-btn"
+                  onClick={() => setIsSetupWizardOpen(true)}
+                  className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  title="Open dealership & shop onboarding wizard"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Shop Setup Wizard</span>
+                </button>
 
-            <button
-              id="add-employee-btn"
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Employee</span>
-            </button>
-
-            <button
-              id="clear-sample-data-btn"
-              onClick={() => setIsClearDataConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-300 hover:border-red-300 px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-              title="Clear all demo repair orders for clean private shop use"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-red-500" />
-              <span>Clear Sample ROs</span>
-            </button>
-
-            <button
-              id="wipe-all-samples-btn"
-              onClick={() => setIsFullWipeConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300 px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              title="Remove sample employees and repair orders for a 100% clean custom shop setup"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>Wipe Sample Staff & ROs</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (window.confirm('Reset all sample team members and demo repair orders?')) {
-                  resetToDemoData();
-                  showFeedback('Restored default demo team and repair orders.');
-                }
-              }}
-              className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-              title="Restore demo users and sample repair orders"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Restore Demo</span>
-            </button>
+                <button
+                  id="add-employee-btn"
+                  onClick={handleOpenAdd}
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Add Employee</span>
+                </button>
+              </>
+            ) : (
+              <div className="inline-flex items-center gap-2 bg-slate-100 border border-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl text-xs font-semibold">
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Roster Locked (Service Manager permission required to add, edit, or remove staff)</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Clean Launch Notice */}
-        <div className="mt-4 p-3 bg-blue-50/60 border border-blue-200 rounded-lg flex items-start gap-2 text-xs text-blue-900">
-          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+        {/* Permissions & Security Status Notice */}
+        <div className={`mt-4 p-3 rounded-lg flex items-start gap-2 text-xs border ${
+          isManager 
+            ? 'bg-blue-50/60 border-blue-200 text-blue-900' 
+            : 'bg-amber-50/60 border-amber-200 text-amber-900'
+        }`}>
+          {isManager ? (
+            <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          ) : (
+            <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          )}
           <div>
-            <span className="font-bold">Private & Clean Launch Tip: </span>
+            <span className="font-bold">
+              {isManager ? 'Service Manager Administration: ' : 'Staff Directory Security Lock: '}
+            </span>
             <span>
-              To make your shop private with zero sample tickets, click <strong>"Clear Sample ROs (Start Fresh)"</strong>. You can then add your actual technicians, advisors, and managers below. Each employee logs in with their designated email and private PIN.
+              {isManager 
+                ? 'You are signed in as the Service Manager with administrative authority to manage staff members, configure roles, and maintain shop security.'
+                : 'All employee profiles and roster details are locked. Only the Service Manager has permission to add new staff, alter user roles, change credentials, or remove accounts.'}
             </span>
           </div>
         </div>
@@ -503,27 +537,33 @@ export const StaffManagement: React.FC = () => {
             return (
               <div 
                 key={user.id}
-                onClick={() => handleOpenEdit(user)}
-                className={`bg-white rounded-xl border p-5 shadow-xs flex flex-col justify-between transition-all cursor-pointer group hover:shadow-md hover:border-blue-400 hover:ring-2 hover:ring-blue-500/10 ${
+                onClick={isManager ? () => handleOpenEdit(user) : undefined}
+                className={`bg-white rounded-xl border p-5 shadow-xs flex flex-col justify-between transition-all ${
+                  isManager 
+                    ? 'cursor-pointer group hover:shadow-md hover:border-blue-400 hover:ring-2 hover:ring-blue-500/10' 
+                    : 'cursor-default'
+                } ${
                   isSelf ? 'border-blue-300 ring-2 ring-blue-500/20' : 'border-slate-200'
                 }`}
-                title="Click anywhere on card to edit employee profile (auto-saves changes)"
+                title={isManager ? "Click anywhere on card to edit employee profile (auto-saves changes)" : "Employee profile (locked, manager permission required to modify)"}
               >
                 <div>
                   {/* Top Card Bar */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative shrink-0">
-                        <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-base flex items-center justify-center ring-2 ring-slate-100 group-hover:ring-blue-400 shadow-xs transition-all">
+                        <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-base flex items-center justify-center ring-2 ring-slate-100 shadow-xs transition-all">
                           {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
                         </div>
-                        <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-2xs border border-slate-200 group-hover:border-blue-400">
-                          <Edit3 className="w-3 h-3 text-blue-600" />
-                        </div>
+                        {isManager && (
+                          <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-2xs border border-slate-200 group-hover:border-blue-400">
+                            <Edit3 className="w-3 h-3 text-blue-600" />
+                          </div>
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-700 transition-colors">
+                          <h3 className={`text-sm font-bold text-slate-900 truncate ${isManager ? 'group-hover:text-blue-700' : ''} transition-colors`}>
                             {user.name}
                           </h3>
                           {isSelf && (
@@ -540,10 +580,17 @@ export const StaffManagement: React.FC = () => {
 
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
                       <div>{getRoleBadge(user.role)}</div>
-                      <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-800 px-2 py-0.5 rounded-md border border-blue-200/60 flex items-center gap-1 transition-colors">
-                        <Edit3 className="w-3 h-3" />
-                        <span>Click to Edit</span>
-                      </span>
+                      {isManager ? (
+                        <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 group-hover:bg-blue-100 group-hover:text-blue-800 px-2 py-0.5 rounded-md border border-blue-200/60 flex items-center gap-1 transition-colors">
+                          <Edit3 className="w-3 h-3" />
+                          <span>Click to Edit</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                          <Lock className="w-3 h-3 text-slate-400" />
+                          <span>Locked</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -631,30 +678,60 @@ export const StaffManagement: React.FC = () => {
                   </span>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenEdit(user);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white group-hover:border-blue-300 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Edit Profile</span>
-                    </button>
+                    {isSelf ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Active Session</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentUser(user);
+                          showFeedback(`Switched active logged-in user to ${user.name}`);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                        title={`Switch active user to ${user.name}`}
+                      >
+                        <LogIn className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Switch User</span>
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setUserToDelete(user);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-colors cursor-pointer"
-                      title="Remove employee from shop"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                      <span>Remove</span>
-                    </button>
+                    {isManager ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(user);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white group-hover:border-blue-300 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Edit Profile</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUserToDelete(user);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-colors cursor-pointer"
+                          title="Remove employee from shop"
+                        >
+                          <UserX className="w-3.5 h-3.5 text-red-500" />
+                          <span>Remove</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 text-xs font-medium">
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Profile Locked</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -969,7 +1046,7 @@ export const StaffManagement: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-xl shadow-2xl border border-red-200 max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
             <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
-              <Trash2 className="w-6 h-6" />
+              <ShieldAlert className="w-6 h-6" />
             </div>
 
             <h3 className="text-base font-bold text-slate-900">
@@ -997,92 +1074,6 @@ export const StaffManagement: React.FC = () => {
                 className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors cursor-pointer"
               >
                 Yes, Remove Employee
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Clear Sample Data Confirmation Modal */}
-      {isClearDataConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-4">
-              <Sparkles className="w-6 h-6" />
-            </div>
-
-            <h3 className="text-base font-bold text-slate-900">
-              Start Clean with Zero Sample Orders?
-            </h3>
-            
-            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              This will clear out all 8 sample demo repair orders, test parts deliveries, and sample chat messages.
-            </p>
-
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mt-3 text-xs text-blue-900">
-              <span className="font-bold">Your employee roster remains intact. </span>
-              You can immediately start creating real repair orders for your actual customers and shop operations. You can also restore sample data anytime using the "Restore Demo" button.
-            </div>
-
-            <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => setIsClearDataConfirmOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  clearAllRepairOrders();
-                  setIsClearDataConfirmOpen(false);
-                  showFeedback('All demo repair orders cleared. Clean shop slate ready!');
-                }}
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer"
-              >
-                Clear All & Start Fresh
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Full Wipe Confirmation Modal (Both Staff & Repair Orders) */}
-      {isFullWipeConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl border border-rose-200 max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
-              <Trash2 className="w-6 h-6" />
-            </div>
-
-            <h3 className="text-base font-bold text-slate-900">
-              Wipe Sample Staff & Repair Orders?
-            </h3>
-            
-            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              This will remove all sample demo employees and sample repair orders, opening the <strong>Shop Setup Wizard</strong> so you can configure your real dealership name, manager credentials, and genuine staff roster.
-            </p>
-
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mt-3 text-xs text-amber-900">
-              <span className="font-bold">100% Clean Slate: </span>
-              A single primary Service Manager account will be initialized for you. You can also restore sample demo data at any time by clicking "Restore Demo".
-            </div>
-
-            <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => setIsFullWipeConfirmOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setIsFullWipeConfirmOpen(false);
-                  setIsStaffManagementOpen(false);
-                  resetAllDataToCleanSlateHandler();
-                }}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors cursor-pointer"
-              >
-                Wipe & Start Setup Wizard
               </button>
             </div>
           </div>

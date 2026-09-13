@@ -90,13 +90,11 @@ export const PartsDashboard: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold uppercase text-slate-400">Tech Requests</div>
           <div className="text-2xl font-black text-amber-600 mt-1">{requestedCount}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5 font-medium">Awaiting supplier order</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold uppercase text-slate-400">Ordered / In Processing</div>
           <div className="text-2xl font-black text-blue-600 mt-1">{orderedCount}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5 font-medium">With supplier hub</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm bg-orange-50/20">
@@ -105,19 +103,16 @@ export const PartsDashboard: React.FC = () => {
             <Truck className="w-3.5 h-3.5 text-orange-600" />
           </div>
           <div className="text-2xl font-black text-orange-600 mt-1">{inTransitCount}</div>
-          <div className="text-[11px] text-orange-600 font-medium mt-0.5">Active ETAs tracked</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold uppercase text-slate-400">Received at Counter</div>
           <div className="text-2xl font-black text-green-600 mt-1">{receivedCount}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5 font-medium">Ready for bay delivery</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
           <div className="text-xs font-bold uppercase text-slate-400">Issued to Tech</div>
           <div className="text-2xl font-black text-slate-800 mt-1">{issuedCount}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5 font-medium">In bay assembly</div>
         </div>
 
       </div>

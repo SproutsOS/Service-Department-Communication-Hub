@@ -127,26 +127,26 @@ export function getDiagnosticStatusDetails(ro: {
   timeLabel: string;
   duration: string;
 } | null {
-  if (ro.status === 'WAITING_DIAGNOSIS') {
+  if (ro.status === 'WAITING_DIAGNOSTICS' || ro.status === 'WAITING_DIAGNOSIS') {
     const timestamp = ro.waitingDiagnosisAt || ro.dispatchedAt || ro.createdAt;
     const duration = formatDurationSince(timestamp);
     return {
       isWaiting: true,
       isDiagnosing: false,
-      label: 'Waiting Diagnosis',
+      label: 'Waiting Diagnostics',
       badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
       timeLabel: timestamp ? `In queue since ${formatTimeOnly(timestamp)}` : 'In queue',
       duration: duration || 'Recently queued',
     };
   }
 
-  if (ro.status === 'BEING_DIAGNOSED' || ro.status === 'IN_BAY') {
+  if (ro.status === 'IN_DIAG' || ro.status === 'BEING_DIAGNOSED' || ro.status === 'IN_BAY') {
     const timestamp = ro.diagnosisStartedAt || ro.dispatchedAt;
     const duration = formatDurationSince(timestamp);
     return {
       isWaiting: false,
       isDiagnosing: true,
-      label: 'Being Diagnosed',
+      label: 'In Diag',
       badgeClass: 'bg-blue-100 text-blue-700 border-blue-200',
       timeLabel: timestamp ? `Started at ${formatTimeOnly(timestamp)}` : 'Underway',
       duration: duration || 'Recently started',

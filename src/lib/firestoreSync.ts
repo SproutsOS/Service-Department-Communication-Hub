@@ -146,6 +146,16 @@ export async function syncRepairOrder(ro: RepairOrder) {
   }
 }
 
+// Delete a repair order
+export async function deleteRepairOrderDoc(roId: string) {
+  try {
+    const docRef = doc(db, REPAIR_ORDERS_COL, roId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${REPAIR_ORDERS_COL}/${roId}`);
+  }
+}
+
 // Save or update a user
 export async function syncUser(user: User) {
   try {

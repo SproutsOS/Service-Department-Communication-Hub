@@ -4,11 +4,8 @@ import {
   Bell, 
   Volume2, 
   VolumeX, 
-  Smartphone, 
-  Laptop, 
   Plus, 
   RotateCcw, 
-  Trash2,
   Settings,
   ChevronDown, 
   AlertCircle,
@@ -27,10 +24,8 @@ export const Navbar: React.FC = () => {
     users,
     notifications,
     isSoundEnabled,
-    isMobileSimulated,
     pushPermission,
     toggleSound,
-    setIsMobileSimulated,
     setIsNewROModalOpen,
     setIsLoginModalOpen,
     setIsStaffManagementOpen,
@@ -62,19 +57,6 @@ export const Navbar: React.FC = () => {
     }
   };
 
-  const getRoleBadge = () => {
-    switch (currentUser.role) {
-      case 'SERVICE_MANAGER':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">Service Manager</span>;
-      case 'SERVICE_ADVISOR':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">Service Advisor</span>;
-      case 'TECHNICIAN':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">Technician</span>;
-      case 'PARTS_SPECIALIST':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">Parts Specialist</span>;
-    }
-  };
-
   return (
     <header className="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 sm:px-6 shadow-md shrink-0 sticky top-0 z-40">
       
@@ -85,7 +67,7 @@ export const Navbar: React.FC = () => {
         </div>
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight flex items-center gap-1.5">
-            <span>{shopName || 'Precision Auto Care'}</span>
+            <span>{shopName || 'Woolwine CDJR'}</span>
             <span className="text-blue-400 font-extrabold text-xs px-1.5 py-0.5 rounded bg-blue-950/60 border border-blue-800/80">Pro</span>
             <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/80 uppercase ml-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -201,30 +183,6 @@ export const Navbar: React.FC = () => {
           </div>
         )}
 
-        {/* Mobile View Toggle */}
-        <button
-          id="mobile-view-toggle-btn"
-          onClick={() => setIsMobileSimulated(!isMobileSimulated)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-            isMobileSimulated
-              ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
-              : 'bg-slate-700/80 text-slate-300 border-slate-600 hover:bg-slate-700 hover:text-white'
-          }`}
-          title="Toggle Tech Mobile Bay Handheld Simulator"
-        >
-          {isMobileSimulated ? (
-            <>
-              <Laptop className="w-3.5 h-3.5 text-white" />
-              <span className="hidden lg:inline font-semibold">Desktop Mode</span>
-            </>
-          ) : (
-            <>
-              <Smartphone className="w-3.5 h-3.5 text-slate-300" />
-              <span className="hidden lg:inline font-semibold">Tech Mobile</span>
-            </>
-          )}
-        </button>
-
         {/* Audio Chime Toggle */}
         <button
           id="sound-chime-toggle-btn"
@@ -263,52 +221,28 @@ export const Navbar: React.FC = () => {
           <span className="hidden md:inline">Staff ({users.length})</span>
         </button>
 
-        {/* Active User Details (Matches Professional Polish Theme Header) */}
+        {/* Active User Details (Displays only signed-in user name) */}
         <button
           id="user-profile-menu-btn"
           onClick={() => setIsLoginModalOpen(true)}
-          className="flex items-center gap-2.5 pl-2 pr-1 py-1 rounded-lg hover:bg-slate-700/60 transition-colors cursor-pointer group"
-          title="Switch User Role & Log In"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-white hover:text-blue-300 border border-slate-600/60 transition-colors cursor-pointer group text-sm font-medium"
+          title="Switch User / Log In"
         >
-          <div className="flex flex-col items-end hidden sm:flex text-right">
-            <span className="text-sm font-medium text-white group-hover:text-blue-300 transition-colors">
-              {currentUser.name}
-            </span>
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
-              {currentUser.role === 'SERVICE_MANAGER' && 'Service Manager'}
-              {currentUser.role === 'SERVICE_ADVISOR' && 'Service Advisor'}
-              {currentUser.role === 'TECHNICIAN' && 'Technician'}
-              {currentUser.role === 'PARTS_SPECIALIST' && 'Parts Specialist'}
-            </span>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-blue-600 border-2 border-slate-500 group-hover:border-blue-400 text-white font-bold text-xs flex items-center justify-center transition-colors">
-            {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
-          </div>
+          <span className="font-semibold">{currentUser.name}</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-300 transition-colors" />
         </button>
 
-        {/* Re-run Setup Wizard */}
-        <button
-          id="navbar-setup-wizard-btn"
-          onClick={() => setIsSetupWizardOpen(true)}
-          className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
-          title="Open Initial Setup Wizard (Configure Shop & Roster)"
-        >
-          <Settings className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Wipe to Clean Slate Button */}
-        <button
-          id="clear-all-data-btn"
-          onClick={() => {
-            if (window.confirm('Wipe all sample tickets, employees, and notifications to start with a pure clean slate (0 tickets)?')) {
-              resetAllDataToCleanSlateHandler();
-            }
-          }}
-          className="p-1.5 text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 rounded-lg transition-colors"
-          title="Wipe to Clean Slate (0 tickets, fresh shop setup)"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        {/* Re-run Setup Wizard - Restricted to Service Manager */}
+        {currentUser.role === 'SERVICE_MANAGER' && (
+          <button
+            id="navbar-setup-wizard-btn"
+            onClick={() => setIsSetupWizardOpen(true)}
+            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
+            title="Open Initial Setup Wizard (Configure Shop & Roster)"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        )}
 
       </div>
     </header>

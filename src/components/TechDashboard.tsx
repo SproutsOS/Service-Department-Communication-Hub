@@ -9,12 +9,11 @@ import {
   Play, 
   Calendar, 
   Send,
-  Smartphone,
   Truck,
   Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { STATUS_CONFIG } from '../data/mockData';
+import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { ROStatus } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly } from '../utils/formatters';
 
@@ -24,15 +23,24 @@ export const TechDashboard: React.FC = () => {
     repairOrders, 
     setSelectedRO, 
     updateROStatus, 
-    startDiagnosis,
-    setIsMobileSimulated 
+    startDiagnosis
   } = useApp();
 
   // Filter strictly to this technician's assigned ROs
   const myROs = repairOrders.filter(ro => ro.techId === currentUser.id);
 
-  const activeROs = myROs.filter(ro => ro.status !== 'COMPLETED');
-  const completedROs = myROs.filter(ro => ro.status === 'COMPLETED');
+  const activeROs = myROs.filter(ro => 
+    ro.status !== 'CLOSED' && 
+    ro.status !== 'COMPLETED' && 
+    normalizeROStatus(ro.status) !== 'REPAIR_COMPLETE' && 
+    normalizeROStatus(ro.status) !== 'READY_FOR_PICKUP'
+  );
+  const completedROs = myROs.filter(ro => 
+    ro.status === 'CLOSED' || 
+    ro.status === 'COMPLETED' || 
+    normalizeROStatus(ro.status) === 'REPAIR_COMPLETE' || 
+    normalizeROStatus(ro.status) === 'READY_FOR_PICKUP'
+  );
 
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
 
@@ -40,21 +48,21 @@ export const TechDashboard: React.FC = () => {
 
   const handleQuickStatus = (e: React.MouseEvent, roId: string, newStatus: ROStatus) => {
     e.stopPropagation();
-    updateROStatus(roId, newStatus, `1-tap status updated by ${currentUser.name}`);
+    updateROStatus(roId, newStatus, `1-tap status updated to ${STATUS_CONFIG[newStatus]?.label || newStatus} by ${currentUser.name}`);
   };
 
   return (
     <div className="space-y-6">
       
       {/* Top Banner */}
-      <div className="bg-slate-800 text-white rounded-xl p-5 sm:p-6 border border-slate-700 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-slate-800 text-white rounded-xl p-5 sm:p-6 border border-slate-700 shadow-sm relative">
+        <div className="flex items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-full bg-blue-600 ring-2 ring-blue-400 text-white font-bold text-base flex items-center justify-center shrink-0">
               {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'T'}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg sm:text-xl font-black tracking-tight">{currentUser.name}</h1>
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
                   <Award className="w-3 h-3 text-blue-400" />
@@ -67,50 +75,53 @@ export const TechDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsMobileSimulated(true)}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
-            >
-              <Smartphone className="w-4 h-4" />
-              <span>Switch to Mobile Bay View</span>
-            </button>
+          <div className="text-right shrink-0">
+            <span className="text-slate-400 text-[11px] uppercase font-bold tracking-wider block">
+              Assigned Total:
+            </span>
+            <span className="text-2xl sm:text-3xl font-black text-white block mt-0.5">
+              {activeROs.length}
+            </span>
           </div>
         </div>
 
         {/* Quick Bay Metrics including Diagnostic Breakdown */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 pt-5 border-t border-slate-700 text-xs">
           <div>
-            <span className="text-slate-400 text-[11px] uppercase font-bold tracking-wider block">Assigned Total:</span>
-            <span className="text-2xl font-black text-white mt-1 block">{activeROs.length}</span>
-          </div>
-          <div>
             <span className="text-amber-400 text-[11px] uppercase font-bold tracking-wider block">Waiting Diag:</span>
             <span className="text-2xl font-black text-amber-300 mt-1 block">
-              {myROs.filter(r => r.status === 'WAITING_DIAGNOSIS').length}
+              {myROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length}
             </span>
           </div>
           <div>
-            <span className="text-blue-400 text-[11px] uppercase font-bold tracking-wider block">Being Diagnosed:</span>
+            <span className="text-blue-400 text-[11px] uppercase font-bold tracking-wider block">In Diag:</span>
             <span className="text-2xl font-black text-blue-300 mt-1 block">
-              {myROs.filter(r => r.status === 'BEING_DIAGNOSED' || r.status === 'IN_BAY').length}
+              {myROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length}
             </span>
           </div>
           <div>
-            <span className="text-indigo-400 text-[11px] uppercase font-bold tracking-wider block">Getting Estimate:</span>
+            <span className="text-indigo-400 text-[11px] uppercase font-bold tracking-wider block">Waiting on Approval:</span>
             <span className="text-2xl font-black text-indigo-300 mt-1 block">
-              {myROs.filter(r => r.status === 'GETTING_ESTIMATE').length}
+              {myROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE' || normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL' || normalizeROStatus(r.status) === 'APPROVED').length}
             </span>
           </div>
           <div>
-            <span className="text-orange-400 text-[11px] uppercase font-bold tracking-wider block">Waiting Parts:</span>
+            <span className="text-orange-400 text-[11px] uppercase font-bold tracking-wider block">Parts on Order:</span>
             <span className="text-2xl font-black text-orange-400 mt-1 block">
-              {myROs.filter(r => r.status === 'WAITING_PARTS').length}
+              {myROs.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length}
             </span>
           </div>
           <div>
-            <span className="text-green-400 text-[11px] uppercase font-bold tracking-wider block">Finished Today:</span>
-            <span className="text-2xl font-black text-green-400 mt-1 block">{completedROs.length}</span>
+            <span className="text-cyan-400 text-[11px] uppercase font-bold tracking-wider block">In Repair:</span>
+            <span className="text-2xl font-black text-cyan-300 mt-1 block">
+              {myROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS').length}
+            </span>
+          </div>
+          <div>
+            <span className="text-emerald-400 text-[11px] uppercase font-bold tracking-wider block">Finished:</span>
+            <span className="text-2xl font-black text-emerald-400 mt-1 block">
+              {completedROs.length}
+            </span>
           </div>
         </div>
       </div>
@@ -125,7 +136,7 @@ export const TechDashboard: React.FC = () => {
               : 'text-slate-600 hover:bg-slate-200'
           }`}
         >
-          Active Bay Jobs ({activeROs.length})
+          Active Repair Orders ({activeROs.length})
         </button>
         <button
           onClick={() => setActiveTab('COMPLETED')}
@@ -135,7 +146,7 @@ export const TechDashboard: React.FC = () => {
               : 'text-slate-600 hover:bg-slate-200'
           }`}
         >
-          Finished & Staged ({completedROs.length})
+          Finished ({completedROs.length})
         </button>
       </div>
 
@@ -297,9 +308,9 @@ export const TechDashboard: React.FC = () => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_DIAGNOSIS')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_DIAGNOSTICS')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'WAITING_DIAGNOSIS'
+                        normalizeROStatus(ro.status) === 'WAITING_DIAGNOSTICS'
                           ? 'bg-amber-500 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
@@ -308,87 +319,65 @@ export const TechDashboard: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'BEING_DIAGNOSED')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'IN_DIAG')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'BEING_DIAGNOSED'
+                        normalizeROStatus(ro.status) === 'IN_DIAG'
                           ? 'bg-blue-600 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
                     >
-                      Being Diagnosed
+                      In Diag
                     </button>
 
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'GETTING_ESTIMATE')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'ESTIMATE_DONE')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'GETTING_ESTIMATE'
+                        normalizeROStatus(ro.status) === 'ESTIMATE_DONE'
                           ? 'bg-indigo-600 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
                     >
-                      Getting Estimate
+                      Estimate Done
                     </button>
 
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_APPROVAL')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'PARTS_IN_TO_TECH')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'WAITING_APPROVAL'
-                          ? 'bg-orange-500 text-white shadow-xs'
+                        normalizeROStatus(ro.status) === 'PARTS_IN_TO_TECH'
+                          ? 'bg-purple-600 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
                     >
-                      Needs Approval
+                      Parts In / To Tech
                     </button>
 
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'APPROVED')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_IN_PROGRESS')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'APPROVED'
-                          ? 'bg-teal-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Approved
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_PARTS')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'WAITING_PARTS'
-                          ? 'bg-orange-500 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Waiting on Parts
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'IN_REPAIR')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'IN_REPAIR'
+                        normalizeROStatus(ro.status) === 'REPAIR_IN_PROGRESS'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
                     >
-                      Active Assembly
+                      Repair in Progress
                     </button>
 
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'QC_TEST')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_COMPLETE')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        ro.status === 'QC_TEST'
-                          ? 'bg-cyan-600 text-white shadow-xs'
+                        normalizeROStatus(ro.status) === 'REPAIR_COMPLETE'
+                          ? 'bg-teal-600 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
                     >
-                      Quality Check/Test Drive
+                      Repair Complete
                     </button>
 
                     <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'COMPLETED')}
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'READY_FOR_PICKUP')}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-black text-white ml-auto cursor-pointer"
                     >
-                      Finish & Stage Vehicle
+                      Ready for Pickup
                     </button>
                   </div>
                 </div>

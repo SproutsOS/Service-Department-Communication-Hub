@@ -15,6 +15,7 @@ import {
   subscribeToNotifications,
   subscribeToShopSettings,
   syncRepairOrder,
+  deleteRepairOrderDoc,
   syncUser,
   deleteUserDoc,
   syncNotification,
@@ -43,7 +44,6 @@ interface AppContextType {
   isNewROModalOpen: boolean;
   isLoginModalOpen: boolean;
   isStaffManagementOpen: boolean;
-  isMobileSimulated: boolean;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
   
@@ -53,7 +53,6 @@ interface AppContextType {
   setIsNewROModalOpen: (isOpen: boolean) => void;
   setIsLoginModalOpen: (isOpen: boolean) => void;
   setIsStaffManagementOpen: (isOpen: boolean) => void;
-  setIsMobileSimulated: (isMobile: boolean) => void;
   toggleSound: () => void;
   requestPushPermission: () => Promise<void>;
   
@@ -97,6 +96,8 @@ interface AppContextType {
   
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
+  deleteRepairOrder: (roId: string) => boolean;
+  updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>) => boolean;
   clearAllRepairOrders: () => void;
   resetAllDataToCleanSlateHandler: () => void;
   resetToDemoData: () => void;
@@ -122,9 +123,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Dealership/Shop Name
   const [shopName, setShopNameState] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_SHOP_NAME) || 'My Service Department';
+      return localStorage.getItem(STORAGE_KEY_SHOP_NAME) || 'Woolwine CDJR';
     } catch {
-      return 'My Service Department';
+      return 'Woolwine CDJR';
     }
   });
 
@@ -185,14 +186,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUserState] = useState<User>(() => {
     try {
       const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+      const savedUsersRaw = localStorage.getItem(STORAGE_KEY_USERS);
+      const usersList: User[] = savedUsersRaw ? JSON.parse(savedUsersRaw) : INITIAL_USERS;
+
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
-        const savedUsersRaw = localStorage.getItem(STORAGE_KEY_USERS);
-        const usersList: User[] = savedUsersRaw ? JSON.parse(savedUsersRaw) : INITIAL_USERS;
-        const match = usersList.find(u => u.id === parsed.id || u.email.toLowerCase() === (parsed.email || '').toLowerCase());
+        const match = usersList.find(u => 
+          u.id === parsed.id || 
+          (u.email && parsed.email && u.email.toLowerCase() === parsed.email.toLowerCase())
+        );
         if (match) return match;
-        if (parsed.id && parsed.name && parsed.role) return parsed;
+        // Never return an obsolete user (e.g. Marcus Vance) if they no longer exist in the shop's roster
       }
+
+      // If no valid match, default to the Service Manager or first employee in the roster
+      const primaryManager = usersList.find(u => u.role === 'SERVICE_MANAGER');
+      if (primaryManager) return primaryManager;
+      if (usersList.length > 0) return usersList[0];
     } catch {
       // ignore
     }
@@ -234,7 +244,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
-  const [isMobileSimulated, setIsMobileSimulated] = useState(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'default'>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -289,8 +298,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUsers(cloudUsers);
         // Keep active session user object current
         setCurrentUserState((prev) => {
-          const fresh = cloudUsers.find(u => u.id === prev.id);
-          return fresh || prev;
+          const fresh = cloudUsers.find(u => 
+            u.id === prev.id || 
+            (u.email && prev.email && u.email.toLowerCase() === prev.email.toLowerCase())
+          );
+          if (fresh) return fresh;
+
+          // If active user is no longer in the cloud roster (e.g. Marcus Vance replaced), switch to the Service Manager or first employee
+          const activeManager = cloudUsers.find(u => u.role === 'SERVICE_MANAGER');
+          return activeManager || cloudUsers[0];
         });
         setIsCloudSynced(true);
       }
@@ -328,6 +344,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // Ensure active session user is ALWAYS strictly synchronized with the current employee roster
+  useEffect(() => {
+    if (!users || users.length === 0) return;
+
+    // Check if current user is an actual member of the shop's employee roster
+    const match = users.find(u => 
+      u.id === currentUser.id || 
+      (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+    );
+
+    if (!match) {
+      // Current user is not in the roster (e.g. obsolete "Marcus Vance" in local storage).
+      // Immediately switch to the Service Manager (e.g. Greg Saulters) or first staff member
+      const designatedManager = users.find(u => u.role === 'SERVICE_MANAGER') || users[0];
+      if (designatedManager) {
+        setCurrentUserState(designatedManager);
+        try {
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(designatedManager));
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      // If the current user was updated (name changed, title changed, cert level changed, etc.)
+      if (
+        match.name !== currentUser.name ||
+        match.title !== currentUser.title ||
+        match.role !== currentUser.role ||
+        match.certificationLevel !== currentUser.certificationLevel ||
+        match.phone !== currentUser.phone ||
+        match.email !== currentUser.email
+      ) {
+        setCurrentUserState(match);
+        try {
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(match));
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [users, currentUser]);
+
   const selectedRO = repairOrders.find(ro => ro.id === selectedROId) || null;
 
   const setSelectedRO = (ro: RepairOrder | null) => {
@@ -336,6 +394,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setCurrentUser = (user: User) => {
     setCurrentUserState(user);
+    try {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    } catch {
+      // ignore
+    }
   };
 
   const toggleSound = () => {
@@ -408,9 +471,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let waitingDiagnosisAt = targetRO.waitingDiagnosisAt;
     let diagnosisStartedAt = targetRO.diagnosisStartedAt;
 
-    if (newStatus === 'WAITING_DIAGNOSIS') {
+    if (newStatus === 'WAITING_DIAGNOSTICS' || newStatus === 'WAITING_DIAGNOSIS') {
       waitingDiagnosisAt = now;
-    } else if (newStatus === 'BEING_DIAGNOSED' || newStatus === 'IN_BAY') {
+    } else if (newStatus === 'IN_DIAG' || newStatus === 'BEING_DIAGNOSED' || newStatus === 'IN_BAY') {
       if (!diagnosisStartedAt) {
         diagnosisStartedAt = now;
       }
@@ -452,7 +515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const startDiagnosis = (roId: string, notes?: string) => {
     updateROStatus(
       roId, 
-      'BEING_DIAGNOSED', 
+      'IN_DIAG', 
       notes || `Technician ${currentUser.name} commenced active diagnostic testing and inspection.`
     );
   };
@@ -470,7 +533,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newHistory = {
       id: `hist_${Date.now()}`,
-      status: 'WAITING_DIAGNOSIS' as ROStatus,
+      status: 'WAITING_DIAGNOSTICS' as ROStatus,
       updatedBy: currentUser.id,
       updatedByName: currentUser.name,
       userRole: currentUser.role,
@@ -480,7 +543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updatedRO: RepairOrder = {
       ...targetRO,
-      status: 'WAITING_DIAGNOSIS',
+      status: 'WAITING_DIAGNOSTICS',
       techId: tech.id,
       techName: tech.name,
       bay: assignedBay,
@@ -604,8 +667,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const allReceived = updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
     let nextROStatus = targetRO.status;
-    if (allReceived && targetRO.status === 'WAITING_PARTS') {
-      nextROStatus = 'IN_REPAIR';
+    if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
+      nextROStatus = status === 'ISSUED_TO_TECH' ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
     }
 
     const isUrgent = status === 'RECEIVED' || status === 'ISSUED_TO_TECH';
@@ -623,7 +686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedByName: currentUser.name,
           userRole: currentUser.role,
           timestamp: new Date().toISOString(),
-          notes: `Part ${partDescription} status updated to ${status.replace('_', ' ')}.${nextROStatus === 'IN_REPAIR' ? ' All parts present, RO transitioned to In Repair.' : ''}`,
+          notes: `Part ${partDescription} status updated to ${status.replace('_', ' ')}.${nextROStatus === 'REPAIR_IN_PROGRESS' ? ' All parts present, RO transitioned to Repair in Progress.' : nextROStatus === 'PARTS_IN_TO_TECH' ? ' Parts arrived, staged for tech.' : ''}`,
         },
       ],
     };
@@ -661,7 +724,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date().toISOString();
 
     const tech = data.techId ? users.find(u => u.id === data.techId) : undefined;
-    const initialStatus: ROStatus = tech ? 'WAITING_DIAGNOSIS' : 'CREATED';
+    const initialStatus: ROStatus = 'WAITING_DIAGNOSTICS';
 
     const newRO: RepairOrder = {
       id: newId,
@@ -726,6 +789,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // User Management
   const addUser = (userData: Omit<User, 'id'>): User => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && users.length > 0) {
+      alert('Permission Denied: Only the Service Manager has permission to add dealership staff.');
+      throw new Error('Permission denied');
+    }
     const newId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const pass = userData.password || userData.pin || '1234';
     const newUser: User = {
@@ -747,6 +814,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUser = (userId: string, updates: Partial<User>) => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && users.length > 0) {
+      alert('Permission Denied: Only the Service Manager has permission to update staff records.');
+      return;
+    }
     setUsers(prev => {
       const updatedList = prev.map(u => u.id === userId ? { ...u, ...updates } : u);
       const target = updatedList.find(u => u.id === userId);
@@ -756,12 +827,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updatedList;
     });
 
-    if (currentUser.id === userId) {
-      setCurrentUserState(prev => ({ ...prev, ...updates }));
-    }
+    setCurrentUserState(prev => {
+      if (
+        prev.id === userId || 
+        (updates.email && prev.email && prev.email.toLowerCase() === updates.email.toLowerCase()) ||
+        users.length === 1
+      ) {
+        const updated = { ...prev, ...updates };
+        try {
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      }
+      return prev;
+    });
   };
 
   const removeUser = (userId: string): { success: boolean; message?: string } => {
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      return { 
+        success: false, 
+        message: 'Permission Denied: Only the Service Manager has permission to delete or remove dealership staff.' 
+      };
+    }
     const target = users.find(u => u.id === userId);
     if (!target) return { success: false, message: 'Employee not found.' };
 
@@ -806,15 +896,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(prev => prev.filter(u => u.id !== userId));
     deleteUserDoc(userId);
 
-    if (currentUser.id === userId) {
+    if (currentUser.id === userId || (target && currentUser.email && target.email && currentUser.email.toLowerCase() === target.email.toLowerCase())) {
       const fallbackUser = remainingManagers[0] || users.find(u => u.id !== userId) || INITIAL_USERS[0];
       setCurrentUserState(fallbackUser);
+      try {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(fallbackUser));
+      } catch {
+        // ignore
+      }
     }
 
     return { success: true };
   };
 
+  // Delete a repair order (Restricted to Service Manager)
+  const deleteRepairOrder = (roId: string): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      alert('Permission Denied: Only the Service Manager has permission to delete repair orders.');
+      return false;
+    }
+    setRepairOrders(prev => {
+      const updated = prev.filter(r => r.id !== roId);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+    if (selectedROId === roId) {
+      setSelectedROId(null);
+    }
+    deleteRepairOrderDoc(roId);
+    return true;
+  };
+
+  // Update core entered repair order details (Restricted to Service Manager)
+  const updateRepairOrderDetails = (roId: string, updates: Partial<RepairOrder>): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      alert('Permission Denied: Only the Service Manager has permission to modify core repair order records.');
+      return false;
+    }
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const updatedRO = {
+            ...ro,
+            ...updates,
+            history: [
+              ...ro.history,
+              {
+                id: `hist-${Date.now()}`,
+                status: ro.status,
+                updatedBy: currentUser.id,
+                updatedByName: currentUser.name,
+                userRole: currentUser.role,
+                timestamp: new Date().toISOString(),
+                notes: `Service Manager updated core records (${Object.keys(updates).join(', ')})`
+              }
+            ]
+          };
+          syncRepairOrder(updatedRO);
+          return updatedRO;
+        }
+        return ro;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+    return true;
+  };
+
   const clearAllRepairOrders = () => {
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      alert('Permission Denied: Only the Service Manager has permission to clear repair orders.');
+      return;
+    }
     setRepairOrders([]);
     setNotifications([]);
     setSelectedROId(null);
@@ -852,6 +1013,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setCurrentUserState(found);
+    try {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(found));
+    } catch {
+      // ignore
+    }
     setIsLoginModalOpen(false);
     return { success: true, user: found };
   };
@@ -874,13 +1040,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const managerUser: User = {
       id: `usr_mgr_${Date.now()}`,
-      name: config.manager.name.trim() || 'Marcus Vance',
+      name: config.manager.name.trim() || 'Service Manager',
       email: config.manager.email.trim().toLowerCase() || 'manager@precisionauto.com',
       password: config.manager.password?.trim() || 'admin123',
       pin: config.manager.pin?.trim() || '1234',
       role: 'SERVICE_MANAGER',
       title: config.manager.title?.trim() || 'Service Director / General Manager',
-      phone: config.manager.phone?.trim() || '(555) 302-8811',
+      phone: config.manager.phone?.trim() || '',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     };
 
@@ -1024,7 +1190,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isNewROModalOpen,
         isLoginModalOpen,
         isStaffManagementOpen,
-        isMobileSimulated,
         isSoundEnabled,
         pushPermission,
         setCurrentUser,
@@ -1032,7 +1197,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsNewROModalOpen,
         setIsLoginModalOpen,
         setIsStaffManagementOpen,
-        setIsMobileSimulated,
         toggleSound,
         requestPushPermission,
         addUser,
@@ -1049,6 +1213,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createRepairOrder,
         markNotificationRead,
         markAllNotificationsRead,
+        deleteRepairOrder,
+        updateRepairOrderDetails,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,
         resetToDemoData,

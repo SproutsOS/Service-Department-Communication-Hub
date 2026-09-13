@@ -9,18 +9,20 @@ import {
   Search, 
   Filter, 
   CheckCircle2, 
-  Send,
-  Truck,
-  LayoutGrid,
-  ListFilter,
-  Check,
-  Calendar,
-  Award
+  Send, 
+  Truck, 
+  LayoutGrid, 
+  ListFilter, 
+  Check, 
+  Calendar, 
+  Award,
+  Calculator,
+  ShieldCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
 import { ROStatus } from '../types';
-import { STATUS_CONFIG } from '../data/mockData';
+import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince } from '../utils/formatters';
 
 export const ManagerDashboard: React.FC = () => {
@@ -35,15 +37,17 @@ export const ManagerDashboard: React.FC = () => {
   // Technicians
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
 
-  // Metrics (Matching Professional Polish Theme)
-  const totalOpen = repairOrders.filter(r => r.status !== 'COMPLETED').length;
-  const waitingDiagCount = repairOrders.filter(r => r.status === 'WAITING_DIAGNOSIS').length;
-  const beingDiagnosedCount = repairOrders.filter(r => r.status === 'BEING_DIAGNOSED' || r.status === 'IN_BAY').length;
-  const gettingEstimateCount = repairOrders.filter(r => r.status === 'GETTING_ESTIMATE').length;
-  const waitingApprovalCount = repairOrders.filter(r => r.status === 'WAITING_APPROVAL').length;
-  const approvedCount = repairOrders.filter(r => r.status === 'APPROVED').length;
-  const waitingPartsCount = repairOrders.filter(r => r.status === 'WAITING_PARTS').length;
-  const readyQC = repairOrders.filter(r => r.status === 'QC_TEST' || r.status === 'COMPLETED').length;
+  // Metrics matching user flow (Uniform with Service Advisor)
+  const openROsCount = repairOrders.filter(r => r.status !== 'CLOSED' && r.status !== 'COMPLETED').length;
+  const waitingDiagCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
+  const inDiagCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
+  const estimateDoneCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
+  const waitingApprovalCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
+  const approvedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
+  const partsOrderedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
+  const inRepairCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
+  const readyPickupCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
+  const completedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'CLOSED' || r.status === 'COMPLETED').length;
 
   // Parts arriving today
   const partsInTransit = repairOrders.flatMap(ro => 
@@ -55,7 +59,19 @@ export const ManagerDashboard: React.FC = () => {
   // Filter ROs
   const filteredROs = repairOrders.filter(ro => {
     if (urgentOnly && !ro.isUrgent) return false;
-    if (statusFilter !== 'ALL' && ro.status !== statusFilter) return false;
+    if (statusFilter !== 'ALL') {
+      const roNorm = normalizeROStatus(ro.status);
+      const filterNorm = normalizeROStatus(statusFilter);
+      if (filterNorm === 'PARTS_ORDERED') {
+        if (roNorm !== 'PARTS_ORDERED' && roNorm !== 'PARTS_IN_TO_TECH') return false;
+      } else if (filterNorm === 'REPAIR_IN_PROGRESS') {
+        if (roNorm !== 'REPAIR_IN_PROGRESS' && roNorm !== 'REPAIR_COMPLETE') return false;
+      } else if (filterNorm === 'READY_FOR_PICKUP') {
+        if (roNorm !== 'READY_FOR_PICKUP' && roNorm !== 'CLOSED' && ro.status !== 'COMPLETED') return false;
+      } else {
+        if (roNorm !== filterNorm) return false;
+      }
+    }
     if (techFilter !== 'ALL' && ro.techId !== techFilter) return false;
 
     if (searchQuery.trim()) {
@@ -94,87 +110,159 @@ export const ManagerDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* 5 KPI Stats Cards with Dedicated Diagnostic Phase Visibility */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 shrink-0">
+      {/* Quick Status Pill Filters (Matching Service Advisor Flow Uniformity) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
         
-        {/* Open Orders */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs font-bold text-slate-500 uppercase mb-1">Open Orders</div>
-          <div className="text-2xl sm:text-3xl font-black text-slate-800">{totalOpen}</div>
-          <div className="text-[11px] text-slate-400 mt-1">Total active jobs in shop</div>
-        </div>
-
-        {/* Waiting to be Diagnosed */}
-        <div 
-          onClick={() => setStatusFilter(statusFilter === 'WAITING_DIAGNOSIS' ? 'ALL' : 'WAITING_DIAGNOSIS')}
-          className={`p-4 rounded-xl border shadow-sm cursor-pointer transition-all ${
-            statusFilter === 'WAITING_DIAGNOSIS' 
-              ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-400' 
-              : 'bg-white border-slate-200 hover:border-amber-300'
+        {/* 1. Open RO's */}
+        <button
+          onClick={() => setStatusFilter('ALL')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'ALL'
+              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-bold text-amber-700 uppercase">Waiting Diag</div>
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
+          <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 truncate">Open RO's</div>
+          <div className="text-lg sm:text-xl font-black">{openROsCount}</div>
+        </button>
+
+        {/* 2. Waiting Diag */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'WAITING_DIAGNOSTICS' ? 'ALL' : 'WAITING_DIAGNOSTICS')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'WAITING_DIAGNOSTICS'
+              ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Waiting Diag</span>
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-amber-700 mt-1">{waitingDiagCount}</div>
-          <div className="text-[11px] text-amber-800 font-medium mt-1">Queued for technician check</div>
-        </div>
+          <div className="text-lg sm:text-xl font-black text-amber-600">{waitingDiagCount}</div>
+        </button>
 
-        {/* Being Diagnosed */}
-        <div 
-          onClick={() => setStatusFilter(statusFilter === 'BEING_DIAGNOSED' ? 'ALL' : 'BEING_DIAGNOSED')}
-          className={`p-4 rounded-xl border shadow-sm cursor-pointer transition-all ${
-            statusFilter === 'BEING_DIAGNOSED' 
-              ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-400' 
-              : 'bg-white border-slate-200 hover:border-blue-300'
+        {/* 3. In Diag */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'IN_DIAG' ? 'ALL' : 'IN_DIAG')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'IN_DIAG'
+              ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50/50 shadow-sm'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-bold text-blue-700 uppercase">Being Diagnosed</div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">In Diag</span>
             <Wrench className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-blue-600 mt-1">{beingDiagnosedCount}</div>
-          <div className="text-[11px] text-blue-600 font-medium mt-1">Active scan & teardown</div>
-        </div>
+          <div className="text-lg sm:text-xl font-black text-blue-600">{inDiagCount}</div>
+        </button>
 
-        {/* Waiting on Parts */}
-        <div 
-          onClick={() => setStatusFilter(statusFilter === 'WAITING_PARTS' ? 'ALL' : 'WAITING_PARTS')}
-          className={`p-4 rounded-xl border shadow-sm cursor-pointer transition-all ${
-            statusFilter === 'WAITING_PARTS' 
-              ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-400' 
-              : 'bg-white border-slate-200 hover:border-orange-300'
+        {/* 4. Estimate Done */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'ESTIMATE_DONE' ? 'ALL' : 'ESTIMATE_DONE')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'ESTIMATE_DONE'
+              ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50/50 shadow-sm'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-bold text-slate-500 uppercase">Waiting Parts</div>
-            <Package className="w-3.5 h-3.5 text-orange-500" />
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Estimate Done</span>
+            <Calculator className="w-3.5 h-3.5 text-indigo-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-orange-500 mt-1">{waitingPartsCount}</div>
-          <div className="text-[11px] text-orange-600 font-medium mt-1">
-            {partsInTransit.length} delivery ETA(s) live
-          </div>
-        </div>
+          <div className="text-lg sm:text-xl font-black text-indigo-600">{estimateDoneCount}</div>
+        </button>
 
-        {/* Ready / QC */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
-          <div className="text-xs font-bold text-slate-500 uppercase mb-1">Ready / QC</div>
-          <div className="text-2xl sm:text-3xl font-black text-emerald-600">{readyQC}</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">
-            Road test or delivery
+        {/* 5. Needs Approval */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'WAITING_FOR_APPROVAL' ? 'ALL' : 'WAITING_FOR_APPROVAL')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'WAITING_FOR_APPROVAL'
+              ? 'bg-orange-500 text-white border-orange-600 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-orange-50/50 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Needs Approval</span>
+            <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
           </div>
-        </div>
+          <div className="text-lg sm:text-xl font-black text-orange-600">{waitingApprovalCount}</div>
+        </button>
+
+        {/* 6. Approved */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'APPROVED'
+              ? 'bg-teal-600 text-white border-teal-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-teal-50/50 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Approved</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+          </div>
+          <div className="text-lg sm:text-xl font-black text-teal-600">{approvedCount}</div>
+        </button>
+
+        {/* 7. Parts Ordered */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'PARTS_ORDERED' ? 'ALL' : 'PARTS_ORDERED')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'PARTS_ORDERED'
+              ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-50/50 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Parts Ordered</span>
+            <Package className="w-3.5 h-3.5 text-purple-600" />
+          </div>
+          <div className="text-lg sm:text-xl font-black text-purple-600">{partsOrderedCount}</div>
+        </button>
+
+        {/* 8. In Repair */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'REPAIR_IN_PROGRESS' ? 'ALL' : 'REPAIR_IN_PROGRESS')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'REPAIR_IN_PROGRESS'
+              ? 'bg-cyan-600 text-white border-cyan-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-cyan-50/50 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">In Repair</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600" />
+          </div>
+          <div className="text-lg sm:text-xl font-black text-cyan-600">{inRepairCount}</div>
+        </button>
+
+        {/* 9. Ready/Pickup */}
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'READY_FOR_PICKUP' ? 'ALL' : 'READY_FOR_PICKUP')}
+          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'READY_FOR_PICKUP'
+              ? 'bg-green-600 text-white border-green-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-green-50/50 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Ready/Pickup</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+          </div>
+          <div className="text-lg sm:text-xl font-black text-green-600">{readyPickupCount + completedCount}</div>
+        </button>
 
       </div>
 
-      {/* Technician Bay Live Status Row */}
+      {/* Technician Live Status Row */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-blue-600" />
             <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Technician Bay Real-Time Status
+              Technician Real-Time Status
             </h2>
           </div>
           <span className="text-xs text-slate-500 font-medium hidden sm:inline">
@@ -231,7 +319,7 @@ export const ManagerDashboard: React.FC = () => {
                         </div>
 
                         {/* Diagnostic Status helper in Bay card */}
-                        {currentJob.status === 'WAITING_DIAGNOSIS' && (
+                        {(currentJob.status === 'WAITING_DIAGNOSTICS' || currentJob.status === 'WAITING_DIAGNOSIS') && (
                           <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-amber-700 font-medium">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-amber-600" />
@@ -248,7 +336,7 @@ export const ManagerDashboard: React.FC = () => {
                             </button>
                           </div>
                         )}
-                        {(currentJob.status === 'BEING_DIAGNOSED' || currentJob.status === 'IN_BAY') && (
+                        {(currentJob.status === 'IN_DIAG' || currentJob.status === 'BEING_DIAGNOSED' || currentJob.status === 'IN_BAY') && (
                           <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center gap-1 text-[10px] text-blue-700 font-medium">
                             <Wrench className="w-3 h-3 text-blue-600" />
                             <span>Diagnosing: {formatDurationSince(currentJob.diagnosisStartedAt)} active</span>
@@ -353,18 +441,19 @@ export const ManagerDashboard: React.FC = () => {
               onChange={e => setStatusFilter(e.target.value as ROStatus | 'ALL')}
               className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
             >
-              <option value="ALL">All Statuses</option>
-              <option value="CREATED">Created</option>
-              <option value="DISPATCHED">Assigned</option>
-              <option value="WAITING_DIAGNOSIS">Waiting to be Diagnosed</option>
-              <option value="BEING_DIAGNOSED">Being Diagnosed</option>
-              <option value="GETTING_ESTIMATE">Getting Estimate</option>
-              <option value="WAITING_APPROVAL">Needs Approval</option>
-              <option value="APPROVED">Approved</option>
-              <option value="WAITING_PARTS">Waiting Parts</option>
-              <option value="IN_REPAIR">In Repair</option>
-              <option value="QC_TEST">Quality Check/Test Drive</option>
-              <option value="COMPLETED">Ready / Done</option>
+              <option value="ALL">All Ticket Stages</option>
+              <option value="WAITING_DIAGNOSTICS">1. Waiting Diagnostics</option>
+              <option value="IN_DIAG">2. In Diag</option>
+              <option value="ESTIMATE_DONE">3. Estimate Done</option>
+              <option value="WAITING_FOR_APPROVAL">4. Waiting for Approval</option>
+              <option value="APPROVED">5. Approved</option>
+              <option value="DENIED">5b. Denied</option>
+              <option value="PARTS_ORDERED">6. Parts Ordered (ETA)</option>
+              <option value="PARTS_IN_TO_TECH">7. Parts In / To Tech</option>
+              <option value="REPAIR_IN_PROGRESS">8. Repair in Progress</option>
+              <option value="REPAIR_COMPLETE">9. Repair Complete</option>
+              <option value="READY_FOR_PICKUP">10. Ready for Pickup</option>
+              <option value="CLOSED">11. Closed</option>
             </select>
 
             {/* Tech Filter */}

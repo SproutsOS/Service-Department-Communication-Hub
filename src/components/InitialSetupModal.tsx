@@ -8,7 +8,6 @@ import {
   Package, 
   Briefcase, 
   Plus, 
-  Trash2, 
   CheckCircle2, 
   Eye, 
   EyeOff, 
@@ -181,6 +180,8 @@ export const InitialSetupModal: React.FC = () => {
   const currentCategoryDrafts = staffDrafts.filter(s => s.role === staffCategory);
 
   if (!isSetupWizardOpen) return null;
+  // Restrict access to Service Manager if shop is already initialized
+  if (users.length > 0 && currentUser.role !== 'SERVICE_MANAGER') return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
@@ -287,7 +288,7 @@ export const InitialSetupModal: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Marcus Vance"
+                    placeholder="e.g. Greg Saulters"
                     value={mgrName}
                     onChange={(e) => setMgrName(e.target.value)}
                     className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
@@ -545,7 +546,7 @@ export const InitialSetupModal: React.FC = () => {
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                         title="Remove from roster"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))

@@ -21,6 +21,20 @@ export interface User {
 }
 
 export type ROStatus = 
+  // User Requested Ticket Flow
+  | 'WAITING_DIAGNOSTICS'
+  | 'IN_DIAG'
+  | 'ESTIMATE_DONE'
+  | 'WAITING_FOR_APPROVAL'
+  | 'APPROVED'
+  | 'DENIED'
+  | 'PARTS_ORDERED'
+  | 'PARTS_IN_TO_TECH'
+  | 'REPAIR_IN_PROGRESS'
+  | 'REPAIR_COMPLETE'
+  | 'READY_FOR_PICKUP'
+  | 'CLOSED'
+  // Legacy aliases for seamless backwards compatibility
   | 'CREATED'
   | 'DISPATCHED'
   | 'WAITING_DIAGNOSIS'
@@ -28,7 +42,6 @@ export type ROStatus =
   | 'GETTING_ESTIMATE'
   | 'IN_BAY'
   | 'WAITING_APPROVAL'
-  | 'APPROVED'
   | 'WAITING_PARTS'
   | 'IN_REPAIR'
   | 'QC_TEST'

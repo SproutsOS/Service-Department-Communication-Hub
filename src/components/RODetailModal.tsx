@@ -16,12 +16,18 @@ import {
   FileText,
   Truck,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert,
+  Lock,
+  Edit3,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole } from '../types';
-import { STATUS_CONFIG } from '../data/mockData';
+import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
+import { TicketFlowStepper } from './TicketFlowStepper';
 
 export const RODetailModal: React.FC = () => {
   const { 
@@ -34,8 +40,41 @@ export const RODetailModal: React.FC = () => {
     dispatchRO, 
     sendMessage, 
     addPartOrder, 
-    updatePartStatus 
+    updatePartStatus,
+    updateRepairOrderDetails,
+    deleteRepairOrder
   } = useApp();
+
+  const isManager = currentUser.role === 'SERVICE_MANAGER';
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [managerActionFeedback, setManagerActionFeedback] = useState<string | null>(null);
+
+  // Editable fields initialized from selectedRO
+  const [editCustomerName, setEditCustomerName] = useState(selectedRO?.customerName || '');
+  const [editCustomerPhone, setEditCustomerPhone] = useState(selectedRO?.customerPhone || '');
+  const [editVehicleYear, setEditVehicleYear] = useState<number | string>(selectedRO?.vehicle.year || '');
+  const [editVehicleMake, setEditVehicleMake] = useState(selectedRO?.vehicle.make || '');
+  const [editVehicleModel, setEditVehicleModel] = useState(selectedRO?.vehicle.model || '');
+  const [editVehicleVin, setEditVehicleVin] = useState(selectedRO?.vehicle.vin || '');
+  const [editPrimaryConcern, setEditPrimaryConcern] = useState(selectedRO?.primaryConcern || '');
+  const [editPromisedTime, setEditPromisedTime] = useState(selectedRO?.promisedTime || '');
+  const [editDiagnosticNotes, setEditDiagnosticNotes] = useState(selectedRO?.diagnosticNotes || '');
+
+  React.useEffect(() => {
+    if (selectedRO) {
+      setEditCustomerName(selectedRO.customerName);
+      setEditCustomerPhone(selectedRO.customerPhone);
+      setEditVehicleYear(selectedRO.vehicle.year);
+      setEditVehicleMake(selectedRO.vehicle.make);
+      setEditVehicleModel(selectedRO.vehicle.model);
+      setEditVehicleVin(selectedRO.vehicle.vin);
+      setEditPrimaryConcern(selectedRO.primaryConcern);
+      setEditPromisedTime(selectedRO.promisedTime);
+      setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
+      setIsEditingDetails(false);
+    }
+  }, [selectedRO?.id]);
 
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY'>('DETAILS');
   const [chatInput, setChatInput] = useState('');
@@ -103,19 +142,52 @@ export const RODetailModal: React.FC = () => {
     setShowAddPart(false);
   };
 
+  const handleSaveDetails = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isManager || !selectedRO) return;
+
+    const ok = updateRepairOrderDetails(selectedRO.id, {
+      customerName: editCustomerName.trim(),
+      customerPhone: editCustomerPhone.trim(),
+      vehicle: {
+        ...selectedRO.vehicle,
+        year: Number(editVehicleYear) || selectedRO.vehicle.year,
+        make: editVehicleMake.trim(),
+        model: editVehicleModel.trim(),
+        vin: editVehicleVin.trim().toUpperCase()
+      },
+      primaryConcern: editPrimaryConcern.trim(),
+      promisedTime: editPromisedTime,
+      diagnosticNotes: editDiagnosticNotes.trim()
+    });
+
+    if (ok) {
+      setIsEditingDetails(false);
+      setManagerActionFeedback('Repair order details updated and logged to audit trail.');
+      setTimeout(() => setManagerActionFeedback(null), 3500);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (!isManager || !selectedRO) return;
+    deleteRepairOrder(selectedRO.id);
+    setIsDeleteConfirmOpen(false);
+  };
+
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
   const statusOptions: ROStatus[] = [
-    'CREATED',
-    'DISPATCHED',
-    'WAITING_DIAGNOSIS',
-    'BEING_DIAGNOSED',
-    'GETTING_ESTIMATE',
-    'WAITING_APPROVAL',
+    'WAITING_DIAGNOSTICS',
+    'IN_DIAG',
+    'ESTIMATE_DONE',
+    'WAITING_FOR_APPROVAL',
     'APPROVED',
-    'WAITING_PARTS',
-    'IN_REPAIR',
-    'QC_TEST',
-    'COMPLETED'
+    'DENIED',
+    'PARTS_ORDERED',
+    'PARTS_IN_TO_TECH',
+    'REPAIR_IN_PROGRESS',
+    'REPAIR_COMPLETE',
+    'READY_FOR_PICKUP',
+    'CLOSED'
   ];
 
   return (
@@ -156,13 +228,50 @@ export const RODetailModal: React.FC = () => {
             </div>
           </div>
 
-          <button
-            id="close-ro-detail-btn"
-            onClick={() => setSelectedRO(null)}
-            className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {isManager ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isEditingDetails && selectedRO) {
+                    setEditCustomerName(selectedRO.customerName);
+                    setEditCustomerPhone(selectedRO.customerPhone);
+                    setEditVehicleYear(selectedRO.vehicle.year);
+                    setEditVehicleMake(selectedRO.vehicle.make);
+                    setEditVehicleModel(selectedRO.vehicle.model);
+                    setEditVehicleVin(selectedRO.vehicle.vin);
+                    setEditPrimaryConcern(selectedRO.primaryConcern);
+                    setEditPromisedTime(selectedRO.promisedTime);
+                    setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
+                    setActiveTab('DETAILS');
+                  }
+                  setIsEditingDetails(!isEditingDetails);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+                  isEditingDetails 
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 shadow-2xs'
+                }`}
+                title="Service Manager: Edit core repair order details"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
+              </button>
+            ) : (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-200/80 border border-slate-300 text-slate-700 text-xs font-semibold">
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Info Locked</span>
+              </span>
+            )}
+
+            <button
+              id="close-ro-detail-btn"
+              onClick={() => setSelectedRO(null)}
+              className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -236,6 +345,191 @@ export const RODetailModal: React.FC = () => {
           {/* TAB 1: DETAILS & ASSIGNMENT & QUICK STATUS CHANGE */}
           {activeTab === 'DETAILS' && (
             <div className="space-y-6">
+
+              {/* Feedback toast when Service Manager updates info */}
+              {managerActionFeedback && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{managerActionFeedback}</span>
+                </div>
+              )}
+
+              {/* Security & Data Locking Banner */}
+              <div className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs ${
+                isManager 
+                  ? 'bg-blue-50/70 border-blue-200 text-blue-900' 
+                  : 'bg-slate-100/90 border-slate-200 text-slate-700'
+              }`}>
+                {isManager ? (
+                  <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                ) : (
+                  <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                )}
+                <div className="leading-relaxed">
+                  <span className="font-bold">
+                    {isManager ? 'Service Manager Administration: ' : 'Data Integrity Lock: '}
+                  </span>
+                  <span>
+                    {isManager
+                      ? 'You have administrative permission to modify all entered customer, vehicle, and work order details, or delete records. Use "Edit RO Info" in the top right to edit.'
+                      : 'All customer information, vehicle specs, and repair order details are locked to preserve data integrity. Only the Service Manager has permission to alter or delete entered information.'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Service Manager Edit Form */}
+              {isManager && isEditingDetails && (
+                <form onSubmit={handleSaveDetails} className="bg-white rounded-xl p-5 border-2 border-blue-500 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <Edit3 className="w-4 h-4 text-blue-600" />
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Service Manager: Edit Repair Order Information
+                      </h4>
+                    </div>
+                    <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                      Manager Authority Active
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Customer Full Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editCustomerName}
+                        onChange={(e) => setEditCustomerName(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Customer Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        value={editCustomerPhone}
+                        onChange={(e) => setEditCustomerPhone(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Year
+                      </label>
+                      <input
+                        type="number"
+                        value={editVehicleYear}
+                        onChange={(e) => setEditVehicleYear(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Make
+                      </label>
+                      <input
+                        type="text"
+                        value={editVehicleMake}
+                        onChange={(e) => setEditVehicleMake(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Model
+                      </label>
+                      <input
+                        type="text"
+                        value={editVehicleModel}
+                        onChange={(e) => setEditVehicleModel(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        VIN
+                      </label>
+                      <input
+                        type="text"
+                        value={editVehicleVin}
+                        onChange={(e) => setEditVehicleVin(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-semibold uppercase focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Customer Primary Concern
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editPrimaryConcern}
+                      onChange={(e) => setEditPrimaryConcern(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Customer Promised Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={editPromisedTime ? new Date(editPromisedTime).toISOString().slice(0, 16) : ''}
+                        onChange={(e) => {
+                          const dt = e.target.value ? new Date(e.target.value).toISOString() : selectedRO.promisedTime;
+                          setEditPromisedTime(dt);
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Technician Diagnostic Findings
+                      </label>
+                      <input
+                        type="text"
+                        value={editDiagnosticNotes}
+                        onChange={(e) => setEditDiagnosticNotes(e.target.value)}
+                        placeholder="Diagnostic notes, inspection findings..."
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDetails(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Save Changes to Order
+                    </button>
+                  </div>
+                </form>
+              )}
               
               {/* Primary Concern & Tech Notes */}
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
@@ -357,58 +651,12 @@ export const RODetailModal: React.FC = () => {
                 </div>
               )}
 
-              {/* Status Update Control Section */}
-              <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Update Repair Order Status in Real-Time
-                  </h4>
-                  <span className="text-xs text-slate-500 font-medium">
-                    Logged as <strong className="text-slate-800">{currentUser.name}</strong> ({currentUser.title})
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {statusOptions.map(opt => {
-                    const cfg = STATUS_CONFIG[opt];
-                    const isCurrent = selectedRO.status === opt;
-                    return (
-                      <button
-                        key={opt}
-                        id={`update-status-btn-${opt}`}
-                        onClick={() => handleStatusChange(opt)}
-                        className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                          isCurrent
-                            ? `${cfg.badgeClass} ring-2 ring-blue-600 font-bold`
-                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs font-semibold">{cfg.label}</div>
-                        <div className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{cfg.description}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-3 flex items-center gap-3 pt-3 border-t border-slate-100">
-                  <input
-                    type="text"
-                    placeholder="Optional note for status change log (e.g., scan tool complete, customer phoned)..."
-                    value={statusNote}
-                    onChange={e => setStatusNote(e.target.value)}
-                    className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
-                  />
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={isUrgentStatusUpdate}
-                      onChange={e => setIsUrgentStatusUpdate(e.target.checked)}
-                      className="rounded text-red-600 focus:ring-red-500"
-                    />
-                    <span className="font-semibold text-red-600">Mark Urgent Push</span>
-                  </label>
-                </div>
-              </div>
+              {/* Visual Ticket Flow Pipeline Stepper */}
+              <TicketFlowStepper 
+                ro={selectedRO} 
+                onUpdateStatus={handleStatusChange} 
+                canEdit={true}
+              />
 
               {/* Technician Assignment Section (For Manager & Advisors) */}
               {(currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR') && (
@@ -774,17 +1022,79 @@ export const RODetailModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <div className="text-xs text-slate-500">
-            Current Status: <strong className="text-slate-800 font-bold">{currentStatusInfo.label}</strong>
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+            <span>Current Status:</span>
+            <strong className="text-slate-800 font-bold">{currentStatusInfo.label}</strong>
+            {!isManager && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded-md font-medium sm:ml-2">
+                <Lock className="w-3 h-3 text-slate-400" /> Information locked (Manager permission required to alter/delete)
+              </span>
+            )}
           </div>
-          <button
-            onClick={() => setSelectedRO(null)}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+          
+          <div className="flex items-center gap-2">
+            {isManager && (
+              <button
+                type="button"
+                onClick={() => setIsDeleteConfirmOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                title="Service Manager authority: Delete this repair order"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
+                <span>Delete RO</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setSelectedRO(null)}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
+
+        {/* Delete Confirmation Modal for Service Manager */}
+        {isManager && isDeleteConfirmOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-xl shadow-2xl border border-red-200 max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+
+              <h3 className="text-base font-bold text-slate-900">
+                Delete Repair Order #{selectedRO.id}?
+              </h3>
+              
+              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                As <strong>Service Manager</strong>, you have sole administrative permission to delete information. Are you sure you want to permanently delete this repair order for <strong>{selectedRO.customerName}</strong> ({selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model})?
+              </p>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mt-3 text-xs text-amber-900">
+                <span className="font-bold">Permanent removal: </span>
+                This record will be deleted from the active board and database. Associated parts logs and message histories for this order will be cleared.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteConfirmOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors cursor-pointer"
+                >
+                  Yes, Delete Repair Order
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

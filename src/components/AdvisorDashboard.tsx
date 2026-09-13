@@ -16,36 +16,31 @@ import {
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
 import { ROStatus } from '../types';
+import { normalizeROStatus } from '../data/mockData';
 
 export const AdvisorDashboard: React.FC = () => {
   const { currentUser, repairOrders, setSelectedRO, setIsNewROModalOpen } = useApp();
   
-  const [activeTab, setActiveTab] = useState<'ALL' | 'WAITING_DIAGNOSIS' | 'BEING_DIAGNOSED' | 'GETTING_ESTIMATE' | 'WAITING_APPROVAL' | 'APPROVED' | 'WAITING_PARTS' | 'QC_TEST' | 'COMPLETED'>('ALL');
+  const [activeTab, setActiveTab] = useState<ROStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Strictly filter by this advisor's ROs to prevent clutter
   const myROs = repairOrders.filter(ro => ro.advisorId === currentUser.id);
 
   // Status counts for this advisor
-  const waitingDiagnosisCount = myROs.filter(r => r.status === 'WAITING_DIAGNOSIS').length;
-  const beingDiagnosedCount = myROs.filter(r => r.status === 'BEING_DIAGNOSED' || r.status === 'IN_BAY').length;
-  const gettingEstimateCount = myROs.filter(r => r.status === 'GETTING_ESTIMATE').length;
-  const waitingApprovalCount = myROs.filter(r => r.status === 'WAITING_APPROVAL').length;
-  const approvedCount = myROs.filter(r => r.status === 'APPROVED').length;
-  const waitingPartsCount = myROs.filter(r => r.status === 'WAITING_PARTS').length;
-  const qcTestCount = myROs.filter(r => r.status === 'QC_TEST').length;
-  const completedCount = myROs.filter(r => r.status === 'COMPLETED').length;
+  const waitingDiagnosisCount = myROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
+  const inDiagCount = myROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
+  const estimateDoneCount = myROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
+  const waitingApprovalCount = myROs.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
+  const approvedCount = myROs.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
+  const partsOrderedCount = myROs.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
+  const inRepairCount = myROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
+  const readyPickupCount = myROs.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
+  const completedCount = myROs.filter(r => normalizeROStatus(r.status) === 'CLOSED' || r.status === 'COMPLETED').length;
 
   // Filtered list
   const displayROs = myROs.filter(ro => {
-    if (activeTab === 'WAITING_DIAGNOSIS' && ro.status !== 'WAITING_DIAGNOSIS') return false;
-    if (activeTab === 'BEING_DIAGNOSED' && !['BEING_DIAGNOSED', 'IN_BAY'].includes(ro.status)) return false;
-    if (activeTab === 'GETTING_ESTIMATE' && ro.status !== 'GETTING_ESTIMATE') return false;
-    if (activeTab === 'WAITING_APPROVAL' && ro.status !== 'WAITING_APPROVAL') return false;
-    if (activeTab === 'APPROVED' && ro.status !== 'APPROVED') return false;
-    if (activeTab === 'WAITING_PARTS' && ro.status !== 'WAITING_PARTS') return false;
-    if (activeTab === 'QC_TEST' && ro.status !== 'QC_TEST') return false;
-    if (activeTab === 'COMPLETED' && ro.status !== 'COMPLETED') return false;
+    if (activeTab !== 'ALL' && normalizeROStatus(ro.status) !== normalizeROStatus(activeTab)) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -101,9 +96,9 @@ export const AdvisorDashboard: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('WAITING_DIAGNOSIS')}
+          onClick={() => setActiveTab('WAITING_DIAGNOSTICS')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'WAITING_DIAGNOSIS'
+            activeTab === 'WAITING_DIAGNOSTICS'
               ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50 shadow-sm'
           }`}
@@ -116,39 +111,39 @@ export const AdvisorDashboard: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('BEING_DIAGNOSED')}
+          onClick={() => setActiveTab('IN_DIAG')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'BEING_DIAGNOSED'
+            activeTab === 'IN_DIAG'
               ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50/50 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Being Diagnosed</span>
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">In Diag</span>
             <Wrench className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-blue-600">{beingDiagnosedCount}</div>
+          <div className="text-lg sm:text-xl font-black text-blue-600">{inDiagCount}</div>
         </button>
 
         <button
-          onClick={() => setActiveTab('GETTING_ESTIMATE')}
+          onClick={() => setActiveTab('ESTIMATE_DONE')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'GETTING_ESTIMATE'
+            activeTab === 'ESTIMATE_DONE'
               ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50/50 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Getting Estimate</span>
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Estimate Done</span>
             <Calculator className="w-3.5 h-3.5 text-indigo-500" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-indigo-600">{gettingEstimateCount}</div>
+          <div className="text-lg sm:text-xl font-black text-indigo-600">{estimateDoneCount}</div>
         </button>
 
         <button
-          onClick={() => setActiveTab('WAITING_APPROVAL')}
+          onClick={() => setActiveTab('WAITING_FOR_APPROVAL')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'WAITING_APPROVAL'
+            activeTab === 'WAITING_FOR_APPROVAL'
               ? 'bg-orange-500 text-white border-orange-600 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-orange-50/50 shadow-sm'
           }`}
@@ -176,48 +171,48 @@ export const AdvisorDashboard: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('WAITING_PARTS')}
+          onClick={() => setActiveTab('PARTS_ORDERED')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'WAITING_PARTS'
+            activeTab === 'PARTS_ORDERED'
               ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-50/50 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Waiting Parts</span>
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Parts Ordered</span>
             <Package className="w-3.5 h-3.5 text-purple-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-purple-600">{waitingPartsCount}</div>
+          <div className="text-lg sm:text-xl font-black text-purple-600">{partsOrderedCount}</div>
         </button>
 
         <button
-          onClick={() => setActiveTab('QC_TEST')}
+          onClick={() => setActiveTab('REPAIR_IN_PROGRESS')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'QC_TEST'
+            activeTab === 'REPAIR_IN_PROGRESS'
               ? 'bg-cyan-600 text-white border-cyan-700 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-cyan-50/50 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">QC / Test Drive</span>
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">In Repair</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-cyan-600">{qcTestCount}</div>
+          <div className="text-lg sm:text-xl font-black text-cyan-600">{inRepairCount}</div>
         </button>
 
         <button
-          onClick={() => setActiveTab('COMPLETED')}
+          onClick={() => setActiveTab('READY_FOR_PICKUP')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'COMPLETED'
+            activeTab === 'READY_FOR_PICKUP'
               ? 'bg-green-600 text-white border-green-700 shadow-sm'
               : 'bg-white text-slate-700 border-slate-200 hover:bg-green-50/50 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Ready/Done</span>
+            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Ready/Pickup</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-green-600">{completedCount}</div>
+          <div className="text-lg sm:text-xl font-black text-green-600">{readyPickupCount + completedCount}</div>
         </button>
 
       </div>

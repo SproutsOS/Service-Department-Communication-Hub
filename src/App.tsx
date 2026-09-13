@@ -4,7 +4,6 @@ import { Navbar } from './components/Navbar';
 import { ManagerDashboard } from './components/ManagerDashboard';
 import { AdvisorDashboard } from './components/AdvisorDashboard';
 import { TechDashboard } from './components/TechDashboard';
-import { TechMobileView } from './components/TechMobileView';
 import { PartsDashboard } from './components/PartsDashboard';
 import { StaffManagement } from './components/StaffManagement';
 import { RODetailModal } from './components/RODetailModal';
@@ -17,7 +16,6 @@ import {
   Wrench, 
   UserCheck, 
   Package, 
-  Smartphone,
   CheckCircle2,
   ShieldCheck,
   AlertTriangle,
@@ -32,7 +30,6 @@ const MainContent: React.FC = () => {
     setCurrentUser, 
     users, 
     repairOrders, 
-    isMobileSimulated, 
     isStaffManagementOpen, 
     setIsStaffManagementOpen 
   } = useApp();
@@ -241,16 +238,6 @@ const MainContent: React.FC = () => {
                   </button>
                 </div>
                 <StaffManagement />
-              </div>
-            ) : isMobileSimulated ? (
-              <div className="py-2">
-                <div className="text-center mb-4">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3.5 py-1 rounded-full uppercase tracking-wider">
-                    <Smartphone className="w-3.5 h-3.5" />
-                    Technician Handheld Bay Simulator
-                  </span>
-                </div>
-                <TechMobileView />
               </div>
             ) : (
               <>
