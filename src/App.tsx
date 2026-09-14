@@ -5,6 +5,7 @@ import { ManagerDashboard } from './components/ManagerDashboard';
 import { AdvisorDashboard } from './components/AdvisorDashboard';
 import { TechDashboard } from './components/TechDashboard';
 import { PartsDashboard } from './components/PartsDashboard';
+import { SalesDashboard } from './components/SalesDashboard';
 import { StaffManagement } from './components/StaffManagement';
 import { RODetailModal } from './components/RODetailModal';
 import { NewROModal } from './components/NewROModal';
@@ -20,7 +21,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Users,
-  ArrowLeft
+  ArrowLeft,
+  Eye
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -122,6 +124,25 @@ const MainContent: React.FC = () => {
               <span className="text-sm font-medium">Parts & Tracking</span>
             </button>
 
+            {/* Sales Portal (Read-Only) */}
+            <button
+              id="sidebar-sales-portal-btn"
+              onClick={() => handleSelectRole('SALES')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
+                !isStaffManagementOpen && activeRoleView === 'SALES'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Eye className="w-4 h-4 shrink-0 text-teal-400" />
+                <span className="text-sm font-medium">Sales Portal</span>
+              </div>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-900/80 text-teal-300 border border-teal-700/50 uppercase tracking-wider">
+                Read-Only
+              </span>
+            </button>
+
             {/* Administration / Staff Section */}
             <div className="pt-4 mt-4 border-t border-slate-800">
               <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
@@ -214,6 +235,15 @@ const MainContent: React.FC = () => {
               Parts & ETA
             </button>
             <button
+              onClick={() => handleSelectRole('SALES')}
+              className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                !isStaffManagementOpen && activeRoleView === 'SALES' ? 'bg-blue-600 text-white' : 'text-slate-400'
+              }`}
+            >
+              <Eye className="w-3 h-3 text-teal-400" />
+              <span>Sales (Read-Only)</span>
+            </button>
+            <button
               onClick={() => setIsStaffManagementOpen(true)}
               className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
                 isStaffManagementOpen ? 'bg-blue-600 text-white' : 'text-slate-400'
@@ -245,6 +275,7 @@ const MainContent: React.FC = () => {
                 {activeRoleView === 'SERVICE_ADVISOR' && <AdvisorDashboard />}
                 {activeRoleView === 'TECHNICIAN' && <TechDashboard />}
                 {activeRoleView === 'PARTS_SPECIALIST' && <PartsDashboard />}
+                {activeRoleView === 'SALES' && <SalesDashboard />}
               </>
             )}
           </main>

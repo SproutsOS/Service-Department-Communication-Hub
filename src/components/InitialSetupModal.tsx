@@ -104,7 +104,8 @@ export const InitialSetupModal: React.FC = () => {
     const defaultTitle = 
       staffCategory === 'TECHNICIAN' ? 'Automotive Technician' :
       staffCategory === 'SERVICE_ADVISOR' ? 'Service Advisor' :
-      staffCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' : 'Assistant Service Manager';
+      staffCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' :
+      staffCategory === 'SALES' ? 'Sales Consultant' : 'Assistant Service Manager';
 
     const newDraft: InitialStaffDraft = {
       tempId: `draft_${Date.now()}`,
@@ -159,6 +160,8 @@ export const InitialSetupModal: React.FC = () => {
         ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
         : draft.role === 'PARTS_SPECIALIST'
         ? 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80'
+        : draft.role === 'SALES'
+        ? 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80'
         : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
     }));
 
@@ -448,13 +451,26 @@ export const InitialSetupModal: React.FC = () => {
                   <Package className="w-3.5 h-3.5" />
                   <span>Parts Specialists ({staffDrafts.filter(s => s.role === 'PARTS_SPECIALIST').length})</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setStaffCategory('SALES'); setIsAddingInline(false); }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    staffCategory === 'SALES'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Sales ({staffDrafts.filter(s => s.role === 'SALES').length})</span>
+                </button>
               </div>
 
               {/* Inline Add Form */}
               {isAddingInline && (
                 <form onSubmit={handleAddDraftStaff} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
                   <div className="text-xs font-bold text-slate-800">
-                    Add New {staffCategory === 'TECHNICIAN' ? 'Technician' : staffCategory === 'SERVICE_ADVISOR' ? 'Service Advisor' : 'Parts Specialist'}
+                    Add New {staffCategory === 'TECHNICIAN' ? 'Technician' : staffCategory === 'SERVICE_ADVISOR' ? 'Service Advisor' : staffCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' : 'Sales Member'}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input

@@ -2,7 +2,8 @@ export type UserRole =
   | 'SERVICE_MANAGER' 
   | 'SERVICE_ADVISOR' 
   | 'TECHNICIAN' 
-  | 'PARTS_SPECIALIST';
+  | 'PARTS_SPECIALIST'
+  | 'SALES';
 
 export interface User {
   id: string;

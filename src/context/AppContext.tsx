@@ -462,6 +462,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes?: string, 
     makeUrgent?: boolean
   ) => {
+    if (currentUser.role === 'SALES') {
+      return;
+    }
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return;
 
@@ -522,6 +525,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Dispatch RO to a technician
   const dispatchRO = (roId: string, techId: string, bay?: string) => {
+    if (currentUser.role === 'SALES') {
+      return;
+    }
     const tech = users.find(u => u.id === techId);
     if (!tech) return;
 
@@ -566,6 +572,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Send message on an RO
   const sendMessage = (roId: string, content: string, isUrgent: boolean = false) => {
+    if (currentUser.role === 'SALES') {
+      return;
+    }
     if (!content.trim()) return;
 
     const targetRO = repairOrders.find(r => r.id === roId);
@@ -602,6 +611,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add Part Order
   const addPartOrder = (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => {
+    if (currentUser.role === 'SALES') {
+      return;
+    }
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return;
 
@@ -804,6 +816,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userData.role === 'SERVICE_MANAGER' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' :
         userData.role === 'SERVICE_ADVISOR' ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80' :
         userData.role === 'PARTS_SPECIALIST' ? 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80' :
+        userData.role === 'SALES' ? 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80' :
         'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
       ),
     };

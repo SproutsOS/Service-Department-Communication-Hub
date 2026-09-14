@@ -21,7 +21,8 @@ import {
   Lock,
   Edit3,
   Check,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole } from '../types';
@@ -46,6 +47,7 @@ export const RODetailModal: React.FC = () => {
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
+  const isSales = currentUser.role === 'SALES';
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [managerActionFeedback, setManagerActionFeedback] = useState<string | null>(null);
@@ -275,6 +277,19 @@ export const RODetailModal: React.FC = () => {
         </div>
 
         {/* Navigation Tabs */}
+        {isSales && (
+          <div className="bg-teal-50 border-b border-teal-200 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs text-teal-950">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>
+                <strong>Sales Portal (Read-Only Mode):</strong> You have real-time visibility into customer vehicle repair stage, parts ETAs, and promised completion times.
+              </span>
+            </div>
+            <span className="font-bold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded bg-teal-200 text-teal-900 border border-teal-300">
+              Read-Only
+            </span>
+          </div>
+        )}
         <div className="flex border-b border-slate-200 px-4 sm:px-6 bg-white gap-2">
           <button
             id="ro-tab-details"
@@ -619,13 +634,15 @@ export const RODetailModal: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => startDiagnosis(selectedRO.id)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Wrench className="w-3.5 h-3.5" />
-                    <span>Begin Diagnosis Now</span>
-                  </button>
+                  {!isSales && (
+                    <button
+                      onClick={() => startDiagnosis(selectedRO.id)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Begin Diagnosis Now</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -655,7 +672,7 @@ export const RODetailModal: React.FC = () => {
               <TicketFlowStepper 
                 ro={selectedRO} 
                 onUpdateStatus={handleStatusChange} 
-                canEdit={true}
+                canEdit={!isSales}
               />
 
               {/* Technician Assignment Section (For Manager & Advisors) */}
@@ -777,40 +794,47 @@ export const RODetailModal: React.FC = () => {
               </div>
 
               {/* Message Input Box */}
-              <form onSubmit={handleSendMessage} className="pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isUrgentMessage}
-                      onChange={e => setIsUrgentMessage(e.target.checked)}
-                      className="rounded text-red-600 focus:ring-red-500"
-                    />
-                    <span className="text-red-600 font-semibold text-xs flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" /> Flag as Urgent Push Notification
-                    </span>
-                  </label>
-                  <span className="text-[10px] text-slate-400">Press Enter to send</span>
+              {isSales ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Inter-department messaging is read-only for the Sales position.</span>
                 </div>
+              ) : (
+                <form onSubmit={handleSendMessage} className="pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isUrgentMessage}
+                        onChange={e => setIsUrgentMessage(e.target.checked)}
+                        className="rounded text-red-600 focus:ring-red-500"
+                      />
+                      <span className="text-red-600 font-semibold text-xs flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Flag as Urgent Push Notification
+                      </span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">Press Enter to send</span>
+                  </div>
 
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder={`Message regarding ${selectedRO.id} as ${currentUser.name}...`}
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    className="flex-1 text-sm px-3.5 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!chatInput.trim()}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
-                  >
-                    <span>Send</span>
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </form>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder={`Message regarding ${selectedRO.id} as ${currentUser.name}...`}
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      className="flex-1 text-sm px-3.5 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!chatInput.trim()}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                    >
+                      <span>Send</span>
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+              )}
 
             </div>
           )}
@@ -829,14 +853,16 @@ export const RODetailModal: React.FC = () => {
                   </p>
                 </div>
 
-                <button
-                  id="add-part-toggle-btn"
-                  onClick={() => setShowAddPart(!showAddPart)}
-                  className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Order New Part</span>
-                </button>
+                {!isSales && (
+                  <button
+                    id="add-part-toggle-btn"
+                    onClick={() => setShowAddPart(!showAddPart)}
+                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Order New Part</span>
+                  </button>
+                )}
               </div>
 
               {/* Add Part Form */}

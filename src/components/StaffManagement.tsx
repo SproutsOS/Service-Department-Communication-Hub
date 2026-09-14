@@ -244,6 +244,7 @@ export const StaffManagement: React.FC = () => {
       case 'SERVICE_ADVISOR': return 'Service Advisor';
       case 'TECHNICIAN': return 'Technician';
       case 'PARTS_SPECIALIST': return 'Parts Specialist';
+      case 'SALES': return 'Sales (Read-Only)';
     }
   };
 
@@ -277,6 +278,13 @@ export const StaffManagement: React.FC = () => {
             Parts Specialist
           </span>
         );
+      case 'SALES':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-teal-100 text-teal-800 border border-teal-200">
+            <Eye className="w-3.5 h-3.5 text-teal-600" />
+            Sales (Read-Only)
+          </span>
+        );
     }
   };
 
@@ -290,6 +298,8 @@ export const StaffManagement: React.FC = () => {
         return 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80';
       case 'PARTS_SPECIALIST':
         return 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80';
+      case 'SALES':
+        return 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80';
     }
   };
 
@@ -299,6 +309,7 @@ export const StaffManagement: React.FC = () => {
   const advisorCount = users.filter(u => u.role === 'SERVICE_ADVISOR').length;
   const techCount = users.filter(u => u.role === 'TECHNICIAN').length;
   const partsCount = users.filter(u => u.role === 'PARTS_SPECIALIST').length;
+  const salesCount = users.filter(u => u.role === 'SALES').length;
 
   // Filtered staff list
   const filteredUsers = users.filter(user => {
@@ -478,6 +489,18 @@ export const StaffManagement: React.FC = () => {
           >
             <Package className="w-3.5 h-3.5" />
             Parts Specialists ({partsCount})
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('SALES')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeCategory === 'SALES'
+                ? 'bg-teal-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-teal-50 hover:text-teal-700'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Sales ({salesCount})
           </button>
         </div>
 
@@ -840,7 +863,8 @@ export const StaffManagement: React.FC = () => {
                     const defaultTitle = (
                       newRole === 'SERVICE_MANAGER' ? 'Service Manager' :
                       newRole === 'SERVICE_ADVISOR' ? 'Service Advisor' :
-                      newRole === 'PARTS_SPECIALIST' ? 'Parts Specialist' : 'Automotive Technician'
+                      newRole === 'PARTS_SPECIALIST' ? 'Parts Specialist' :
+                      newRole === 'SALES' ? 'Sales Consultant' : 'Automotive Technician'
                     );
                     const newTitle = titleInput || defaultTitle;
                     setTitleInput(newTitle);
@@ -854,6 +878,7 @@ export const StaffManagement: React.FC = () => {
                   <option value="SERVICE_ADVISOR">Service Advisor (Customer Facing / Estimates & Authorizations)</option>
                   <option value="TECHNICIAN">Technician (Bay Diagnoses, Parts Orders & Assembly)</option>
                   <option value="PARTS_SPECIALIST">Parts Specialist (Inventory, Orders & Courier Tracking)</option>
+                  <option value="SALES">Sales (Read-Only / Vehicle Delivery & Status Tracker)</option>
                 </select>
               </div>
 

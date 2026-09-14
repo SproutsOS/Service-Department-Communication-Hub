@@ -84,6 +84,7 @@ export const LoginModal: React.FC = () => {
       case 'SERVICE_ADVISOR': return <UserCheck className="w-4 h-4 text-blue-600" />;
       case 'TECHNICIAN': return <Wrench className="w-4 h-4 text-emerald-600" />;
       case 'PARTS_SPECIALIST': return <Package className="w-4 h-4 text-amber-600" />;
+      case 'SALES': return <Eye className="w-4 h-4 text-teal-600" />;
     }
   };
 
@@ -296,7 +297,7 @@ export const LoginModal: React.FC = () => {
                 
                 {/* Role filter buttons */}
                 <div className="flex gap-1">
-                  {(['ALL', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'TECHNICIAN', 'PARTS_SPECIALIST'] as const).map(roleKey => (
+                  {(['ALL', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'TECHNICIAN', 'PARTS_SPECIALIST', 'SALES'] as const).map(roleKey => (
                     <button
                       key={roleKey}
                       onClick={() => setSelectedRoleFilter(roleKey)}
@@ -306,7 +307,7 @@ export const LoginModal: React.FC = () => {
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      {roleKey === 'ALL' ? 'All' : roleKey === 'SERVICE_MANAGER' ? 'Manager' : roleKey === 'SERVICE_ADVISOR' ? 'Advisors' : roleKey === 'TECHNICIAN' ? 'Techs' : 'Parts'}
+                      {roleKey === 'ALL' ? 'All' : roleKey === 'SERVICE_MANAGER' ? 'Manager' : roleKey === 'SERVICE_ADVISOR' ? 'Advisors' : roleKey === 'TECHNICIAN' ? 'Techs' : roleKey === 'PARTS_SPECIALIST' ? 'Parts' : 'Sales'}
                     </button>
                   ))}
                 </div>
