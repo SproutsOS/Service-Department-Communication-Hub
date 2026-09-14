@@ -77,7 +77,7 @@ export const Navbar: React.FC = () => {
             </span>
           </h1>
           <p className="text-[11px] text-slate-400 hidden sm:block">
-            Centralized Service Department & Repair Order Hub
+            Service Department & Repair Order Hub
           </p>
         </div>
       </div>

@@ -493,7 +493,7 @@ export const InitialSetupModal: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
-                      placeholder="Password or PIN (default: 1234)"
+                      placeholder="Password or PIN"
                       value={newStaffPassword}
                       onChange={(e) => setNewStaffPassword(e.target.value)}
                       className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-slate-900"
@@ -553,7 +553,7 @@ export const InitialSetupModal: React.FC = () => {
                         <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                           <span>{draft.email}</span>
                           <span>•</span>
-                          <span className="font-mono text-slate-400">PW/PIN: {draft.password || draft.pin || '1234'}</span>
+                          <span className="font-mono text-slate-400">PW/PIN: ••••</span>
                         </div>
                       </div>
 

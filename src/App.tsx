@@ -232,12 +232,9 @@ const MainContent: React.FC = () => {
                       <Wrench className="w-4 h-4 text-emerald-300" />
                       <div>
                         <div className="text-sm font-bold leading-tight">Technician Hub</div>
-                        <div className="text-[11px] text-blue-200">Active Bay & Repair Orders</div>
+                        <div className="text-[11px] text-blue-200">Active Repair Orders</div>
                       </div>
                     </div>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 uppercase">
-                      Tech Bay
-                    </span>
                   </button>
                 )}
 
@@ -276,17 +273,6 @@ const MainContent: React.FC = () => {
                     </span>
                   </button>
                 )}
-
-                {/* Role Isolation Notice */}
-                <div className="p-3 bg-slate-800/90 rounded-xl border border-slate-700/80 text-xs">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold mb-1">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Designated Space</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Your account is assigned strictly to this workstation. Access to other dealership workspaces (Technician Hub, Service Advisor, Master Board, Staff Admin) is restricted.
-                  </p>
-                </div>
               </div>
             )}
           </nav>

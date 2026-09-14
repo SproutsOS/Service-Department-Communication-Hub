@@ -110,7 +110,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setSuccessMsg(`Welcome, ${selectedUser.name}! Unlocking workstation...`);
         if (onLoginSuccess) onLoginSuccess(selectedUser);
       } else {
-        setErrorMsg(res.message || 'Incorrect PIN or password. Try 1234 or your assigned passcode.');
+        setErrorMsg(res.message || 'Incorrect PIN or password. Please verify your passcode and try again.');
         setIsAuthenticating(false);
       }
     }, 250);
@@ -174,7 +174,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Centralized Service Department & Repair Order Hub
+              Service Department & Repair Order Hub
             </p>
           </div>
         </div>
@@ -458,10 +458,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   </form>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-between">
-                  <span>Standard PIN: <strong className="text-slate-400">1234</strong></span>
-                  <span>Manager: <strong className="text-slate-400">admin</strong></span>
-                </div>
               </div>
 
             </div>
@@ -479,7 +475,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. admin@precisionauto.com or Employee Name"
+                      placeholder="e.g. employee@dealership.com or Employee Name"
                       value={directEmail}
                       onChange={(e) => setDirectEmail(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -534,7 +530,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         type="button"
                         onClick={() => {
                           setDirectEmail(u.email || u.name);
-                          setDirectPassword(u.password || u.pin || '1234');
+                          setDirectPassword('');
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition-colors"
                       >
