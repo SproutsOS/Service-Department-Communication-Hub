@@ -99,14 +99,14 @@ export const PartsDashboard: React.FC = () => {
 
         <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm bg-orange-50/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase text-orange-800">In-Transit / Courier</span>
+            <span className="text-xs font-bold uppercase text-orange-800">In-Transit</span>
             <Truck className="w-3.5 h-3.5 text-orange-600" />
           </div>
           <div className="text-2xl font-black text-orange-600 mt-1">{inTransitCount}</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs font-bold uppercase text-slate-400">Received at Counter</div>
+          <div className="text-xs font-bold uppercase text-slate-400">Received</div>
           <div className="text-2xl font-black text-green-600 mt-1">{receivedCount}</div>
         </div>
 
@@ -141,8 +141,8 @@ export const PartsDashboard: React.FC = () => {
               <option value="ALL">All Part Statuses ({allParts.length})</option>
               <option value="REQUESTED">Requested by Tech</option>
               <option value="ORDERED">Ordered from Vendor</option>
-              <option value="IN_TRANSIT">In Transit (With Courier)</option>
-              <option value="RECEIVED">Received at Counter</option>
+              <option value="IN_TRANSIT">In Transit</option>
+              <option value="RECEIVED">Received</option>
               <option value="ISSUED_TO_TECH">Issued to Tech</option>
             </select>
           </div>

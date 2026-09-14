@@ -106,7 +106,7 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
               Customer Communications
             </span>
             <span className="text-xs text-slate-300 font-medium">
-              Twice-Weekly Call Cadence Tracker
+              Twice-Weekly Call Tracker
             </span>
           </div>
           <h2 className="text-lg sm:text-xl font-black mt-1 text-white tracking-tight flex items-center gap-2">
@@ -130,7 +130,7 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
           </div>
           <div className="px-3 py-1.5 bg-purple-500/20 border border-purple-400/40 rounded-xl text-center hidden sm:block">
             <span className="block text-sm font-black text-purple-300">{waitingPartsCount}</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-200">On Parts</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Waiting on Parts</span>
           </div>
         </div>
       </div>
@@ -373,7 +373,7 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
       <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-slate-600">
           <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-          <span className="font-semibold">Cadence Standard:</span>
+          <span className="font-semibold">Service Standard:</span>
           <span>Customers contacted every 3–4 days (min 2x/week) while vehicle is on site.</span>
         </div>
         <span className="font-semibold text-slate-700 text-[11px]">

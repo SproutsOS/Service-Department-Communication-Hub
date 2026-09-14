@@ -145,7 +145,7 @@ export const AdvisorDashboard: React.FC = () => {
             </div>
             <div>
               <div className="text-xs font-black text-slate-900 flex items-center gap-2">
-                <span>Customer Cadence Standard: {totalCallsDue} Calls Pending</span>
+                <span>Customer Service Standard: {totalCallsDue} Calls Pending</span>
                 {myOverdueCalls > 0 && (
                   <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
                     {myOverdueCalls} Overdue

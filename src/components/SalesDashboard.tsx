@@ -30,28 +30,28 @@ export const SalesDashboard: React.FC = () => {
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'READY' | 'REPAIR' | 'PARTS' | 'DIAG' | 'COMPLETED'>('ALL');
-  const [sortOrder, setSortOrder] = useState<'PROMISED_ASC' | 'NEWEST' | 'CUSTOMER'>('PROMISED_ASC');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DIAG' | 'PARTS' | 'REPAIR' | 'READY' | 'COMPLETED'>('ALL');
+  const [sortOrder, setSortOrder] = useState<'STAGE' | 'PROMISED_ASC' | 'NEWEST' | 'CUSTOMER'>('STAGE');
 
   // Categorized counts for the sales team
-  const readyForPickup = repairOrders.filter(ro => normalizeROStatus(ro.status) === 'READY_FOR_PICKUP');
-  const inRepair = repairOrders.filter(ro => 
-    normalizeROStatus(ro.status) === 'REPAIR_IN_PROGRESS' || 
-    normalizeROStatus(ro.status) === 'REPAIR_COMPLETE' ||
-    ro.status === 'IN_BAY' ||
-    ro.status === 'IN_REPAIR'
-  );
-  const waitingParts = repairOrders.filter(ro => 
-    normalizeROStatus(ro.status) === 'PARTS_ORDERED' || 
-    normalizeROStatus(ro.status) === 'PARTS_IN_TO_TECH' ||
-    ro.status === 'WAITING_PARTS'
-  );
   const inDiagOrWait = repairOrders.filter(ro => 
     normalizeROStatus(ro.status) === 'WAITING_DIAGNOSTICS' || 
     normalizeROStatus(ro.status) === 'IN_DIAG' ||
     normalizeROStatus(ro.status) === 'ESTIMATE_DONE' ||
     normalizeROStatus(ro.status) === 'WAITING_FOR_APPROVAL'
   );
+  const waitingParts = repairOrders.filter(ro => 
+    normalizeROStatus(ro.status) === 'PARTS_ORDERED' || 
+    normalizeROStatus(ro.status) === 'PARTS_IN_TO_TECH' ||
+    ro.status === 'WAITING_PARTS'
+  );
+  const inRepair = repairOrders.filter(ro => 
+    normalizeROStatus(ro.status) === 'REPAIR_IN_PROGRESS' || 
+    normalizeROStatus(ro.status) === 'REPAIR_COMPLETE' ||
+    ro.status === 'IN_BAY' ||
+    ro.status === 'IN_REPAIR'
+  );
+  const readyForPickup = repairOrders.filter(ro => normalizeROStatus(ro.status) === 'READY_FOR_PICKUP');
   const completedHistory = repairOrders.filter(ro => 
     ro.status === 'CLOSED' || 
     ro.status === 'COMPLETED'
@@ -59,6 +59,25 @@ export const SalesDashboard: React.FC = () => {
 
   // Active units
   const activeOrders = repairOrders.filter(ro => ro.status !== 'CLOSED' && ro.status !== 'COMPLETED');
+
+  // Stage order for natural dealership workflow progression:
+  // 1. In Diagnostics -> 2. Waiting on Parts -> 3. In Repair -> 4. Ready for Pickup
+  const STAGE_ORDER: Record<string, number> = {
+    'WAITING_DIAGNOSTICS': 1,
+    'IN_DIAG': 1,
+    'ESTIMATE_DONE': 1,
+    'WAITING_FOR_APPROVAL': 1,
+    'PARTS_ORDERED': 2,
+    'PARTS_IN_TO_TECH': 2,
+    'WAITING_PARTS': 2,
+    'REPAIR_IN_PROGRESS': 3,
+    'REPAIR_COMPLETE': 3,
+    'IN_BAY': 3,
+    'IN_REPAIR': 3,
+    'READY_FOR_PICKUP': 4,
+    'CLOSED': 5,
+    'COMPLETED': 5,
+  };
 
   // Filter logic
   const filteredROs = repairOrders.filter(ro => {
@@ -89,6 +108,16 @@ export const SalesDashboard: React.FC = () => {
 
   // Sorting
   const sortedROs = [...filteredROs].sort((a, b) => {
+    if (sortOrder === 'STAGE') {
+      const normA = normalizeROStatus(a.status);
+      const normB = normalizeROStatus(b.status);
+      const stageA = STAGE_ORDER[normA] || STAGE_ORDER[a.status] || 99;
+      const stageB = STAGE_ORDER[normB] || STAGE_ORDER[b.status] || 99;
+      if (stageA !== stageB) {
+        return stageA - stageB;
+      }
+      return new Date(a.promisedTime).getTime() - new Date(b.promisedTime).getTime();
+    }
     if (sortOrder === 'PROMISED_ASC') {
       return new Date(a.promisedTime).getTime() - new Date(b.promisedTime).getTime();
     }
@@ -193,69 +222,38 @@ export const SalesDashboard: React.FC = () => {
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         
-        {/* Ready for Delivery (The primary sales metric) */}
+        {/* 1. In Diagnostics */}
         <div 
-          onClick={() => setStatusFilter('READY')}
+          onClick={() => setStatusFilter('DIAG')}
           className={`p-4 rounded-xl border transition-all cursor-pointer shadow-2xs ${
-            statusFilter === 'READY'
-              ? 'bg-emerald-500 text-white border-emerald-600 ring-2 ring-emerald-300'
-              : 'bg-white hover:bg-emerald-50/50 border-emerald-200 text-slate-800'
+            statusFilter === 'DIAG'
+              ? 'bg-purple-600 text-white border-purple-700 ring-2 ring-purple-300'
+              : 'bg-white hover:bg-purple-50/50 border-slate-200 text-slate-800'
           }`}
         >
           <div className="flex items-center justify-between">
             <span className={`text-[11px] font-bold uppercase tracking-wider ${
-              statusFilter === 'READY' ? 'text-emerald-100' : 'text-emerald-700'
+              statusFilter === 'DIAG' ? 'text-purple-100' : 'text-purple-700'
             }`}>
-              Ready for Pickup
+              In Diagnostics
             </span>
             <div className={`p-1.5 rounded-lg ${
-              statusFilter === 'READY' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'
+              statusFilter === 'DIAG' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-700'
             }`}>
-              <Sparkles className="w-4 h-4" />
+              <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black mt-2">
-            {readyForPickup.length}
+            {inDiagOrWait.length}
           </div>
           <div className={`text-[11px] mt-1 font-medium ${
-            statusFilter === 'READY' ? 'text-emerald-100' : 'text-slate-500'
+            statusFilter === 'DIAG' ? 'text-purple-100' : 'text-slate-500'
           }`}>
-            Finished & ready for client
+            Initial scan & inspection
           </div>
         </div>
 
-        {/* In Active Repair */}
-        <div 
-          onClick={() => setStatusFilter('REPAIR')}
-          className={`p-4 rounded-xl border transition-all cursor-pointer shadow-2xs ${
-            statusFilter === 'REPAIR'
-              ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300'
-              : 'bg-white hover:bg-blue-50/50 border-slate-200 text-slate-800'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-bold uppercase tracking-wider ${
-              statusFilter === 'REPAIR' ? 'text-blue-100' : 'text-blue-600'
-            }`}>
-              In Bay Repair
-            </span>
-            <div className={`p-1.5 rounded-lg ${
-              statusFilter === 'REPAIR' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-700'
-            }`}>
-              <Wrench className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black mt-2">
-            {inRepair.length}
-          </div>
-          <div className={`text-[11px] mt-1 font-medium ${
-            statusFilter === 'REPAIR' ? 'text-blue-100' : 'text-slate-500'
-          }`}>
-            Actively being serviced
-          </div>
-        </div>
-
-        {/* Waiting on Parts */}
+        {/* 2. Waiting on Parts */}
         <div 
           onClick={() => setStatusFilter('PARTS')}
           className={`p-4 rounded-xl border transition-all cursor-pointer shadow-2xs ${
@@ -286,34 +284,65 @@ export const SalesDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* In Diagnostics */}
+        {/* 3. In Repair */}
         <div 
-          onClick={() => setStatusFilter('DIAG')}
+          onClick={() => setStatusFilter('REPAIR')}
           className={`p-4 rounded-xl border transition-all cursor-pointer shadow-2xs ${
-            statusFilter === 'DIAG'
-              ? 'bg-purple-600 text-white border-purple-700 ring-2 ring-purple-300'
-              : 'bg-white hover:bg-purple-50/50 border-slate-200 text-slate-800'
+            statusFilter === 'REPAIR'
+              ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300'
+              : 'bg-white hover:bg-blue-50/50 border-slate-200 text-slate-800'
           }`}
         >
           <div className="flex items-center justify-between">
             <span className={`text-[11px] font-bold uppercase tracking-wider ${
-              statusFilter === 'DIAG' ? 'text-purple-100' : 'text-purple-700'
+              statusFilter === 'REPAIR' ? 'text-blue-100' : 'text-blue-600'
             }`}>
-              In Diagnostics
+              In Repair
             </span>
             <div className={`p-1.5 rounded-lg ${
-              statusFilter === 'DIAG' ? 'bg-purple-700 text-white' : 'bg-purple-100 text-purple-700'
+              statusFilter === 'REPAIR' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-700'
             }`}>
-              <Clock className="w-4 h-4" />
+              <Wrench className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black mt-2">
-            {inDiagOrWait.length}
+            {inRepair.length}
           </div>
           <div className={`text-[11px] mt-1 font-medium ${
-            statusFilter === 'DIAG' ? 'text-purple-100' : 'text-slate-500'
+            statusFilter === 'REPAIR' ? 'text-blue-100' : 'text-slate-500'
           }`}>
-            Initial scan & inspection
+            Actively being serviced
+          </div>
+        </div>
+
+        {/* 4. Ready for Pickup */}
+        <div 
+          onClick={() => setStatusFilter('READY')}
+          className={`p-4 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            statusFilter === 'READY'
+              ? 'bg-emerald-500 text-white border-emerald-600 ring-2 ring-emerald-300'
+              : 'bg-white hover:bg-emerald-50/50 border-emerald-200 text-slate-800'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-bold uppercase tracking-wider ${
+              statusFilter === 'READY' ? 'text-emerald-100' : 'text-emerald-700'
+            }`}>
+              Ready for Pickup
+            </span>
+            <div className={`p-1.5 rounded-lg ${
+              statusFilter === 'READY' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700'
+            }`}>
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-black mt-2">
+            {readyForPickup.length}
+          </div>
+          <div className={`text-[11px] mt-1 font-medium ${
+            statusFilter === 'READY' ? 'text-emerald-100' : 'text-slate-500'
+          }`}>
+            Finished & ready for client
           </div>
         </div>
 
@@ -345,6 +374,7 @@ export const SalesDashboard: React.FC = () => {
               onChange={(e) => setSortOrder(e.target.value as any)}
               className="text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
             >
+              <option value="STAGE">Workflow Stage (Diagnostics → Parts → Repair → Ready)</option>
               <option value="PROMISED_ASC">Promised Delivery Time (Earliest First)</option>
               <option value="NEWEST">Date Created (Newest First)</option>
               <option value="CUSTOMER">Customer Name (A-Z)</option>
@@ -352,7 +382,7 @@ export const SalesDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Filter Pills */}
+        {/* Filter Pills in requested workflow order: In Diagnostics, Waiting on Parts, In Repair, Ready for Pickup */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-slate-100">
           <button
             onClick={() => setStatusFilter('ALL')}
@@ -365,42 +395,7 @@ export const SalesDashboard: React.FC = () => {
             All Active Vehicles ({activeOrders.length})
           </button>
 
-          <button
-            onClick={() => setStatusFilter('READY')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              statusFilter === 'READY'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-            }`}
-          >
-            <Sparkles className="w-3 h-3" />
-            Ready for Pickup ({readyForPickup.length})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter('REPAIR')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              statusFilter === 'REPAIR'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'
-            }`}
-          >
-            <Wrench className="w-3 h-3" />
-            In Bay Repair ({inRepair.length})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter('PARTS')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              statusFilter === 'PARTS'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700'
-            }`}
-          >
-            <Package className="w-3 h-3" />
-            Waiting on Parts ({waitingParts.length})
-          </button>
-
+          {/* 1. In Diagnostics */}
           <button
             onClick={() => setStatusFilter('DIAG')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
@@ -413,6 +408,46 @@ export const SalesDashboard: React.FC = () => {
             In Diagnostics ({inDiagOrWait.length})
           </button>
 
+          {/* 2. Waiting on Parts */}
+          <button
+            onClick={() => setStatusFilter('PARTS')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              statusFilter === 'PARTS'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700'
+            }`}
+          >
+            <Package className="w-3 h-3" />
+            Waiting on Parts ({waitingParts.length})
+          </button>
+
+          {/* 3. In Repair */}
+          <button
+            onClick={() => setStatusFilter('REPAIR')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              statusFilter === 'REPAIR'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'
+            }`}
+          >
+            <Wrench className="w-3 h-3" />
+            In Repair ({inRepair.length})
+          </button>
+
+          {/* 4. Ready for Pickup */}
+          <button
+            onClick={() => setStatusFilter('READY')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              statusFilter === 'READY'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+            }`}
+          >
+            <Sparkles className="w-3 h-3" />
+            Ready for Pickup ({readyForPickup.length})
+          </button>
+
+          {/* 5. Completed Archive */}
           <button
             onClick={() => setStatusFilter('COMPLETED')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
