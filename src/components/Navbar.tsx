@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Users,
   Cloud,
-  CheckCircle2
+  CheckCircle2,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -38,6 +39,7 @@ export const Navbar: React.FC = () => {
     setSelectedRO,
     repairOrders,
     markNotificationRead,
+    lockWorkstation,
     markAllNotificationsRead,
   } = useApp();
 
@@ -230,6 +232,17 @@ export const Navbar: React.FC = () => {
         >
           <span className="font-semibold">{currentUser.name}</span>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-300 transition-colors" />
+        </button>
+
+        {/* Lock Terminal / Sign Out Button */}
+        <button
+          id="navbar-lock-station-btn"
+          onClick={lockWorkstation}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-300 hover:text-white border border-red-800/60 transition-colors cursor-pointer text-xs font-bold"
+          title="Lock Workstation & Sign Out"
+        >
+          <Lock className="w-3.5 h-3.5 text-red-400" />
+          <span className="hidden sm:inline">Lock Station</span>
         </button>
 
         {/* Re-run Setup Wizard - Restricted to Service Manager */}

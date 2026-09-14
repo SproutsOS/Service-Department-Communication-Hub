@@ -5,8 +5,13 @@ import {
   ROStatus, 
   PartStatus, 
   PartItem, 
-  UrgentNotification 
+  UrgentNotification,
+  CustomerContactRecord,
+  CustomerContactType,
+  CustomerContactOutcome,
+  StatusHistory
 } from '../types';
+import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
@@ -46,6 +51,8 @@ interface AppContextType {
   isStaffManagementOpen: boolean;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
+  isAuthenticated: boolean;
+  setIsAuthenticated: (auth: boolean) => void;
   
   // Actions
   setCurrentUser: (user: User) => void;
@@ -61,7 +68,9 @@ interface AppContextType {
   updateUser: (userId: string, updates: Partial<User>) => void;
   removeUser: (userId: string) => { success: boolean; message?: string };
   loginWithCredentials: (emailOrId: string, passwordOrPin: string) => { success: boolean; user?: User; message?: string };
+  loginUser: (user: User, passwordOrPin: string) => { success: boolean; message?: string };
   logout: () => void;
+  lockWorkstation: () => void;
   completeInitialSetup: (config: {
     shopName: string;
     manager: {
@@ -98,6 +107,18 @@ interface AppContextType {
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>) => boolean;
+  logCustomerContact: (
+    roId: string, 
+    contactData: {
+      type: CustomerContactType;
+      outcome: CustomerContactOutcome;
+      summary: string;
+      notes?: string;
+      partsEtaDiscussed?: string;
+      promisedDateDiscussed?: string;
+      nextScheduledContactDate?: string;
+    }
+  ) => boolean;
   clearAllRepairOrders: () => void;
   resetAllDataToCleanSlateHandler: () => void;
   resetToDemoData: () => void;
@@ -113,12 +134,22 @@ const STORAGE_KEY_NOTIFS = 'precision_auto_notifs_v6_clean';
 const STORAGE_KEY_SHOP_NAME = 'precision_auto_shop_name_v6_clean';
 const STORAGE_KEY_SETUP_DONE = 'precision_auto_setup_completed_v6_clean';
 const STORAGE_KEY_WIPE_PERFORMED = 'precision_auto_wipe_performed_v6_clean';
+const STORAGE_KEY_SESSION_AUTH = 'dealership_session_authenticated_v1';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Cloud sync status indicator
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+
+  // Authentication gate state - requires staff login on new session visits
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(STORAGE_KEY_SESSION_AUTH) === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Dealership/Shop Name
   const [shopName, setShopNameState] = useState<string>(() => {
@@ -1032,6 +1063,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Log customer contact touchpoint & update cadence schedule
+  const logCustomerContact = (
+    roId: string, 
+    contactData: {
+      type: CustomerContactType;
+      outcome: CustomerContactOutcome;
+      summary: string;
+      notes?: string;
+      partsEtaDiscussed?: string;
+      promisedDateDiscussed?: string;
+      nextScheduledContactDate?: string;
+    }
+  ): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const now = new Date().toISOString();
+    const contactId = `cnt_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+
+    const nextDueDate = contactData.nextScheduledContactDate || calculateNextContactDate(now, 3.5);
+
+    const newRecord: CustomerContactRecord = {
+      id: contactId,
+      timestamp: now,
+      advisorId: currentUser.id,
+      advisorName: currentUser.name,
+      type: contactData.type,
+      outcome: contactData.outcome,
+      summary: contactData.summary.trim(),
+      notes: (contactData.notes || '').trim(),
+      partsEtaDiscussed: contactData.partsEtaDiscussed?.trim() || '',
+      promisedDateDiscussed: contactData.promisedDateDiscussed?.trim() || '',
+      nextScheduledContactDate: nextDueDate,
+    };
+
+    const typeInfo = formatContactType(contactData.type);
+
+    const newHistoryEntry: StatusHistory = {
+      id: `hist_${Date.now()}`,
+      status: targetRO.status,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: `Customer contact logged (${typeInfo.label}): ${contactData.summary.trim()}. Next scheduled update: ${nextDueDate}.`,
+    };
+
+    const updatedContactHistory = [newRecord, ...(targetRO.contactHistory || [])];
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      lastContactDate: now,
+      lastContactBy: currentUser.name,
+      lastContactOutcome: contactData.outcome,
+      nextContactDueDate: nextDueDate,
+      contactHistory: updatedContactHistory,
+      history: [...targetRO.history, newHistoryEntry],
+    };
+
+    setRepairOrders(prev => {
+      const updatedList = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updatedList));
+      } catch {
+        // ignore
+      }
+      return updatedList;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      `Customer Contact: ${targetRO.customerName}`,
+      `${currentUser.name} reached out (${typeInfo.label}). Next call scheduled for ${nextDueDate}.`,
+      false,
+      'STATUS_CHANGE'
+    );
+
+    return true;
+  };
+
   const clearAllRepairOrders = () => {
     if (currentUser.role !== 'SERVICE_MANAGER') {
       alert('Permission Denied: Only the Service Manager has permission to clear repair orders.');
@@ -1067,20 +1180,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const matchesPass = found.password && found.password === cred;
     const matchesPin = found.pin && found.pin === cred;
-    const matchesDefault = cred === '1234' || cred === 'admin123';
+    const matchesDefault = cred === '1234' || cred === 'admin123' || cred === 'admin';
 
     if (!matchesPass && !matchesPin && !matchesDefault) {
       return { success: false, message: 'Invalid password or PIN entered.' };
     }
 
     setCurrentUserState(found);
+    setIsAuthenticated(true);
     try {
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(found));
+      sessionStorage.setItem(STORAGE_KEY_SESSION_AUTH, 'true');
     } catch {
       // ignore
     }
     setIsLoginModalOpen(false);
     return { success: true, user: found };
+  };
+
+  const loginUser = (user: User, passwordOrPin: string): { success: boolean; message?: string } => {
+    const cred = passwordOrPin.trim();
+    const matchesPass = user.password && user.password === cred;
+    const matchesPin = user.pin && user.pin === cred;
+    const matchesDefault = cred === '1234' || cred === 'admin123' || cred === 'admin';
+
+    if (!matchesPass && !matchesPin && !matchesDefault) {
+      return { success: false, message: 'Invalid password or PIN entered.' };
+    }
+
+    setCurrentUserState(user);
+    setIsAuthenticated(true);
+    try {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+      sessionStorage.setItem(STORAGE_KEY_SESSION_AUTH, 'true');
+    } catch {
+      // ignore
+    }
+    setIsLoginModalOpen(false);
+    return { success: true };
+  };
+
+  const lockWorkstation = () => {
+    setIsAuthenticated(false);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY_SESSION_AUTH);
+    } catch {
+      // ignore
+    }
+    setIsLoginModalOpen(false);
+  };
+
+  const logout = () => {
+    lockWorkstation();
   };
 
   const completeInitialSetup = (config: {
@@ -1124,12 +1275,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(finalUsers);
     try {
       localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(finalUsers));
+      sessionStorage.setItem(STORAGE_KEY_SESSION_AUTH, 'true');
     } catch {
       // ignore
     }
     finalUsers.forEach(u => syncUser(u));
 
     setCurrentUserState(managerUser);
+    setIsAuthenticated(true);
 
     if (config.startWithEmptyROs) {
       clearAllRepairOrders();
@@ -1157,10 +1310,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cleanSlateInitialized: config.startWithEmptyROs,
       seededDemoData: !config.startWithEmptyROs,
     });
-  };
-
-  const logout = () => {
-    setIsLoginModalOpen(true);
   };
 
   const resetAllDataToCleanSlateHandler = () => {
@@ -1265,6 +1414,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isStaffManagementOpen,
         isSoundEnabled,
         pushPermission,
+        isAuthenticated,
+        setIsAuthenticated,
         setCurrentUser,
         setSelectedRO,
         setIsNewROModalOpen,
@@ -1276,7 +1427,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUser,
         removeUser,
         loginWithCredentials,
+        loginUser,
         logout,
+        lockWorkstation,
         updateROStatus,
         startDiagnosis,
         dispatchRO,
@@ -1288,6 +1441,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAllNotificationsRead,
         deleteRepairOrder,
         updateRepairOrderDetails,
+        logCustomerContact,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,
         resetToDemoData,

@@ -22,13 +22,18 @@ import {
   Edit3,
   Check,
   AlertCircle,
-  Eye
+  Eye,
+  PhoneCall,
+  Voicemail,
+  PhoneForwarded
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
 import { TicketFlowStepper } from './TicketFlowStepper';
+import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 
 export const RODetailModal: React.FC = () => {
   const { 
@@ -50,6 +55,7 @@ export const RODetailModal: React.FC = () => {
   const isSales = currentUser.role === 'SALES';
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [managerActionFeedback, setManagerActionFeedback] = useState<string | null>(null);
 
   // Editable fields initialized from selectedRO
@@ -78,7 +84,7 @@ export const RODetailModal: React.FC = () => {
     }
   }, [selectedRO?.id]);
 
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY'>('DETAILS');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS'>('DETAILS');
   const [chatInput, setChatInput] = useState('');
   const [isUrgentMessage, setIsUrgentMessage] = useState(false);
   const [statusNote, setStatusNote] = useState('');
@@ -231,6 +237,18 @@ export const RODetailModal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {!isSales && (
+              <button
+                type="button"
+                onClick={() => setIsFollowUpModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer shadow-2xs"
+                title="Log customer call or follow-up note"
+              >
+                <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
+                <span>Log Customer Follow-Up</span>
+              </button>
+            )}
+
             {isManager ? (
               <button
                 type="button"
@@ -351,6 +369,24 @@ export const RODetailModal: React.FC = () => {
           >
             <History className="w-4 h-4" />
             <span>Audit History ({selectedRO.history.length})</span>
+          </button>
+
+          <button
+            id="ro-tab-contacts"
+            onClick={() => setActiveTab('CONTACTS')}
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              activeTab === 'CONTACTS'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Phone className="w-4 h-4" />
+            <span>Customer Follow-Ups</span>
+            {(selectedRO.contactHistory?.length || 0) > 0 && (
+              <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                {selectedRO.contactHistory?.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -546,6 +582,49 @@ export const RODetailModal: React.FC = () => {
                 </form>
               )}
               
+              {/* Customer Follow-Up & Cadence Card (Twice-Per-Week Cadence) */}
+              {(() => {
+                const cadence = getContactCadenceStatus(selectedRO);
+                return (
+                  <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs ${
+                    cadence.isOverdue 
+                      ? 'bg-red-50/70 border-red-200' 
+                      : cadence.isDueToday
+                      ? 'bg-amber-50/70 border-amber-200'
+                      : 'bg-emerald-50/50 border-emerald-200'
+                  }`}>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                          <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Customer Communication Cadence:</span>
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cadence.badgeClass}`}>
+                          {cadence.label}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          (Twice per week standard)
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-700 mt-1">
+                        <strong>Last Contact:</strong> {cadence.lastContactText} • <strong>Next Call Due:</strong> {cadence.nextDueText}
+                      </div>
+                    </div>
+
+                    {!isSales && (
+                      <button
+                        type="button"
+                        onClick={() => setIsFollowUpModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" />
+                        <span>Log Customer Touchpoint</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Primary Concern & Tech Notes */}
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
@@ -1045,6 +1124,132 @@ export const RODetailModal: React.FC = () => {
             </div>
           )}
 
+          {/* TAB 5: CUSTOMER CONTACTS & TWICE-WEEKLY CADENCE HISTORY */}
+          {activeTab === 'CONTACTS' && (
+            <div className="space-y-4">
+              {/* Cadence Policy Header Card */}
+              {(() => {
+                const cadence = getContactCadenceStatus(selectedRO);
+                return (
+                  <div className="p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                          Twice-Weekly Call Standard
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cadence.badgeClass}`}>
+                          {cadence.label}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-black mt-1 text-white flex items-center gap-2">
+                        <span>Customer Contact & Update History</span>
+                      </h4>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        {cadence.lastContactText} • Next call scheduled: <strong>{cadence.nextDueText}</strong>
+                      </p>
+                    </div>
+
+                    {!isSales && (
+                      <button
+                        type="button"
+                        onClick={() => setIsFollowUpModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" />
+                        <span>Log New Call / Touchpoint</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Direct Phone Dial Quick Banner */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-800">{selectedRO.customerName}</span>
+                  <span className="font-mono text-slate-600 font-semibold">{selectedRO.customerPhone}</span>
+                </div>
+                <a
+                  href={`tel:${selectedRO.customerPhone}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  <PhoneForwarded className="w-3.5 h-3.5" />
+                  <span>Call {selectedRO.customerPhone}</span>
+                </a>
+              </div>
+
+              {/* Contact History List */}
+              <div className="space-y-3">
+                <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Logged Touchpoint Records ({selectedRO.contactHistory?.length || 0})
+                </h5>
+
+                {!selectedRO.contactHistory || selectedRO.contactHistory.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-500">
+                    <PhoneCall className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-60" />
+                    <p className="font-bold text-xs text-slate-700">No Customer Calls Logged Yet</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                      All customers with vehicles in the shop or waiting on parts must receive proactive calls at least twice per week.
+                    </p>
+                    {!isSales && (
+                      <button
+                        type="button"
+                        onClick={() => setIsFollowUpModalOpen(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>Log Initial Customer Call</span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {selectedRO.contactHistory.map(record => {
+                      const typeCfg = formatContactType(record.type);
+                      const outcomeCfg = formatContactOutcome(record.outcome);
+                      return (
+                        <div
+                          key={record.id}
+                          className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
+                                <span className="font-semibold text-blue-600">{typeCfg.label}</span>
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${outcomeCfg.color}`}>
+                                {outcomeCfg.label}
+                              </span>
+                            </div>
+
+                            <span className="text-[11px] text-slate-400">
+                              {formatDateTime(record.timestamp)}
+                            </span>
+                          </div>
+
+                          {/* Notes/Summary */}
+                          <p className="text-xs text-slate-800 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            {record.summary}
+                          </p>
+
+                          {/* Details: Advisor, ETA Discussed, Next Due */}
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
+                            <span>Logged by: <strong className="text-slate-700">{record.advisorName}</strong></span>
+                            {record.nextScheduledContactDate && (
+                              <span className="font-semibold text-blue-600">
+                                Next Call Due: {record.nextScheduledContactDate}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* Footer */}
@@ -1120,6 +1325,18 @@ export const RODetailModal: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Customer Follow-Up Modal */}
+        {isFollowUpModalOpen && (
+          <CustomerFollowUpModal
+            ro={selectedRO}
+            onClose={() => setIsFollowUpModalOpen(false)}
+            onSuccess={(msg) => {
+              setManagerActionFeedback(msg);
+              setTimeout(() => setManagerActionFeedback(null), 4000);
+            }}
+          />
         )}
 
       </div>

@@ -10,6 +10,7 @@ import { StaffManagement } from './components/StaffManagement';
 import { RODetailModal } from './components/RODetailModal';
 import { NewROModal } from './components/NewROModal';
 import { LoginModal } from './components/LoginModal';
+import { LoginScreen } from './components/LoginScreen';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { 
@@ -17,12 +18,13 @@ import {
   Wrench, 
   UserCheck, 
   Package, 
-  CheckCircle2,
-  ShieldCheck,
-  AlertTriangle,
-  Users,
-  ArrowLeft,
-  Eye
+  CheckCircle2, 
+  ShieldCheck, 
+  AlertTriangle, 
+  Users, 
+  ArrowLeft, 
+  Eye,
+  Lock
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -33,13 +35,29 @@ const MainContent: React.FC = () => {
     users, 
     repairOrders, 
     isStaffManagementOpen, 
-    setIsStaffManagementOpen 
+    setIsStaffManagementOpen,
+    isAuthenticated,
+    lockWorkstation
   } = useApp();
   
   // Tab override to allow user to inspect different dashboards while preserving active login
   const [viewOverride, setViewOverride] = useState<UserRole | null>(null);
 
   const activeRoleView = viewOverride || currentUser.role;
+
+  // Authentication Gate: Render ONLY the Login Screen until authorized staff credentials/PIN are entered
+  if (!isAuthenticated) {
+    return (
+      <>
+        <LoginScreen 
+          onLoginSuccess={(loggedUser) => {
+            setViewOverride(loggedUser.role);
+          }}
+        />
+        <InitialSetupModal />
+      </>
+    );
+  }
 
   // Real-time capacity calculation
   const totalActive = repairOrders.filter(r => r.status !== 'COMPLETED').length;
@@ -168,8 +186,8 @@ const MainContent: React.FC = () => {
             </div>
           </nav>
 
-          {/* Perspective Indicator */}
-          <div className="px-3 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700/80 mb-4">
+          {/* Perspective Indicator & Lock Button */}
+          <div className="px-3 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700/80 mb-3">
             <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
               Viewing Filter
             </div>
@@ -180,6 +198,22 @@ const MainContent: React.FC = () => {
               {currentUser.title}
             </div>
           </div>
+
+          {/* Lock Workstation / Sign Out Button */}
+          <button
+            id="sidebar-lock-workstation-btn"
+            onClick={lockWorkstation}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 text-xs font-bold transition-colors cursor-pointer mb-4"
+            title="Lock Workstation & Return to Sign-In Screen"
+          >
+            <div className="flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-red-400" />
+              <span>Lock Workstation</span>
+            </div>
+            <span className="text-[10px] uppercase font-semibold text-red-400 bg-red-950 px-1.5 py-0.5 rounded border border-red-800/60">
+              Sign Out
+            </span>
+          </button>
 
           {/* Shop Load Status Widget (Professional Polish) */}
           <div className="mt-auto p-4 bg-slate-800 rounded-xl border border-slate-700">
@@ -251,6 +285,14 @@ const MainContent: React.FC = () => {
             >
               <Users className="w-3.5 h-3.5" />
               <span>Staff ({users.length})</span>
+            </button>
+            <button
+              onClick={lockWorkstation}
+              className="px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 bg-red-950/60 text-red-300 border border-red-800/60 ml-auto"
+              title="Lock Workstation"
+            >
+              <Lock className="w-3 h-3 text-red-400" />
+              <span>Lock</span>
             </button>
           </div>
 

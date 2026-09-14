@@ -29,7 +29,8 @@ export const LoginModal: React.FC = () => {
     loginWithCredentials,
     setIsStaffManagementOpen,
     setIsSetupWizardOpen,
-    shopName
+    shopName,
+    lockWorkstation
   } = useApp();
 
   const [loginMode, setLoginMode] = useState<'INDIVIDUAL' | 'QUICK_SWITCH'>('INDIVIDUAL');
@@ -354,15 +355,25 @@ export const LoginModal: React.FC = () => {
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-          <span className="text-xs text-slate-500">
-            {users.length} registered employees
-          </span>
           <button
-            onClick={() => setIsLoginModalOpen(false)}
-            className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+            type="button"
+            onClick={lockWorkstation}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold transition-colors cursor-pointer"
           >
-            Close
+            <Lock className="w-3.5 h-3.5 text-red-600" />
+            <span>Lock Workstation (Sign Out)</span>
           </button>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              {users.length} registered employees
+            </span>
+            <button
+              onClick={() => setIsLoginModalOpen(false)}
+              className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
       </div>

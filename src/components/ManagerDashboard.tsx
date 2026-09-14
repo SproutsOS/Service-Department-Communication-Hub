@@ -17,25 +17,37 @@ import {
   Calendar, 
   Award,
   Calculator,
-  ShieldCheck
+  ShieldCheck,
+  PhoneCall
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
-import { ROStatus } from '../types';
+import { ROStatus, RepairOrder } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince } from '../utils/formatters';
+import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
+import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
   const { repairOrders, users, setSelectedRO, setIsNewROModalOpen, startDiagnosis } = useApp();
 
+  const [viewSection, setViewSection] = useState<'FLOOR' | 'CALL_SHEET'>('FLOOR');
+  const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
   const [techFilter, setTechFilter] = useState<string>('ALL');
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARDS'>('TABLE');
 
   // Technicians
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
+
+  // Cadence tracking (Twice-per-week policy dealership overview)
+  const eligibleROs = repairOrders.filter(r => isEligibleForCadence(r));
+  const overdueCallsCount = eligibleROs.filter(r => getContactCadenceStatus(r).isOverdue).length;
+  const dueTodayCallsCount = eligibleROs.filter(r => getContactCadenceStatus(r).isDueToday).length;
+  const totalCallsDue = overdueCallsCount + dueTodayCallsCount;
 
   // Metrics matching user flow (Uniform with Service Advisor)
   const openROsCount = repairOrders.filter(r => r.status !== 'CLOSED' && r.status !== 'COMPLETED').length;
@@ -59,7 +71,10 @@ export const ManagerDashboard: React.FC = () => {
   // Filter ROs
   const filteredROs = repairOrders.filter(ro => {
     if (urgentOnly && !ro.isUrgent) return false;
-    if (statusFilter !== 'ALL') {
+    if (statusFilter === 'CALLS_DUE') {
+      const cadence = getContactCadenceStatus(ro);
+      if (!cadence.needsCall) return false;
+    } else if (statusFilter !== 'ALL') {
       const roNorm = normalizeROStatus(ro.status);
       const filterNorm = normalizeROStatus(statusFilter);
       if (filterNorm === 'PARTS_ORDERED') {
@@ -101,30 +116,126 @@ export const ManagerDashboard: React.FC = () => {
           </p>
         </div>
 
-        <button
-          id="create-new-ro-btn-mgr"
-          onClick={() => setIsNewROModalOpen(true)}
-          className="inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors self-start sm:self-auto"
-        >
-          + Create New RO
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Section Toggle */}
+          <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewSection('FLOOR')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewSection === 'FLOOR'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Floor Board</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewSection('CALL_SHEET')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewSection === 'CALL_SHEET'
+                  ? 'bg-white text-blue-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
+              <span>Customer Call Sheet</span>
+              {totalCallsDue > 0 && (
+                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {totalCallsDue}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <button
+            id="create-new-ro-btn-mgr"
+            onClick={() => setIsNewROModalOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
+          >
+            + Create New RO
+          </button>
+        </div>
       </div>
+
+      {/* Cadence Notification Alert for Service Manager */}
+      {totalCallsDue > 0 && viewSection === 'FLOOR' && (
+        <div className="p-4 bg-gradient-to-r from-red-50 to-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <PhoneCall className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 flex items-center gap-2">
+                <span>Dealership 2x/Week Customer Follow-Up Policy: {totalCallsDue} Calls Pending</span>
+                {overdueCallsCount > 0 && (
+                  <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                    {overdueCallsCount} Overdue
+                  </span>
+                )}
+                {dueTodayCallsCount > 0 && (
+                  <span className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                    {dueTodayCallsCount} Due Today
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Ensure customers waiting on backordered parts, teardown, or lengthy repairs are contacted at least twice per week.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewSection('CALL_SHEET')}
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>Manage Dealership Call Sheet</span>
+          </button>
+        </div>
+      )}
+
+      {viewSection === 'CALL_SHEET' ? (
+        <CustomerCallSheetWidget 
+          onSelectRO={setSelectedRO}
+          onOpenFollowUpModal={setSelectedFollowUpRO}
+        />
+      ) : (
+        <>
 
       {/* Quick Status Pill Filters (Matching Service Advisor Flow Uniformity) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
         
-        {/* 1. Open RO's */}
-        <button
-          onClick={() => setStatusFilter('ALL')}
-          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            statusFilter === 'ALL'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 truncate">Open RO's</div>
-          <div className="text-lg sm:text-xl font-black">{openROsCount}</div>
-        </button>
+            {/* 1. Open RO's */}
+            <button
+              onClick={() => setStatusFilter('ALL')}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                statusFilter === 'ALL'
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 truncate">Open RO's</div>
+              <div className="text-lg sm:text-xl font-black">{openROsCount}</div>
+            </button>
+
+            {/* Cadence filter */}
+            <button
+              onClick={() => setStatusFilter(statusFilter === 'CALLS_DUE' ? 'ALL' : 'CALLS_DUE')}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                statusFilter === 'CALLS_DUE'
+                  ? 'bg-red-600 text-white border-red-700 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-red-50/50 shadow-sm'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Calls Due (2x/Wk)</span>
+                <PhoneCall className="w-3.5 h-3.5 text-red-500" />
+              </div>
+              <div className="text-lg sm:text-xl font-black text-red-600">{totalCallsDue}</div>
+            </button>
 
         {/* 2. Waiting Diag */}
         <button
@@ -513,6 +624,7 @@ export const ManagerDashboard: React.FC = () => {
                 <tr className="text-[11px] uppercase text-slate-400 border-b border-slate-200 font-bold">
                   <th className="px-6 py-3">RO #</th>
                   <th className="px-6 py-3">Customer & Vehicle</th>
+                  <th className="px-6 py-3">Follow-Up (2x/Wk)</th>
                   <th className="px-6 py-3">Date Created</th>
                   <th className="px-6 py-3">Assigned Tech</th>
                   <th className="px-6 py-3">Current Status</th>
@@ -570,6 +682,24 @@ export const ManagerDashboard: React.FC = () => {
                           <div className="text-xs text-slate-400">
                             {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
                           </div>
+                        </td>
+
+                        {/* Customer Follow-Up Cadence */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(() => {
+                            const cadence = getContactCadenceStatus(ro);
+                            return (
+                              <div>
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${cadence.badgeClass}`}>
+                                  <PhoneCall className="w-2.5 h-2.5" />
+                                  <span>{cadence.label}</span>
+                                </span>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  {cadence.lastContactText}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Date Created */}
@@ -672,6 +802,16 @@ export const ManagerDashboard: React.FC = () => {
         )}
 
       </div>
+      </>
+      )}
+
+      {/* Customer Follow-Up Modal */}
+      {selectedFollowUpRO && (
+        <CustomerFollowUpModal
+          ro={selectedFollowUpRO}
+          onClose={() => setSelectedFollowUpRO(null)}
+        />
+      )}
 
     </div>
   );

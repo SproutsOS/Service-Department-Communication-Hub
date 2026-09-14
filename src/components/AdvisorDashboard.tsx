@@ -11,21 +11,34 @@ import {
   Wrench,
   Send,
   Calculator,
-  ShieldCheck
+  ShieldCheck,
+  PhoneCall,
+  LayoutGrid
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
-import { ROStatus } from '../types';
+import { ROStatus, RepairOrder } from '../types';
 import { normalizeROStatus } from '../data/mockData';
+import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
+import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const AdvisorDashboard: React.FC = () => {
   const { currentUser, repairOrders, setSelectedRO, setIsNewROModalOpen } = useApp();
   
-  const [activeTab, setActiveTab] = useState<ROStatus | 'ALL'>('ALL');
+  const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET'>('BOARD');
+  const [activeTab, setActiveTab] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
 
   // Strictly filter by this advisor's ROs to prevent clutter
   const myROs = repairOrders.filter(ro => ro.advisorId === currentUser.id);
+
+  // Calculate customer cadence counts for this advisor
+  const myEligibleROs = myROs.filter(ro => isEligibleForCadence(ro));
+  const myOverdueCalls = myEligibleROs.filter(ro => getContactCadenceStatus(ro).isOverdue).length;
+  const myDueTodayCalls = myEligibleROs.filter(ro => getContactCadenceStatus(ro).isDueToday).length;
+  const totalCallsDue = myOverdueCalls + myDueTodayCalls;
 
   // Status counts for this advisor
   const waitingDiagnosisCount = myROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
@@ -40,7 +53,12 @@ export const AdvisorDashboard: React.FC = () => {
 
   // Filtered list
   const displayROs = myROs.filter(ro => {
-    if (activeTab !== 'ALL' && normalizeROStatus(ro.status) !== normalizeROStatus(activeTab)) return false;
+    if (activeTab === 'CALLS_DUE') {
+      const cadence = getContactCadenceStatus(ro);
+      if (!cadence.needsCall) return false;
+    } else if (activeTab !== 'ALL' && normalizeROStatus(ro.status) !== normalizeROStatus(activeTab)) {
+      return false;
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -68,32 +86,134 @@ export const AdvisorDashboard: React.FC = () => {
               Personal Queue
             </span>
           </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Track your active repair orders and maintain twice-weekly customer communication.
+          </p>
         </div>
 
-        <button
-          id="advisor-new-ro-btn"
-          onClick={() => setIsNewROModalOpen(true)}
-          className="inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Customer RO</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Mode Toggle */}
+          <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('BOARD')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'BOARD'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>RO Board</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('CALL_SHEET')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'CALL_SHEET'
+                  ? 'bg-white text-blue-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
+              <span>Daily Call Sheet</span>
+              {totalCallsDue > 0 && (
+                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {totalCallsDue}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <button
+            id="advisor-new-ro-btn"
+            onClick={() => setIsNewROModalOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Customer RO</span>
+          </button>
+        </div>
       </div>
 
-      {/* Quick Status Pill Filters (Professional Polish Theme) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
-        
-        <button
-          onClick={() => setActiveTab('ALL')}
-          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-            activeTab === 'ALL'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm'
-          }`}
-        >
-          <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 truncate">All My ROs</div>
-          <div className="text-lg sm:text-xl font-black">{myROs.length}</div>
-        </button>
+      {/* Cadence Notification Alert when calls are due */}
+      {totalCallsDue > 0 && viewMode === 'BOARD' && (
+        <div className="p-4 bg-gradient-to-r from-red-50 to-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <PhoneCall className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 flex items-center gap-2">
+                <span>Customer Cadence Standard: {totalCallsDue} Calls Pending</span>
+                {myOverdueCalls > 0 && (
+                  <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                    {myOverdueCalls} Overdue
+                  </span>
+                )}
+                {myDueTodayCalls > 0 && (
+                  <span className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                    {myDueTodayCalls} Due Today
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Dealership standard requires contacting customers with vehicles waiting on parts or undergoing repairs at least twice per week.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewMode('CALL_SHEET')}
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>Open Call Sheet Now</span>
+          </button>
+        </div>
+      )}
+
+      {/* Render either Call Sheet or RO Board */}
+      {viewMode === 'CALL_SHEET' ? (
+        <div className="space-y-4">
+          <CustomerCallSheetWidget 
+            filterAdvisorId={currentUser.id}
+            onSelectRO={setSelectedRO}
+            onOpenFollowUpModal={setSelectedFollowUpRO}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Quick Status Pill Filters */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-2.5">
+            
+            <button
+              onClick={() => setActiveTab('ALL')}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                activeTab === 'ALL'
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 truncate">All My ROs</div>
+              <div className="text-lg sm:text-xl font-black">{myROs.length}</div>
+            </button>
+
+            {/* Cadence filter tab */}
+            <button
+              onClick={() => setActiveTab('CALLS_DUE')}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                activeTab === 'CALLS_DUE'
+                  ? 'bg-red-600 text-white border-red-700 shadow-sm'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-red-50/50 shadow-sm'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Calls Due (2x/Wk)</span>
+                <PhoneCall className="w-3.5 h-3.5 text-red-500" />
+              </div>
+              <div className="text-lg sm:text-xl font-black text-red-600">{totalCallsDue}</div>
+            </button>
 
         <button
           onClick={() => setActiveTab('WAITING_DIAGNOSTICS')}
@@ -253,6 +373,16 @@ export const AdvisorDashboard: React.FC = () => {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* Customer Follow-Up Modal */}
+      {selectedFollowUpRO && (
+        <CustomerFollowUpModal
+          ro={selectedFollowUpRO}
+          onClose={() => setSelectedFollowUpRO(null)}
+        />
+      )}
 
     </div>
   );

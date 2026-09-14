@@ -9,11 +9,13 @@ import {
   Calendar, 
   ArrowRight,
   Send,
-  Truck
+  Truck,
+  PhoneCall
 } from 'lucide-react';
 import { RepairOrder, ROStatus } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatEtaBadge, calculateDispatchedDuration, getDiagnosticStatusDetails } from '../utils/formatters';
+import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 interface ROCardProps {
   ro: RepairOrder;
@@ -23,6 +25,8 @@ interface ROCardProps {
 
 export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) => {
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
+  const cadence = getContactCadenceStatus(ro);
+  const showCadence = isEligibleForCadence(ro);
   
   // Check parts in transit or with active ETA
   const activeParts = ro.parts.filter(p => p.status !== 'ISSUED_TO_TECH');
@@ -51,12 +55,23 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
           )}
         </div>
 
-        {/* Status Badge */}
-        <span 
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${statusInfo.badgeClass}`}
-        >
-          {statusInfo.label}
-        </span>
+        {/* Status & Cadence Badges */}
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          {showCadence && (
+            <span 
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${cadence.badgeClass}`}
+              title={`Customer Follow-Up: ${cadence.lastContactText} • ${cadence.nextDueText}`}
+            >
+              <PhoneCall className="w-2.5 h-2.5" />
+              <span>{cadence.label}</span>
+            </span>
+          )}
+          <span 
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${statusInfo.badgeClass}`}
+          >
+            {statusInfo.label}
+          </span>
+        </div>
       </div>
 
       {/* Diagnostic Phase Highlight: Waiting vs Active Diagnosis */}

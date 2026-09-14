@@ -101,6 +101,35 @@ export interface VehicleInfo {
   color?: string;
 }
 
+export type CustomerContactType = 
+  | 'PHONE_CALL' 
+  | 'LEFT_VOICEMAIL' 
+  | 'SMS' 
+  | 'IN_PERSON' 
+  | 'EMAIL';
+
+export type CustomerContactOutcome = 
+  | 'SPOKE_WITH_CUSTOMER' 
+  | 'LEFT_VOICEMAIL' 
+  | 'NO_ANSWER' 
+  | 'SENT_SMS_UPDATE' 
+  | 'CUSTOMER_APPROVED_DELAY' 
+  | 'CUSTOMER_REQUESTED_CALLBACK';
+
+export interface CustomerContactRecord {
+  id: string;
+  timestamp: string; // ISO string
+  advisorId: string;
+  advisorName: string;
+  type: CustomerContactType;
+  outcome: CustomerContactOutcome;
+  summary: string;
+  notes?: string;
+  partsEtaDiscussed?: string;
+  promisedDateDiscussed?: string;
+  nextScheduledContactDate?: string;
+}
+
 export interface RepairOrder {
   id: string; // e.g. "RO-8821"
   customerName: string;
@@ -123,6 +152,12 @@ export interface RepairOrder {
   parts: PartItem[];
   messages: Message[];
   history: StatusHistory[];
+  // Customer Follow-Up & Contact Cadence (Twice-per-week tracking)
+  lastContactDate?: string; // Timestamp of last customer touchpoint
+  lastContactBy?: string; // Name of advisor/staff who contacted
+  lastContactOutcome?: string;
+  nextContactDueDate?: string; // ISO date string when next call is due
+  contactHistory?: CustomerContactRecord[];
 }
 
 export interface UrgentNotification {
