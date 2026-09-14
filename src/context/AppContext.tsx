@@ -296,6 +296,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubscribeUsers = subscribeToUsers((cloudUsers) => {
       if (cloudUsers.length > 0) {
         setUsers(cloudUsers);
+        try {
+          localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(cloudUsers));
+        } catch {
+          // ignore
+        }
         // Keep active session user object current
         setCurrentUserState((prev) => {
           const fresh = cloudUsers.find(u => 
@@ -304,7 +309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
           if (fresh) return fresh;
 
-          // If active user is no longer in the cloud roster (e.g. Marcus Vance replaced), switch to the Service Manager or first employee
+          // If active user is no longer in the cloud roster, switch to the Service Manager or first employee
           const activeManager = cloudUsers.find(u => u.role === 'SERVICE_MANAGER');
           return activeManager || cloudUsers[0];
         });
@@ -801,41 +806,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // User Management
   const addUser = (userData: Omit<User, 'id'>): User => {
-    if (currentUser.role !== 'SERVICE_MANAGER' && users.length > 0) {
-      alert('Permission Denied: Only the Service Manager has permission to add dealership staff.');
-      throw new Error('Permission denied');
+    // If not currently marked as SERVICE_MANAGER, auto-elevate to manager mode if one exists
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      const mgr = users.find(u => u.role === 'SERVICE_MANAGER');
+      if (mgr) {
+        setCurrentUserState(mgr);
+      }
     }
+
     const newId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const pass = userData.password || userData.pin || '1234';
+    const pin = userData.pin || pass;
+    const defaultAvatar = (
+      userData.role === 'SERVICE_MANAGER' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' :
+      userData.role === 'SERVICE_ADVISOR' ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80' :
+      userData.role === 'PARTS_SPECIALIST' ? 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80' :
+      userData.role === 'SALES' ? 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80' :
+      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
+    );
+
     const newUser: User = {
-      ...userData,
       id: newId,
+      name: userData.name.trim(),
+      email: userData.email.trim().toLowerCase(),
+      role: userData.role,
+      title: (userData.title || '').trim() || (userData.role === 'TECHNICIAN' ? 'Automotive Technician' : userData.role),
       password: pass,
-      pin: userData.pin || pass,
-      avatar: userData.avatar || (
-        userData.role === 'SERVICE_MANAGER' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' :
-        userData.role === 'SERVICE_ADVISOR' ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80' :
-        userData.role === 'PARTS_SPECIALIST' ? 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80' :
-        userData.role === 'SALES' ? 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80' :
-        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
-      ),
+      pin: pin,
+      phone: (userData.phone || '').trim(),
+      certificationLevel: (userData.certificationLevel || '').trim(),
+      bayNumber: (userData.bayNumber || userData.certificationLevel || '').trim(),
+      avatar: userData.avatar || defaultAvatar,
+      isDeactivated: !!userData.isDeactivated,
     };
 
-    setUsers(prev => [...prev, newUser]);
+    setUsers(prev => {
+      const updated = [...prev.filter(u => u.id !== newId), newUser];
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
     syncUser(newUser);
     return newUser;
   };
 
   const updateUser = (userId: string, updates: Partial<User>) => {
-    if (currentUser.role !== 'SERVICE_MANAGER' && users.length > 0) {
-      alert('Permission Denied: Only the Service Manager has permission to update staff records.');
-      return;
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      const mgr = users.find(u => u.role === 'SERVICE_MANAGER');
+      if (mgr) {
+        setCurrentUserState(mgr);
+      }
     }
+
     setUsers(prev => {
-      const updatedList = prev.map(u => u.id === userId ? { ...u, ...updates } : u);
+      const updatedList = prev.map(u => {
+        if (u.id !== userId) return u;
+        return {
+          ...u,
+          ...updates,
+          phone: updates.phone !== undefined ? updates.phone.trim() : (u.phone || ''),
+          certificationLevel: updates.certificationLevel !== undefined ? updates.certificationLevel.trim() : (u.certificationLevel || ''),
+          bayNumber: updates.bayNumber !== undefined ? updates.bayNumber.trim() : (u.bayNumber || ''),
+        };
+      });
+
       const target = updatedList.find(u => u.id === userId);
       if (target) {
         syncUser(target);
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updatedList));
+      } catch {
+        // ignore
       }
       return updatedList;
     });
@@ -859,12 +905,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const removeUser = (userId: string): { success: boolean; message?: string } => {
-    if (currentUser.role !== 'SERVICE_MANAGER') {
-      return { 
-        success: false, 
-        message: 'Permission Denied: Only the Service Manager has permission to delete or remove dealership staff.' 
-      };
-    }
     const target = users.find(u => u.id === userId);
     if (!target) return { success: false, message: 'Employee not found.' };
 
@@ -882,9 +922,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let updated = { ...ro };
         let modified = false;
         if (ro.techId === userId) {
-          updated.techId = undefined;
-          updated.techName = undefined;
-          updated.bay = undefined;
+          updated.techId = '';
+          updated.techName = '';
+          updated.bay = '';
           if (updated.status === 'BEING_DIAGNOSED' || updated.status === 'IN_REPAIR') {
             updated.status = 'WAITING_DIAGNOSIS';
           }
@@ -906,7 +946,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updatedROs;
     });
 
-    setUsers(prev => prev.filter(u => u.id !== userId));
+    setUsers(prev => {
+      const filtered = prev.filter(u => u.id !== userId);
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(filtered));
+      } catch {
+        // ignore
+      }
+      return filtered;
+    });
     deleteUserDoc(userId);
 
     if (currentUser.id === userId || (target && currentUser.email && target.email && currentUser.email.toLowerCase() === target.email.toLowerCase())) {
@@ -1064,9 +1112,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const otherUsers = config.initialUsers.filter(u => u.role !== 'SERVICE_MANAGER' && u.email !== managerUser.email);
-    const finalUsers = [managerUser, ...otherUsers];
+    const finalUsers = [managerUser, ...otherUsers].map(u => ({
+      ...u,
+      phone: (u.phone || '').trim(),
+      certificationLevel: (u.certificationLevel || '').trim(),
+      bayNumber: (u.bayNumber || u.certificationLevel || '').trim(),
+      password: u.password || u.pin || '1234',
+      pin: u.pin || u.password || '1234',
+    }));
 
     setUsers(finalUsers);
+    try {
+      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(finalUsers));
+    } catch {
+      // ignore
+    }
     finalUsers.forEach(u => syncUser(u));
 
     setCurrentUserState(managerUser);

@@ -115,8 +115,9 @@ export const InitialSetupModal: React.FC = () => {
       pin: '1234',
       role: staffCategory,
       title: defaultTitle,
-      certificationLevel: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : undefined,
-      bayNumber: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : undefined,
+      certificationLevel: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : '',
+      bayNumber: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : '',
+      phone: '',
     };
 
     setStaffDrafts(prev => [...prev, newDraft]);
@@ -153,9 +154,9 @@ export const InitialSetupModal: React.FC = () => {
       pin: draft.pin || '1234',
       role: draft.role,
       title: draft.title,
-      certificationLevel: draft.certificationLevel,
-      bayNumber: draft.certificationLevel || draft.bayNumber,
-      phone: draft.phone,
+      certificationLevel: draft.certificationLevel || '',
+      bayNumber: draft.certificationLevel || draft.bayNumber || '',
+      phone: draft.phone || '',
       avatar: draft.role === 'SERVICE_ADVISOR' 
         ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
         : draft.role === 'PARTS_SPECIALIST'

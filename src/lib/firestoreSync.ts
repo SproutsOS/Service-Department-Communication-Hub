@@ -136,13 +136,43 @@ export function subscribeToShopSettings(callback: (settings: ShopSettings | null
   });
 }
 
+/**
+ * Recursively cleans an object to make it 100% safe for Firestore setDoc / updateDoc operations.
+ * Firestore SDK rejects undefined values with a fatal runtime error:
+ * "Function setDoc() called with invalid data. Unsupported field value: undefined".
+ * This helper strips all undefined properties while preserving nulls, booleans, strings, numbers, arrays, and objects.
+ */
+export function sanitizeForFirestore<T>(val: T): T {
+  if (val === undefined) {
+    return null as any;
+  }
+  if (val === null || typeof val !== 'object') {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val
+      .filter(item => item !== undefined)
+      .map(item => sanitizeForFirestore(item)) as any;
+  }
+  const clean: Record<string, any> = {};
+  for (const [k, v] of Object.entries(val as Record<string, any>)) {
+    if (v !== undefined) {
+      clean[k] = sanitizeForFirestore(v);
+    }
+  }
+  return clean as T;
+}
+
 // Save or update a repair order
-export async function syncRepairOrder(ro: RepairOrder) {
+export async function syncRepairOrder(ro: RepairOrder): Promise<boolean> {
   try {
+    const cleanRO = sanitizeForFirestore(ro);
     const docRef = doc(db, REPAIR_ORDERS_COL, ro.id);
-    await setDoc(docRef, ro, { merge: true });
+    await setDoc(docRef, cleanRO, { merge: true });
+    return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${REPAIR_ORDERS_COL}/${ro.id}`);
+    return false;
   }
 }
 
@@ -157,12 +187,29 @@ export async function deleteRepairOrderDoc(roId: string) {
 }
 
 // Save or update a user
-export async function syncUser(user: User) {
+export async function syncUser(user: User): Promise<boolean> {
   try {
+    const cleanUser = sanitizeForFirestore({
+      id: user.id,
+      name: (user.name || '').trim(),
+      email: (user.email || '').trim().toLowerCase(),
+      role: user.role || 'TECHNICIAN',
+      title: (user.title || '').trim(),
+      avatar: user.avatar || '',
+      password: user.password || user.pin || '1234',
+      pin: user.pin || user.password || '1234',
+      phone: (user.phone || '').trim(),
+      certificationLevel: (user.certificationLevel || '').trim(),
+      bayNumber: (user.bayNumber || user.certificationLevel || '').trim(),
+      isDeactivated: !!user.isDeactivated,
+    });
     const docRef = doc(db, USERS_COL, user.id);
-    await setDoc(docRef, user, { merge: true });
+    await setDoc(docRef, cleanUser, { merge: true });
+    console.log(`[Firestore] Successfully saved user ${cleanUser.name} (${cleanUser.id})`);
+    return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${USERS_COL}/${user.id}`);
+    return false;
   }
 }
 
@@ -177,12 +224,15 @@ export async function deleteUserDoc(userId: string) {
 }
 
 // Save notification
-export async function syncNotification(notif: UrgentNotification) {
+export async function syncNotification(notif: UrgentNotification): Promise<boolean> {
   try {
+    const cleanNotif = sanitizeForFirestore(notif);
     const docRef = doc(db, NOTIFICATIONS_COL, notif.id);
-    await setDoc(docRef, notif, { merge: true });
+    await setDoc(docRef, cleanNotif, { merge: true });
+    return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${NOTIFICATIONS_COL}/${notif.id}`);
+    return false;
   }
 }
 
@@ -213,8 +263,9 @@ export async function markAllNotificationsReadDocs(notifIds: string[]) {
 // Save shop settings
 export async function syncShopSettings(settings: Partial<ShopSettings>) {
   try {
+    const cleanSettings = sanitizeForFirestore({ ...settings, updatedAt: new Date().toISOString() });
     const docRef = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
-    await setDoc(docRef, { ...settings, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanSettings, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COL}/${SHOP_SETTINGS_DOC}`);
   }
@@ -257,7 +308,7 @@ export async function resetAllDataToCleanSlate(cleanManager: User, shopName: str
     const usersBatch = writeBatch(db);
     usersSnap.forEach(d => usersBatch.delete(d.ref));
     const mgrDoc = doc(db, USERS_COL, cleanManager.id);
-    usersBatch.set(mgrDoc, cleanManager);
+    usersBatch.set(mgrDoc, sanitizeForFirestore(cleanManager));
     await usersBatch.commit();
 
     // 4. Reset shop settings with cleanSlateInitialized = true to prevent auto-re-seeding
@@ -294,7 +345,7 @@ export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: R
       const batch = writeBatch(db);
       initialUsers.forEach(u => {
         const docRef = doc(db, USERS_COL, u.id);
-        batch.set(docRef, u);
+        batch.set(docRef, sanitizeForFirestore(u));
       });
       await batch.commit();
     }
@@ -305,7 +356,7 @@ export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: R
       const batch = writeBatch(db);
       initialROs.forEach(ro => {
         const docRef = doc(db, REPAIR_ORDERS_COL, ro.id);
-        batch.set(docRef, ro);
+        batch.set(docRef, sanitizeForFirestore(ro));
       });
       await batch.commit();
     }

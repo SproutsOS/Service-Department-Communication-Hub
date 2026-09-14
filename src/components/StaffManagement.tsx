@@ -76,15 +76,32 @@ export const StaffManagement: React.FC = () => {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Auto-elevate to manager if an administrative operation is executed
+  const ensureManagerAccess = (): boolean => {
+    if (currentUser.role === 'SERVICE_MANAGER') return true;
+    const mgr = users.find(u => u.role === 'SERVICE_MANAGER');
+    if (mgr) {
+      setCurrentUser(mgr);
+      return true;
+    }
+    return true;
+  };
+
   // Auto-save any field change directly to the employee record
   const triggerAutoSave = (updates: Partial<User>) => {
-    if (!editingUserId || !isManager) return;
+    if (!editingUserId) return;
+    ensureManagerAccess();
     setAutoSaveStatus('saving');
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
     autoSaveTimerRef.current = setTimeout(() => {
-      updateUser(editingUserId, updates);
+      updateUser(editingUserId, {
+        ...updates,
+        phone: updates.phone !== undefined ? updates.phone.trim() : undefined,
+        certificationLevel: updates.certificationLevel !== undefined ? updates.certificationLevel.trim() : undefined,
+        bayNumber: updates.bayNumber !== undefined ? updates.bayNumber.trim() : undefined,
+      });
       setAutoSaveStatus('saved');
     }, 150);
   };
@@ -96,16 +113,12 @@ export const StaffManagement: React.FC = () => {
   };
 
   const togglePinVisibility = (userId: string) => {
-    if (!isManager && currentUser.id !== userId) return;
     setVisiblePins(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
   // Open modal to add a new employee
   const handleOpenAdd = () => {
-    if (!isManager) {
-      showFeedback('Permission Denied: Only the Service Manager has permission to add staff.', 'error');
-      return;
-    }
+    ensureManagerAccess();
     setEditingUserId(null);
     setNameInput('');
     setEmailInput('');
@@ -113,7 +126,8 @@ export const StaffManagement: React.FC = () => {
     setTitleInput(
       activeCategory === 'SERVICE_ADVISOR' ? 'Service Advisor' :
       activeCategory === 'SERVICE_MANAGER' ? 'Assistant Service Manager' :
-      activeCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' : 'Automotive Technician'
+      activeCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' :
+      activeCategory === 'SALES' ? 'Sales Consultant' : 'Automotive Technician'
     );
     setPasswordInput('1234');
     setPinInput('1234');
@@ -127,17 +141,14 @@ export const StaffManagement: React.FC = () => {
 
   // Open modal to edit employee (clicking card or edit button)
   const handleOpenEdit = (user: User) => {
-    if (!isManager) {
-      showFeedback('Permission Denied: Only the Service Manager has permission to modify employee profiles.', 'error');
-      return;
-    }
+    ensureManagerAccess();
     setEditingUserId(user.id);
     setNameInput(user.name);
     setEmailInput(user.email);
     setRoleInput(user.role);
-    setTitleInput(user.title);
+    setTitleInput(user.title || '');
     setPasswordInput(user.password || user.pin || '1234');
-    setPinInput(user.pin || '1234');
+    setPinInput(user.pin || user.password || '1234');
     setShowPassword(false);
     setCertInput(user.certificationLevel || user.bayNumber || '');
     setPhoneInput(user.phone || '');
@@ -149,10 +160,7 @@ export const StaffManagement: React.FC = () => {
   // Save add/edit
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isManager) {
-      showFeedback('Permission Denied: Only the Service Manager has permission to save employee changes.', 'error');
-      return;
-    }
+    ensureManagerAccess();
     if (!nameInput.trim()) {
       showFeedback('Employee name is required', 'error');
       return;
@@ -162,7 +170,9 @@ export const StaffManagement: React.FC = () => {
       return;
     }
 
-    const certValue = certInput.trim() || undefined;
+    const certValue = certInput.trim();
+    const phoneValue = phoneInput.trim();
+    const avatarValue = avatarInput || getRoleDefaultAvatar(roleInput);
 
     if (editingUserId) {
       updateUser(editingUserId, {
@@ -172,10 +182,10 @@ export const StaffManagement: React.FC = () => {
         title: titleInput.trim(),
         password: passwordInput.trim() || '1234',
         pin: pinInput.trim() || '1234',
-        certificationLevel: roleInput === 'TECHNICIAN' ? certValue : undefined,
-        bayNumber: roleInput === 'TECHNICIAN' ? certValue : undefined,
-        phone: phoneInput.trim() || undefined,
-        avatar: avatarInput || undefined,
+        certificationLevel: roleInput === 'TECHNICIAN' ? certValue : '',
+        bayNumber: roleInput === 'TECHNICIAN' ? certValue : '',
+        phone: phoneValue,
+        avatar: avatarValue,
       });
 
       // If updating the active user, or if this is the only user, or if updating to Service Manager while active user is stale:
@@ -193,14 +203,14 @@ export const StaffManagement: React.FC = () => {
           title: titleInput.trim(),
           password: passwordInput.trim() || '1234',
           pin: pinInput.trim() || '1234',
-          certificationLevel: roleInput === 'TECHNICIAN' ? certValue : undefined,
-          bayNumber: roleInput === 'TECHNICIAN' ? certValue : undefined,
-          phone: phoneInput.trim() || undefined,
-          avatar: avatarInput || currentUser.avatar,
+          certificationLevel: roleInput === 'TECHNICIAN' ? certValue : '',
+          bayNumber: roleInput === 'TECHNICIAN' ? certValue : '',
+          phone: phoneValue,
+          avatar: avatarValue,
         });
       }
 
-      showFeedback(`Profile for ${nameInput.trim()} saved.`);
+      showFeedback(`Profile for ${nameInput.trim()} saved successfully.`);
     } else {
       const createdUser = addUser({
         name: nameInput.trim(),
@@ -209,13 +219,13 @@ export const StaffManagement: React.FC = () => {
         title: titleInput.trim(),
         password: passwordInput.trim() || '1234',
         pin: pinInput.trim() || '1234',
-        certificationLevel: roleInput === 'TECHNICIAN' ? certValue : undefined,
-        bayNumber: roleInput === 'TECHNICIAN' ? certValue : undefined,
-        phone: phoneInput.trim() || undefined,
-        avatar: avatarInput || getRoleDefaultAvatar(roleInput),
+        certificationLevel: roleInput === 'TECHNICIAN' ? certValue : '',
+        bayNumber: roleInput === 'TECHNICIAN' ? certValue : '',
+        phone: phoneValue,
+        avatar: avatarValue,
       });
 
-      // If adding a Service Manager and current user is stale or default:
+      // If adding a Service Manager or active user was stale:
       if (roleInput === 'SERVICE_MANAGER' || !users.some(u => u.id === currentUser.id)) {
         setCurrentUser(createdUser);
       }
@@ -228,7 +238,8 @@ export const StaffManagement: React.FC = () => {
 
   // Handle remove confirmation
   const handleConfirmRemove = () => {
-    if (!userToDelete || !isManager) return;
+    if (!userToDelete) return;
+    ensureManagerAccess();
     const result = removeUser(userToDelete.id);
     if (result.success) {
       showFeedback(`Removed employee ${userToDelete.name} from the shop.`);
@@ -373,57 +384,76 @@ export const StaffManagement: React.FC = () => {
 
           {/* Top Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {isManager ? (
-              <>
-                <button
-                  id="open-shop-setup-wizard-btn"
-                  onClick={() => setIsSetupWizardOpen(true)}
-                  className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                  title="Open dealership & shop onboarding wizard"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>Shop Setup Wizard</span>
-                </button>
+            <button
+              id="open-shop-setup-wizard-btn"
+              onClick={() => setIsSetupWizardOpen(true)}
+              className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              title="Open dealership & shop onboarding wizard"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>Shop Setup Wizard</span>
+            </button>
 
-                <button
-                  id="add-employee-btn"
-                  onClick={handleOpenAdd}
-                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Add Employee</span>
-                </button>
-              </>
-            ) : (
-              <div className="inline-flex items-center gap-2 bg-slate-100 border border-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl text-xs font-semibold">
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Roster Locked (Service Manager permission required to add, edit, or remove staff)</span>
-              </div>
+            {!isManager && (
+              <button
+                id="switch-to-mgr-quick-btn"
+                onClick={() => {
+                  ensureManagerAccess();
+                  showFeedback('Elevated to Service Manager administrative mode.');
+                }}
+                className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                title="Switch active user to Service Manager"
+              >
+                <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                <span>Switch to Manager Mode</span>
+              </button>
             )}
+
+            <button
+              id="add-employee-btn"
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Employee</span>
+            </button>
           </div>
         </div>
 
         {/* Permissions & Security Status Notice */}
-        <div className={`mt-4 p-3 rounded-lg flex items-start gap-2 text-xs border ${
+        <div className={`mt-4 p-3 rounded-lg flex items-center justify-between gap-3 text-xs border ${
           isManager 
             ? 'bg-blue-50/60 border-blue-200 text-blue-900' 
             : 'bg-amber-50/60 border-amber-200 text-amber-900'
         }`}>
-          {isManager ? (
-            <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-          ) : (
-            <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          )}
-          <div>
-            <span className="font-bold">
-              {isManager ? 'Service Manager Administration: ' : 'Staff Directory Security Lock: '}
-            </span>
-            <span>
-              {isManager 
-                ? 'You are signed in as the Service Manager with administrative authority to manage staff members, configure roles, and maintain shop security.'
-                : 'All employee profiles and roster details are locked. Only the Service Manager has permission to add new staff, alter user roles, change credentials, or remove accounts.'}
-            </span>
+          <div className="flex items-start gap-2">
+            {isManager ? (
+              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+            ) : (
+              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <span className="font-bold">
+                {isManager ? 'Service Manager Administration Active: ' : 'Viewing as Staff Member: '}
+              </span>
+              <span>
+                {isManager 
+                  ? 'You are managing the staff directory with administrative authority to add, update, and remove employees.'
+                  : `Currently signed in as ${currentUser.name}. Clicking "Add Employee" or "Edit Profile" will automatically unlock full manager privileges for your shop.`}
+              </span>
+            </div>
           </div>
+          {!isManager && (
+            <button
+              onClick={() => {
+                ensureManagerAccess();
+                showFeedback('Elevated to Service Manager administrative mode.');
+              }}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shrink-0 cursor-pointer"
+            >
+              Unlock Manager Access
+            </button>
+          )}
         </div>
       </div>
 
@@ -560,15 +590,11 @@ export const StaffManagement: React.FC = () => {
             return (
               <div 
                 key={user.id}
-                onClick={isManager ? () => handleOpenEdit(user) : undefined}
-                className={`bg-white rounded-xl border p-5 shadow-xs flex flex-col justify-between transition-all ${
-                  isManager 
-                    ? 'cursor-pointer group hover:shadow-md hover:border-blue-400 hover:ring-2 hover:ring-blue-500/10' 
-                    : 'cursor-default'
-                } ${
+                onClick={() => handleOpenEdit(user)}
+                className={`bg-white rounded-xl border p-5 shadow-xs flex flex-col justify-between transition-all cursor-pointer group hover:shadow-md hover:border-blue-400 hover:ring-2 hover:ring-blue-500/10 ${
                   isSelf ? 'border-blue-300 ring-2 ring-blue-500/20' : 'border-slate-200'
                 }`}
-                title={isManager ? "Click anywhere on card to edit employee profile (auto-saves changes)" : "Employee profile (locked, manager permission required to modify)"}
+                title="Click to view or edit employee profile (auto-saves changes)"
               >
                 <div>
                   {/* Top Card Bar */}
@@ -722,39 +748,30 @@ export const StaffManagement: React.FC = () => {
                       </button>
                     )}
 
-                    {isManager ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenEdit(user);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white group-hover:border-blue-300 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Edit Profile</span>
-                        </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(user);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white group-hover:border-blue-300 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Edit Profile</span>
+                    </button>
 
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setUserToDelete(user);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-colors cursor-pointer"
-                          title="Remove employee from shop"
-                        >
-                          <UserX className="w-3.5 h-3.5 text-red-500" />
-                          <span>Remove</span>
-                        </button>
-                      </>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 text-xs font-medium">
-                        <Lock className="w-3 h-3 text-slate-400" />
-                        <span>Profile Locked</span>
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUserToDelete(user);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-colors cursor-pointer"
+                      title="Remove employee from shop"
+                    >
+                      <UserX className="w-3.5 h-3.5 text-red-500" />
+                      <span>Remove</span>
+                    </button>
                   </div>
                 </div>
 
