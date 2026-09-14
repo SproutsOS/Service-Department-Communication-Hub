@@ -212,27 +212,26 @@ export const Navbar: React.FC = () => {
           </button>
         )}
 
-        {/* Staff & Employee Directory Button */}
-        <button
-          id="navbar-team-btn"
-          onClick={() => setIsStaffManagementOpen(true)}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer"
-          title="Manage Dealership Staff & Job Roles"
-        >
-          <Users className="w-3.5 h-3.5 text-blue-400" />
-          <span className="hidden md:inline">Staff ({users.length})</span>
-        </button>
+        {/* Staff & Employee Directory Button (Service Manager Only) */}
+        {currentUser.role === 'SERVICE_MANAGER' && (
+          <button
+            id="navbar-team-btn"
+            onClick={() => setIsStaffManagementOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer"
+            title="Manage Dealership Staff & Job Roles"
+          >
+            <Users className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden md:inline">Staff ({users.length})</span>
+          </button>
+        )}
 
-        {/* Active User Details (Displays only signed-in user name) */}
-        <button
-          id="user-profile-menu-btn"
-          onClick={() => setIsLoginModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-white hover:text-blue-300 border border-slate-600/60 transition-colors cursor-pointer group text-sm font-medium"
-          title="Switch User / Log In"
-        >
-          <span className="font-semibold">{currentUser.name}</span>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-300 transition-colors" />
-        </button>
+        {/* Active User Details (Displays signed-in user name & role space) */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/60 text-xs">
+          <span className="font-semibold text-white">{currentUser.name}</span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 uppercase">
+            {currentUser.title || currentUser.role}
+          </span>
+        </div>
 
         {/* Lock Terminal / Sign Out Button */}
         <button

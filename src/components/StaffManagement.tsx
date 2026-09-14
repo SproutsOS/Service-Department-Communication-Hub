@@ -52,7 +52,7 @@ export const StaffManagement: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<'ALL' | UserRole>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const isManager = currentUser.role === 'SERVICE_MANAGER';
-  
+
   // Modal states
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -76,21 +76,28 @@ export const StaffManagement: React.FC = () => {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-elevate to manager if an administrative operation is executed
-  const ensureManagerAccess = (): boolean => {
-    if (currentUser.role === 'SERVICE_MANAGER') return true;
-    const mgr = users.find(u => u.role === 'SERVICE_MANAGER');
-    if (mgr) {
-      setCurrentUser(mgr);
-      return true;
-    }
-    return true;
-  };
+  // Strict manager-only barrier
+  if (!isManager) {
+    return (
+      <div className="p-8 bg-white rounded-2xl border border-red-200 text-center max-w-lg mx-auto shadow-sm my-12">
+        <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-3" />
+        <h3 className="text-lg font-bold text-slate-900">Restricted Access</h3>
+        <p className="text-sm text-slate-600 mt-1">
+          Staff Roster and User Management is restricted to the Service Manager. Your current account ({currentUser.name}) is assigned to {currentUser.title || currentUser.role}.
+        </p>
+        <button
+          onClick={() => setIsStaffManagementOpen(false)}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
+        >
+          Return to My Workspace
+        </button>
+      </div>
+    );
+  }
 
   // Auto-save any field change directly to the employee record
   const triggerAutoSave = (updates: Partial<User>) => {
-    if (!editingUserId) return;
-    ensureManagerAccess();
+    if (!editingUserId || !isManager) return;
     setAutoSaveStatus('saving');
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -118,7 +125,7 @@ export const StaffManagement: React.FC = () => {
 
   // Open modal to add a new employee
   const handleOpenAdd = () => {
-    ensureManagerAccess();
+    if (!isManager) return;
     setEditingUserId(null);
     setNameInput('');
     setEmailInput('');
@@ -141,7 +148,7 @@ export const StaffManagement: React.FC = () => {
 
   // Open modal to edit employee (clicking card or edit button)
   const handleOpenEdit = (user: User) => {
-    ensureManagerAccess();
+    if (!isManager) return;
     setEditingUserId(user.id);
     setNameInput(user.name);
     setEmailInput(user.email);
@@ -160,7 +167,7 @@ export const StaffManagement: React.FC = () => {
   // Save add/edit
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
-    ensureManagerAccess();
+    if (!isManager) return;
     if (!nameInput.trim()) {
       showFeedback('Employee name is required', 'error');
       return;
@@ -238,8 +245,7 @@ export const StaffManagement: React.FC = () => {
 
   // Handle remove confirmation
   const handleConfirmRemove = () => {
-    if (!userToDelete) return;
-    ensureManagerAccess();
+    if (!userToDelete || !isManager) return;
     const result = removeUser(userToDelete.id);
     if (result.success) {
       showFeedback(`Removed employee ${userToDelete.name} from the shop.`);
@@ -394,21 +400,6 @@ export const StaffManagement: React.FC = () => {
               <span>Shop Setup Wizard</span>
             </button>
 
-            {!isManager && (
-              <button
-                id="switch-to-mgr-quick-btn"
-                onClick={() => {
-                  ensureManagerAccess();
-                  showFeedback('Elevated to Service Manager administrative mode.');
-                }}
-                className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                title="Switch active user to Service Manager"
-              >
-                <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                <span>Switch to Manager Mode</span>
-              </button>
-            )}
-
             <button
               id="add-employee-btn"
               onClick={handleOpenAdd}
@@ -421,39 +412,18 @@ export const StaffManagement: React.FC = () => {
         </div>
 
         {/* Permissions & Security Status Notice */}
-        <div className={`mt-4 p-3 rounded-lg flex items-center justify-between gap-3 text-xs border ${
-          isManager 
-            ? 'bg-blue-50/60 border-blue-200 text-blue-900' 
-            : 'bg-amber-50/60 border-amber-200 text-amber-900'
-        }`}>
+        <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3 text-xs border bg-blue-50/60 border-blue-200 text-blue-900">
           <div className="flex items-start gap-2">
-            {isManager ? (
-              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            ) : (
-              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            )}
+            <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <div>
               <span className="font-bold">
-                {isManager ? 'Service Manager Administration Active: ' : 'Viewing as Staff Member: '}
+                Service Manager Administration Active:
               </span>
               <span>
-                {isManager 
-                  ? 'You are managing the staff directory with administrative authority to add, update, and remove employees.'
-                  : `Currently signed in as ${currentUser.name}. Clicking "Add Employee" or "Edit Profile" will automatically unlock full manager privileges for your shop.`}
+                {' '}You are managing the staff directory with administrative authority to configure employee roles, credentials, and dealership departments.
               </span>
             </div>
           </div>
-          {!isManager && (
-            <button
-              onClick={() => {
-                ensureManagerAccess();
-                showFeedback('Elevated to Service Manager administrative mode.');
-              }}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shrink-0 cursor-pointer"
-            >
-              Unlock Manager Access
-            </button>
-          )}
         </div>
       </div>
 
