@@ -87,8 +87,8 @@ export const InitialSetupModal: React.FC = () => {
   // Adding quick employee inline
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffPassword, setNewStaffPassword] = useState('1234');
-  const [newStaffCert, setNewStaffCert] = useState('ASE Master Tech');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [newStaffCert, setNewStaffCert] = useState('');
   const [isAddingInline, setIsAddingInline] = useState(false);
 
   // Step 3: Initial State

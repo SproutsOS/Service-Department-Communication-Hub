@@ -330,14 +330,14 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
           {/* Parts Ordered (ETA) Input Shortcut */}
           {currentNormalized === 'PARTS_ORDERED' && canEdit && (
             <div className="flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1">
+              <div className="flex items-center gap-1.5 bg-white border-2 border-slate-600 rounded-lg px-2.5 py-1">
                 <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                 <input
                   type="text"
                   placeholder="Parts ETA (e.g. Today 2 PM)"
                   value={customEta}
                   onChange={e => setCustomEta(e.target.value)}
-                  className="text-xs outline-none w-36 sm:w-44 text-slate-800"
+                  className="text-xs outline-none w-36 sm:w-44 text-slate-900 font-medium"
                 />
               </div>
               <button
@@ -368,10 +368,10 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
                   <button
                     key={s.id}
                     onClick={() => handleAdvance(s.key)}
-                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                    className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                       isCurrent
                         ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-300 shadow-xs font-bold'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-400 hover:border-slate-600'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -384,20 +384,20 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
             </div>
 
             {/* Optional Note & Urgent Push */}
-            <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="mt-3 pt-3 border-t-2 border-slate-300 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
               <input
                 type="text"
                 placeholder="Optional note for status change history (e.g. scan complete, parts received)..."
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                className="flex-1 text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="flex-1 text-xs px-3 py-1.5 border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
               />
               <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none self-end sm:self-auto">
                 <input
                   type="checkbox"
                   checked={urgentCheck}
                   onChange={e => setUrgentCheck(e.target.checked)}
-                  className="rounded text-red-600 focus:ring-red-500"
+                  className="rounded text-red-600 focus:ring-red-500 border-2 border-slate-600"
                 />
                 <span className="font-semibold text-red-600 text-xs">Notify Urgent</span>
               </label>

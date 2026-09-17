@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Wrench, 
   Clock, 
@@ -10,12 +10,180 @@ import {
   Calendar, 
   Send,
   Truck,
-  Award
+  Award,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Save,
+  FileText
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { ROStatus } from '../types';
+import { ROStatus, RepairOrder } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly } from '../utils/formatters';
+
+interface TechCauseCorrectionSectionProps {
+  ro: RepairOrder;
+}
+
+const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({ ro }) => {
+  const { updateTechCauseAndCorrection } = useApp();
+  const [cause, setCause] = useState(ro.cause || ro.diagnosticNotes || '');
+  const [correction, setCorrection] = useState(ro.correction || '');
+  const [isSavedRecently, setIsSavedRecently] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Sync state whenever ro prop changes
+  useEffect(() => {
+    setCause(ro.cause || ro.diagnosticNotes || '');
+    setCorrection(ro.correction || '');
+  }, [ro.cause, ro.correction, ro.diagnosticNotes]);
+
+  const hasContent = Boolean(cause.trim() || correction.trim());
+  const isComplete = Boolean(cause.trim() && correction.trim());
+
+  const handleSave = (e: React.MouseEvent | React.FormEvent) => {
+    e.stopPropagation();
+    const success = updateTechCauseAndCorrection(ro.id, cause, correction);
+    if (success) {
+      setIsSavedRecently(true);
+      setTimeout(() => setIsSavedRecently(false), 2500);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleSave(e);
+    }
+  };
+
+  return (
+    <div 
+      onClick={(e) => e.stopPropagation()} 
+      className="bg-white rounded-xl border-2 border-slate-400 overflow-hidden shadow-2xs transition-all"
+    >
+      {/* Header */}
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="p-3 bg-slate-50/90 border-b-2 border-slate-300 flex items-center justify-between cursor-pointer hover:bg-slate-100/90 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className={`p-1.5 rounded-lg border ${isComplete ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-blue-100 text-blue-700 border-blue-300'}`}>
+            <Wrench className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-900">
+                Tech Findings: Cause & Correction
+              </span>
+              {isComplete ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border-2 border-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Documented
+                </span>
+              ) : hasContent ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border-2 border-amber-400">
+                  Partially Documented
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-400">
+                  Pending Entry
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-500">
+              Diagnostic failure cause & corrective repair work
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isSavedRecently && (
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border-2 border-emerald-400 animate-in fade-in flex items-center gap-1">
+              <Check className="w-3.5 h-3.5 text-emerald-600" /> Saved!
+            </span>
+          )}
+          <button
+            type="button"
+            className="text-slate-500 hover:text-slate-800 p-1 rounded-md"
+            title={isExpanded ? "Collapse" : "Expand"}
+          >
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Collapsible Body */}
+      {isExpanded && (
+        <div className="p-3.5 space-y-3 bg-white" onKeyDown={handleKeyDown}>
+          {/* Cause Field */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                <span>Cause (Diagnostic Finding / Root Cause)</span>
+              </label>
+              <span className="text-[10px] text-slate-500 font-medium">Why did it fail?</span>
+            </div>
+            <textarea
+              rows={2}
+              value={cause}
+              onChange={(e) => setCause(e.target.value)}
+              placeholder="Type diagnostic cause (e.g., Code P0300 - cylinder 3 spark plug fouled with oil due to leaking valve cover spark plug tube seal)..."
+              className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+          </div>
+
+          {/* Correction Field */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                <span>Correction (Repair Completed / Corrective Action)</span>
+              </label>
+              <span className="text-[10px] text-slate-500 font-medium">What repair was performed?</span>
+            </div>
+            <textarea
+              rows={2}
+              value={correction}
+              onChange={(e) => setCorrection(e.target.value)}
+              placeholder="Type repair correction (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, road tested 5 miles)..."
+              className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[11px] text-slate-500 italic">
+              Press <kbd className="px-1.5 py-0.5 bg-slate-100 border-2 border-slate-400 rounded text-[10px] text-slate-700 font-mono font-bold">Ctrl+Enter</kbd> to save
+            </span>
+            <button
+              type="button"
+              onClick={handleSave}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 border-2 cursor-pointer ${
+                isSavedRecently 
+                  ? 'bg-emerald-600 text-white border-emerald-700' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+              }`}
+            >
+              {isSavedRecently ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Saved!</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Cause & Correction</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TechDashboard: React.FC = () => {
   const { 
@@ -170,19 +338,28 @@ export const TechDashboard: React.FC = () => {
                 key={ro.id}
                 id={`tech-ro-card-${ro.id}`}
                 onClick={() => setSelectedRO(ro)}
-                className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-blue-400 transition-all cursor-pointer space-y-4"
+                className={`bg-white rounded-xl border-2 p-5 shadow-sm transition-all cursor-pointer space-y-4 ${
+                  ro.isUrgent || ro.isWaiter
+                    ? 'border-red-400 ring-2 ring-red-400/20 hover:border-red-600'
+                    : 'border-slate-400 hover:border-blue-600'
+                }`}
               >
                 {/* Header: RO, Customer, Vehicle, Assigned Time */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-base text-blue-600">#{ro.id}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${statusInfo.badgeClass}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
                         {statusInfo.label}
                       </span>
                       {ro.isUrgent && (
-                        <span className="text-[10px] font-bold uppercase bg-red-100 text-red-700 px-2 py-0.5 rounded-full border border-red-200 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" /> Urgent
+                        <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-red-600" /> HIGH PRIORITY
+                        </span>
+                      )}
+                      {ro.isWaiter && (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-red-600" /> WAITER
                         </span>
                       )}
                     </div>
@@ -205,13 +382,13 @@ export const TechDashboard: React.FC = () => {
 
                 {/* Diagnostic Phase Callout: Waiting vs Being Diagnosed */}
                 {ro.status === 'WAITING_DIAGNOSIS' && (
-                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
                     <div>
                       <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs uppercase tracking-wide">
                         <Clock className="w-4 h-4 text-amber-600" />
                         <span>Vehicle is Waiting to be Diagnosed</span>
                       </div>
-                      <div className="text-xs text-amber-800 mt-0.5">
+                      <div className="text-xs text-amber-800 mt-0.5 font-medium">
                         Staged in bay • In queue since {formatTimeOnly(ro.waitingDiagnosisAt)} ({formatDurationSince(ro.waitingDiagnosisAt)} wait)
                       </div>
                     </div>
@@ -220,7 +397,7 @@ export const TechDashboard: React.FC = () => {
                         e.stopPropagation();
                         startDiagnosis(ro.id);
                       }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg border-2 border-blue-700 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       <span>Begin Diagnosis Now</span>
@@ -229,38 +406,63 @@ export const TechDashboard: React.FC = () => {
                 )}
 
                 {ro.status === 'BEING_DIAGNOSED' && (
-                  <div className="bg-blue-50 border border-blue-300 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="bg-blue-50 border-2 border-blue-400 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
                     <div>
                       <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs uppercase tracking-wide">
                         <Wrench className="w-4 h-4 text-blue-600" />
                         <span>Vehicle is Being Diagnosed</span>
                       </div>
-                      <div className="text-xs text-blue-800 mt-0.5">
+                      <div className="text-xs text-blue-800 mt-0.5 font-medium">
                         Diagnostic testing & scan underway • Started at {formatTimeOnly(ro.diagnosisStartedAt)} ({formatDurationSince(ro.diagnosisStartedAt)} active)
                       </div>
                     </div>
-                    <span className="text-[11px] font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-full border border-blue-200 uppercase tracking-wider">
+                    <span className="text-[11px] font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full border-2 border-blue-300 uppercase tracking-wider">
                       Active Inspection
                     </span>
                   </div>
                 )}
 
-                {/* Complaint / Diagnostic findings */}
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
-                  <span className="font-bold text-slate-700 block mb-0.5">Customer Concern:</span>
-                  <p className="text-slate-800 font-medium">{ro.primaryConcern}</p>
+                {/* Customer Complaints & Concerns */}
+                <div className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700">
+                      Customer Complaints & Concerns:
+                    </span>
+                    {ro.concerns && ro.concerns.length > 1 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
+                        {ro.concerns.length} Line Items
+                      </span>
+                    )}
+                  </div>
+                  {ro.concerns && ro.concerns.length > 1 ? (
+                    <div className="space-y-1.5 pt-1">
+                      {ro.concerns.map((concern, idx) => (
+                        <div key={idx} className="flex items-start gap-2 bg-white p-2 rounded border-2 border-slate-300">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded uppercase tracking-wider shrink-0 mt-0.5">
+                            Line {idx + 1}
+                          </span>
+                          <span className="text-slate-800 font-medium leading-relaxed">{concern}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-800 font-medium">{ro.primaryConcern}</p>
+                  )}
                 </div>
+
+                {/* Technician Diagnosis & Repair Documentation: Cause & Correction */}
+                <TechCauseCorrectionSection ro={ro} />
 
                 {/* Prominent Parts Arrival Tracker */}
                 {ro.parts.length > 0 && (
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                  <div className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-800 flex items-center gap-1.5">
                         <Package className="w-4 h-4 text-orange-600" />
                         Parts Ordered & Estimated Arrival Time
                       </span>
                       {hasPartsETA && (
-                        <span className="text-[10px] font-bold uppercase text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold uppercase text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-300">
                           Live Delivery
                         </span>
                       )}
@@ -272,23 +474,23 @@ export const TechDashboard: React.FC = () => {
                         return (
                           <div 
                             key={part.id} 
-                            className="flex items-center justify-between text-xs bg-white p-2 rounded-md border border-slate-200"
+                            className="flex items-center justify-between text-xs bg-white p-2 rounded-md border-2 border-slate-300"
                           >
                             <div className="truncate pr-2">
-                              <span className="font-mono text-slate-400 text-[11px] mr-1.5">#{part.partNumber}</span>
+                              <span className="font-mono text-slate-500 text-[11px] mr-1.5 font-bold">#{part.partNumber}</span>
                               <span className="font-semibold text-slate-800">{part.description}</span>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
                                 part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-orange-100 text-orange-700'
+                                  ? 'bg-green-100 text-green-700 border-green-300'
+                                  : 'bg-orange-100 text-orange-700 border-orange-300'
                               }`}>
                                 {part.status.replace('_', ' ')}
                               </span>
                               {part.estimatedArrival && part.status !== 'ISSUED_TO_TECH' && (
-                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                                  etaBadge.pastDue ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                                  etaBadge.pastDue ? 'bg-red-100 text-red-700 border-red-300' : 'bg-orange-100 text-orange-700 border-orange-300'
                                 }`}>
                                   {etaBadge.text}
                                 </span>

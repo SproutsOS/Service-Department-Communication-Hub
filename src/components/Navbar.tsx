@@ -6,7 +6,6 @@ import {
   VolumeX, 
   Plus, 
   RotateCcw, 
-  Settings,
   ChevronDown, 
   AlertCircle,
   Clock,
@@ -30,7 +29,6 @@ export const Navbar: React.FC = () => {
     setIsNewROModalOpen,
     setIsLoginModalOpen,
     setIsStaffManagementOpen,
-    setIsSetupWizardOpen,
     shopName,
     isCloudSynced,
     resetAllDataToCleanSlateHandler,
@@ -243,18 +241,6 @@ export const Navbar: React.FC = () => {
           <Lock className="w-3.5 h-3.5 text-red-400" />
           <span className="hidden sm:inline">Lock Station</span>
         </button>
-
-        {/* Re-run Setup Wizard - Restricted to Service Manager */}
-        {currentUser.role === 'SERVICE_MANAGER' && (
-          <button
-            id="navbar-setup-wizard-btn"
-            onClick={() => setIsSetupWizardOpen(true)}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
-            title="Open Initial Setup Wizard (Configure Shop & Roster)"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-        )}
 
       </div>
     </header>

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   X, 
   Phone, 
-  PhoneCall,
   Voicemail, 
   MessageSquare, 
   User, 
@@ -194,15 +193,6 @@ export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro
                 </button>
               </div>
             </div>
-
-            {/* Direct Call Button */}
-            <a
-              href={`tel:${ro.customerPhone}`}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
-            >
-              <PhoneCall className="w-4 h-4" />
-              <span>Call Customer Now</span>
-            </a>
           </div>
 
           {/* Pre-Call Briefing: Parts on Order & Current Job Status */}
@@ -219,8 +209,14 @@ export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               <div className="bg-white p-2 rounded-lg border border-blue-100">
-                <span className="font-bold text-slate-700 block text-[11px]">Primary Concern:</span>
-                <span className="text-slate-600 line-clamp-1">{ro.primaryConcern}</span>
+                <span className="font-bold text-slate-700 block text-[11px]">
+                  Customer Complaints / Concerns:
+                </span>
+                <span className="text-slate-600 line-clamp-2">
+                  {ro.concerns && ro.concerns.length > 1
+                    ? ro.concerns.map((c, idx) => `${idx + 1}. ${c}`).join(' • ')
+                    : ro.primaryConcern}
+                </span>
               </div>
 
               <div className="bg-white p-2 rounded-lg border border-blue-100">
@@ -443,7 +439,7 @@ export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Save & Reset Cadence Timer</span>
+              <span>Save & Reset Timer</span>
             </button>
           </div>
 

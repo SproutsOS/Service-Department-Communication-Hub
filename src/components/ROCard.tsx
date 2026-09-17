@@ -36,21 +36,26 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
     <div
       id={`ro-card-${ro.id}`}
       onClick={onClick}
-      className={`group relative bg-white rounded-xl border transition-all duration-150 cursor-pointer hover:shadow-md hover:border-blue-400 ${
-        ro.isUrgent 
-          ? 'border-red-300 ring-1 ring-red-400/40 shadow-xs' 
-          : 'border-slate-200 shadow-xs'
+      className={`group relative bg-white rounded-xl border-2 transition-all duration-150 cursor-pointer hover:shadow-md hover:border-blue-600 ${
+        ro.isUrgent || ro.isWaiter
+          ? 'border-red-400 ring-2 ring-red-400/30 shadow-xs' 
+          : 'border-slate-400 shadow-xs'
       } ${compact ? 'p-3.5' : 'p-4 sm:p-5'}`}
     >
       {/* Top Bar: RO Number, Created Date, Status Badge */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-bold text-sm sm:text-base text-blue-600 tracking-tight">
             #{ro.id}
           </span>
           {ro.isUrgent && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full border border-red-200">
-              <AlertTriangle className="w-3 h-3" /> Urgent
+            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500">
+              <AlertTriangle className="w-3 h-3 text-red-600" /> HIGH PRIORITY
+            </span>
+          )}
+          {ro.isWaiter && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500">
+              <Clock className="w-3 h-3 text-red-600" /> WAITER
             </span>
           )}
         </div>
@@ -79,10 +84,10 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
         const diagInfo = getDiagnosticStatusDetails(ro);
         if (!diagInfo) return null;
         return (
-          <div className={`mt-2 px-2.5 py-1.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+          <div className={`mt-2 px-2.5 py-1.5 rounded-lg border-2 text-xs flex items-center justify-between gap-2 ${
             diagInfo.isWaiting 
-              ? 'bg-amber-50/80 border-amber-200 text-amber-900' 
-              : 'bg-blue-50/80 border-blue-200 text-blue-900'
+              ? 'bg-amber-50 border-amber-300 text-amber-900' 
+              : 'bg-blue-50 border-blue-300 text-blue-900'
           }`}>
             <span className="font-semibold flex items-center gap-1.5 text-[11px]">
               {diagInfo.isWaiting ? (
@@ -109,9 +114,34 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
             {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
           </span>
         </div>
-        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
-          Concern: {ro.primaryConcern}
-        </p>
+        <div className="text-xs text-slate-500 mt-0.5 flex items-center justify-between gap-1">
+          <span className="truncate">
+            <span className="font-semibold text-slate-600">Concern:</span> {ro.primaryConcern}
+          </span>
+          {ro.concerns && ro.concerns.length > 1 && (
+            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
+              +{ro.concerns.length - 1} more
+            </span>
+          )}
+        </div>
+
+        {/* Tech Diagnosis & Repair (Cause & Correction) if documented */}
+        {(ro.cause || ro.correction) && (
+          <div className="mt-2 text-[11px] bg-slate-50 p-2 rounded-md border-2 border-slate-300 space-y-1">
+            {ro.cause && (
+              <div className="flex items-start gap-1.5 truncate">
+                <span className="font-bold text-amber-800 shrink-0">Cause:</span>
+                <span className="text-slate-700 truncate font-mono text-[10px]">{ro.cause}</span>
+              </div>
+            )}
+            {ro.correction && (
+              <div className="flex items-start gap-1.5 truncate">
+                <span className="font-bold text-emerald-800 shrink-0">Corr:</span>
+                <span className="text-slate-700 truncate font-mono text-[10px]">{ro.correction}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Assignment Info: When Assigned and to Which Tech */}
@@ -144,7 +174,7 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
 
       {/* Parts Ordered and Tracked with ETA Directly on Dashboard */}
       {ro.parts.length > 0 && (
-        <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+        <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border-2 border-slate-300">
           <div className="flex items-center justify-between text-[11px] mb-1.5">
             <span className="font-semibold text-slate-700 flex items-center gap-1">
               <Package className="w-3.5 h-3.5 text-blue-600" />

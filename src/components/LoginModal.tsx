@@ -8,12 +8,9 @@ import {
   Briefcase, 
   Package, 
   CheckCircle2, 
-  KeyRound, 
-  Mail, 
   AlertCircle,
   Users,
   Eye,
-  EyeOff,
   Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -24,21 +21,13 @@ export const LoginModal: React.FC = () => {
     isLoginModalOpen, 
     setIsLoginModalOpen, 
     currentUser, 
-    setCurrentUser, 
     users, 
     loginWithCredentials,
     setIsStaffManagementOpen,
-    setIsSetupWizardOpen,
-    shopName,
     lockWorkstation
   } = useApp();
 
-  const [loginMode, setLoginMode] = useState<'INDIVIDUAL' | 'QUICK_SWITCH'>('INDIVIDUAL');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<UserRole | 'ALL'>('ALL');
-  const [emailOrNameInput, setEmailOrNameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   // Prompt for PIN when switching to a user from the roster
@@ -49,7 +38,7 @@ export const LoginModal: React.FC = () => {
   if (!isLoginModalOpen) return null;
 
   const handleSelectUser = (user: User) => {
-    // Open secure PIN/Password verification for this specific user
+    // Open secure PIN verification for this specific user
     setPinPromptUser(user);
     setEnteredPin('');
     setPinError('');
@@ -61,7 +50,7 @@ export const LoginModal: React.FC = () => {
     setPinError('');
 
     if (!enteredPin.trim()) {
-      setPinError('Please enter password or PIN.');
+      setPinError('Please enter 4-digit PIN.');
       return;
     }
 
@@ -75,29 +64,7 @@ export const LoginModal: React.FC = () => {
         setSuccessMsg('');
       }, 400);
     } else {
-      setPinError('Incorrect PIN or password. Access denied.');
-    }
-  };
-
-  const handleIndividualLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    if (!emailOrNameInput.trim()) {
-      setErrorMsg('Please enter your employee email or name.');
-      return;
-    }
-
-    const result = loginWithCredentials(emailOrNameInput, passwordInput || '1234');
-    if (result.success && result.user) {
-      setSuccessMsg(`Welcome back, ${result.user.name}!`);
-      setTimeout(() => {
-        setIsLoginModalOpen(false);
-        setSuccessMsg('');
-      }, 500);
-    } else {
-      setErrorMsg(result.message || 'Invalid email, password, or PIN.');
+      setPinError('Incorrect PIN entered. Access denied.');
     }
   };
 
@@ -119,18 +86,18 @@ export const LoginModal: React.FC = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
       <div 
         id="login-rbac-modal"
-        className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-white rounded-xl shadow-2xl border-2 border-slate-400 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
-        <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div className="p-6 border-b-2 border-slate-300 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">Individual Employee Sign-In</h2>
+              <h2 className="text-lg font-bold text-slate-900">Staff Roster Sign-In</h2>
               <p className="text-xs text-slate-500 font-medium">
-                Log in to access your designated role, assigned repair orders, and shop bay status
+                Select your employee profile from the roster and enter your PIN
               </p>
             </div>
           </div>
@@ -143,69 +110,28 @@ export const LoginModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Mode Selector Tabs */}
-        <div className="px-6 pt-4 border-b border-slate-100 flex items-center justify-between bg-white">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setLoginMode('INDIVIDUAL')}
-              className={`pb-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-                loginMode === 'INDIVIDUAL'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <KeyRound className="w-4 h-4" />
-              <span>Individual Login</span>
-            </button>
-            <button
-              onClick={() => setLoginMode('QUICK_SWITCH')}
-              className={`pb-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-                loginMode === 'QUICK_SWITCH'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Quick Roster Switch</span>
-            </button>
+        {/* Sub-header with Manage Staff shortcut */}
+        <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+            <Users className="w-4 h-4 text-blue-600" />
+            <span>Employee Workstation Switcher</span>
           </div>
 
-          <div className="flex items-center gap-3 pb-3">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLoginModalOpen(false);
-                setIsSetupWizardOpen(true);
-              }}
-              className="text-xs font-semibold text-slate-600 hover:text-blue-700 flex items-center gap-1"
-            >
-              <span>Shop Setup</span>
-            </button>
-            <span className="text-slate-300">•</span>
-            <button
-              type="button"
-              onClick={() => {
-                setIsLoginModalOpen(false);
-                setIsStaffManagementOpen(true);
-              }}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Manage Staff</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsLoginModalOpen(false);
+              setIsStaffManagementOpen(true);
+            }}
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Manage Staff Roster</span>
+          </button>
         </div>
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5">
-
-          {/* Feedback messages */}
-          {errorMsg && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
 
           {successMsg && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
@@ -235,212 +161,132 @@ export const LoginModal: React.FC = () => {
             </span>
           </div>
 
-          {loginMode === 'INDIVIDUAL' ? (
-            /* Individual Password / PIN Login Form */
-            <form onSubmit={handleIndividualLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Employee Email or Full Name
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. c.ramirez@precisionauto.com or Carlos Ramirez"
-                    value={emailOrNameInput}
-                    onChange={(e) => setEmailOrNameInput(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
-                  />
+          {/* Quick Switch Roster */}
+          <div>
+            {pinPromptUser ? (
+              <form onSubmit={handleVerifyUserPin} className="space-y-4 max-w-md mx-auto p-5 bg-slate-50 rounded-xl border-2 border-slate-400 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-base flex items-center justify-center shadow-xs">
+                    {pinPromptUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">{pinPromptUser.name}</h4>
+                    <p className="text-xs text-slate-500">{pinPromptUser.title} • {pinPromptUser.role}</p>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Password or PIN
+                {pinError && (
+                  <div className="p-2.5 bg-red-50 border-2 border-red-300 text-red-700 rounded-lg text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                    <span>{pinError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Enter 4-Digit Staff PIN
                   </label>
-                  <span className="text-[11px] text-blue-600 font-medium">Accepts employee password or PIN</span>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      autoFocus
+                      value={enteredPin}
+                      onChange={(e) => setEnteredPin(e.target.value)}
+                      placeholder="Enter 4-digit PIN"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-white border-2 border-slate-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono tracking-widest text-center text-slate-900"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1 text-center">
+                    Authentication is required to switch into {pinPromptUser.name}&apos;s session.
+                  </p>
                 </div>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter password or 4-digit PIN"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full pl-9 pr-10 py-2.5 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
-                  />
+
+                <div className="flex gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5"
+                    onClick={() => {
+                      setPinPromptUser(null);
+                      setEnteredPin('');
+                      setPinError('');
+                    }}
+                    className="flex-1 py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Unlock Session</span>
                   </button>
                 </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>Log In to Role Dashboard</span>
-                </button>
-              </div>
-
-              {/* Quick Select Preset to Fill Name */}
-              <div className="pt-4 border-t border-slate-100">
-                <p className="text-xs font-bold text-slate-500 mb-2">Select your name from the roster to fill email:</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {users.slice(0, 6).map(u => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => {
-                        setEmailOrNameInput(u.email);
-                        setPasswordInput('');
-                      }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-xs text-slate-700 transition-colors"
-                      title={`Select ${u.name} (Password required)`}
-                    >
-                      <div className="w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center">
-                        {u.name.slice(0, 1).toUpperCase()}
-                      </div>
-                      <span className="font-medium">{u.name}</span>
-                    </button>
-                  ))}
+              </form>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Select Team Member
+                  </h3>
+                  
+                  {/* Role filter buttons */}
+                  <div className="flex gap-1 flex-wrap">
+                    {(['ALL', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'TECHNICIAN', 'PARTS_SPECIALIST', 'SALES'] as const).map(roleKey => (
+                      <button
+                        key={roleKey}
+                        type="button"
+                        onClick={() => setSelectedRoleFilter(roleKey)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
+                          selectedRoleFilter === roleKey
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {roleKey === 'ALL' ? 'All' : roleKey === 'SERVICE_MANAGER' ? 'Manager' : roleKey === 'SERVICE_ADVISOR' ? 'Advisors' : roleKey === 'TECHNICIAN' ? 'Techs' : roleKey === 'PARTS_SPECIALIST' ? 'Parts' : 'Sales'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </form>
-          ) : (
-            /* Quick Switch Roster */
-            <div>
-              {pinPromptUser ? (
-                <form onSubmit={handleVerifyUserPin} className="space-y-4 max-w-md mx-auto p-5 bg-slate-50 rounded-xl border border-slate-200 shadow-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-base flex items-center justify-center shadow-xs">
-                      {pinPromptUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{pinPromptUser.name}</h4>
-                      <p className="text-xs text-slate-500">{pinPromptUser.title} • {pinPromptUser.role}</p>
-                    </div>
-                  </div>
 
-                  {pinError && (
-                    <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-                      <span>{pinError}</span>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Enter PIN or Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="password"
-                        autoFocus
-                        value={enteredPin}
-                        onChange={(e) => setEnteredPin(e.target.value)}
-                        placeholder="Enter employee PIN or password"
-                        className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
-                      />
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Authentication is required to switch into {pinPromptUser.name}&apos;s space.
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPinPromptUser(null);
-                        setEnteredPin('');
-                        setPinError('');
-                      }}
-                      className="flex-1 py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Unlock Workspace</span>
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      Select Team Member
-                    </h3>
-                    
-                    {/* Role filter buttons */}
-                    <div className="flex gap-1">
-                      {(['ALL', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'TECHNICIAN', 'PARTS_SPECIALIST', 'SALES'] as const).map(roleKey => (
-                        <button
-                          key={roleKey}
-                          onClick={() => setSelectedRoleFilter(roleKey)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
-                            selectedRoleFilter === roleKey
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {roleKey === 'ALL' ? 'All' : roleKey === 'SERVICE_MANAGER' ? 'Manager' : roleKey === 'SERVICE_ADVISOR' ? 'Advisors' : roleKey === 'TECHNICIAN' ? 'Techs' : roleKey === 'PARTS_SPECIALIST' ? 'Parts' : 'Sales'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {filteredUsers.map(user => {
-                      const isCurrent = user.id === currentUser.id;
-                      return (
-                        <button
-                          key={user.id}
-                          id={`login-switch-user-${user.id}`}
-                          onClick={() => handleSelectUser(user)}
-                          className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                            isCurrent
-                              ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600 shadow-sm'
-                              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-xs'
-                          }`}
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
-                            {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {filteredUsers.map(user => {
+                    const isCurrent = user.id === currentUser.id;
+                    return (
+                      <button
+                        key={user.id}
+                        id={`login-switch-user-${user.id}`}
+                        type="button"
+                        onClick={() => handleSelectUser(user)}
+                        className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-xs'
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
+                          {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-sm font-bold text-slate-900 truncate">{user.name}</span>
+                            {getRoleIcon(user.role)}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-sm font-bold text-slate-900 truncate">{user.name}</span>
-                              {getRoleIcon(user.role)}
-                            </div>
-                            <p className="text-xs text-slate-500 truncate">{user.title}</p>
-                            {(user.certificationLevel || user.bayNumber) && (
-                              <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                                {user.role === 'TECHNICIAN' && <Award className="w-3 h-3 text-blue-600" />}
-                                <span>{user.certificationLevel || user.bayNumber}</span>
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                          <p className="text-xs text-slate-500 truncate">{user.title}</p>
+                          {(user.certificationLevel || user.bayNumber) && (
+                            <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                              {user.role === 'TECHNICIAN' && <Award className="w-3 h-3 text-blue-600" />}
+                              <span>{user.certificationLevel || user.bayNumber}</span>
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
 
         </div>
 
@@ -459,6 +305,7 @@ export const LoginModal: React.FC = () => {
               {users.length} registered employees
             </span>
             <button
+              type="button"
               onClick={() => setIsLoginModalOpen(false)}
               className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
             >
@@ -471,4 +318,3 @@ export const LoginModal: React.FC = () => {
     </div>
   );
 };
-

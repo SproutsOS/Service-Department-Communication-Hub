@@ -93,20 +93,24 @@ interface AppContextType {
   addPartOrder: (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => void;
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
   createRepairOrder: (data: {
+    roNumber?: string;
     customerName: string;
     customerPhone: string;
     vehicle: RepairOrder['vehicle'];
-    primaryConcern: string;
+    primaryConcern?: string;
+    concerns?: string[];
     promisedTime?: string;
     techId?: string;
     bay?: string;
     isUrgent?: boolean;
+    isWaiter?: boolean;
   }) => string;
   
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>) => boolean;
+  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string) => boolean;
   logCustomerContact: (
     roId: string, 
     contactData: {
@@ -179,14 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState<boolean>(() => {
-    try {
-      const done = localStorage.getItem(STORAGE_KEY_SETUP_DONE);
-      return done !== 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState<boolean>(false);
 
   // Users state
   const [users, setUsers] = useState<User[]>(() => {
@@ -753,26 +750,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Create new repair order
   const createRepairOrder = (data: {
+    roNumber?: string;
     customerName: string;
     customerPhone: string;
     vehicle: RepairOrder['vehicle'];
-    primaryConcern: string;
+    primaryConcern?: string;
+    concerns?: string[];
     promisedTime?: string;
     techId?: string;
     bay?: string;
     isUrgent?: boolean;
+    isWaiter?: boolean;
   }): string => {
-    const maxRoNum = repairOrders.reduce((max, ro) => {
-      const match = ro.id.match(/\d+/);
-      const num = match ? parseInt(match[0], 10) : 0;
-      return num > max ? num : max;
-    }, 10488);
-
-    const newId = `RO-${maxRoNum + 1}`;
+    let newId: string;
+    const cleanRoInput = data.roNumber?.trim().toUpperCase();
+    if (cleanRoInput) {
+      newId = cleanRoInput;
+    } else {
+      const maxRoNum = repairOrders.reduce((max, ro) => {
+        const match = ro.id.match(/\d+/);
+        const num = match ? parseInt(match[0], 10) : 0;
+        return num > max ? num : max;
+      }, 10488);
+      newId = `RO-${maxRoNum + 1}`;
+    }
     const now = new Date().toISOString();
 
     const tech = data.techId ? users.find(u => u.id === data.techId) : undefined;
     const initialStatus: ROStatus = 'WAITING_DIAGNOSTICS';
+
+    const cleanConcernsList = data.concerns && data.concerns.length > 0
+      ? data.concerns.map(c => c.trim()).filter(Boolean)
+      : (data.primaryConcern?.trim() ? [data.primaryConcern.trim()] : []);
+    
+    const primaryConcernText = cleanConcernsList[0] || data.primaryConcern?.trim() || 'General Inspection / Service';
 
     const newRO: RepairOrder = {
       id: newId,
@@ -789,8 +800,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bay: data.bay || tech?.bayNumber,
       status: initialStatus,
       isUrgent: !!data.isUrgent,
+      isWaiter: !!data.isWaiter,
       promisedTime: data.promisedTime || new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
-      primaryConcern: data.primaryConcern,
+      primaryConcern: primaryConcernText,
+      concerns: cleanConcernsList.length > 0 ? cleanConcernsList : [primaryConcernText],
       parts: [],
       messages: [],
       history: [
@@ -1060,6 +1073,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     });
+    return true;
+  };
+
+  // Technician & Staff: Update Cause & Correction for diagnostic & repair documentation
+  const updateTechCauseAndCorrection = (roId: string, cause: string, correction: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const trimmedCause = cause.trim();
+    const trimmedCorrection = correction.trim();
+
+    const now = new Date().toISOString();
+    const newHistoryItem = {
+      id: `hist_${Date.now()}`,
+      status: targetRO.status,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) updated Cause & Correction documentation`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      cause: trimmedCause,
+      correction: trimmedCorrection,
+      // For backwards compatibility, sync diagnosticNotes if empty
+      diagnosticNotes: trimmedCause || targetRO.diagnosticNotes,
+      history: [...targetRO.history, newHistoryItem]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    // Notify team
+    triggerNotification(
+      updatedRO,
+      `Cause & Correction Updated`,
+      `${currentUser.name} documented Cause & Correction on RO #${targetRO.id}`,
+      false,
+      'STATUS_CHANGE'
+    );
+
     return true;
   };
 
@@ -1441,6 +1506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAllNotificationsRead,
         deleteRepairOrder,
         updateRepairOrderDetails,
+        updateTechCauseAndCorrection,
         logCustomerContact,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,

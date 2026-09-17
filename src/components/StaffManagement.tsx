@@ -20,7 +20,6 @@ import {
   Eye, 
   EyeOff, 
   RotateCcw,
-  Sparkles,
   Info,
   Camera,
   Check,
@@ -45,7 +44,6 @@ export const StaffManagement: React.FC = () => {
     resetToDemoData,
     isStaffManagementOpen,
     setIsStaffManagementOpen,
-    setIsSetupWizardOpen,
     shopName
   } = useApp();
 
@@ -67,8 +65,8 @@ export const StaffManagement: React.FC = () => {
   const [emailInput, setEmailInput] = useState('');
   const [roleInput, setRoleInput] = useState<UserRole>('TECHNICIAN');
   const [titleInput, setTitleInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('1234');
-  const [pinInput, setPinInput] = useState('1234');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [pinInput, setPinInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [certInput, setCertInput] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
@@ -130,17 +128,12 @@ export const StaffManagement: React.FC = () => {
     setNameInput('');
     setEmailInput('');
     setRoleInput(activeCategory === 'ALL' ? 'TECHNICIAN' : activeCategory);
-    setTitleInput(
-      activeCategory === 'SERVICE_ADVISOR' ? 'Service Advisor' :
-      activeCategory === 'SERVICE_MANAGER' ? 'Assistant Service Manager' :
-      activeCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' :
-      activeCategory === 'SALES' ? 'Sales Consultant' : 'Automotive Technician'
-    );
-    setPasswordInput('1234');
-    setPinInput('1234');
+    setTitleInput('');
+    setPasswordInput('');
+    setPinInput('');
     setShowPassword(false);
-    setCertInput(activeCategory === 'TECHNICIAN' ? 'ASE Master Tech' : '');
-    setPhoneInput('(555) 302-');
+    setCertInput('');
+    setPhoneInput('');
     setAvatarInput(getRoleDefaultAvatar(activeCategory === 'ALL' ? 'TECHNICIAN' : activeCategory));
     setAutoSaveStatus('saved');
     setIsAddEditModalOpen(true);
@@ -390,16 +383,6 @@ export const StaffManagement: React.FC = () => {
 
           {/* Top Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              id="open-shop-setup-wizard-btn"
-              onClick={() => setIsSetupWizardOpen(true)}
-              className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              title="Open dealership & shop onboarding wizard"
-            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Shop Setup Wizard</span>
-            </button>
-
             <button
               id="add-employee-btn"
               onClick={handleOpenAdd}
@@ -754,10 +737,10 @@ export const StaffManagement: React.FC = () => {
       {/* Add / Edit Employee Modal */}
       {isAddEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-2xl border-2 border-slate-400 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
             
             {/* Header */}
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+            <div className="p-5 border-b-2 border-slate-300 flex items-center justify-between bg-slate-50 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
                   {editingUserId ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
@@ -812,7 +795,7 @@ export const StaffManagement: React.FC = () => {
                       triggerAutoSave({ name: val.trim() });
                     }
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -833,7 +816,7 @@ export const StaffManagement: React.FC = () => {
                       triggerAutoSave({ email: val.trim().toLowerCase() });
                     }
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -859,7 +842,7 @@ export const StaffManagement: React.FC = () => {
                       triggerAutoSave({ role: newRole, title: newTitle });
                     }
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="SERVICE_MANAGER">Service Manager (Admin / Full Shop Oversight)</option>
                   <option value="SERVICE_ADVISOR">Service Advisor (Customer Facing / Estimates & Authorizations)</option>
@@ -885,7 +868,7 @@ export const StaffManagement: React.FC = () => {
                       triggerAutoSave({ title: val.trim() });
                     }
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -911,7 +894,7 @@ export const StaffManagement: React.FC = () => {
                         });
                       }
                     }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
                     Shows in technician dispatch lists, work orders, and shop management.
@@ -924,7 +907,7 @@ export const StaffManagement: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Staff Avatar Badge
                 </label>
-                <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex items-center gap-3 p-3 bg-slate-50 border-2 border-slate-400 rounded-xl">
                   <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-base flex items-center justify-center ring-2 ring-blue-500 shrink-0 shadow-xs">
                     {(nameInput || 'Staff').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
@@ -956,7 +939,7 @@ export const StaffManagement: React.FC = () => {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    placeholder="Enter employee password"
+                    placeholder="Enter password"
                     value={passwordInput}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -965,7 +948,7 @@ export const StaffManagement: React.FC = () => {
                         triggerAutoSave({ password: val.trim() || '1234' });
                       }
                     }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-[10px] text-slate-400 mt-0.5">Used for individual login.</p>
                 </div>
@@ -978,7 +961,7 @@ export const StaffManagement: React.FC = () => {
                     type="text"
                     required
                     maxLength={8}
-                    placeholder="1234"
+                    placeholder="Enter 4-digit PIN"
                     value={pinInput}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -987,7 +970,7 @@ export const StaffManagement: React.FC = () => {
                         triggerAutoSave({ pin: val.trim() || '1234' });
                       }
                     }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-[10px] text-slate-400 mt-0.5">Used for quick kiosk & bay switching.</p>
                 </div>
@@ -1000,7 +983,7 @@ export const StaffManagement: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="(555) 302-8811"
+                  placeholder="Enter phone number"
                   value={phoneInput}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -1009,12 +992,12 @@ export const StaffManagement: React.FC = () => {
                       triggerAutoSave({ phone: val.trim() || undefined });
                     }
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-200 shrink-0">
+              <div className="flex items-center justify-between pt-4 border-t-2 border-slate-300 shrink-0">
                 {editingUserId ? (
                   <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -1028,7 +1011,7 @@ export const StaffManagement: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsAddEditModalOpen(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border-2 border-slate-400 transition-colors cursor-pointer"
                   >
                     {editingUserId ? 'Close' : 'Cancel'}
                   </button>

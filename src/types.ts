@@ -146,9 +146,13 @@ export interface RepairOrder {
   waitingDiagnosisAt?: string; // Timestamp when vehicle began waiting for diagnosis
   diagnosisStartedAt?: string; // Timestamp when technician began active diagnosis
   isUrgent: boolean;
+  isWaiter?: boolean;
   promisedTime?: string;
   primaryConcern: string;
+  concerns?: string[]; // Multiple customer complaints / line items
   diagnosticNotes?: string;
+  cause?: string; // Diagnostic finding: root cause of failure/complaint
+  correction?: string; // Repair performed: corrective action taken by technician
   parts: PartItem[];
   messages: Message[];
   history: StatusHistory[];

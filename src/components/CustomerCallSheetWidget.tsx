@@ -307,7 +307,9 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
                       </span>
                     ) : (
                       <span className="line-clamp-1 italic text-[11px]">
-                        "{ro.primaryConcern}"
+                        "{ro.concerns && ro.concerns.length > 1
+                          ? `${ro.concerns[0]} (+${ro.concerns.length - 1} more)`
+                          : ro.primaryConcern}"
                       </span>
                     )}
 

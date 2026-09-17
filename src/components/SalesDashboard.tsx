@@ -493,9 +493,21 @@ export const SalesDashboard: React.FC = () => {
                   {/* Top line: RO #, Delivery Badge, Status Badge */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <span className="font-bold text-base text-blue-600 group-hover:text-teal-600 transition-colors">
-                        #{ro.id}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-base text-blue-600 group-hover:text-teal-600 transition-colors">
+                          #{ro.id}
+                        </span>
+                        {ro.isUrgent && (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-400">
+                            HIGH PRIORITY
+                          </span>
+                        )}
+                        {ro.isWaiter && (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-400">
+                            WAITER
+                          </span>
+                        )}
+                      </div>
                       <h3 className="font-extrabold text-base text-slate-900 mt-0.5 leading-snug">
                         {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
                       </h3>
@@ -526,10 +538,21 @@ export const SalesDashboard: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Primary Concern */}
-                  <div className="mt-2 text-xs text-slate-600 line-clamp-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
-                    <span className="font-bold text-slate-700">Concern: </span>
-                    {ro.primaryConcern}
+                  {/* Primary Concern / Line Items */}
+                  <div className="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="font-bold text-slate-700">Concern: </span>
+                      {ro.concerns && ro.concerns.length > 1 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-teal-100 text-teal-800 rounded">
+                          {ro.concerns.length} Line Items
+                        </span>
+                      )}
+                    </div>
+                    <div className="line-clamp-2 text-slate-700">
+                      {ro.concerns && ro.concerns.length > 1
+                        ? ro.concerns.map((c, i) => `${i + 1}. ${c}`).join(' • ')
+                        : ro.primaryConcern}
+                    </div>
                   </div>
 
                   {/* Parts Summary if present */}

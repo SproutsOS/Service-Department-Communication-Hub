@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   ShieldCheck, 
   Lock, 
-  KeyRound, 
   Wrench, 
   UserCheck, 
   Package, 
@@ -15,8 +14,7 @@ import {
   Users, 
   LogIn, 
   Building2,
-  Delete,
-  Settings
+  Delete
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole } from '../types';
@@ -30,12 +28,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     users, 
     shopName, 
     isCloudSynced, 
-    loginWithCredentials, 
-    loginUser,
-    setIsSetupWizardOpen 
+    loginUser
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'ROSTER' | 'DIRECT'>('ROSTER');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -43,11 +38,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [showPin, setShowPin] = useState(false);
-
-  // Direct login state
-  const [directEmail, setDirectEmail] = useState('');
-  const [directPassword, setDirectPassword] = useState('');
-  const [showDirectPassword, setShowDirectPassword] = useState(false);
 
   // Status feedback
   const [errorMsg, setErrorMsg] = useState('');
@@ -116,33 +106,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }, 250);
   };
 
-  // Handle Direct Login Form Submit
-  const handleDirectSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!directEmail.trim()) {
-      setErrorMsg('Please enter your employee email or name.');
-      return;
-    }
-    if (!directPassword.trim()) {
-      setErrorMsg('Please enter your password or PIN.');
-      return;
-    }
-
-    setIsAuthenticating(true);
-    setErrorMsg('');
-
-    setTimeout(() => {
-      const res = loginWithCredentials(directEmail, directPassword);
-      if (res.success && res.user) {
-        setSuccessMsg(`Welcome, ${res.user.name}! Unlocking workstation...`);
-        if (onLoginSuccess) onLoginSuccess(res.user);
-      } else {
-        setErrorMsg(res.message || 'Invalid credentials entered.');
-        setIsAuthenticating(false);
-      }
-    }, 250);
-  };
-
   // Quick Keypad append
   const handleKeypadPress = (val: string) => {
     if (pinInput.length < 16) {
@@ -180,21 +143,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/90 border border-slate-700/80 text-[11px] text-slate-300">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/90 border border-slate-700/80 text-[11px] text-slate-300">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Staff Access Protected</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsSetupWizardOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer border border-transparent hover:border-slate-700"
-            title="Dealership Initial Setup Wizard"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Setup Wizard</span>
-          </button>
         </div>
       </header>
 
@@ -213,42 +166,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 Staff Authentication & PIN Access
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Please enter your credentials or select your staff profile to unlock the service console.
+                Select your employee profile from the staff roster and enter your 4-digit PIN to unlock.
               </p>
             </div>
 
-            {/* Mode Switcher Tabs */}
-            <div className="bg-slate-950/80 p-1 rounded-xl border border-slate-800 flex items-center shrink-0 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('ROSTER');
-                  setErrorMsg('');
-                }}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'ROSTER'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Staff Roster (PIN)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('DIRECT');
-                  setErrorMsg('');
-                }}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'DIRECT'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>Email & Password</span>
-              </button>
+            {/* Staff Roster Indicator Badge */}
+            <div className="bg-slate-950/80 px-3.5 py-2 rounded-xl border border-slate-800 flex items-center gap-2 text-xs font-bold text-blue-400 shrink-0 self-start sm:self-auto">
+              <Users className="w-3.5 h-3.5 text-blue-400" />
+              <span>Staff Roster Sign-In</span>
             </div>
           </div>
 
@@ -267,9 +192,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </div>
           )}
 
-          {/* Tab 1: Staff Roster Grid & Quick PIN (Shop-Floor Optimized) */}
-          {activeTab === 'ROSTER' && (
-            <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Staff Roster Grid & Quick PIN (Shop-Floor Optimized) */}
+          <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
               
               {/* Left Column: Staff Roster Cards */}
               <div className="lg:col-span-7 flex flex-col space-y-4">
@@ -366,7 +290,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               <div className="lg:col-span-5 bg-slate-950/90 rounded-xl border border-slate-800 p-5 flex flex-col justify-between">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-blue-400" />
+                    <Lock className="w-3.5 h-3.5 text-blue-400" />
                     <span>Selected Profile Passcode</span>
                   </div>
 
@@ -461,90 +385,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               </div>
 
             </div>
-          )}
-
-          {/* Tab 2: Direct Email & Password Sign-In Form */}
-          {activeTab === 'DIRECT' && (
-            <div className="p-6 max-w-lg mx-auto w-full">
-              <form onSubmit={handleDirectSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Employee Email or Name
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. employee@dealership.com or Employee Name"
-                      value={directEmail}
-                      onChange={(e) => setDirectEmail(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Password or PIN
-                    </label>
-                    <span className="text-[10px] text-slate-500">Accepts staff PIN or password</span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showDirectPassword ? 'text' : 'password'}
-                      required
-                      placeholder="Enter employee password or PIN"
-                      value={directPassword}
-                      onChange={(e) => setDirectPassword(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowDirectPassword(!showDirectPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
-                    >
-                      {showDirectPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={isAuthenticating}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    <span>{isAuthenticating ? 'Signing In...' : 'Log In to Workstation'}</span>
-                  </button>
-                </div>
-
-                {/* Quick Auto-Fill Profile buttons */}
-                <div className="pt-5 border-t border-slate-800/80">
-                  <p className="text-[11px] font-bold text-slate-400 mb-2">Or select a profile to auto-fill:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {users.slice(0, 6).map(u => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => {
-                          setDirectEmail(u.email || u.name);
-                          setDirectPassword('');
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition-colors"
-                      >
-                        <div className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white font-bold text-[8px] flex items-center justify-center">
-                          {u.name.slice(0, 1).toUpperCase()}
-                        </div>
-                        <span className="font-semibold">{u.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </form>
-            </div>
-          )}
 
           {/* Footer Notes */}
           <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">

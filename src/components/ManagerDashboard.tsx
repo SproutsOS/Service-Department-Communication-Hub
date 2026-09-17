@@ -109,7 +109,7 @@ export const ManagerDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
-            Master Service Floor Board
+            Master Dashboard
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 font-medium">
             Centralized communications, live assignments, technician real-time status & parts ETA
@@ -663,13 +663,20 @@ export const ManagerDashboard: React.FC = () => {
                       >
                         {/* RO # */}
                         <td className="px-6 py-4 font-bold text-blue-600 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span>#{ro.id}</span>
                             {ro.isUrgent && (
-                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                              <span className="text-[9px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-400">
+                                HIGH PRIORITY
+                              </span>
+                            )}
+                            {ro.isWaiter && (
+                              <span className="text-[9px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-400">
+                                WAITER
+                              </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-normal">
+                          <div className="text-[10px] text-slate-400 font-normal mt-0.5">
                             Adv: {ro.advisorName}
                           </div>
                         </td>

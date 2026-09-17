@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/* 
+ * High-contrast, dark visible border lines around all boxes where information is entered
+ */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+textarea,
+select {
+  border-width: 1.5px !important;
+  border-color: #334155 !important; /* slate-700: clear, dark visible line */
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):hover,
+textarea:hover,
+select:hover {
+  border-color: #0f172a !important; /* slate-900 */
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):focus,
+textarea:focus,
+select:focus {
+  border-color: #2563eb !important; /* blue-600 */
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25) !important;
+  outline: none !important;
+}
+
+/* Invalid / Duplicate error states */
+input.border-red-400,
+input.border-red-500,
+textarea.border-red-400,
+textarea.border-red-500 {
+  border-color: #dc2626 !important;
+}

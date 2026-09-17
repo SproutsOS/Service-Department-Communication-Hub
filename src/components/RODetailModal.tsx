@@ -21,11 +21,16 @@ import {
   Lock,
   Edit3,
   Check,
+  Save,
   AlertCircle,
   Eye,
   PhoneCall,
   Voicemail,
-  PhoneForwarded
+  PhoneForwarded,
+  Loader2,
+  Sparkles,
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole } from '../types';
@@ -34,6 +39,7 @@ import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, for
 import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
+import { decodeVin } from '../utils/vinDecoder';
 
 export const RODetailModal: React.FC = () => {
   const { 
@@ -48,6 +54,7 @@ export const RODetailModal: React.FC = () => {
     addPartOrder, 
     updatePartStatus,
     updateRepairOrderDetails,
+    updateTechCauseAndCorrection,
     deleteRepairOrder
   } = useApp();
 
@@ -66,8 +73,105 @@ export const RODetailModal: React.FC = () => {
   const [editVehicleModel, setEditVehicleModel] = useState(selectedRO?.vehicle.model || '');
   const [editVehicleVin, setEditVehicleVin] = useState(selectedRO?.vehicle.vin || '');
   const [editPrimaryConcern, setEditPrimaryConcern] = useState(selectedRO?.primaryConcern || '');
+  const [editConcerns, setEditConcerns] = useState<string[]>(
+    selectedRO?.concerns && selectedRO.concerns.length > 0
+      ? selectedRO.concerns
+      : [selectedRO?.primaryConcern || '']
+  );
   const [editPromisedTime, setEditPromisedTime] = useState(selectedRO?.promisedTime || '');
   const [editDiagnosticNotes, setEditDiagnosticNotes] = useState(selectedRO?.diagnosticNotes || '');
+  const [editCause, setEditCause] = useState(selectedRO?.cause || '');
+  const [editCorrection, setEditCorrection] = useState(selectedRO?.correction || '');
+  const [editIsUrgent, setEditIsUrgent] = useState(selectedRO?.isUrgent || false);
+  const [editIsWaiter, setEditIsWaiter] = useState(selectedRO?.isWaiter || false);
+
+  // Tech direct cause & correction editor in View Mode
+  const [isEditingTechFindings, setIsEditingTechFindings] = useState(false);
+  const [techCauseInput, setTechCauseInput] = useState(selectedRO?.cause || selectedRO?.diagnosticNotes || '');
+  const [techCorrectionInput, setTechCorrectionInput] = useState(selectedRO?.correction || '');
+  const [techSaveSuccess, setTechSaveSuccess] = useState(false);
+
+  const handleEditConcernChange = (index: number, val: string) => {
+    setEditConcerns(prev => {
+      const next = [...prev];
+      next[index] = val;
+      return next;
+    });
+  };
+
+  const handleAddEditConcern = () => {
+    setEditConcerns(prev => [...prev, '']);
+  };
+
+  const handleRemoveEditConcern = (index: number) => {
+    setEditConcerns(prev => {
+      if (prev.length <= 1) return [''];
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // Auto-VIN Decoding state for edit modal
+  const [isDecodingEditVin, setIsDecodingEditVin] = useState(false);
+  const [editVinDecodedMsg, setEditVinDecodedMsg] = useState<string | null>(null);
+  const [editVinError, setEditVinError] = useState<string | null>(null);
+  const editVinAbortRef = React.useRef<AbortController | null>(null);
+  const editVinDebounceRef = React.useRef<any>(null);
+
+  const runEditVinDecode = async (inputVin: string, isManual = false) => {
+    const cleanVin = inputVin.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (cleanVin.length < 10) {
+      if (isManual) setEditVinError('VIN must be at least 10 characters');
+      return;
+    }
+
+    if (editVinAbortRef.current) {
+      editVinAbortRef.current.abort();
+    }
+    editVinAbortRef.current = new AbortController();
+
+    setIsDecodingEditVin(true);
+    setEditVinError(null);
+    setEditVinDecodedMsg(null);
+
+    try {
+      const result = await decodeVin(cleanVin, editVinAbortRef.current.signal);
+      if (result.success) {
+        if (result.year) setEditVehicleYear(result.year);
+        if (result.make) setEditVehicleMake(result.make);
+        if (result.model) setEditVehicleModel(result.model);
+
+        const summary = [result.year, result.make, result.model].filter(Boolean).join(' ');
+        setEditVinDecodedMsg(summary ? `Auto-populated: ${summary}` : 'Decoded successfully');
+      } else if (isManual || cleanVin.length === 17) {
+        setEditVinError(result.error || 'Could not decode VIN');
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setEditVinError('Error decoding VIN');
+      }
+    } finally {
+      setIsDecodingEditVin(false);
+    }
+  };
+
+  const handleEditVinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    setEditVehicleVin(rawVal);
+    setEditVinDecodedMsg(null);
+    setEditVinError(null);
+
+    if (editVinDebounceRef.current) {
+      clearTimeout(editVinDebounceRef.current);
+    }
+
+    if (rawVal.length === 17) {
+      runEditVinDecode(rawVal, false);
+    } else if (rawVal.length >= 10) {
+      editVinDebounceRef.current = setTimeout(() => {
+        runEditVinDecode(rawVal, false);
+      }, 500);
+    }
+  };
 
   React.useEffect(() => {
     if (selectedRO) {
@@ -78,9 +182,20 @@ export const RODetailModal: React.FC = () => {
       setEditVehicleModel(selectedRO.vehicle.model);
       setEditVehicleVin(selectedRO.vehicle.vin);
       setEditPrimaryConcern(selectedRO.primaryConcern);
+      const initialConcerns = selectedRO.concerns && selectedRO.concerns.length > 0
+        ? selectedRO.concerns
+        : [selectedRO.primaryConcern || ''];
+      setEditConcerns(initialConcerns);
       setEditPromisedTime(selectedRO.promisedTime);
       setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
+      setEditCause(selectedRO.cause || '');
+      setEditCorrection(selectedRO.correction || '');
+      setEditIsUrgent(selectedRO.isUrgent || false);
+      setEditIsWaiter(selectedRO.isWaiter || false);
+      setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
+      setTechCorrectionInput(selectedRO.correction || '');
       setIsEditingDetails(false);
+      setIsEditingTechFindings(false);
     }
   }, [selectedRO?.id]);
 
@@ -95,8 +210,8 @@ export const RODetailModal: React.FC = () => {
   const [partNumber, setPartNumber] = useState('');
   const [partDescription, setPartDescription] = useState('');
   const [partQuantity, setPartQuantity] = useState(1);
-  const [partVendor, setPartVendor] = useState('Ford Direct Warehouse');
-  const [partEtaTime, setPartEtaTime] = useState('14:30');
+  const [partVendor, setPartVendor] = useState('');
+  const [partEtaTime, setPartEtaTime] = useState('');
   const [partTracking, setPartTracking] = useState('');
 
   // Dispatch selector state
@@ -132,27 +247,33 @@ export const RODetailModal: React.FC = () => {
 
     // Build today's date with chosen ETA time
     const today = new Date();
-    const [hours, minutes] = partEtaTime.split(':');
-    const etaDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hours || '14'), parseInt(minutes || '00'));
+    const [hours, minutes] = partEtaTime ? partEtaTime.split(':') : ['17', '00'];
+    const etaDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hours || '17'), parseInt(minutes || '00'));
 
     addPartOrder(selectedRO.id, {
       partNumber: partNumber.trim(),
       description: partDescription.trim(),
-      quantity: partQuantity,
+      quantity: partQuantity || 1,
       status: 'ORDERED',
-      vendor: partVendor,
+      vendor: partVendor.trim() || 'Direct Parts Supplier',
       estimatedArrival: etaDate.toISOString(),
       trackingNumber: partTracking.trim() || undefined,
     });
 
     setPartNumber('');
     setPartDescription('');
+    setPartVendor('');
+    setPartEtaTime('');
+    setPartTracking('');
     setShowAddPart(false);
   };
 
   const handleSaveDetails = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isManager || !selectedRO) return;
+
+    const validConcerns = editConcerns.map(c => c.trim()).filter(Boolean);
+    const finalPrimary = validConcerns[0] || editPrimaryConcern.trim() || selectedRO.primaryConcern;
 
     const ok = updateRepairOrderDetails(selectedRO.id, {
       customerName: editCustomerName.trim(),
@@ -164,15 +285,31 @@ export const RODetailModal: React.FC = () => {
         model: editVehicleModel.trim(),
         vin: editVehicleVin.trim().toUpperCase()
       },
-      primaryConcern: editPrimaryConcern.trim(),
+      primaryConcern: finalPrimary,
+      concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
       promisedTime: editPromisedTime,
-      diagnosticNotes: editDiagnosticNotes.trim()
+      diagnosticNotes: editDiagnosticNotes.trim(),
+      cause: editCause.trim(),
+      correction: editCorrection.trim(),
+      isUrgent: editIsUrgent,
+      isWaiter: editIsWaiter
     });
 
     if (ok) {
       setIsEditingDetails(false);
       setManagerActionFeedback('Repair order details updated and logged to audit trail.');
       setTimeout(() => setManagerActionFeedback(null), 3500);
+    }
+  };
+
+  const handleSaveTechFindings = (e: React.FormEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (!selectedRO) return;
+    const ok = updateTechCauseAndCorrection(selectedRO.id, techCauseInput, techCorrectionInput);
+    if (ok) {
+      setIsEditingTechFindings(false);
+      setTechSaveSuccess(true);
+      setTimeout(() => setTechSaveSuccess(false), 3000);
     }
   };
 
@@ -215,8 +352,13 @@ export const RODetailModal: React.FC = () => {
                 {currentStatusInfo.label}
               </span>
               {selectedRO.isUrgent && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full border border-red-200">
-                  <AlertTriangle className="w-3.5 h-3.5" /> Urgent Attention Required
+                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> HIGH PRIORITY
+                </span>
+              )}
+              {selectedRO.isWaiter && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
+                  <Clock className="w-3.5 h-3.5 text-red-600" /> WAITER
                 </span>
               )}
             </div>
@@ -453,7 +595,7 @@ export const RODetailModal: React.FC = () => {
                         value={editCustomerName}
                         onChange={(e) => setEditCustomerName(e.target.value)}
                         required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
                     <div>
@@ -465,73 +607,136 @@ export const RODetailModal: React.FC = () => {
                         value={editCustomerPhone}
                         onChange={(e) => setEditCustomerPhone(e.target.value)}
                         required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Year
+                  {/* Vehicle Section with VIN Auto-Decode */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border-2 border-slate-400">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                        <span>VIN (17-character)</span>
+                        {isDecodingEditVin && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-blue-600 font-medium normal-case">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Decoding VIN with NHTSA...
+                          </span>
+                        )}
+                        {editVinDecodedMsg && !isDecodingEditVin && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-semibold normal-case bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {editVinDecodedMsg}
+                          </span>
+                        )}
+                        {editVinError && !isDecodingEditVin && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 font-medium normal-case bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300">
+                            {editVinError}
+                          </span>
+                        )}
                       </label>
-                      <input
-                        type="number"
-                        value={editVehicleYear}
-                        onChange={(e) => setEditVehicleYear(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      {editVehicleVin.trim().length >= 10 && (
+                        <button
+                          type="button"
+                          onClick={() => runEditVinDecode(editVehicleVin, true)}
+                          disabled={isDecodingEditVin}
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isDecodingEditVin ? 'animate-spin' : ''}`} /> Auto-Decode
+                        </button>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Make
-                      </label>
-                      <input
-                        type="text"
-                        value={editVehicleMake}
-                        onChange={(e) => setEditVehicleMake(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Model
-                      </label>
-                      <input
-                        type="text"
-                        value={editVehicleModel}
-                        onChange={(e) => setEditVehicleModel(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        VIN
-                      </label>
-                      <input
-                        type="text"
-                        value={editVehicleVin}
-                        onChange={(e) => setEditVehicleVin(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-semibold uppercase focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Customer Primary Concern
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={editPrimaryConcern}
-                      onChange={(e) => setEditPrimaryConcern(e.target.value)}
+                    <input
+                      type="text"
+                      value={editVehicleVin}
+                      onChange={handleEditVinChange}
+                      maxLength={17}
                       required
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter 17-digit VIN to auto-fill Year, Make & Model"
+                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono font-bold uppercase focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                     />
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Year
+                        </label>
+                        <input
+                          type="number"
+                          value={editVehicleYear}
+                          onChange={(e) => setEditVehicleYear(e.target.value)}
+                          required
+                          className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Make
+                        </label>
+                        <input
+                          type="text"
+                          value={editVehicleMake}
+                          onChange={(e) => setEditVehicleMake(e.target.value)}
+                          required
+                          className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                        />
+                      </div>
+                      <div className="col-span-2 sm:col-span-1">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Model
+                        </label>
+                        <input
+                          type="text"
+                          value={editVehicleModel}
+                          onChange={(e) => setEditVehicleModel(e.target.value)}
+                          required
+                          className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Customer Complaints & Concerns Lines */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border-2 border-slate-400 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-blue-600" /> Customer Complaints & Concerns
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddEditConcern}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-md border-2 border-blue-300 shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Line
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {editConcerns.map((c, idx) => (
+                        <div key={idx} className="bg-white p-2.5 rounded-lg border-2 border-slate-400 space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider">
+                              {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
+                            </span>
+                            {editConcerns.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEditConcern(idx)}
+                                className="text-[10px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded"
+                                title="Remove line"
+                              >
+                                <Trash2 className="w-3 h-3" /> Remove
+                              </button>
+                            )}
+                          </div>
+                          <textarea
+                            rows={2}
+                            value={c}
+                            onChange={e => handleEditConcernChange(idx, e.target.value)}
+                            placeholder={idx === 0 ? "Customer primary concern / complaint..." : `Additional concern / complaint line ${idx + 1}...`}
+                            className="w-full px-2.5 py-1.5 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -546,21 +751,89 @@ export const RODetailModal: React.FC = () => {
                           const dt = e.target.value ? new Date(e.target.value).toISOString() : selectedRO.promisedTime;
                           setEditPromisedTime(dt);
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                        <span>Diagnostic Cause (Why it failed)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editCause}
+                        onChange={(e) => setEditCause(e.target.value)}
+                        placeholder="Root cause (e.g., Code P0300 cylinder 3 plug fouled with oil, broken belt tensioner)..."
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                        <span>Correction (Repair Performed)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editCorrection}
+                        onChange={(e) => setEditCorrection(e.target.value)}
+                        placeholder="Corrective repair (e.g., Replaced spark plug tube seals & plugs, road tested 5 mi)..."
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Technician Diagnostic Findings
+                        Technician Diagnostic Notes
                       </label>
                       <input
                         type="text"
                         value={editDiagnosticNotes}
                         onChange={(e) => setEditDiagnosticNotes(e.target.value)}
                         placeholder="Diagnostic notes, inspection findings..."
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
+                  </div>
+
+                  {/* High Priority & Waiter Toggles */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditIsUrgent(!editIsUrgent)}
+                      className={`px-3.5 py-2 rounded-lg border-2 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer select-none ${
+                        editIsUrgent
+                          ? 'border-red-600 bg-red-50 text-red-600 shadow-sm ring-1 ring-red-500'
+                          : 'border-slate-500 bg-white text-slate-700 hover:border-red-500 hover:text-red-600'
+                      }`}
+                    >
+                      <AlertTriangle className={`w-4 h-4 ${editIsUrgent ? 'text-red-600' : 'text-slate-500'}`} />
+                      <span>High Priority</span>
+                      {editIsUrgent && (
+                        <span className="text-[10px] font-black uppercase text-red-600 bg-red-200/80 px-1.5 py-0.5 rounded">
+                          Active
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditIsWaiter(!editIsWaiter)}
+                      className={`px-3.5 py-2 rounded-lg border-2 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer select-none ${
+                        editIsWaiter
+                          ? 'border-red-600 bg-red-50 text-red-600 shadow-sm ring-1 ring-red-500'
+                          : 'border-slate-500 bg-white text-slate-700 hover:border-red-500 hover:text-red-600'
+                      }`}
+                    >
+                      <Clock className={`w-4 h-4 ${editIsWaiter ? 'text-red-600' : 'text-slate-500'}`} />
+                      <span>Waiter</span>
+                      {editIsWaiter && (
+                        <span className="text-[10px] font-black uppercase text-red-600 bg-red-200/80 px-1.5 py-0.5 rounded">
+                          Active
+                        </span>
+                      )}
+                    </button>
                   </div>
 
                   <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -625,25 +898,237 @@ export const RODetailModal: React.FC = () => {
                 );
               })()}
 
-              {/* Primary Concern & Tech Notes */}
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                  Customer Primary Concern
-                </h4>
-                <p className="text-sm text-slate-900 font-medium leading-relaxed">
-                  {selectedRO.primaryConcern}
-                </p>
-                {selectedRO.diagnosticNotes && (
-                  <div className="mt-3 pt-3 border-t border-slate-200">
-                    <h5 className="text-xs font-bold text-slate-700 mb-1">
-                      Technician Diagnostic Findings:
-                    </h5>
-                    <p className="text-xs text-slate-700 leading-relaxed font-mono bg-white p-2.5 rounded border border-slate-200">
-                      {selectedRO.diagnosticNotes}
-                    </p>
+              {/* Customer Complaints / Concerns & Technician Three C's (Complaint, Cause, Correction) */}
+              {(() => {
+                const displayConcerns = selectedRO.concerns && selectedRO.concerns.length > 0
+                  ? selectedRO.concerns
+                  : [selectedRO.primaryConcern];
+                const hasTechCause = Boolean(selectedRO.cause?.trim());
+                const hasTechCorrection = Boolean(selectedRO.correction?.trim());
+                const hasBoth = hasTechCause && hasTechCorrection;
+
+                return (
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-4">
+                    {/* Header with quick action */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-blue-600" />
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Customer Intake & Technician Three C's
+                        </h4>
+                        {hasBoth ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cause & Correction Documented
+                          </span>
+                        ) : (hasTechCause || hasTechCorrection) ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                            Partially Documented
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                            Cause & Correction Pending
+                          </span>
+                        )}
+                      </div>
+
+                      {!isSales && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
+                            setTechCorrectionInput(selectedRO.correction || '');
+                            setIsEditingTechFindings(!isEditingTechFindings);
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg border-2 shadow-2xs transition-colors cursor-pointer ${
+                            isEditingTechFindings
+                              ? 'bg-slate-100 text-slate-800 border-slate-600 hover:bg-slate-200'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+                          }`}
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>{isEditingTechFindings ? 'Close Cause & Correction' : (hasBoth ? 'Edit Cause & Correction' : 'Type In Cause & Correction')}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {techSaveSuccess && (
+                      <div className="p-3 bg-emerald-50 border-2 border-emerald-500 rounded-lg text-xs font-bold text-emerald-800 flex items-center gap-2 animate-in fade-in">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Cause and Correction saved to repair order and updated across all workstations.</span>
+                      </div>
+                    )}
+
+                    {/* 1. COMPLAINT: Customer Complaints */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-600 inline-block"></span>
+                          <span>1. Customer Complaints / Concerns (Complaint):</span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                          {displayConcerns.length} {displayConcerns.length === 1 ? 'Line Item' : 'Line Items'}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {displayConcerns.map((concern, idx) => (
+                          <div key={idx} className="bg-white p-3 rounded-lg border-2 border-slate-300 shadow-2xs flex items-start gap-2.5">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 uppercase tracking-wider shrink-0 mt-0.5">
+                              {idx === 0 ? 'Line 1 (Primary)' : `Line ${idx + 1}`}
+                            </span>
+                            <p className="text-xs text-slate-900 font-medium leading-relaxed flex-1">
+                              {concern}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 2 & 3: CAUSE & CORRECTION (Either Interactive Form or Documented Cards) */}
+                    {isEditingTechFindings ? (
+                      <form onSubmit={handleSaveTechFindings} className="bg-white p-4 rounded-xl border-2 border-slate-600 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between pb-2 border-b-2 border-slate-200">
+                          <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Wrench className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Technician Diagnostic Findings: Cause & Correction</span>
+                          </h5>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Enter root cause and corrective repair
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                            <span>2. Cause (Diagnostic Finding / Root Cause)</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={techCauseInput}
+                            onChange={(e) => setTechCauseInput(e.target.value)}
+                            placeholder="Type diagnostic cause (e.g., Code P0300 set due to cylinder 3 spark plug fouled with oil from leaking valve cover gasket tube seal)..."
+                            className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                            <span>3. Correction (Repair Completed / Corrective Action)</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={techCorrectionInput}
+                            onChange={(e) => setTechCorrectionInput(e.target.value)}
+                            placeholder="Type corrective repair (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, verified 5-mile road test)..."
+                            className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t-2 border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingTechFindings(false)}
+                            className="px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border-2 border-slate-400 transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Save Cause & Correction</span>
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {/* 2. CAUSE */}
+                        <div className="bg-white p-3.5 rounded-lg border-2 border-slate-300 shadow-2xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                              <span>2. Cause (Diagnostic Finding / Root Cause)</span>
+                            </span>
+                            {hasTechCause ? (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 uppercase">
+                                Diagnosed
+                              </span>
+                            ) : !isSales && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
+                                  setTechCorrectionInput(selectedRO.correction || '');
+                                  setIsEditingTechFindings(true);
+                                }}
+                                className="text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-0.5 rounded border border-amber-300 transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Type In Cause</span>
+                              </button>
+                            )}
+                          </div>
+                          {hasTechCause ? (
+                            <p className="text-xs text-slate-900 font-medium leading-relaxed font-mono bg-slate-50 p-2.5 rounded border border-slate-300">
+                              {selectedRO.cause}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic py-1">
+                              No diagnostic root cause documented yet. Technician can type it directly by clicking "Type In Cause" above.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* 3. CORRECTION */}
+                        <div className="bg-white p-3.5 rounded-lg border-2 border-slate-300 shadow-2xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                              <span>3. Correction (Repair Completed / Corrective Action)</span>
+                            </span>
+                            {hasTechCorrection ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
+                                Repaired
+                              </span>
+                            ) : !isSales && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
+                                  setTechCorrectionInput(selectedRO.correction || '');
+                                  setIsEditingTechFindings(true);
+                                }}
+                                className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-0.5 rounded border border-emerald-300 transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Type In Correction</span>
+                              </button>
+                            )}
+                          </div>
+                          {hasTechCorrection ? (
+                            <p className="text-xs text-slate-900 font-medium leading-relaxed font-mono bg-slate-50 p-2.5 rounded border border-slate-300">
+                              {selectedRO.correction}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic py-1">
+                              No corrective repair documented yet. Technician can type it directly by clicking "Type In Correction" above.
+                            </p>
+                          )}
+                        </div>
+
+                        {selectedRO.diagnosticNotes && selectedRO.diagnosticNotes !== selectedRO.cause && (
+                          <div className="bg-white p-3 rounded-lg border-2 border-slate-300 text-xs">
+                            <span className="font-bold text-slate-700 block mb-1">Additional Diagnostic Notes:</span>
+                            <p className="text-slate-600 font-mono leading-relaxed">{selectedRO.diagnosticNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Order Metadata Grid: Created, Assigned, Advisor, Tech, Promised */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -772,7 +1257,7 @@ export const RODetailModal: React.FC = () => {
                           setSelectedBay(tech.bayNumber);
                         }
                       }}
-                      className="text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-700 font-semibold"
+                      className="text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-semibold"
                     >
                       <option value="">Select Technician...</option>
                       {technicians.map(tech => (
@@ -787,14 +1272,14 @@ export const RODetailModal: React.FC = () => {
                       placeholder="Bay / Stall (e.g. Bay 3)"
                       value={selectedBay}
                       onChange={e => setSelectedBay(e.target.value)}
-                      className="text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg sm:w-44 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
+                      className="text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg sm:w-44 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                     />
 
                     <button
                       id="confirm-dispatch-btn"
                       onClick={handleDispatch}
                       disabled={!selectedTechId}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm transition-colors whitespace-nowrap cursor-pointer"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm transition-colors whitespace-nowrap cursor-pointer border-2 border-blue-700"
                     >
                       {selectedRO.techId ? 'Re-Assign Job' : 'Assign to Tech'}
                     </button>
@@ -835,7 +1320,7 @@ export const RODetailModal: React.FC = () => {
                     const isSelf = msg.senderId === currentUser.id;
                     return (
                       <div 
-                        key={msg.id}
+                        key={msg.id} 
                         className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">
@@ -853,10 +1338,10 @@ export const RODetailModal: React.FC = () => {
                         <div 
                           className={`max-w-md p-3 rounded-xl text-xs leading-relaxed ${
                             msg.isUrgent
-                              ? 'bg-red-50 text-red-950 border border-red-200 font-medium'
+                              ? 'bg-red-50 text-red-950 border-2 border-red-300 font-medium'
                               : isSelf
                               ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
-                              : 'bg-slate-100 text-slate-900 rounded-bl-xs border border-slate-200'
+                              : 'bg-slate-100 text-slate-900 rounded-bl-xs border-2 border-slate-300'
                           }`}
                         >
                           {msg.isUrgent && (
@@ -874,12 +1359,12 @@ export const RODetailModal: React.FC = () => {
 
               {/* Message Input Box */}
               {isSales ? (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                <div className="p-3 bg-slate-50 border-2 border-slate-300 rounded-xl text-center text-xs text-slate-500 flex items-center justify-center gap-2">
                   <Lock className="w-3.5 h-3.5 text-slate-400" />
                   <span>Inter-department messaging is read-only for the Sales position.</span>
                 </div>
               ) : (
-                <form onSubmit={handleSendMessage} className="pt-3 border-t border-slate-100">
+                <form onSubmit={handleSendMessage} className="pt-3 border-t-2 border-slate-200">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                       <input
@@ -901,12 +1386,12 @@ export const RODetailModal: React.FC = () => {
                       placeholder={`Message regarding ${selectedRO.id} as ${currentUser.name}...`}
                       value={chatInput}
                       onChange={e => setChatInput(e.target.value)}
-                      className="flex-1 text-sm px-3.5 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
+                      className="flex-1 text-sm px-3.5 py-2 border-2 border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs bg-white text-slate-800"
                     />
                     <button
                       type="submit"
                       disabled={!chatInput.trim()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer border-2 border-blue-700"
                     >
                       <span>Send</span>
                       <Send className="w-3.5 h-3.5" />
@@ -936,7 +1421,7 @@ export const RODetailModal: React.FC = () => {
                   <button
                     id="add-part-toggle-btn"
                     onClick={() => setShowAddPart(!showAddPart)}
-                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer border-2 border-blue-700"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Order New Part</span>
@@ -948,48 +1433,49 @@ export const RODetailModal: React.FC = () => {
               {showAddPart && (
                 <form 
                   onSubmit={handleAddPartSubmit}
-                  className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 animate-in fade-in duration-100 shadow-sm"
+                  className="p-4 bg-slate-50 rounded-xl border-2 border-slate-400 space-y-3 animate-in fade-in duration-100 shadow-sm"
                 >
                   <h5 className="text-xs font-bold text-slate-900">Order Parts from Supplier</h5>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Part Number</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Number</label>
                       <input
                         type="text"
                         placeholder="e.g. ML3Z-8C419-A"
                         value={partNumber}
                         onChange={e => setPartNumber(e.target.value)}
                         required
-                        className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
+                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Part Description</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Description</label>
                       <input
                         type="text"
                         placeholder="e.g. Auxiliary Coolant Pump"
                         value={partDescription}
                         onChange={e => setPartDescription(e.target.value)}
                         required
-                        className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
+                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Supplier / Vendor</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Supplier / Vendor</label>
                       <input
                         type="text"
+                        placeholder="e.g. Ford Motorcraft, AutoZone, NAPA..."
                         value={partVendor}
                         onChange={e => setPartVendor(e.target.value)}
-                        className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
+                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Estimated Arrival Time Today (ETA)</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Estimated Arrival Time Today (ETA)</label>
                       <input
                         type="time"
                         value={partEtaTime}
                         onChange={e => setPartEtaTime(e.target.value)}
-                        className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
+                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                       />
                     </div>
                   </div>
@@ -998,13 +1484,13 @@ export const RODetailModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowAddPart(false)}
-                      className="px-3 py-1.5 border border-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-100 cursor-pointer"
+                      className="px-3 py-1.5 border-2 border-slate-400 text-xs font-semibold rounded-lg hover:bg-slate-100 cursor-pointer text-slate-700"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm cursor-pointer"
+                      className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm cursor-pointer border-2 border-blue-700"
                     >
                       Confirm Order & Notify Tech
                     </button>
