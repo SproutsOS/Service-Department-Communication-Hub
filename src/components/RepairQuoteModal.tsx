@@ -263,21 +263,7 @@ export const RepairQuoteModal: React.FC = () => {
     triggerQuoteAutoSave();
   }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, techNotes]);
 
-  if (!activeQuoteRO) return null;
-
-  const vehicle = activeQuoteRO.vehicle || {
-    year: '',
-    make: 'Vehicle',
-    model: '',
-    vin: '',
-    engine: '',
-    mileage: 0,
-  };
-
-  const quote = activeQuoteRO.quote;
-  const quoteStatus: QuoteStatus = quote?.status || 'DRAFT';
-
-  // Calculations
+  // Calculations (must remain before any early return to obey React Rules of Hooks)
   const totalLaborHours = useMemo(() => {
     return Number(laborItems.reduce((acc, item) => acc + (Number(item?.laborHours) || 0), 0).toFixed(2));
   }, [laborItems]);
@@ -306,6 +292,20 @@ export const RepairQuoteModal: React.FC = () => {
   const grandTotal = useMemo(() => {
     return Number(((totalLaborCost || 0) + (totalPartsCost || 0) + (calculatedShopSupplies || 0) + (estimatedTaxAmount || 0)).toFixed(2));
   }, [totalLaborCost, totalPartsCost, calculatedShopSupplies, estimatedTaxAmount]);
+
+  if (!activeQuoteRO) return null;
+
+  const vehicle = activeQuoteRO.vehicle || {
+    year: '',
+    make: 'Vehicle',
+    model: '',
+    vin: '',
+    engine: '',
+    mileage: 0,
+  };
+
+  const quote = activeQuoteRO.quote;
+  const quoteStatus: QuoteStatus = quote?.status || 'DRAFT';
 
   // Copy helper for ProDemand VIN lookup
   const handleCopyVin = () => {
