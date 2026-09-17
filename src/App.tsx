@@ -41,6 +41,9 @@ const MainContent: React.FC = () => {
     setIsStaffManagementOpen,
     isChatBoxOpen,
     setIsChatBoxOpen,
+    openShopChat,
+    unreadShopCount,
+    latestUnreadShopMessage,
     shopMessages,
     isAuthenticated,
     lockWorkstation
@@ -497,19 +500,36 @@ const MainContent: React.FC = () => {
       {!isChatBoxOpen && (
         <button
           id="floating-chat-launcher-btn"
-          onClick={() => setIsChatBoxOpen(true)}
-          className="fixed bottom-14 sm:bottom-16 right-5 z-40 bg-blue-600 hover:bg-blue-700 text-white p-3 sm:px-4 sm:py-3 rounded-full shadow-xl border-2 border-white flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
-          title="Open Shop Team Chat"
+          onClick={() => openShopChat()}
+          className={`fixed bottom-14 sm:bottom-16 right-5 z-40 text-white p-3 sm:px-4 sm:py-3 rounded-full shadow-xl border-2 border-white flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95 ${
+            unreadShopCount > 0 
+              ? 'bg-blue-700 ring-4 ring-amber-400/50 shadow-amber-500/20' 
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+          title={
+            latestUnreadShopMessage
+              ? `New message from ${latestUnreadShopMessage.senderName}: "${latestUnreadShopMessage.content}" - Click to open chat`
+              : 'Open Shop Team Chat'
+          }
         >
           <div className="relative">
-            <MessageSquare className="w-5 h-5 text-white" />
-            {shopMessages.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
-                {shopMessages.length > 9 ? '9+' : shopMessages.length}
+            <MessageSquare className={`w-5 h-5 text-white ${unreadShopCount > 0 ? 'animate-bounce' : ''}`} />
+            {unreadShopCount > 0 && (
+              <span className="absolute -top-2.5 -right-2.5 bg-red-600 text-white text-[10px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
+                {unreadShopCount > 9 ? '9+' : unreadShopCount}
               </span>
             )}
           </div>
-          <span className="hidden sm:inline text-xs font-bold">Shop Chat</span>
+          <span className="hidden sm:inline text-xs font-bold truncate max-w-[200px]">
+            {latestUnreadShopMessage 
+              ? `Chat from ${latestUnreadShopMessage.senderName}` 
+              : 'Shop Chat'}
+          </span>
+          {unreadShopCount > 0 && (
+            <span className="hidden sm:inline-flex text-[10px] font-extrabold bg-red-600 text-white px-1.5 py-0.5 rounded-full shadow-xs">
+              {unreadShopCount}
+            </span>
+          )}
         </button>
       )}
 

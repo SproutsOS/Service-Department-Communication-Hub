@@ -12,7 +12,9 @@ import {
   Minimize2,
   Maximize2,
   Users,
-  Paperclip
+  Paperclip,
+  ChevronRight,
+  Bell
 } from 'lucide-react';
 import { UserRole, User as UserType } from '../types';
 
@@ -68,7 +70,12 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
     isSoundEnabled,
     toggleSound,
     selectedChatRecipientId,
-    setSelectedChatRecipientId
+    setSelectedChatRecipientId,
+    unreadShopMessages,
+    unreadShopCount,
+    latestUnreadShopMessage,
+    unreadCountBySender,
+    markShopMessagesAsRead
   } = useApp();
 
   const [inputText, setInputText] = useState('');
@@ -107,6 +114,95 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
   const colleagues = useMemo(() => {
     return users.filter(u => u.id !== currentUser.id && !u.isDeactivated);
   }, [users, currentUser.id]);
+
+  // Colleagues sorted with unread messages at the very top
+  const sortedColleagues = useMemo(() => {
+    return [...colleagues].sort((a, b) => {
+      const aUnread = unreadCountBySender[a.id] || 0;
+      const bUnread = unreadCountBySender[b.id] || 0;
+      if (bUnread !== aUnread) return bUnread - aUnread;
+      return a.name.localeCompare(b.name);
+    });
+  }, [colleagues, unreadCountBySender]);
+
+  // Active conversations list for quick tabs
+  const activeConversations = useMemo(() => {
+    const map = new Map<string, {
+      user: UserType;
+      lastMsgTimestamp: string;
+      lastMsgContent: string;
+      unreadCount: number;
+    }>();
+
+    // Map through shopMessages
+    for (const msg of shopMessages) {
+      if (!msg.recipientId || msg.recipientId === 'ALL') continue;
+      const otherId = msg.senderId === currentUser.id 
+        ? msg.recipientId 
+        : (msg.recipientId === currentUser.id ? msg.senderId : null);
+      if (!otherId) continue;
+      const u = users.find(x => x.id === otherId && !x.isDeactivated);
+      if (!u) continue;
+      const unread = unreadCountBySender[u.id] || 0;
+      const existing = map.get(u.id);
+      if (!existing || new Date(msg.timestamp) > new Date(existing.lastMsgTimestamp)) {
+        map.set(u.id, {
+          user: u,
+          lastMsgTimestamp: msg.timestamp,
+          lastMsgContent: msg.content,
+          unreadCount: unread,
+        });
+      }
+    }
+
+    // Also include any user who currently has unread messages
+    for (const [senderId, count] of Object.entries(unreadCountBySender)) {
+      if (senderId === 'ALL') continue;
+      if (!map.has(senderId)) {
+        const u = users.find(x => x.id === senderId && !x.isDeactivated);
+        if (u) {
+          map.set(u.id, {
+            user: u,
+            lastMsgTimestamp: new Date().toISOString(),
+            lastMsgContent: '',
+            unreadCount: Number(count) || 0,
+          });
+        }
+      }
+    }
+
+    // Sort by unread count descending, then by last message timestamp desc
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.unreadCount !== a.unreadCount) return b.unreadCount - a.unreadCount;
+      return new Date(b.lastMsgTimestamp).getTime() - new Date(a.lastMsgTimestamp).getTime();
+    });
+  }, [shopMessages, users, currentUser.id, unreadCountBySender]);
+
+  // Alert banner for unread messages outside the currently selected conversation
+  const otherUnreadMessage = useMemo(() => {
+    return unreadShopMessages.find(m => {
+      if (isGeneralChannel) {
+        // In general channel: any direct message is an external unread
+        return !!m.recipientId && m.recipientId === currentUser.id;
+      } else {
+        // In 1-on-1: any broadcast or message from another colleague
+        if (!m.recipientId || m.recipientId === 'ALL') return true;
+        return m.senderId !== activeRecipient?.id;
+      }
+    });
+  }, [unreadShopMessages, isGeneralChannel, activeRecipient?.id, currentUser.id]);
+
+  // Automatically mark visible incoming messages as read
+  useEffect(() => {
+    if (isOpen && !isMinimized && visibleMessages.length > 0) {
+      const unreadIds = visibleMessages
+        .filter(m => m.senderId !== currentUser.id)
+        .map(m => m.id);
+      if (unreadIds.length > 0) {
+        markShopMessagesAsRead(unreadIds);
+      }
+    }
+  }, [isOpen, isMinimized, visibleMessages, currentUser.id, markShopMessagesAsRead]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -256,12 +352,135 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
 
       {!isMinimized && (
         <div className="flex-1 flex flex-col bg-white overflow-hidden">
-          {/* Conversation Sub-header with the single roster dropdown */}
-          <div className="px-3.5 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-1.5 text-xs truncate min-w-0">
-              <span className="text-slate-500 font-semibold shrink-0">Conversation:</span>
+          {/* Quick Conversations & Colleague Switcher Bar */}
+          <div className="px-3 py-2 bg-slate-100/90 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0 mr-0.5">
+              Chats:
+            </span>
+
+            {/* Shop Floor Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedChatRecipientId('ALL')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                isGeneralChannel
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : (unreadCountBySender['ALL'] || 0) > 0
+                  ? 'bg-amber-100 border-2 border-amber-400 text-slate-900'
+                  : 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-300'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Shop Floor</span>
+              {(unreadCountBySender['ALL'] || 0) > 0 && (
+                <span className="bg-red-600 text-white text-[10px] font-extrabold px-1.5 py-0.2 rounded-full animate-pulse">
+                  {unreadCountBySender['ALL']}
+                </span>
+              )}
+            </button>
+
+            {/* Active Colleague Conversation Chips */}
+            {activeConversations.map(c => {
+              const isSelected = selectedChatRecipientId === c.user.id;
+              return (
+                <button
+                  key={c.user.id}
+                  type="button"
+                  onClick={() => setSelectedChatRecipientId(c.user.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : c.unreadCount > 0
+                      ? 'bg-amber-50 border-2 border-amber-400 text-slate-900 ring-2 ring-amber-400/40 shadow-xs'
+                      : 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-300'
+                  }`}
+                  title={`Chat with ${c.user.name}${c.unreadCount > 0 ? ` (${c.unreadCount} unread)` : ''}`}
+                >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${
+                    c.unreadCount > 0 ? 'bg-red-600 animate-ping' : 'bg-emerald-500'
+                  }`} />
+                  <span className="truncate max-w-[110px]">{c.user.name}</span>
+                  {c.user.employeeNumber && (
+                    <span className={`text-[10px] font-mono px-1 rounded ${
+                      isSelected ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {c.user.employeeNumber}
+                    </span>
+                  )}
+                  {c.unreadCount > 0 && (
+                    <span className="bg-red-600 text-white text-[10px] font-extrabold px-1.5 py-0.2 rounded-full animate-pulse">
+                      {c.unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Colleague Roster Dropdown (select any staff member in shop) */}
+            <div className="ml-auto shrink-0 pl-1">
+              <label htmlFor="chat-roster-select" className="sr-only">Select Colleague</label>
+              <select
+                id="chat-roster-select"
+                value={selectedChatRecipientId}
+                onChange={(e) => setSelectedChatRecipientId(e.target.value)}
+                className="text-xs font-semibold px-2 py-1 bg-white border border-slate-300 rounded-md shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[180px] truncate text-slate-800"
+                title="Select Person or Channel to Chat With"
+              >
+                <option value="ALL">
+                  📢 Shop Floor {unreadCountBySender['ALL'] ? `(${unreadCountBySender['ALL']} new)` : ''}
+                </option>
+                <optgroup label="Colleagues">
+                  {sortedColleagues.map(c => {
+                    const unread = unreadCountBySender[c.id] || 0;
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {unread > 0 ? `🔴 [${unread} NEW] ` : ''}{c.name}{c.employeeNumber ? ` ${c.employeeNumber}` : ''} ({ROLE_BADGE_STYLES[c.role]?.label || c.role})
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+          {/* Incoming Message Notification Banner (if message arrives from outside active chat) */}
+          {otherUnreadMessage && (
+            <div className="px-3.5 py-2 bg-amber-50 border-b border-amber-300 flex items-center justify-between gap-2 shrink-0 animate-fadeIn">
+              <div className="flex items-center gap-2 min-w-0 text-xs">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-red-600 animate-ping shrink-0" />
+                <div className="truncate">
+                  <span className="font-extrabold text-amber-950">
+                    New message from {otherUnreadMessage.senderName}
+                    {users.find(u => u.id === otherUnreadMessage.senderId)?.employeeNumber ? ` (${users.find(u => u.id === otherUnreadMessage.senderId)?.employeeNumber})` : ''}:
+                  </span>
+                  <span className="italic text-slate-700 ml-1.5 truncate">
+                    "{otherUnreadMessage.content}"
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!otherUnreadMessage.recipientId || otherUnreadMessage.recipientId === 'ALL') {
+                    setSelectedChatRecipientId('ALL');
+                  } else {
+                    setSelectedChatRecipientId(otherUnreadMessage.senderId);
+                  }
+                }}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-md shrink-0 cursor-pointer shadow-xs transition-colors flex items-center gap-1"
+              >
+                <span>Open Chat</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Current Conversation Information Header */}
+          <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0 text-xs">
+            <div className="flex items-center gap-1.5 truncate min-w-0">
+              <span className="text-slate-400 font-semibold shrink-0">Current Chat:</span>
               <span className="font-bold text-slate-900 truncate">
-                {isGeneralChannel ? 'Shop Floor (Everyone)' : activeRecipient?.name}
+                {isGeneralChannel ? '📢 Shop Floor (All Team)' : `👤 ${activeRecipient?.name}`}
               </span>
               {!isGeneralChannel && activeRecipient?.employeeNumber && (
                 <span className="text-xs font-mono font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-800 border border-blue-200 shrink-0">
@@ -269,29 +488,14 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
                 </span>
               )}
               {!isGeneralChannel && activeRecipient && (
-                <span className="text-[11px] text-slate-500 hidden sm:inline shrink-0">
+                <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
                   • {activeRecipient.title || activeRecipient.role.replace(/_/g, ' ')}
                 </span>
               )}
             </div>
 
-            {/* Colleague Roster Dropdown (to the right of conversation) */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <label htmlFor="chat-roster-select" className="sr-only">Select Colleague</label>
-              <select
-                id="chat-roster-select"
-                value={selectedChatRecipientId}
-                onChange={(e) => setSelectedChatRecipientId(e.target.value)}
-                className="text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[200px] truncate text-slate-800"
-                title="Select Person or Channel to Chat With"
-              >
-                <option value="ALL">📢 Shop Floor (Everyone)</option>
-                {colleagues.map(c => (
-                  <option key={c.id} value={c.id}>
-                    👤 {c.name}{c.employeeNumber ? ` ${c.employeeNumber}` : ''} ({ROLE_BADGE_STYLES[c.role]?.label || c.role})
-                  </option>
-                ))}
-              </select>
+            <div className="text-[11px] text-slate-400 shrink-0 font-medium">
+              {isGeneralChannel ? 'Broadcast' : 'Private 1-on-1'}
             </div>
           </div>
 
@@ -318,8 +522,8 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
                 const isMe = msg.senderId === currentUser.id;
                 const senderUser = users.find(u => u.id === msg.senderId);
                 const senderEmpNum = senderUser?.employeeNumber;
-                const roleConfig = ROLE_BADGE_STYLES[msg.senderRole] || {
-                  label: msg.senderRole,
+                const roleConfig = ROLE_BADGE_STYLES[msg.senderRole || senderUser?.role || 'TECHNICIAN'] || {
+                  label: msg.senderRole || 'STAFF',
                   badgeClass: 'bg-slate-100 text-slate-800 border-slate-300',
                 };
                 const msgTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -330,18 +534,28 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
                     className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`}
                   >
                     {/* Sender details & role badge */}
-                    <div className="flex items-center gap-1.5 px-1">
-                      <span className="text-[11px] font-bold text-slate-700">
-                        {isMe ? 'You' : msg.senderName}
+                    <div className="flex items-center gap-1.5 px-1 flex-wrap">
+                      <span className={`text-[11px] font-extrabold ${isMe ? 'text-blue-700' : 'text-slate-900'}`}>
+                        {isMe ? 'You' : (msg.senderName || senderUser?.name || 'Shop Member')}
                       </span>
                       {senderEmpNum && (
-                        <span className="text-[11px] font-mono font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="text-[10px] font-mono font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
                           {senderEmpNum}
                         </span>
                       )}
                       <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${roleConfig.badgeClass}`}>
                         {roleConfig.label}
                       </span>
+                      {!isMe && msg.recipientId === currentUser.id && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          Direct to you
+                        </span>
+                      )}
+                      {isMe && msg.recipientId && (
+                        <span className="text-[9px] font-medium text-slate-400">
+                          to {activeRecipient?.name || 'Colleague'}
+                        </span>
+                      )}
                       <span className="text-[10px] text-slate-400">
                         {msgTime}
                       </span>

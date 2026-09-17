@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   User, 
   RepairOrder, 
@@ -142,12 +142,18 @@ interface AppContextType {
   selectedChatRecipientId: string; // 'ALL' or user.id
   setSelectedChatRecipientId: (recipientId: string) => void;
   openDirectChat: (recipientUserId: string | 'ALL') => void;
+  openShopChat: (targetRecipientId?: string) => void;
   sendShopChatMessage: (
     content: string, 
     recipientId?: string, 
     roId?: string, 
     isUrgent?: boolean
   ) => void;
+  unreadShopMessages: ShopChatMessage[];
+  unreadShopCount: number;
+  latestUnreadShopMessage: ShopChatMessage | null;
+  unreadCountBySender: Record<string, number>;
+  markShopMessagesAsRead: (messageIds: string[]) => void;
 
   // Tech Additional Recommendations
   addRecommendedService: (roId: string, item: {
@@ -323,6 +329,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
   const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
+  const [readShopMessageIds, setReadShopMessageIds] = useState<Set<string>>(() => {
+    try {
+      const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+      const userId = savedUser ? JSON.parse(savedUser).id : null;
+      if (userId) {
+        const savedRead = localStorage.getItem(`shop_chat_read_ids_${userId}`);
+        if (savedRead) {
+          const arr = JSON.parse(savedRead);
+          if (Array.isArray(arr)) {
+            return new Set(arr);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return new Set<string>();
+  });
+
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  // When currentUser changes, reload their read message IDs
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    try {
+      const savedRead = localStorage.getItem(`shop_chat_read_ids_${currentUser.id}`);
+      if (savedRead) {
+        const arr = JSON.parse(savedRead);
+        if (Array.isArray(arr)) {
+          setReadShopMessageIds(new Set(arr));
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setReadShopMessageIds(new Set<string>());
+  }, [currentUser?.id]);
+
+  const markShopMessagesAsRead = useCallback((messageIds: string[]) => {
+    if (!messageIds || messageIds.length === 0 || !currentUser?.id) return;
+    setReadShopMessageIds(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of messageIds) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      if (changed) {
+        try {
+          localStorage.setItem(`shop_chat_read_ids_${currentUser.id}`, JSON.stringify(Array.from(next)));
+        } catch {
+          // ignore
+        }
+        return next;
+      }
+      return prev;
+    });
+  }, [currentUser?.id]);
+
+  // Unread messages intended for currentUser (not sent by currentUser)
+  const unreadShopMessages = useMemo(() => {
+    if (!currentUser || !currentUser.id) return [];
+    return shopMessages.filter(m => {
+      if (m.senderId === currentUser.id) return false;
+      const isForMe = !m.recipientId || m.recipientId === 'ALL' || m.recipientId === currentUser.id;
+      if (!isForMe) return false;
+      return !readShopMessageIds.has(m.id);
+    });
+  }, [shopMessages, currentUser, readShopMessageIds]);
+
+  const unreadShopCount = unreadShopMessages.length;
+
+  const latestUnreadShopMessage = useMemo(() => {
+    if (unreadShopMessages.length === 0) return null;
+    return unreadShopMessages[unreadShopMessages.length - 1];
+  }, [unreadShopMessages]);
+
+  const unreadCountBySender = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const msg of unreadShopMessages) {
+      if (!msg.recipientId || msg.recipientId === 'ALL') {
+        map['ALL'] = (map['ALL'] || 0) + 1;
+      } else {
+        map[msg.senderId] = (map[msg.senderId] || 0) + 1;
+      }
+    }
+    return map;
+  }, [unreadShopMessages]);
+
+  const openShopChat = useCallback((targetRecipientId?: string) => {
+    if (targetRecipientId) {
+      setSelectedChatRecipientId(targetRecipientId);
+    } else {
+      // When opening the chat box, check if there are unread messages:
+      if (unreadShopMessages.length > 0) {
+        // Direct messages to currentUser have highest priority
+        const directUnread = [...unreadShopMessages].reverse().find(m => m.recipientId === currentUser?.id);
+        if (directUnread) {
+          setSelectedChatRecipientId(directUnread.senderId);
+        } else {
+          // Shop Floor announcement
+          setSelectedChatRecipientId('ALL');
+        }
+      }
+    }
+    setIsChatBoxOpen(true);
+  }, [unreadShopMessages, currentUser?.id]);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'default'>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -427,8 +546,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Subscribe to real-time Shop Messages
+    const knownShopMsgIds = new Set<string>();
+    let isFirstShopMessagesLoad = true;
+
     const unsubscribeMessages = subscribeToShopMessages((cloudMessages) => {
       setShopMessages(cloudMessages);
+
+      if (isFirstShopMessagesLoad) {
+        cloudMessages.forEach(m => knownShopMsgIds.add(m.id));
+        isFirstShopMessagesLoad = false;
+        return;
+      }
+
+      const activeUser = currentUserRef.current;
+      const incoming = cloudMessages.filter(m => 
+        !knownShopMsgIds.has(m.id) &&
+        m.senderId !== activeUser?.id &&
+        (!m.recipientId || m.recipientId === 'ALL' || m.recipientId === activeUser?.id)
+      );
+
+      cloudMessages.forEach(m => knownShopMsgIds.add(m.id));
+
+      if (incoming.length > 0) {
+        const newest = incoming[incoming.length - 1];
+        if (isSoundEnabled) {
+          playNotificationChime(newest.isUrgent);
+        }
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(
+              newest.recipientId === activeUser?.id
+                ? `Direct chat from ${newest.senderName}`
+                : `Shop Floor chat from ${newest.senderName}`,
+              {
+                body: newest.content,
+                icon: '/favicon.ico'
+              }
+            );
+          } catch {
+            // ignore
+          }
+        }
+      }
     });
 
     return () => {
@@ -1795,7 +1954,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedChatRecipientId,
         setSelectedChatRecipientId,
         openDirectChat,
+        openShopChat,
         sendShopChatMessage,
+        unreadShopMessages,
+        unreadShopCount,
+        latestUnreadShopMessage,
+        unreadCountBySender,
+        markShopMessagesAsRead,
         addRecommendedService,
         updateRecommendedServiceStatus,
       }}
