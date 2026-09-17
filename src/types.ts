@@ -54,13 +54,15 @@ export type PartStatus =
   | 'ORDERED' 
   | 'IN_TRANSIT' 
   | 'RECEIVED' 
-  | 'ISSUED_TO_TECH';
+  | 'ISSUED_TO_TECH'
+  | 'BACKORDERED';
 
 export interface PartItem {
   id: string;
   roId: string;
   partNumber: string;
   description: string;
+  name?: string;
   quantity: number;
   status: PartStatus;
   orderedAt?: string;
@@ -68,6 +70,7 @@ export interface PartItem {
   vendor: string;
   trackingNumber?: string;
   cost?: number;
+  price?: number;
   notes?: string;
 }
 
@@ -90,6 +93,7 @@ export interface StatusHistory {
   userRole: UserRole;
   timestamp: string;
   notes?: string;
+  userId?: string;
 }
 
 export interface VehicleInfo {
@@ -100,6 +104,7 @@ export interface VehicleInfo {
   mileage: number;
   licensePlate?: string;
   color?: string;
+  engine?: string;
 }
 
 export type CustomerContactType = 

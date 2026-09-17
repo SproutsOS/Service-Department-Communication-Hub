@@ -526,7 +526,7 @@ export const RODetailModal: React.FC = () => {
               <Calculator className="w-3.5 h-3.5" />
               {selectedRO.quote ? (
                 <span>
-                  Quote: <strong>${selectedRO.quote.grandTotal.toFixed(2)}</strong>
+                  Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
                 </span>
               ) : (
                 <span>+ Repair Quote</span>
@@ -1554,40 +1554,40 @@ export const RODetailModal: React.FC = () => {
                       <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
                         <div className="text-[10px] uppercase font-bold text-slate-500">Labor Items</div>
                         <div className="text-sm font-bold text-slate-800 mt-0.5">
-                          {selectedRO.quote.laborItems.length} lines ({selectedRO.quote.laborItems.reduce((s, i) => s + i.hours, 0).toFixed(1)} hrs)
+                          {(selectedRO.quote.laborItems || []).length} lines ({((selectedRO.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs)
                         </div>
                         <div className="text-xs font-semibold text-slate-600 mt-0.5">
-                          ${selectedRO.quote.laborSubtotal.toFixed(2)}
+                          ${(Number(selectedRO.quote.totalLaborCost ?? (selectedRO.quote as any).laborSubtotal) || 0).toFixed(2)}
                         </div>
                       </div>
 
                       <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
                         <div className="text-[10px] uppercase font-bold text-slate-500">Parts Required</div>
                         <div className="text-sm font-bold text-slate-800 mt-0.5">
-                          {selectedRO.quote.partsItems.length} parts
+                          {(selectedRO.quote.partsItems || []).length} parts
                         </div>
                         <div className="text-xs font-semibold text-slate-600 mt-0.5">
-                          ${selectedRO.quote.partsSubtotal.toFixed(2)}
+                          ${(Number(selectedRO.quote.totalPartsCost ?? (selectedRO.quote as any).partsSubtotal) || 0).toFixed(2)}
                         </div>
                       </div>
 
                       <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
                         <div className="text-[10px] uppercase font-bold text-slate-500">Supplies & Tax</div>
                         <div className="text-sm font-bold text-slate-800 mt-0.5">
-                          ${(selectedRO.quote.shopSupplies + selectedRO.quote.tax).toFixed(2)}
+                          ${((Number(selectedRO.quote.shopSuppliesFee ?? (selectedRO.quote as any).shopSupplies) || 0) + (Number(selectedRO.quote.taxAmount ?? (selectedRO.quote as any).tax) || 0)).toFixed(2)}
                         </div>
                         <div className="text-[11px] text-slate-500">
-                          Supplies ${(selectedRO.quote.shopSupplies).toFixed(2)} • Tax ${(selectedRO.quote.tax).toFixed(2)}
+                          Supplies ${((Number(selectedRO.quote.shopSuppliesFee ?? (selectedRO.quote as any).shopSupplies) || 0)).toFixed(2)} • Tax ${((Number(selectedRO.quote.taxAmount ?? (selectedRO.quote as any).tax) || 0)).toFixed(2)}
                         </div>
                       </div>
 
                       <div className="p-2.5 bg-indigo-50/80 rounded-lg border border-indigo-200">
                         <div className="text-[10px] uppercase font-bold text-indigo-700">Grand Total</div>
                         <div className="text-lg font-black text-indigo-950 mt-0.5">
-                          ${selectedRO.quote.grandTotal.toFixed(2)}
+                          ${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}
                         </div>
                         <div className="text-[10px] font-bold text-indigo-600">
-                          Rate: ${selectedRO.quote.hourlyLaborRate}/hr
+                          Rate: ${(selectedRO.quote.defaultLaborRate ?? (selectedRO.quote as any).hourlyLaborRate ?? 150)}/hr
                         </div>
                       </div>
                     </div>

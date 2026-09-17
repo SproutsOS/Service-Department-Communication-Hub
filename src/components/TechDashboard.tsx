@@ -278,7 +278,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
               }`}
             >
               <Calculator className="w-3.5 h-3.5" />
-              <span>{ro.quote ? `View/Edit Quote ($${ro.quote.grandTotal.toFixed(2)})` : '+ Initiate Repair Quote'}</span>
+              <span>{ro.quote ? `View/Edit Quote ($${(Number(ro.quote.grandTotal) || 0).toFixed(2)})` : '+ Initiate Repair Quote'}</span>
             </button>
           </div>
 
@@ -616,7 +616,7 @@ export const TechDashboard: React.FC = () => {
                       <Calculator className="w-3.5 h-3.5" />
                       {ro.quote ? (
                         <span>
-                          Quote: <strong>${ro.quote.grandTotal.toFixed(2)}</strong> ({ro.quote.status})
+                          Quote: <strong>${(Number(ro.quote.grandTotal) || 0).toFixed(2)}</strong> ({ro.quote.status})
                         </span>
                       ) : (
                         <span>+ Initiate Repair Quote</span>

@@ -16,6 +16,7 @@ import { RepairQuoteModal } from './components/RepairQuoteModal';
 import { WarrantyPrintModal } from './components/WarrantyPrintModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
   Wrench, 
@@ -492,11 +493,15 @@ const MainContent: React.FC = () => {
       </div>
 
       {/* Global Modals & Notifications */}
-      <RODetailModal />
+      <ErrorBoundary fallbackTitle="Repair Order Details Error">
+        <RODetailModal />
+      </ErrorBoundary>
       <NewROModal />
       <LoginModal />
       <InitialSetupModal />
-      <RepairQuoteModal />
+      <ErrorBoundary fallbackTitle="Repair Quote Modal Error">
+        <RepairQuoteModal />
+      </ErrorBoundary>
       <WarrantyPrintModal />
       <UrgentToastStack />
 
@@ -548,9 +553,11 @@ const MainContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <MainContent />
-    </AppProvider>
+    <ErrorBoundary fallbackTitle="Shop Management System Encountered an Error">
+      <AppProvider>
+        <MainContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
 

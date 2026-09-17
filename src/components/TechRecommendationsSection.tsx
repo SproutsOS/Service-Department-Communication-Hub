@@ -94,7 +94,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
     setIsSubmitting(false);
   };
 
-  const handleReviewStatus = (recId: string, status: RecommendedServiceStatus, reason?: string) => {
+  const handleReviewStatus = (recId: string, status: 'APPROVED' | 'DECLINED', reason?: string) => {
     updateRecommendedServiceStatus(ro.id, recId, status, reason);
   };
 

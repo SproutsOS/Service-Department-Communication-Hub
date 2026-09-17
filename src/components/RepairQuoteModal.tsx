@@ -66,6 +66,11 @@ export const RepairQuoteModal: React.FC = () => {
   const [quoteLastSavedTime, setQuoteLastSavedTime] = useState<string | null>(null);
   const quoteAutoSaveTimerRef = React.useRef<any>(null);
   const hasInitializedRef = React.useRef(false);
+  const activeQuoteRORef = React.useRef(activeQuoteRO);
+
+  useEffect(() => {
+    activeQuoteRORef.current = activeQuoteRO;
+  }, [activeQuoteRO]);
 
   const latestQuoteValuesRef = React.useRef({
     laborItems,
@@ -95,7 +100,8 @@ export const RepairQuoteModal: React.FC = () => {
       clearTimeout(quoteAutoSaveTimerRef.current);
       quoteAutoSaveTimerRef.current = null;
     }
-    if (!activeQuoteRO) return;
+    const currentRO = activeQuoteRORef.current;
+    if (!currentRO || !hasInitializedRef.current) return;
 
     const {
       laborItems: curLabor,
@@ -119,13 +125,13 @@ export const RepairQuoteModal: React.FC = () => {
     const curGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + curTax).toFixed(2));
 
     const autoQuote: RepairQuote = {
-      id: activeQuoteRO.quote?.id || `quote_${Date.now()}`,
-      roId: activeQuoteRO.id,
-      createdAt: activeQuoteRO.quote?.createdAt || new Date().toISOString(),
+      id: currentRO.quote?.id || `quote_${Date.now()}`,
+      roId: currentRO.id,
+      createdAt: currentRO.quote?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      initiatedByTechId: activeQuoteRO.quote?.initiatedByTechId || currentUser.id,
-      initiatedByTechName: activeQuoteRO.quote?.initiatedByTechName || currentUser.name,
-      status: activeQuoteRO.quote?.status || 'DRAFT',
+      initiatedByTechId: currentRO.quote?.initiatedByTechId || currentUser.id,
+      initiatedByTechName: currentRO.quote?.initiatedByTechName || currentUser.name,
+      status: currentRO.quote?.status || 'DRAFT',
       laborItems: curLabor,
       partsItems: curParts,
       defaultLaborRate: curRate,
@@ -137,15 +143,15 @@ export const RepairQuoteModal: React.FC = () => {
       totalPartsCost: curPartsCost,
       grandTotal: curGrandTotal,
       techNotes: curTechNotes.trim() || undefined,
-      advisorNotes: activeQuoteRO.quote?.advisorNotes,
-      submittedAt: activeQuoteRO.quote?.submittedAt,
-      approvedAt: activeQuoteRO.quote?.approvedAt,
-      approvedBy: activeQuoteRO.quote?.approvedBy,
-      declinedAt: activeQuoteRO.quote?.declinedAt,
-      declinedReason: activeQuoteRO.quote?.declinedReason,
+      advisorNotes: currentRO.quote?.advisorNotes,
+      submittedAt: currentRO.quote?.submittedAt,
+      approvedAt: currentRO.quote?.approvedAt,
+      approvedBy: currentRO.quote?.approvedBy,
+      declinedAt: currentRO.quote?.declinedAt,
+      declinedReason: currentRO.quote?.declinedReason,
     };
 
-    saveRepairQuote(activeQuoteRO.id, autoQuote, false, { isAutoSave: true });
+    saveRepairQuote(currentRO.id, autoQuote, false, { isAutoSave: true });
     setQuoteAutoSaveStatus('saved');
     setQuoteLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
   };
@@ -186,7 +192,7 @@ export const RepairQuoteModal: React.FC = () => {
       setDefaultRate(q.defaultLaborRate || 150);
       setLaborItems(q.laborItems || []);
       setPartsItems(q.partsItems || []);
-      setApplyShopSupplies(q.shopSuppliesFee > 0);
+      setApplyShopSupplies((q.shopSuppliesFee || 0) > 0);
       setShopSuppliesFee(q.shopSuppliesFee || 0);
       setTaxRatePercent((q.taxRate || 0.0825) * 100);
       setTechNotes(q.techNotes || '');
@@ -247,9 +253,9 @@ export const RepairQuoteModal: React.FC = () => {
     // Mark initialized on next frame
     const timer = setTimeout(() => {
       hasInitializedRef.current = true;
-    }, 100);
+    }, 150);
     return () => clearTimeout(timer);
-  }, [activeQuoteRO]);
+  }, [activeQuoteRO?.id]);
 
   // Watch for any changes to form fields and trigger auto-save
   useEffect(() => {
@@ -259,16 +265,25 @@ export const RepairQuoteModal: React.FC = () => {
 
   if (!activeQuoteRO) return null;
 
+  const vehicle = activeQuoteRO.vehicle || {
+    year: '',
+    make: 'Vehicle',
+    model: '',
+    vin: '',
+    engine: '',
+    mileage: 0,
+  };
+
   const quote = activeQuoteRO.quote;
   const quoteStatus: QuoteStatus = quote?.status || 'DRAFT';
 
   // Calculations
   const totalLaborHours = useMemo(() => {
-    return Number(laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0).toFixed(2));
+    return Number(laborItems.reduce((acc, item) => acc + (Number(item?.laborHours) || 0), 0).toFixed(2));
   }, [laborItems]);
 
   const totalLaborCost = useMemo(() => {
-    return Number(laborItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
+    return Number(laborItems.reduce((acc, item) => acc + (Number(item?.subtotal) || 0), 0).toFixed(2));
   }, [laborItems]);
 
   const calculatedShopSupplies = useMemo(() => {
@@ -279,7 +294,7 @@ export const RepairQuoteModal: React.FC = () => {
   }, [applyShopSupplies, totalLaborCost, shopSuppliesFee]);
 
   const totalPartsCost = useMemo(() => {
-    return Number(partsItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
+    return Number(partsItems.reduce((acc, item) => acc + (Number(item?.subtotal) || 0), 0).toFixed(2));
   }, [partsItems]);
 
   const estimatedTaxAmount = useMemo(() => {
@@ -289,12 +304,12 @@ export const RepairQuoteModal: React.FC = () => {
   }, [totalPartsCost, taxRatePercent]);
 
   const grandTotal = useMemo(() => {
-    return Number((totalLaborCost + totalPartsCost + calculatedShopSupplies + estimatedTaxAmount).toFixed(2));
+    return Number(((totalLaborCost || 0) + (totalPartsCost || 0) + (calculatedShopSupplies || 0) + (estimatedTaxAmount || 0)).toFixed(2));
   }, [totalLaborCost, totalPartsCost, calculatedShopSupplies, estimatedTaxAmount]);
 
   // Copy helper for ProDemand VIN lookup
   const handleCopyVin = () => {
-    const vin = activeQuoteRO.vehicle.vin;
+    const vin = vehicle.vin;
     if (vin) {
       navigator.clipboard.writeText(vin);
       setCopiedVin(true);
@@ -303,8 +318,8 @@ export const RepairQuoteModal: React.FC = () => {
   };
 
   const handleCopyVehicleInfo = () => {
-    const v = activeQuoteRO.vehicle;
-    const text = `${v.year} ${v.make} ${v.model}${v.engine ? ` ${v.engine}` : ''}${v.vin ? ` (VIN: ${v.vin})` : ''}`;
+    const v = vehicle;
+    const text = `${v.year || ''} ${v.make || ''} ${v.model || ''}${v.engine ? ` ${v.engine}` : ''}${v.vin ? ` (VIN: ${v.vin})` : ''}`.trim();
     navigator.clipboard.writeText(text);
     setCopiedVehicleInfo(true);
     setTimeout(() => setCopiedVehicleInfo(false), 2500);
@@ -481,7 +496,8 @@ export const RepairQuoteModal: React.FC = () => {
 
   // Advisor / Manager approval or decline
   const handleApproveQuote = () => {
-    if (window.confirm(`Authorize repair quote for ${activeQuoteRO.customerName} totaling $${grandTotal.toFixed(2)}?`)) {
+    const formattedTotal = (Number(grandTotal) || 0).toFixed(2);
+    if (window.confirm(`Authorize repair quote for ${activeQuoteRO.customerName} totaling $${formattedTotal}?`)) {
       updateQuoteStatus(activeQuoteRO.id, 'APPROVED');
       setSaveSuccessMsg('Quote authorized and repair order approved!');
       setTimeout(() => {
@@ -557,11 +573,11 @@ export const RepairQuoteModal: React.FC = () => {
               <p className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
                 <span>Customer: <strong className="text-slate-200">{activeQuoteRO.customerName}</strong></span>
                 <span>•</span>
-                <span>Vehicle: <strong className="text-slate-200">{activeQuoteRO.vehicle.year} {activeQuoteRO.vehicle.make} {activeQuoteRO.vehicle.model}</strong></span>
-                {activeQuoteRO.vehicle.vin && (
+                <span>Vehicle: <strong className="text-slate-200">{vehicle.year} {vehicle.make} {vehicle.model}</strong></span>
+                {vehicle.vin && (
                   <>
                     <span>•</span>
-                    <span className="font-mono text-slate-300">VIN: {activeQuoteRO.vehicle.vin}</span>
+                    <span className="font-mono text-slate-300">VIN: {vehicle.vin}</span>
                   </>
                 )}
               </p>
@@ -640,17 +656,17 @@ export const RepairQuoteModal: React.FC = () => {
                 <p className="text-xs text-slate-300 leading-relaxed">
                   Open Mitchell 1 ProDemand to look up OEM flat-rate labor times, R&R procedures, service intervals, and repair specs for this vehicle.
                 </p>
-                {activeQuoteRO.vehicle.vin && (
+                {vehicle.vin && (
                   <div className="text-xs text-blue-200 font-mono flex items-center gap-2 pt-1">
-                    <span>VIN: <strong>{activeQuoteRO.vehicle.vin}</strong></span>
-                    {activeQuoteRO.vehicle.engine && <span>• Engine: <strong>{activeQuoteRO.vehicle.engine}</strong></span>}
+                    <span>VIN: <strong>{vehicle.vin}</strong></span>
+                    {vehicle.engine && <span>• Engine: <strong>{vehicle.engine}</strong></span>}
                   </div>
                 )}
               </div>
 
               {/* Action Buttons for ProDemand */}
               <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto shrink-0">
-                {activeQuoteRO.vehicle.vin && (
+                {vehicle.vin && (
                   <button
                     id="copy-vin-for-prodemand-btn"
                     onClick={handleCopyVin}
@@ -1291,7 +1307,7 @@ export const RepairQuoteModal: React.FC = () => {
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Authorize & Approve ($ {grandTotal.toFixed(2)})</span>
+                  <span>Authorize & Approve ($ {(Number(grandTotal) || 0).toFixed(2)})</span>
                 </button>
               </>
             )}
@@ -1315,7 +1331,7 @@ export const RepairQuoteModal: React.FC = () => {
               className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:scale-102 active:scale-98 cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>Submit Quote to Advisor ($ {grandTotal.toFixed(2)})</span>
+              <span>Submit Quote to Advisor ($ {(Number(grandTotal) || 0).toFixed(2)})</span>
             </button>
           </div>
         </div>
