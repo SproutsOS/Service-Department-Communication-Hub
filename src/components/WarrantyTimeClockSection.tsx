@@ -161,7 +161,11 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
   };
 
   return (
-    <div className="bg-white rounded-xl border-2 border-slate-300 shadow-2xs overflow-hidden">
+    <div 
+      onClick={(e) => e.stopPropagation()} 
+      onMouseDown={(e) => e.stopPropagation()}
+      className="bg-white rounded-xl border-2 border-slate-300 shadow-2xs overflow-hidden"
+    >
       
       {/* Header Bar */}
       <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3">

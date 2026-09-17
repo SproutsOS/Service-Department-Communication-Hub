@@ -102,7 +102,11 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
   const isAdvisorOrMgr = currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER';
 
   return (
-    <div className="bg-slate-50 rounded-xl border-2 border-slate-300 p-3.5 space-y-3">
+    <div 
+      onClick={(e) => e.stopPropagation()} 
+      onMouseDown={(e) => e.stopPropagation()}
+      className="bg-slate-50 rounded-xl border-2 border-slate-300 p-3.5 space-y-3"
+    >
       {/* Header & Badges */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
