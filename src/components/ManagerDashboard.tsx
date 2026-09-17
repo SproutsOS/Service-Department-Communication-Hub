@@ -406,7 +406,14 @@ export const ManagerDashboard: React.FC = () => {
                       {tech.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'T'}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-slate-900 truncate">{tech.name}</div>
+                      <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1 flex-wrap">
+                        <span>{tech.name}</span>
+                        {tech.employeeNumber && (
+                          <span className="font-mono text-xs font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                            {tech.employeeNumber}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-blue-700 font-semibold truncate flex items-center gap-1">
                         <Award className="w-2.5 h-2.5 text-blue-500 shrink-0" />
                         <span className="truncate">{tech.certificationLevel || tech.bayNumber || 'Technician'}</span>
@@ -511,7 +518,17 @@ export const ManagerDashboard: React.FC = () => {
                   </div>
 
                   <div className="mt-2.5 pt-2 border-t border-slate-200/80 text-[10px] text-slate-500 flex items-center justify-between">
-                    <span>Assigned Tech: <strong className="text-slate-700">{part.techName || 'Unassigned'}</strong></span>
+                    <span className="flex items-center gap-1 flex-wrap">
+                      <span>Assigned Tech: <strong className="text-slate-700">{part.techName || 'Unassigned'}</strong></span>
+                      {part.techName && (() => {
+                        const tch = users.find(u => u.name === part.techName);
+                        return tch?.employeeNumber ? (
+                          <span className="font-mono text-[10px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            {tch.employeeNumber}
+                          </span>
+                        ) : null;
+                      })()}
+                    </span>
                     <span className="text-blue-600 font-bold">View RO &rarr;</span>
                   </div>
                 </div>
@@ -575,7 +592,9 @@ export const ManagerDashboard: React.FC = () => {
             >
               <option value="ALL">All Techs</option>
               {technicians.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+                <option key={t.id} value={t.id}>
+                  {t.name}{t.employeeNumber ? ` ${t.employeeNumber}` : ''}
+                </option>
               ))}
             </select>
 
@@ -676,8 +695,16 @@ export const ManagerDashboard: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-normal mt-0.5">
-                            Adv: {ro.advisorName}
+                          <div className="text-[10px] text-slate-400 font-normal mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span>Adv: {ro.advisorName}</span>
+                            {(() => {
+                              const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
+                              return adv?.employeeNumber ? (
+                                <span className="font-mono text-[10px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                  {adv.employeeNumber}
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
                         </td>
 
@@ -724,9 +751,19 @@ export const ManagerDashboard: React.FC = () => {
                                 {techInitials}
                               </div>
                               <div>
-                                <span className="font-medium text-slate-700 block text-xs">
-                                  {ro.techName}
-                                </span>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="font-medium text-slate-700 text-xs">
+                                    {ro.techName}
+                                  </span>
+                                  {(() => {
+                                    const tch = users.find(u => u.id === ro.techId || u.name === ro.techName);
+                                    return tch?.employeeNumber ? (
+                                      <span className="font-mono text-xs font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                        {tch.employeeNumber}
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </div>
                                 {ro.bay && (
                                   <span className="text-[10px] text-slate-400 block">
                                     {ro.bay}

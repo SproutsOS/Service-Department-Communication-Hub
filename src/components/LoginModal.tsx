@@ -150,6 +150,11 @@ export const LoginModal: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-blue-900">Current Session:</span>
                   <span className="text-xs font-bold text-slate-900">{currentUser.name}</span>
+                  {currentUser.employeeNumber && (
+                    <span className="text-xs font-mono font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                      {currentUser.employeeNumber}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-blue-700">
                   {currentUser.title} {(currentUser.certificationLevel || currentUser.bayNumber) ? `• ${currentUser.certificationLevel || currentUser.bayNumber}` : ''}
@@ -170,7 +175,14 @@ export const LoginModal: React.FC = () => {
                     {pinPromptUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">{pinPromptUser.name}</h4>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="text-sm font-bold text-slate-900">{pinPromptUser.name}</h4>
+                      {pinPromptUser.employeeNumber && (
+                        <span className="text-sm font-mono font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                          {pinPromptUser.employeeNumber}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500">{pinPromptUser.title} • {pinPromptUser.role}</p>
                   </div>
                 </div>
@@ -184,21 +196,22 @@ export const LoginModal: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Enter 4-Digit Staff PIN
+                    Enter 4-Digit Quick PIN
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="password"
                       autoFocus
+                      maxLength={8}
                       value={enteredPin}
                       onChange={(e) => setEnteredPin(e.target.value)}
                       placeholder="Enter 4-digit PIN"
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-white border-2 border-slate-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono tracking-widest text-center text-slate-900"
+                      className="w-full pl-9 pr-3 py-2 text-base bg-white border-2 border-slate-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono tracking-widest text-center text-slate-900"
                     />
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1 text-center">
-                    Authentication is required to switch into {pinPromptUser.name}&apos;s session.
+                    Quick PIN verification is required to switch into {pinPromptUser.name}&apos;s profile.
                   </p>
                 </div>
 
@@ -269,7 +282,14 @@ export const LoginModal: React.FC = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-sm font-bold text-slate-900 truncate">{user.name}</span>
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="text-sm font-bold text-slate-900 truncate">{user.name}</span>
+                              {user.employeeNumber && (
+                                <span className="text-sm font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+                                  {user.employeeNumber}
+                                </span>
+                              )}
+                            </div>
                             {getRoleIcon(user.role)}
                           </div>
                           <p className="text-xs text-slate-500 truncate">{user.title}</p>

@@ -13,6 +13,7 @@ import { LoginModal } from './components/LoginModal';
 import { LoginScreen } from './components/LoginScreen';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
+import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { 
   LayoutDashboard, 
   Wrench, 
@@ -25,7 +26,8 @@ import {
   Users, 
   ArrowLeft, 
   Eye,
-  Lock
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -37,6 +39,9 @@ const MainContent: React.FC = () => {
     repairOrders, 
     isStaffManagementOpen, 
     setIsStaffManagementOpen,
+    isChatBoxOpen,
+    setIsChatBoxOpen,
+    shopMessages,
     isAuthenticated,
     lockWorkstation
   } = useApp();
@@ -487,6 +492,32 @@ const MainContent: React.FC = () => {
       <LoginModal />
       <InitialSetupModal />
       <UrgentToastStack />
+
+      {/* Floating Quick Chat Launcher (visible when chat box is closed) */}
+      {!isChatBoxOpen && (
+        <button
+          id="floating-chat-launcher-btn"
+          onClick={() => setIsChatBoxOpen(true)}
+          className="fixed bottom-14 sm:bottom-16 right-5 z-40 bg-blue-600 hover:bg-blue-700 text-white p-3 sm:px-4 sm:py-3 rounded-full shadow-xl border-2 border-white flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
+          title="Open Shop Team Chat"
+        >
+          <div className="relative">
+            <MessageSquare className="w-5 h-5 text-white" />
+            {shopMessages.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
+                {shopMessages.length > 9 ? '9+' : shopMessages.length}
+              </span>
+            )}
+          </div>
+          <span className="hidden sm:inline text-xs font-bold">Shop Chat</span>
+        </button>
+      )}
+
+      {/* Real-time Shop Team Chat Box */}
+      <ShopChatDrawer 
+        isOpen={isChatBoxOpen} 
+        onClose={() => setIsChatBoxOpen(false)} 
+      />
     </div>
   );
 };

@@ -21,6 +21,7 @@ import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { ROStatus, RepairOrder } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly } from '../utils/formatters';
+import { TechRecommendationsSection } from './TechRecommendationsSection';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
@@ -188,10 +189,12 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
 export const TechDashboard: React.FC = () => {
   const { 
     currentUser, 
+    users,
     repairOrders, 
     setSelectedRO, 
     updateROStatus, 
-    startDiagnosis
+    startDiagnosis,
+    openDirectChat
   } = useApp();
 
   // Filter strictly to this technician's assigned ROs
@@ -232,6 +235,11 @@ export const TechDashboard: React.FC = () => {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg sm:text-xl font-black tracking-tight">{currentUser.name}</h1>
+                {currentUser.employeeNumber && (
+                  <span className="text-lg sm:text-xl font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                    {currentUser.employeeNumber}
+                  </span>
+                )}
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
                   <Award className="w-3 h-3 text-blue-400" />
                   <span>{currentUser.certificationLevel || currentUser.bayNumber || 'Technician'}</span>
@@ -374,8 +382,30 @@ export const TechDashboard: React.FC = () => {
                       <Clock className="w-3.5 h-3.5 text-blue-600" />
                       {calculateDispatchedDuration(ro.dispatchedAt)}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Advisor: {ro.advisorName}
+                    <div className="text-[11px] text-slate-400 mt-0.5 flex items-center sm:justify-end gap-1.5 flex-wrap">
+                      <span>Advisor: {ro.advisorName}</span>
+                      {(() => {
+                        const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
+                        return adv?.employeeNumber ? (
+                          <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            {adv.employeeNumber}
+                          </span>
+                        ) : null;
+                      })()}
+                      {ro.advisorId && ro.advisorId !== currentUser.id && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDirectChat(ro.advisorId);
+                          }}
+                          className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 inline-flex items-center gap-0.5 transition-colors cursor-pointer"
+                          title={`Direct message ${ro.advisorName}`}
+                        >
+                          <MessageSquare className="w-2.5 h-2.5" />
+                          <span>Chat</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -452,6 +482,9 @@ export const TechDashboard: React.FC = () => {
 
                 {/* Technician Diagnosis & Repair Documentation: Cause & Correction */}
                 <TechCauseCorrectionSection ro={ro} />
+
+                {/* Technician Additional Recommended Services (MPI Upsells / Filter / Tires / Scheduled Maint) */}
+                <TechRecommendationsSection ro={ro} />
 
                 {/* Prominent Parts Arrival Tracker */}
                 {ro.parts.length > 0 && (

@@ -26,7 +26,8 @@ export const SalesDashboard: React.FC = () => {
     repairOrders, 
     setSelectedRO, 
     currentUser,
-    shopName
+    shopName,
+    users
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -580,14 +581,30 @@ export const SalesDashboard: React.FC = () => {
                   </div>
 
                   {/* Team Members */}
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
+                    <div className="flex items-center gap-1 flex-wrap">
                       <UserCheck className="w-3.5 h-3.5 text-blue-500" />
                       <span>Adv: <strong className="text-slate-700">{ro.advisorName}</strong></span>
+                      {(() => {
+                        const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
+                        return adv?.employeeNumber ? (
+                          <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            {adv.employeeNumber}
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
                       <Wrench className="w-3.5 h-3.5 text-emerald-500" />
                       <span>Tech: <strong className="text-slate-700">{ro.techName || 'Pending'}</strong></span>
+                      {ro.techName && (() => {
+                        const tch = users.find(u => u.id === ro.techId || u.name === ro.techName);
+                        return tch?.employeeNumber ? (
+                          <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            {tch.employeeNumber}
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
 

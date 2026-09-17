@@ -25,7 +25,8 @@ import {
   Check,
   Award,
   LogIn,
-  Lock
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole } from '../types';
@@ -44,7 +45,8 @@ export const StaffManagement: React.FC = () => {
     resetToDemoData,
     isStaffManagementOpen,
     setIsStaffManagementOpen,
-    shopName
+    shopName,
+    openDirectChat
   } = useApp();
 
   const [activeCategory, setActiveCategory] = useState<'ALL' | UserRole>('ALL');
@@ -62,12 +64,11 @@ export const StaffManagement: React.FC = () => {
 
   // Form fields
   const [nameInput, setNameInput] = useState('');
+  const [employeeNumberInput, setEmployeeNumberInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [roleInput, setRoleInput] = useState<UserRole>('TECHNICIAN');
   const [titleInput, setTitleInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
   const [pinInput, setPinInput] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [certInput, setCertInput] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [avatarInput, setAvatarInput] = useState('');
@@ -101,12 +102,22 @@ export const StaffManagement: React.FC = () => {
       clearTimeout(autoSaveTimerRef.current);
     }
     autoSaveTimerRef.current = setTimeout(() => {
-      updateUser(editingUserId, {
-        ...updates,
-        phone: updates.phone !== undefined ? updates.phone.trim() : undefined,
-        certificationLevel: updates.certificationLevel !== undefined ? updates.certificationLevel.trim() : undefined,
-        bayNumber: updates.bayNumber !== undefined ? updates.bayNumber.trim() : undefined,
-      });
+      const cleanUpdates: Partial<User> = { ...updates };
+      if ('employeeNumber' in updates) {
+        cleanUpdates.employeeNumber = updates.employeeNumber && updates.employeeNumber.trim() 
+          ? updates.employeeNumber.trim() 
+          : undefined;
+      }
+      if ('phone' in updates) {
+        cleanUpdates.phone = updates.phone !== undefined ? updates.phone.trim() : undefined;
+      }
+      if ('certificationLevel' in updates) {
+        cleanUpdates.certificationLevel = updates.certificationLevel !== undefined ? updates.certificationLevel.trim() : undefined;
+      }
+      if ('bayNumber' in updates) {
+        cleanUpdates.bayNumber = updates.bayNumber !== undefined ? updates.bayNumber.trim() : undefined;
+      }
+      updateUser(editingUserId, cleanUpdates);
       setAutoSaveStatus('saved');
     }, 150);
   };
@@ -126,12 +137,11 @@ export const StaffManagement: React.FC = () => {
     if (!isManager) return;
     setEditingUserId(null);
     setNameInput('');
+    setEmployeeNumberInput(String(100 + users.length + 1));
     setEmailInput('');
     setRoleInput(activeCategory === 'ALL' ? 'TECHNICIAN' : activeCategory);
     setTitleInput('');
-    setPasswordInput('');
     setPinInput('');
-    setShowPassword(false);
     setCertInput('');
     setPhoneInput('');
     setAvatarInput(getRoleDefaultAvatar(activeCategory === 'ALL' ? 'TECHNICIAN' : activeCategory));
@@ -144,12 +154,11 @@ export const StaffManagement: React.FC = () => {
     if (!isManager) return;
     setEditingUserId(user.id);
     setNameInput(user.name);
+    setEmployeeNumberInput(user.employeeNumber || '');
     setEmailInput(user.email);
     setRoleInput(user.role);
     setTitleInput(user.title || '');
-    setPasswordInput(user.password || user.pin || '1234');
-    setPinInput(user.pin || user.password || '1234');
-    setShowPassword(false);
+    setPinInput(user.pin || '1234');
     setCertInput(user.certificationLevel || user.bayNumber || '');
     setPhoneInput(user.phone || '');
     setAvatarInput(user.avatar || getRoleDefaultAvatar(user.role));
@@ -173,14 +182,15 @@ export const StaffManagement: React.FC = () => {
     const certValue = certInput.trim();
     const phoneValue = phoneInput.trim();
     const avatarValue = avatarInput || getRoleDefaultAvatar(roleInput);
+    const empNumValue = employeeNumberInput.trim() || undefined;
 
     if (editingUserId) {
       updateUser(editingUserId, {
         name: nameInput.trim(),
+        employeeNumber: empNumValue,
         email: emailInput.trim().toLowerCase(),
         role: roleInput,
         title: titleInput.trim(),
-        password: passwordInput.trim() || '1234',
         pin: pinInput.trim() || '1234',
         certificationLevel: roleInput === 'TECHNICIAN' ? certValue : '',
         bayNumber: roleInput === 'TECHNICIAN' ? certValue : '',
@@ -198,10 +208,10 @@ export const StaffManagement: React.FC = () => {
           ...currentUser,
           id: editingUserId,
           name: nameInput.trim(),
+          employeeNumber: empNumValue,
           email: emailInput.trim().toLowerCase(),
           role: roleInput,
           title: titleInput.trim(),
-          password: passwordInput.trim() || '1234',
           pin: pinInput.trim() || '1234',
           certificationLevel: roleInput === 'TECHNICIAN' ? certValue : '',
           bayNumber: roleInput === 'TECHNICIAN' ? certValue : '',
@@ -214,10 +224,10 @@ export const StaffManagement: React.FC = () => {
     } else {
       const createdUser = addUser({
         name: nameInput.trim(),
+        employeeNumber: empNumValue,
         email: emailInput.trim().toLowerCase(),
         role: roleInput,
         title: titleInput.trim(),
-        password: passwordInput.trim() || '1234',
         pin: pinInput.trim() || '1234',
         certificationLevel: roleInput === 'TECHNICIAN' ? certValue : '',
         bayNumber: roleInput === 'TECHNICIAN' ? certValue : '',
@@ -327,10 +337,11 @@ export const StaffManagement: React.FC = () => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = user.name.toLowerCase().includes(q);
+      const matchEmpNum = user.employeeNumber ? user.employeeNumber.toLowerCase().includes(q) || `#${user.employeeNumber.toLowerCase()}`.includes(q) : false;
       const matchEmail = user.email.toLowerCase().includes(q);
       const matchTitle = user.title.toLowerCase().includes(q);
       const matchBay = (user.certificationLevel || user.bayNumber)?.toLowerCase().includes(q);
-      return matchName || matchEmail || matchTitle || matchBay;
+      return matchName || matchEmpNum || matchEmail || matchTitle || matchBay;
     }
     return true;
   });
@@ -564,10 +575,15 @@ export const StaffManagement: React.FC = () => {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 className={`text-sm font-bold text-slate-900 truncate ${isManager ? 'group-hover:text-blue-700' : ''} transition-colors`}>
                             {user.name}
                           </h3>
+                          {user.employeeNumber && (
+                            <span className="text-sm font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 shrink-0">
+                              {user.employeeNumber}
+                            </span>
+                          )}
                           {isSelf && (
                             <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full border border-blue-200 shrink-0">
                               You
@@ -701,6 +717,21 @@ export const StaffManagement: React.FC = () => {
                       </button>
                     )}
 
+                    {!isSelf && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDirectChat(user.id);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                        title={`Send direct message to ${user.name}`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Chat</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={(e) => {
@@ -778,25 +809,46 @@ export const StaffManagement: React.FC = () => {
             {/* Form */}
             <form onSubmit={handleSaveUser} className="p-6 space-y-4 overflow-y-auto">
               
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. John Doe"
-                  value={nameInput}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNameInput(val);
-                    if (editingUserId && val.trim()) {
-                      triggerAutoSave({ name: val.trim() });
-                    }
-                  }}
-                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
+              {/* Full Name & Employee # */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Doe"
+                    value={nameInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNameInput(val);
+                      if (editingUserId && val.trim()) {
+                        triggerAutoSave({ name: val.trim() });
+                      }
+                    }}
+                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Employee Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 101 (optional)"
+                    value={employeeNumberInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEmployeeNumberInput(val);
+                      if (editingUserId) {
+                        triggerAutoSave({ employeeNumber: val });
+                      }
+                    }}
+                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
 
               {/* Email / Username */}
@@ -912,7 +964,14 @@ export const StaffManagement: React.FC = () => {
                     {(nameInput || 'Staff').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900">{nameInput || 'Staff Member'}</div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-slate-900">{nameInput || 'Staff Member'}</span>
+                      {employeeNumberInput && (
+                        <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                          {employeeNumberInput}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-slate-500">
                       Standard initials badge is automatically generated for clean shop floor identification.
                     </div>
@@ -920,60 +979,27 @@ export const StaffManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Password & Login PIN */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Account Password *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                      <span>{showPassword ? 'Hide' : 'Show'}</span>
-                    </button>
-                  </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="Enter password"
-                    value={passwordInput}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPasswordInput(val);
-                      if (editingUserId) {
-                        triggerAutoSave({ password: val.trim() || '1234' });
-                      }
-                    }}
-                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">Used for individual login.</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Quick PIN Code (4-digits) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={8}
-                    placeholder="Enter 4-digit PIN"
-                    value={pinInput}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPinInput(val);
-                      if (editingUserId) {
-                        triggerAutoSave({ pin: val.trim() || '1234' });
-                      }
-                    }}
-                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">Used for quick kiosk & bay switching.</p>
-                </div>
+              {/* Quick PIN Code */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Quick PIN Code (4-digits) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={8}
+                  placeholder="Enter 4-digit PIN"
+                  value={pinInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPinInput(val);
+                    if (editingUserId) {
+                      triggerAutoSave({ pin: val.trim() || '1234' });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">Used exclusively for all workstation logins, kiosk unlocks, and staff profile switching.</p>
               </div>
 
               {/* Direct Phone */}

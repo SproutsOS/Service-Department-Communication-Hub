@@ -27,8 +27,8 @@ import { User, UserRole } from '../types';
 interface InitialStaffDraft {
   tempId: string;
   name: string;
+  employeeNumber?: string;
   email: string;
-  password?: string;
   pin?: string;
   role: UserRole;
   title: string;
@@ -54,12 +54,11 @@ export const InitialSetupModal: React.FC = () => {
   // Step 1: Shop & Manager
   const [shopNameInput, setShopNameInput] = useState(existingShopName || 'My Service Department');
   const [mgrName, setMgrName] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.name !== 'Service Manager' ? currentUser.name : '');
+  const [mgrEmployeeNumber, setMgrEmployeeNumber] = useState(currentUser.employeeNumber || '');
   const [mgrEmail, setMgrEmail] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.email !== 'admin@precisionauto.com' ? currentUser.email : '');
-  const [mgrPassword, setMgrPassword] = useState(currentUser.password || 'admin123');
   const [mgrPin, setMgrPin] = useState(currentUser.pin || '1234');
   const [mgrTitle, setMgrTitle] = useState(currentUser.title || 'Service Manager');
   const [mgrPhone, setMgrPhone] = useState(currentUser.phone || '');
-  const [showMgrPassword, setShowMgrPassword] = useState(false);
 
   // Step 2: Staff Roster by Category
   const [staffCategory, setStaffCategory] = useState<UserRole>('TECHNICIAN');
@@ -68,11 +67,11 @@ export const InitialSetupModal: React.FC = () => {
     if (users && users.length > 1) {
       return users
         .filter(u => u.role !== 'SERVICE_MANAGER')
-        .map(u => ({
+        .map((u, idx) => ({
           tempId: u.id,
           name: u.name,
+          employeeNumber: u.employeeNumber || undefined,
           email: u.email,
-          password: u.password || '1234',
           pin: u.pin || '1234',
           role: u.role,
           title: u.title,
@@ -86,8 +85,9 @@ export const InitialSetupModal: React.FC = () => {
 
   // Adding quick employee inline
   const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffEmployeeNumber, setNewStaffEmployeeNumber] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [newStaffPin, setNewStaffPin] = useState('1234');
   const [newStaffCert, setNewStaffCert] = useState('');
   const [isAddingInline, setIsAddingInline] = useState(false);
 
@@ -107,12 +107,14 @@ export const InitialSetupModal: React.FC = () => {
       staffCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' :
       staffCategory === 'SALES' ? 'Sales Consultant' : 'Assistant Service Manager';
 
+    const empNum = newStaffEmployeeNumber.trim() || undefined;
+
     const newDraft: InitialStaffDraft = {
       tempId: `draft_${Date.now()}`,
       name: newStaffName.trim(),
+      employeeNumber: empNum,
       email,
-      password: newStaffPassword.trim() || '1234',
-      pin: '1234',
+      pin: newStaffPin.trim() || '1234',
       role: staffCategory,
       title: defaultTitle,
       certificationLevel: staffCategory === 'TECHNICIAN' ? newStaffCert.trim() : '',
@@ -122,8 +124,9 @@ export const InitialSetupModal: React.FC = () => {
 
     setStaffDrafts(prev => [...prev, newDraft]);
     setNewStaffName('');
+    setNewStaffEmployeeNumber('');
     setNewStaffEmail('');
-    setNewStaffPassword('1234');
+    setNewStaffPin('1234');
     setNewStaffCert('ASE Master Tech');
     setIsAddingInline(false);
   };
@@ -139,18 +142,18 @@ export const InitialSetupModal: React.FC = () => {
       setStep(1);
       return;
     }
-    if (!mgrName.trim() || !mgrEmail.trim() || !mgrPassword.trim()) {
-      setErrorMsg('Please complete the primary manager account details (Name, Email, and Password).');
+    if (!mgrName.trim() || !mgrEmail.trim() || !mgrPin.trim()) {
+      setErrorMsg('Please complete the primary manager account details (Name, Email, and 4-Digit PIN).');
       setStep(1);
       return;
     }
 
     // Map drafts into User objects
-    const initialUsers: User[] = staffDrafts.map(draft => ({
+    const initialUsers: User[] = staffDrafts.map((draft, idx) => ({
       id: draft.tempId.startsWith('usr_') ? draft.tempId : `usr_${draft.tempId}`,
       name: draft.name,
+      employeeNumber: draft.employeeNumber?.trim() || undefined,
       email: draft.email,
-      password: draft.password || '1234',
       pin: draft.pin || '1234',
       role: draft.role,
       title: draft.title,
@@ -170,8 +173,8 @@ export const InitialSetupModal: React.FC = () => {
       shopName: shopNameInput.trim(),
       manager: {
         name: mgrName.trim(),
+        employeeNumber: mgrEmployeeNumber.trim() || undefined,
         email: mgrEmail.trim(),
-        password: mgrPassword.trim(),
         pin: mgrPin.trim() || '1234',
         title: mgrTitle.trim(),
         phone: mgrPhone.trim(),
@@ -266,7 +269,7 @@ export const InitialSetupModal: React.FC = () => {
                   <span>Initial Shop Administrator Account</span>
                 </h3>
                 <p className="text-xs text-blue-700 mt-1">
-                  Set up your Dealership / Shop Name and your primary Service Manager login with password and PIN.
+                  Set up your Dealership / Shop Name and your primary Service Manager login with Employee Number and Quick PIN.
                 </p>
               </div>
 
@@ -351,42 +354,32 @@ export const InitialSetupModal: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Manager Password
+                    Employee Number (Optional)
                   </label>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type={showMgrPassword ? 'text' : 'password'}
-                      required
-                      placeholder="Enter manager password"
-                      value={mgrPassword}
-                      onChange={(e) => setMgrPassword(e.target.value)}
-                      className="w-full pl-9 pr-10 py-2 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowMgrPassword(!showMgrPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5"
-                    >
-                      {showMgrPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Used for individual sign-in to the master board.</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 100"
+                    value={mgrEmployeeNumber}
+                    onChange={(e) => setMgrEmployeeNumber(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">Visible identifier to the right of your name.</span>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Quick PIN (For Tablets / Kiosks)
+                    Quick PIN Code (4-Digits) *
                   </label>
                   <input
                     type="text"
-                    maxLength={6}
+                    required
+                    maxLength={8}
                     placeholder="1234"
                     value={mgrPin}
                     onChange={(e) => setMgrPin(e.target.value)}
                     className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block">4-digit rapid unlock code for floor kiosks.</span>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Used exclusively for all workstation sign-ins.</span>
                 </div>
               </div>
             </div>
@@ -473,15 +466,24 @@ export const InitialSetupModal: React.FC = () => {
                   <div className="text-xs font-bold text-slate-800">
                     Add New {staffCategory === 'TECHNICIAN' ? 'Technician' : staffCategory === 'SERVICE_ADVISOR' ? 'Service Advisor' : staffCategory === 'PARTS_SPECIALIST' ? 'Parts Specialist' : 'Sales Member'}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <input
                       type="text"
                       required
                       placeholder="Full Name (e.g. Alex Chen)"
                       value={newStaffName}
                       onChange={(e) => setNewStaffName(e.target.value)}
-                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900"
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 sm:col-span-2"
                     />
+                    <input
+                      type="text"
+                      placeholder="Emp # (optional)"
+                      value={newStaffEmployeeNumber}
+                      onChange={(e) => setNewStaffEmployeeNumber(e.target.value)}
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-slate-900"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Login Email (e.g. a.chen@precisionauto.com)"
@@ -489,25 +491,24 @@ export const InitialSetupModal: React.FC = () => {
                       onChange={(e) => setNewStaffEmail(e.target.value)}
                       className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900"
                     />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
-                      placeholder="Password or PIN"
-                      value={newStaffPassword}
-                      onChange={(e) => setNewStaffPassword(e.target.value)}
+                      maxLength={8}
+                      placeholder="4-Digit PIN (default 1234)"
+                      value={newStaffPin}
+                      onChange={(e) => setNewStaffPin(e.target.value)}
                       className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-slate-900"
                     />
-                    {staffCategory === 'TECHNICIAN' && (
-                      <input
-                        type="text"
-                        placeholder="Certification Level (e.g. Master Tech, ASE A-Level, L1)"
-                        value={newStaffCert}
-                        onChange={(e) => setNewStaffCert(e.target.value)}
-                        className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900"
-                      />
-                    )}
                   </div>
+                  {staffCategory === 'TECHNICIAN' && (
+                    <input
+                      type="text"
+                      placeholder="Certification Level (e.g. Master Tech, ASE A-Level, L1)"
+                      value={newStaffCert}
+                      onChange={(e) => setNewStaffCert(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900"
+                    />
+                  )}
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
@@ -541,8 +542,13 @@ export const InitialSetupModal: React.FC = () => {
                       className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-xs hover:border-slate-300"
                     >
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-bold text-slate-900">{draft.name}</span>
+                          {draft.employeeNumber && (
+                            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                              {draft.employeeNumber}
+                            </span>
+                          )}
                           {(draft.certificationLevel || draft.bayNumber) && (
                             <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                               <Award className="w-3 h-3 text-blue-600" />
@@ -553,7 +559,7 @@ export const InitialSetupModal: React.FC = () => {
                         <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                           <span>{draft.email}</span>
                           <span>•</span>
-                          <span className="font-mono text-slate-400">PW/PIN: ••••</span>
+                          <span className="font-mono text-slate-400">PIN: {draft.pin || '1234'}</span>
                         </div>
                       </div>
 

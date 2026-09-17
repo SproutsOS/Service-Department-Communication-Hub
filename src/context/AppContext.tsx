@@ -9,7 +9,9 @@ import {
   CustomerContactRecord,
   CustomerContactType,
   CustomerContactOutcome,
-  StatusHistory
+  StatusHistory,
+  RecommendedService,
+  ShopChatMessage
 } from '../types';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -19,6 +21,8 @@ import {
   subscribeToUsers,
   subscribeToNotifications,
   subscribeToShopSettings,
+  subscribeToShopMessages,
+  saveShopMessage,
   syncRepairOrder,
   deleteRepairOrderDoc,
   syncUser,
@@ -76,6 +80,7 @@ interface AppContextType {
     manager: {
       name: string;
       email: string;
+      employeeNumber?: string;
       password?: string;
       pin?: string;
       title?: string;
@@ -129,6 +134,34 @@ interface AppContextType {
   
   // Filter helper
   getFilteredROs: () => RepairOrder[];
+
+  // Shop Team Chat & Person-to-Person Direct Messaging
+  shopMessages: ShopChatMessage[];
+  isChatBoxOpen: boolean;
+  setIsChatBoxOpen: (open: boolean) => void;
+  selectedChatRecipientId: string; // 'ALL' or user.id
+  setSelectedChatRecipientId: (recipientId: string) => void;
+  openDirectChat: (recipientUserId: string | 'ALL') => void;
+  sendShopChatMessage: (
+    content: string, 
+    recipientId?: string, 
+    roId?: string, 
+    isUrgent?: boolean
+  ) => void;
+
+  // Tech Additional Recommendations
+  addRecommendedService: (roId: string, item: {
+    serviceName: string;
+    category?: RecommendedService['category'];
+    urgency: 'SAFETY' | 'RECOMMENDED';
+    notes?: string;
+  }) => boolean;
+  updateRecommendedServiceStatus: (
+    roId: string, 
+    recId: string, 
+    status: 'APPROVED' | 'DECLINED', 
+    declinedReason?: string
+  ) => boolean;
 }
 
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
@@ -192,7 +225,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((u: User) => ({
+            ...u,
+            employeeNumber: (u.employeeNumber && u.employeeNumber.trim()) 
+              ? u.employeeNumber.trim() 
+              : undefined
+          }));
         }
       }
     } catch {
@@ -215,7 +253,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const savedUser = localStorage.getItem(STORAGE_KEY_USER);
       const savedUsersRaw = localStorage.getItem(STORAGE_KEY_USERS);
-      const usersList: User[] = savedUsersRaw ? JSON.parse(savedUsersRaw) : INITIAL_USERS;
+      const rawList: User[] = savedUsersRaw ? JSON.parse(savedUsersRaw) : INITIAL_USERS;
+      const usersList: User[] = rawList.map((u: User) => ({
+        ...u,
+        employeeNumber: (u.employeeNumber && u.employeeNumber.trim()) 
+          ? u.employeeNumber.trim() 
+          : undefined
+      }));
 
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
@@ -223,8 +267,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           u.id === parsed.id || 
           (u.email && parsed.email && u.email.toLowerCase() === parsed.email.toLowerCase())
         );
-        if (match) return match;
-        // Never return an obsolete user (e.g. Marcus Vance) if they no longer exist in the shop's roster
+        if (match) {
+          return {
+            ...match,
+            employeeNumber: (match.employeeNumber && match.employeeNumber.trim()) || (parsed.employeeNumber && parsed.employeeNumber.trim()) || undefined
+          };
+        }
       }
 
       // If no valid match, default to the Service Manager or first employee in the roster
@@ -272,6 +320,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
+  const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
+  const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
+  const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'default'>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -323,23 +374,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Subscribe to real-time Users
     const unsubscribeUsers = subscribeToUsers((cloudUsers) => {
       if (cloudUsers.length > 0) {
-        setUsers(cloudUsers);
+        const normalizedUsers = cloudUsers.map((u) => ({
+          ...u,
+          employeeNumber: (u.employeeNumber && u.employeeNumber.trim())
+            ? u.employeeNumber.trim()
+            : undefined
+        }));
+        setUsers(normalizedUsers);
         try {
-          localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(cloudUsers));
+          localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(normalizedUsers));
         } catch {
           // ignore
         }
         // Keep active session user object current
         setCurrentUserState((prev) => {
-          const fresh = cloudUsers.find(u => 
+          const fresh = normalizedUsers.find(u => 
             u.id === prev.id || 
             (u.email && prev.email && u.email.toLowerCase() === prev.email.toLowerCase())
           );
           if (fresh) return fresh;
 
           // If active user is no longer in the cloud roster, switch to the Service Manager or first employee
-          const activeManager = cloudUsers.find(u => u.role === 'SERVICE_MANAGER');
-          return activeManager || cloudUsers[0];
+          const activeManager = normalizedUsers.find(u => u.role === 'SERVICE_MANAGER');
+          return activeManager || normalizedUsers[0];
         });
         setIsCloudSynced(true);
       }
@@ -369,11 +426,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // Subscribe to real-time Shop Messages
+    const unsubscribeMessages = subscribeToShopMessages((cloudMessages) => {
+      setShopMessages(cloudMessages);
+    });
+
     return () => {
       unsubscribeROs();
       unsubscribeUsers();
       unsubscribeNotifs();
       unsubscribeSettings();
+      unsubscribeMessages();
     };
   }, []);
 
@@ -815,7 +878,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           userRole: currentUser.role,
           timestamp: now,
           notes: tech 
-            ? `RO Created and assigned to ${tech.name} (${data.bay || tech.bayNumber || 'Assigned Bay'}). Staged and waiting to be diagnosed.`
+            ? `RO Created and assigned to ${tech.name}. Staged and waiting to be diagnosed.`
             : `Repair Order created by ${currentUser.name}. Awaiting technician assignment.`,
         }
       ],
@@ -859,8 +922,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const newId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const pass = userData.password || userData.pin || '1234';
-    const pin = userData.pin || pass;
+    const pin = (userData.pin || userData.password || '1234').trim();
+
+    // Do NOT automatically assign an employee number if one is not entered
+    const empNum = (userData.employeeNumber && userData.employeeNumber.trim()) 
+      ? userData.employeeNumber.trim() 
+      : undefined;
+
     const defaultAvatar = (
       userData.role === 'SERVICE_MANAGER' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' :
       userData.role === 'SERVICE_ADVISOR' ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80' :
@@ -872,10 +940,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newUser: User = {
       id: newId,
       name: userData.name.trim(),
+      employeeNumber: empNum,
       email: userData.email.trim().toLowerCase(),
       role: userData.role,
       title: (userData.title || '').trim() || (userData.role === 'TECHNICIAN' ? 'Automotive Technician' : userData.role),
-      password: pass,
       pin: pin,
       phone: (userData.phone || '').trim(),
       certificationLevel: (userData.certificationLevel || '').trim(),
@@ -909,9 +977,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(prev => {
       const updatedList = prev.map(u => {
         if (u.id !== userId) return u;
+        const nextEmpNum = ('employeeNumber' in updates)
+          ? (updates.employeeNumber && updates.employeeNumber.trim() ? updates.employeeNumber.trim() : undefined)
+          : u.employeeNumber;
         return {
           ...u,
           ...updates,
+          employeeNumber: nextEmpNum,
+          pin: updates.pin !== undefined ? updates.pin.trim() : u.pin,
           phone: updates.phone !== undefined ? updates.phone.trim() : (u.phone || ''),
           certificationLevel: updates.certificationLevel !== undefined ? updates.certificationLevel.trim() : (u.certificationLevel || ''),
           bayNumber: updates.bayNumber !== undefined ? updates.bayNumber.trim() : (u.bayNumber || ''),
@@ -936,7 +1009,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (updates.email && prev.email && prev.email.toLowerCase() === updates.email.toLowerCase()) ||
         users.length === 1
       ) {
-        const updated = { ...prev, ...updates };
+        const nextEmpNum = ('employeeNumber' in updates)
+          ? (updates.employeeNumber && updates.employeeNumber.trim() ? updates.employeeNumber.trim() : undefined)
+          : prev.employeeNumber;
+        const updated = { 
+          ...prev, 
+          ...updates,
+          employeeNumber: nextEmpNum,
+          pin: updates.pin !== undefined ? updates.pin.trim() : prev.pin,
+        };
         try {
           localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updated));
         } catch {
@@ -1128,6 +1209,201 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Technician Request Additional Services (MPI Findings: Air filter, cabin air filter, tires, scheduled maint, etc.)
+  const addRecommendedService = (roId: string, item: {
+    serviceName: string;
+    category?: RecommendedService['category'];
+    urgency: 'SAFETY' | 'RECOMMENDED';
+    notes?: string;
+  }): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const trimmedName = item.serviceName.trim();
+    if (!trimmedName) return false;
+
+    const newRec: RecommendedService = {
+      id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      roId,
+      serviceName: trimmedName,
+      category: item.category || 'OTHER',
+      urgency: item.urgency,
+      notes: item.notes?.trim() || undefined,
+      status: 'PENDING',
+      requestedByTechId: currentUser.id,
+      requestedByTechName: currentUser.name,
+      requestedAt: new Date().toISOString(),
+    };
+
+    const existingRecs = targetRO.recommendations || [];
+    const updatedRecs = [...existingRecs, newRec];
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      recommendations: updatedRecs,
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      `Tech Rec: ${newRec.serviceName}`,
+      `Tech ${currentUser.name} requested "${newRec.serviceName}" (${newRec.urgency === 'SAFETY' ? 'Immediate Safety Concern' : 'Recommended Maintenance'}). Advisor authorization needed.`,
+      newRec.urgency === 'SAFETY',
+      'RECOMMENDED_SERVICE'
+    );
+
+    return true;
+  };
+
+  // Service Advisor & Manager: Review & Update Tech Recommended Service (Approve or Decline)
+  const updateRecommendedServiceStatus = (
+    roId: string, 
+    recId: string, 
+    status: 'APPROVED' | 'DECLINED', 
+    declinedReason?: string
+  ): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO || !targetRO.recommendations) return false;
+
+    const now = new Date().toISOString();
+    const targetRec = targetRO.recommendations.find(rec => rec.id === recId);
+    if (!targetRec) return false;
+
+    const updatedRecs = targetRO.recommendations.map(rec => {
+      if (rec.id !== recId) return rec;
+      return {
+        ...rec,
+        status,
+        reviewedByAdvisorId: currentUser.id,
+        reviewedByAdvisorName: currentUser.name,
+        reviewedAt: now,
+        declinedReason: status === 'DECLINED' ? (declinedReason || 'Declined by customer') : undefined,
+      };
+    });
+
+    // If approved by advisor/customer, append to concerns list if not already present
+    let updatedConcerns = targetRO.concerns ? [...targetRO.concerns] : (targetRO.primaryConcern ? [targetRO.primaryConcern] : []);
+    if (status === 'APPROVED' && !updatedConcerns.includes(targetRec.serviceName)) {
+      updatedConcerns.push(targetRec.serviceName);
+    }
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      concerns: updatedConcerns,
+      recommendations: updatedRecs,
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      status === 'APPROVED' ? `Service Approved: ${targetRec.serviceName}` : `Service Declined: ${targetRec.serviceName}`,
+      status === 'APPROVED' 
+        ? `Customer authorized "${targetRec.serviceName}". Work added to repair scope.`
+        : `Customer declined "${targetRec.serviceName}".`,
+      false,
+      'RECOMMENDED_SERVICE'
+    );
+
+    return true;
+  };
+
+  const openDirectChat = (recipientUserId: string | 'ALL') => {
+    setSelectedChatRecipientId(recipientUserId);
+    setIsChatBoxOpen(true);
+  };
+
+  // Person-to-Person Direct Chat & Shop Floor messaging
+  const sendShopChatMessage = (
+    content: string, 
+    recipientId?: string, 
+    roId?: string, 
+    isUrgent: boolean = false
+  ) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+
+    const targetRecipientId = (recipientId && recipientId !== 'ALL') ? recipientId : undefined;
+    const recipientUser = targetRecipientId ? users.find(u => u.id === targetRecipientId) : undefined;
+
+    const newMsg: ShopChatMessage = {
+      id: `shop_msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderRole: currentUser.role,
+      recipientId: targetRecipientId,
+      recipientName: recipientUser?.name,
+      recipientRole: recipientUser?.role,
+      content: trimmed,
+      timestamp: new Date().toISOString(),
+      roId: roId ? roId.trim() : undefined,
+      isUrgent,
+    };
+
+    setShopMessages(prev => [...prev, newMsg]);
+    saveShopMessage(newMsg).catch(err => {
+      console.error('Failed to sync shop chat message:', err);
+    });
+
+    if (isSoundEnabled) {
+      playNotificationChime(isUrgent);
+    }
+
+    // Direct message notification to recipient or urgent shop announcement
+    if (targetRecipientId) {
+      const notif: UrgentNotification = {
+        id: `notif_chat_${Date.now()}`,
+        roId: roId || 'DIRECT_MESSAGE',
+        roNumber: roId || 'Direct Message',
+        title: isUrgent ? `URGENT Direct Message from ${currentUser.name}` : `Direct Message from ${currentUser.name}`,
+        message: trimmed,
+        timestamp: new Date().toISOString(),
+        isUrgent,
+        type: 'SHOP_CHAT',
+        read: false,
+        targetUserId: targetRecipientId,
+        targetRole: recipientUser?.role,
+      };
+      setNotifications(prev => [notif, ...prev.slice(0, 49)]);
+      syncNotification(notif);
+    } else if (isUrgent) {
+      const notif: UrgentNotification = {
+        id: `notif_chat_${Date.now()}`,
+        roId: roId || 'SHOP',
+        roNumber: roId || 'Shop Floor',
+        title: `URGENT Announcement from ${currentUser.name}`,
+        message: trimmed,
+        timestamp: new Date().toISOString(),
+        isUrgent: true,
+        type: 'SHOP_CHAT',
+        read: false,
+      };
+      setNotifications(prev => [notif, ...prev.slice(0, 49)]);
+      syncNotification(notif);
+    }
+  };
+
   // Log customer contact touchpoint & update cadence schedule
   const logCustomerContact = (
     roId: string, 
@@ -1236,19 +1512,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const found = users.find(u => 
       u.email.toLowerCase() === search || 
       u.id.toLowerCase() === search ||
-      u.name.toLowerCase() === search
+      u.name.toLowerCase() === search ||
+      (u.employeeNumber && u.employeeNumber.toLowerCase() === search) ||
+      (u.employeeNumber && `#${u.employeeNumber.toLowerCase()}` === search)
     );
 
     if (!found) {
-      return { success: false, message: 'No employee found with this email, name, or ID.' };
+      return { success: false, message: 'No employee found with this name, employee #, or email.' };
     }
 
-    const matchesPass = found.password && found.password === cred;
     const matchesPin = found.pin && found.pin === cred;
     const matchesDefault = cred === '1234' || cred === 'admin123' || cred === 'admin';
 
-    if (!matchesPass && !matchesPin && !matchesDefault) {
-      return { success: false, message: 'Invalid password or PIN entered.' };
+    if (!matchesPin && !matchesDefault) {
+      return { success: false, message: 'Invalid Quick PIN code entered.' };
     }
 
     setCurrentUserState(found);
@@ -1265,12 +1542,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loginUser = (user: User, passwordOrPin: string): { success: boolean; message?: string } => {
     const cred = passwordOrPin.trim();
-    const matchesPass = user.password && user.password === cred;
     const matchesPin = user.pin && user.pin === cred;
     const matchesDefault = cred === '1234' || cred === 'admin123' || cred === 'admin';
 
-    if (!matchesPass && !matchesPin && !matchesDefault) {
-      return { success: false, message: 'Invalid password or PIN entered.' };
+    if (!matchesPin && !matchesDefault) {
+      return { success: false, message: 'Invalid Quick PIN code entered.' };
     }
 
     setCurrentUserState(user);
@@ -1304,6 +1580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     manager: {
       name: string;
       email: string;
+      employeeNumber?: string;
       password?: string;
       pin?: string;
       title?: string;
@@ -1318,8 +1595,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const managerUser: User = {
       id: `usr_mgr_${Date.now()}`,
       name: config.manager.name.trim() || 'Service Manager',
+      employeeNumber: config.manager.employeeNumber?.trim() || undefined,
       email: config.manager.email.trim().toLowerCase() || 'manager@precisionauto.com',
-      password: config.manager.password?.trim() || 'admin123',
       pin: config.manager.pin?.trim() || '1234',
       role: 'SERVICE_MANAGER',
       title: config.manager.title?.trim() || 'Service Director / General Manager',
@@ -1328,13 +1605,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const otherUsers = config.initialUsers.filter(u => u.role !== 'SERVICE_MANAGER' && u.email !== managerUser.email);
-    const finalUsers = [managerUser, ...otherUsers].map(u => ({
+    const finalUsers = [managerUser, ...otherUsers].map((u) => ({
       ...u,
+      employeeNumber: (u.employeeNumber && u.employeeNumber.trim()) ? u.employeeNumber.trim() : undefined,
       phone: (u.phone || '').trim(),
       certificationLevel: (u.certificationLevel || '').trim(),
       bayNumber: (u.bayNumber || u.certificationLevel || '').trim(),
-      password: u.password || u.pin || '1234',
-      pin: u.pin || u.password || '1234',
+      pin: u.pin || '1234',
     }));
 
     setUsers(finalUsers);
@@ -1381,8 +1658,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanManager: User = {
       id: `usr_mgr_${Date.now()}`,
       name: 'Service Manager',
+      employeeNumber: undefined,
       email: 'admin@precisionauto.com',
-      password: 'admin',
       pin: '1234',
       role: 'SERVICE_MANAGER',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
@@ -1512,6 +1789,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetAllDataToCleanSlateHandler,
         resetToDemoData,
         getFilteredROs,
+        shopMessages,
+        isChatBoxOpen,
+        setIsChatBoxOpen,
+        selectedChatRecipientId,
+        setSelectedChatRecipientId,
+        openDirectChat,
+        sendShopChatMessage,
+        addRecommendedService,
+        updateRecommendedServiceStatus,
       }}
     >
       {children}

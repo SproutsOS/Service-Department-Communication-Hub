@@ -10,10 +10,13 @@ import {
   ArrowRight,
   Send,
   Truck,
-  PhoneCall
+  PhoneCall,
+  Sparkles,
+  CheckCircle
 } from 'lucide-react';
 import { RepairOrder, ROStatus } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
+import { useApp } from '../context/AppContext';
 import { formatDateTime, formatTimeOnly, formatEtaBadge, calculateDispatchedDuration, getDiagnosticStatusDetails } from '../utils/formatters';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
@@ -24,9 +27,13 @@ interface ROCardProps {
 }
 
 export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) => {
+  const { users } = useApp();
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
   const cadence = getContactCadenceStatus(ro);
   const showCadence = isEligibleForCadence(ro);
+
+  const techUser = users.find(u => u.id === ro.techId || u.name === ro.techName);
+  const advisorUser = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
   
   // Check parts in transit or with active ETA
   const activeParts = ro.parts.filter(p => p.status !== 'ISSUED_TO_TECH');
@@ -142,6 +149,24 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
             )}
           </div>
         )}
+
+        {/* Tech Recommendations Badges */}
+        {ro.recommendations && ro.recommendations.length > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            {ro.recommendations.some(r => r.status === 'PENDING') && (
+              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300 flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                <span>{ro.recommendations.filter(r => r.status === 'PENDING').length} Tech Rec Pending</span>
+              </span>
+            )}
+            {ro.recommendations.some(r => r.status === 'APPROVED') && (
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 flex items-center gap-1">
+                <CheckCircle className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                <span>{ro.recommendations.filter(r => r.status === 'APPROVED').length} Approved</span>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Assignment Info: When Assigned and to Which Tech */}
@@ -159,8 +184,14 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
         <div className="flex items-center gap-1.5 text-slate-600">
           <Send className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           {ro.techName ? (
-            <span className="truncate text-[11px]">
-              <strong className="font-medium text-slate-700">Tech:</strong> {ro.techName} 
+            <span className="truncate text-[11px] inline-flex items-center gap-1 flex-wrap">
+              <strong className="font-medium text-slate-700">Tech:</strong> 
+              <span>{ro.techName}</span>
+              {techUser?.employeeNumber && (
+                <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                  {techUser.employeeNumber}
+                </span>
+              )}
               {ro.dispatchedAt ? ` (${formatTimeOnly(ro.dispatchedAt)})` : ''}
               {ro.bay ? ` • ${ro.bay}` : ''}
             </span>
@@ -234,7 +265,14 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
       {/* Footer: Advisor, Messages Count, Open details prompt */}
       <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
         <div className="flex items-center gap-2">
-          <span>Advisor: <strong className="text-slate-700 font-medium">{ro.advisorName}</strong></span>
+          <span className="inline-flex items-center gap-1">
+            Advisor: <strong className="text-slate-700 font-medium">{ro.advisorName}</strong>
+            {advisorUser?.employeeNumber && (
+              <span className="font-mono text-xs font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                {advisorUser.employeeNumber}
+              </span>
+            )}
+          </span>
           {ro.messages.length > 0 && (
             <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full text-[11px]">
               <MessageSquare className="w-3 h-3" />

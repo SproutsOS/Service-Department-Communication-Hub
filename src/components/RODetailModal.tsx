@@ -38,6 +38,7 @@ import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
 import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 import { decodeVin } from '../utils/vinDecoder';
 
@@ -55,7 +56,8 @@ export const RODetailModal: React.FC = () => {
     updatePartStatus,
     updateRepairOrderDetails,
     updateTechCauseAndCorrection,
-    deleteRepairOrder
+    deleteRepairOrder,
+    openDirectChat
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -1130,6 +1132,9 @@ export const RODetailModal: React.FC = () => {
                 );
               })()}
 
+              {/* Technician Additional Recommended Services (Air filter, cabin filter, tires, scheduled maint) */}
+              <TechRecommendationsSection ro={selectedRO} />
+
               {/* Order Metadata Grid: Created, Assigned, Advisor, Tech, Promised */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 
@@ -1142,19 +1147,48 @@ export const RODetailModal: React.FC = () => {
                   <div className="text-sm font-bold text-slate-900 mt-1">
                     {formatDateTime(selectedRO.createdAt)}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Logged by {selectedRO.advisorName}
+                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
+                    <span>Logged by {selectedRO.advisorName}</span>
+                    {(() => {
+                      const adv = users.find(u => u.id === selectedRO.advisorId || u.name === selectedRO.advisorName);
+                      return adv?.employeeNumber ? (
+                        <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                          {adv.employeeNumber}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
 
                 {/* When Assigned and to Which Tech */}
                 <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                    <Send className="w-3.5 h-3.5 text-indigo-500" />
-                    When Assigned & Tech
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                      <Send className="w-3.5 h-3.5 text-indigo-500" />
+                      When Assigned & Tech
+                    </div>
+                    {selectedRO.techId && selectedRO.techId !== currentUser.id && (
+                      <button
+                        type="button"
+                        onClick={() => openDirectChat(selectedRO.techId!)}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                        title={`Direct message ${selectedRO.techName}`}
+                      >
+                        <MessageSquare className="w-2.5 h-2.5" />
+                        <span>Chat</span>
+                      </button>
+                    )}
                   </div>
-                  <div className="text-sm font-bold text-slate-900 mt-1">
-                    {selectedRO.techName ? selectedRO.techName : 'Unassigned'}
+                  <div className="text-sm font-bold text-slate-900 mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span>{selectedRO.techName ? selectedRO.techName : 'Unassigned'}</span>
+                    {selectedRO.techName && (() => {
+                      const tch = users.find(u => u.id === selectedRO.techId || u.name === selectedRO.techName);
+                      return tch?.employeeNumber ? (
+                        <span className="font-mono text-sm font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                          {tch.employeeNumber}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                   <div className="text-[11px] text-slate-500 mt-0.5">
                     {selectedRO.dispatchedAt ? (
@@ -1167,15 +1201,36 @@ export const RODetailModal: React.FC = () => {
 
                 {/* Promised Completion Time */}
                 <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    Customer Promised Time
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      Customer Promised Time
+                    </div>
+                    {selectedRO.advisorId && selectedRO.advisorId !== currentUser.id && (
+                      <button
+                        type="button"
+                        onClick={() => openDirectChat(selectedRO.advisorId)}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                        title={`Direct message ${selectedRO.advisorName}`}
+                      >
+                        <MessageSquare className="w-2.5 h-2.5" />
+                        <span>Chat</span>
+                      </button>
+                    )}
                   </div>
                   <div className="text-sm font-bold text-slate-900 mt-1">
                     {formatDateTime(selectedRO.promisedTime)}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Service Advisor: {selectedRO.advisorName}
+                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
+                    <span>Service Advisor: {selectedRO.advisorName}</span>
+                    {(() => {
+                      const adv = users.find(u => u.id === selectedRO.advisorId || u.name === selectedRO.advisorName);
+                      return adv?.employeeNumber ? (
+                        <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                          {adv.employeeNumber}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
 
@@ -1262,7 +1317,7 @@ export const RODetailModal: React.FC = () => {
                       <option value="">Select Technician...</option>
                       {technicians.map(tech => (
                         <option key={tech.id} value={tech.id}>
-                          {tech.name} — {tech.title} ({tech.bayNumber || 'No Bay'})
+                          {tech.name}{tech.employeeNumber ? ` ${tech.employeeNumber}` : ''} — {tech.title} ({tech.bayNumber || 'No Bay'})
                         </option>
                       ))}
                     </select>
@@ -1327,6 +1382,14 @@ export const RODetailModal: React.FC = () => {
                           <span className="text-[11px] font-bold text-slate-700">
                             {msg.senderName}
                           </span>
+                          {(() => {
+                            const sender = users.find(u => u.id === msg.senderId);
+                            return sender?.employeeNumber ? (
+                              <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                {sender.employeeNumber}
+                              </span>
+                            ) : null;
+                          })()}
                           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-bold uppercase">
                             {msg.senderRole.replace('_', ' ')}
                           </span>
@@ -1601,8 +1664,17 @@ export const RODetailModal: React.FC = () => {
                     <p className="text-xs text-slate-600 mt-0.5">
                       {item.notes}
                     </p>
-                    <div className="text-[10px] text-slate-500 mt-0.5">
-                      Updated by: <strong className="font-semibold text-slate-700">{item.updatedByName}</strong> ({item.userRole.replace('_', ' ')})
+                    <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
+                      <span>Updated by: <strong className="font-semibold text-slate-700">{item.updatedByName}</strong></span>
+                      {(() => {
+                        const updUser = users.find(u => u.id === item.userId || u.name === item.updatedByName);
+                        return updUser?.employeeNumber ? (
+                          <span className="font-mono text-[10px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            {updUser.employeeNumber}
+                          </span>
+                        ) : null;
+                      })()}
+                      <span>({item.userRole.replace('_', ' ')})</span>
                     </div>
                   </div>
                 ))}
@@ -1720,7 +1792,17 @@ export const RODetailModal: React.FC = () => {
 
                           {/* Details: Advisor, ETA Discussed, Next Due */}
                           <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
-                            <span>Logged by: <strong className="text-slate-700">{record.advisorName}</strong></span>
+                            <span className="inline-flex items-center gap-1 flex-wrap">
+                              <span>Logged by: <strong className="text-slate-700">{record.advisorName}</strong></span>
+                              {(() => {
+                                const adv = users.find(u => u.id === record.advisorId || u.name === record.advisorName);
+                                return adv?.employeeNumber ? (
+                                  <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                    {adv.employeeNumber}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </span>
                             {record.nextScheduledContactDate && (
                               <span className="font-semibold text-blue-600">
                                 Next Call Due: {record.nextScheduledContactDate}

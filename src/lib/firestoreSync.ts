@@ -13,7 +13,7 @@ import {
   limit
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { RepairOrder, User, UrgentNotification } from '../types';
+import { RepairOrder, User, UrgentNotification, ShopChatMessage } from '../types';
 
 // Collection references
 export const REPAIR_ORDERS_COL = 'repairOrders';
@@ -21,6 +21,7 @@ export const USERS_COL = 'users';
 export const NOTIFICATIONS_COL = 'notifications';
 export const SETTINGS_COL = 'settings';
 export const SHOP_SETTINGS_DOC = 'shop';
+export const SHOP_MESSAGES_COL = 'shopMessages';
 
 export enum OperationType {
   CREATE = 'create',
@@ -122,6 +123,28 @@ export function subscribeToNotifications(callback: (notifs: UrgentNotification[]
   });
 }
 
+// Subscribe to real-time shop chat messages
+export function subscribeToShopMessages(callback: (messages: ShopChatMessage[]) => void) {
+  const colRef = collection(db, SHOP_MESSAGES_COL);
+  const q = query(colRef, orderBy('timestamp', 'asc'), limit(150));
+  return onSnapshot(q, (snapshot) => {
+    const list: ShopChatMessage[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push(docSnap.data() as ShopChatMessage);
+    });
+    callback(list);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, SHOP_MESSAGES_COL);
+  });
+}
+
+// Save a shop chat message
+export async function saveShopMessage(msg: ShopChatMessage) {
+  const docRef = doc(db, SHOP_MESSAGES_COL, msg.id);
+  const cleanData = sanitizeForFirestore(msg);
+  await setDoc(docRef, cleanData);
+}
+
 // Subscribe to real-time shop settings
 export function subscribeToShopSettings(callback: (settings: ShopSettings | null) => void) {
   const docRef = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
@@ -192,12 +215,12 @@ export async function syncUser(user: User): Promise<boolean> {
     const cleanUser = sanitizeForFirestore({
       id: user.id,
       name: (user.name || '').trim(),
+      employeeNumber: (user.employeeNumber || '').trim(),
       email: (user.email || '').trim().toLowerCase(),
       role: user.role || 'TECHNICIAN',
       title: (user.title || '').trim(),
       avatar: user.avatar || '',
-      password: user.password || user.pin || '1234',
-      pin: user.pin || user.password || '1234',
+      pin: user.pin || '1234',
       phone: (user.phone || '').trim(),
       certificationLevel: (user.certificationLevel || '').trim(),
       bayNumber: (user.bayNumber || user.certificationLevel || '').trim(),

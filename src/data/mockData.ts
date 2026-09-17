@@ -4,9 +4,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_mgr_1',
     name: 'Service Manager',
+    employeeNumber: '100',
     email: 'admin@precisionauto.com',
     pin: '1234',
-    password: 'admin',
     role: 'SERVICE_MANAGER',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     title: 'Service Manager',

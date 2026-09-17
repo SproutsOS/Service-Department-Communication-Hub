@@ -52,6 +52,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       const q = searchQuery.toLowerCase();
       return (
         user.name.toLowerCase().includes(q) ||
+        (user.employeeNumber && user.employeeNumber.toLowerCase().includes(q)) ||
+        (user.employeeNumber && `#${user.employeeNumber.toLowerCase()}`.includes(q)) ||
         user.title.toLowerCase().includes(q) ||
         user.email.toLowerCase().includes(q)
       );
@@ -87,7 +89,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return;
     }
     if (!pinInput.trim()) {
-      setErrorMsg('Please enter your 4-digit PIN or password.');
+      setErrorMsg('Please enter your 4-digit Quick PIN.');
       return;
     }
 
@@ -100,7 +102,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setSuccessMsg(`Welcome, ${selectedUser.name}! Unlocking workstation...`);
         if (onLoginSuccess) onLoginSuccess(selectedUser);
       } else {
-        setErrorMsg(res.message || 'Incorrect PIN or password. Please verify your passcode and try again.');
+        setErrorMsg(res.message || 'Incorrect PIN entered. Please verify your 4-digit PIN and try again.');
         setIsAuthenticating(false);
       }
     }, 250);
@@ -108,7 +110,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // Quick Keypad append
   const handleKeypadPress = (val: string) => {
-    if (pinInput.length < 16) {
+    if (pinInput.length < 8) {
       setPinInput(prev => prev + val);
     }
   };
@@ -259,8 +261,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                               {user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-xs font-bold text-white truncate">{user.name}</span>
+                                {user.employeeNumber && (
+                                  <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-900/80 text-blue-200 border border-blue-700/80 shrink-0">
+                                    {user.employeeNumber}
+                                  </span>
+                                )}
                                 {getRoleIcon(user.role)}
                               </div>
                               <p className="text-[11px] text-slate-400 truncate mt-0.5">
@@ -291,7 +298,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Selected Profile Passcode</span>
+                    <span>Quick PIN Code</span>
                   </div>
 
                   {selectedUser ? (
@@ -300,13 +307,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         {selectedUser.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-xs font-bold text-white truncate">{selectedUser.name}</div>
-                        <div className="text-[11px] text-blue-400 truncate">{selectedUser.title}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-white truncate">{selectedUser.name}</span>
+                          {selectedUser.employeeNumber && (
+                            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-900/80 text-blue-200 border border-blue-700/80 shrink-0">
+                              {selectedUser.employeeNumber}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-blue-400 truncate mt-0.5">{selectedUser.title}</div>
                       </div>
                     </div>
                   ) : (
                     <div className="p-3 bg-slate-900/60 rounded-xl border border-dashed border-slate-800 mb-4 text-center text-xs text-slate-500">
-                      Select an employee on the left to enter passcode
+                      Select an employee on the left to enter Quick PIN
                     </div>
                   )}
 
@@ -315,12 +329,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     <div className="relative">
                       <input
                         type={showPin ? 'text' : 'password'}
-                        placeholder="Enter 4-digit PIN or password"
+                        placeholder="Enter 4-digit PIN"
                         value={pinInput}
                         onChange={(e) => setPinInput(e.target.value)}
                         disabled={!selectedUser || isAuthenticating}
                         autoFocus={Boolean(selectedUser)}
-                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-center text-sm font-mono tracking-widest text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                        maxLength={8}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-center text-base font-mono tracking-widest text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       />
                       <button
                         type="button"

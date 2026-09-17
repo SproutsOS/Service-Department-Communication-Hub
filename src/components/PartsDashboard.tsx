@@ -16,7 +16,7 @@ import { PartItem, PartStatus } from '../types';
 import { formatEtaBadge, formatDateTime } from '../utils/formatters';
 
 export const PartsDashboard: React.FC = () => {
-  const { repairOrders, updatePartStatus, setSelectedRO } = useApp();
+  const { repairOrders, updatePartStatus, setSelectedRO, users } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<PartStatus | 'ALL'>('ALL');
@@ -204,12 +204,33 @@ export const PartsDashboard: React.FC = () => {
                       <span>Customer: <strong className="text-slate-700">{part.customerName}</strong></span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <div className="flex items-center gap-2 text-xs text-slate-600 flex-wrap">
                       <span className="font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => targetRO && setSelectedRO(targetRO)}>
                         #{part.roId}
                       </span>
-                      <span>• Assigned Tech: <strong className="text-slate-800">{part.techName || 'Unassigned'}</strong> ({part.bay || 'No Bay'})</span>
-                      <span>• Advisor: <strong className="text-slate-800">{part.advisorName}</strong></span>
+                      <span className="flex items-center gap-1">
+                        <span>• Assigned Tech: <strong className="text-slate-800">{part.techName || 'Unassigned'}</strong></span>
+                        {part.techName && (() => {
+                          const tch = users.find(u => u.name === part.techName);
+                          return tch?.employeeNumber ? (
+                            <span className="font-mono text-xs font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              {tch.employeeNumber}
+                            </span>
+                          ) : null;
+                        })()}
+                        <span>({part.bay || 'No Bay'})</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span>• Advisor: <strong className="text-slate-800">{part.advisorName}</strong></span>
+                        {part.advisorName && (() => {
+                          const adv = users.find(u => u.name === part.advisorName);
+                          return adv?.employeeNumber ? (
+                            <span className="font-mono text-xs font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              {adv.employeeNumber}
+                            </span>
+                          ) : null;
+                        })()}
+                      </span>
                     </div>
                   </div>
 

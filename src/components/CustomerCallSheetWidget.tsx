@@ -212,7 +212,9 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
             >
               <option value="ALL">All Advisors</option>
               {advisors.map(adv => (
-                <option key={adv.id} value={adv.id}>{adv.name}</option>
+                <option key={adv.id} value={adv.id}>
+                  {adv.name}{adv.employeeNumber ? ` ${adv.employeeNumber}` : ''}
+                </option>
               ))}
             </select>
           )}
@@ -314,14 +316,33 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
                     )}
 
                     <span className="text-slate-400 text-[11px]">•</span>
-                    <span className="text-slate-500 text-[11px]">Advisor: {ro.advisorName}</span>
+                    <span className="text-slate-500 text-[11px] flex items-center gap-1 flex-wrap">
+                      <span>Advisor: {ro.advisorName}</span>
+                      {(() => {
+                        const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
+                        return adv?.employeeNumber ? (
+                          <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            {adv.employeeNumber}
+                          </span>
+                        ) : null;
+                      })()}
+                    </span>
 
                     {/* Last contact record summary */}
                     {latestContact && (
                       <>
                         <span className="text-slate-400 text-[11px]">•</span>
-                        <span className="text-slate-600 text-[11px]">
-                          Last called: {latestContact.timestamp.split('T')[0]} ({latestContact.advisorName})
+                        <span className="text-slate-600 text-[11px] flex items-center gap-1 flex-wrap">
+                          <span>Last called: {latestContact.timestamp.split('T')[0]} ({latestContact.advisorName}</span>
+                          {(() => {
+                            const adv = users.find(u => u.id === latestContact.advisorId || u.name === latestContact.advisorName);
+                            return adv?.employeeNumber ? (
+                              <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                {adv.employeeNumber}
+                              </span>
+                            ) : null;
+                          })()}
+                          <span>)</span>
                         </span>
                       </>
                     )}

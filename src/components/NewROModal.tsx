@@ -482,38 +482,25 @@ export const NewROModal: React.FC = () => {
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Send className="w-3.5 h-3.5 text-blue-600" /> Immediate Assignment (Optional)
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Assign Technician</label>
-                <select
-                  value={techId}
-                  onChange={e => {
-                    const id = e.target.value;
-                    setTechId(id);
-                    const tech = technicians.find(t => t.id === id);
-                    if (tech?.bayNumber) setBay(tech.bayNumber);
-                  }}
-                  className="w-full text-xs px-3 py-2.5 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs font-semibold text-slate-800"
-                >
-                  <option value="">Leave in Queue (Unassigned)</option>
-                  {technicians.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} — {t.title} ({t.bayNumber || 'No Bay'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Assigned Bay</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Bay 3"
-                  value={bay}
-                  onChange={e => setBay(e.target.value)}
-                  className="w-full text-xs px-3 py-2.5 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-900"
-                />
-              </div>
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Assign Technician</label>
+              <select
+                value={techId}
+                onChange={e => {
+                  const id = e.target.value;
+                  setTechId(id);
+                  const tech = technicians.find(t => t.id === id);
+                  if (tech?.bayNumber) setBay(tech.bayNumber);
+                }}
+                className="w-full text-xs px-3 py-2.5 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs font-semibold text-slate-800"
+              >
+                <option value="">Leave in Queue (Unassigned)</option>
+                {technicians.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.employeeNumber ? ` ${t.employeeNumber}` : ''} — {t.title}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

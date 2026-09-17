@@ -13,7 +13,8 @@ import {
   Users,
   Cloud,
   CheckCircle2,
-  Lock
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -29,6 +30,9 @@ export const Navbar: React.FC = () => {
     setIsNewROModalOpen,
     setIsLoginModalOpen,
     setIsStaffManagementOpen,
+    isChatBoxOpen,
+    setIsChatBoxOpen,
+    shopMessages,
     shopName,
     isCloudSynced,
     resetAllDataToCleanSlateHandler,
@@ -183,6 +187,26 @@ export const Navbar: React.FC = () => {
           </div>
         )}
 
+        {/* Shop Team Chat Box Launcher */}
+        <button
+          id="navbar-shop-chat-btn"
+          onClick={() => setIsChatBoxOpen(!isChatBoxOpen)}
+          className={`relative p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+            isChatBoxOpen 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white'
+          }`}
+          title="Open Shop Team Chat"
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span className="hidden md:inline text-xs font-semibold">Shop Chat</span>
+          {shopMessages.length > 0 && (
+            <span className="flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full text-[10px] font-bold text-white bg-blue-500 shadow-2xs">
+              {shopMessages.length}
+            </span>
+          )}
+        </button>
+
         {/* Audio Chime Toggle */}
         <button
           id="sound-chime-toggle-btn"
@@ -226,6 +250,11 @@ export const Navbar: React.FC = () => {
         {/* Active User Details (Displays signed-in user name & role space) */}
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/60 text-xs">
           <span className="font-semibold text-white">{currentUser.name}</span>
+          {currentUser.employeeNumber && (
+            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
+              {currentUser.employeeNumber}
+            </span>
+          )}
           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 uppercase">
             {currentUser.title || currentUser.role}
           </span>

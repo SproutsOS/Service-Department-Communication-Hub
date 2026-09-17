@@ -31,7 +31,7 @@ interface CustomerFollowUpModalProps {
 }
 
 export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro, onClose, onSuccess }) => {
-  const { logCustomerContact, currentUser } = useApp();
+  const { logCustomerContact, currentUser, users } = useApp();
 
   const [contactType, setContactType] = useState<CustomerContactType>('PHONE_CALL');
   const [outcome, setOutcome] = useState<CustomerContactOutcome>('SPOKE_WITH_CUSTOMER');
@@ -202,8 +202,25 @@ export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro
                 <Package className="w-3.5 h-3.5 text-blue-600" />
                 <span>Pre-Call Cheat Sheet</span>
               </span>
-              <span className="text-[11px] font-medium text-blue-700">
-                Advisor: {ro.advisorName} • Tech: {ro.techName || 'Unassigned'}
+              <span className="text-[11px] font-medium text-blue-700 flex items-center gap-1.5 flex-wrap">
+                <span>Advisor: {ro.advisorName}</span>
+                {(() => {
+                  const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
+                  return adv?.employeeNumber ? (
+                    <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                      {adv.employeeNumber}
+                    </span>
+                  ) : null;
+                })()}
+                <span>• Tech: {ro.techName || 'Unassigned'}</span>
+                {ro.techName && (() => {
+                  const tch = users.find(u => u.id === ro.techId || u.name === ro.techName);
+                  return tch?.employeeNumber ? (
+                    <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                      {tch.employeeNumber}
+                    </span>
+                  ) : null;
+                })()}
               </span>
             </div>
 

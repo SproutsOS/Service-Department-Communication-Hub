@@ -8,9 +8,10 @@ export type UserRole =
 export interface User {
   id: string;
   name: string;
+  employeeNumber?: string; // Employee number displayed to the right of employee name (e.g. '101', '102')
   email: string;
-  password?: string; // Password for individual login
-  pin?: string; // 4-digit PIN or password for individual login
+  password?: string; // Legacy field (deprecated in favor of quick PIN)
+  pin?: string; // Quick 4-digit PIN code for individual login
   role: UserRole;
   avatar: string;
   certificationLevel?: string; // e.g. 'Master Certified', 'ASE Master Tech', 'A-Level Tech', 'B-Level Tech', 'L1 Advanced Diagnostics'
@@ -155,6 +156,7 @@ export interface RepairOrder {
   correction?: string; // Repair performed: corrective action taken by technician
   parts: PartItem[];
   messages: Message[];
+  recommendations?: RecommendedService[]; // Tech additional requested items (air filter, tires, cabin air, scheduled maint, etc.)
   history: StatusHistory[];
   // Customer Follow-Up & Contact Cadence (Twice-per-week tracking)
   lastContactDate?: string; // Timestamp of last customer touchpoint
@@ -162,6 +164,39 @@ export interface RepairOrder {
   lastContactOutcome?: string;
   nextContactDueDate?: string; // ISO date string when next call is due
   contactHistory?: CustomerContactRecord[];
+}
+
+export type RecommendedServiceStatus = 'PENDING' | 'APPROVED' | 'DECLINED';
+
+export interface RecommendedService {
+  id: string;
+  roId: string;
+  serviceName: string;
+  category: 'AIR_FILTER' | 'CABIN_FILTER' | 'TIRES' | 'SCHEDULED_MAINT' | 'BRAKES' | 'BATTERY' | 'WIPERS' | 'OTHER';
+  urgency: 'SAFETY' | 'RECOMMENDED';
+  notes?: string;
+  status: RecommendedServiceStatus;
+  requestedByTechId: string;
+  requestedByTechName: string;
+  requestedAt: string;
+  reviewedByAdvisorId?: string;
+  reviewedByAdvisorName?: string;
+  reviewedAt?: string;
+  declinedReason?: string;
+}
+
+export interface ShopChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  recipientId?: string; // 'ALL' or undefined for All Team; or user.id for 1-on-1 DM
+  recipientName?: string;
+  recipientRole?: UserRole;
+  content: string;
+  timestamp: string;
+  roId?: string; // Optional reference to a specific Repair Order #
+  isUrgent?: boolean;
 }
 
 export interface UrgentNotification {
@@ -172,7 +207,7 @@ export interface UrgentNotification {
   message: string;
   timestamp: string;
   isUrgent: boolean;
-  type: 'STATUS_CHANGE' | 'PARTS_UPDATE' | 'NEW_MESSAGE' | 'DISPATCH';
+  type: 'STATUS_CHANGE' | 'PARTS_UPDATE' | 'NEW_MESSAGE' | 'DISPATCH' | 'RECOMMENDED_SERVICE' | 'SHOP_CHAT';
   read: boolean;
   targetRole?: UserRole;
   targetUserId?: string;
