@@ -1,5 +1,5 @@
 {
-  "name": "Remix Service Department Communication \u0026 RO Hub",
+  "name": "Service Department & Repair Order Hub",
   "description": "Centralized communication and real-time Repair Order tracking with role-based access for Service Managers, Advisors, Technicians, Parts Specialists, and a read-only Sales position.",
   "requestFramePermissions": [],
   "majorCapabilities": [
