@@ -164,6 +164,56 @@ export interface RepairOrder {
   lastContactOutcome?: string;
   nextContactDueDate?: string; // ISO date string when next call is due
   contactHistory?: CustomerContactRecord[];
+  quote?: RepairQuote;
+}
+
+export type QuoteStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'DECLINED';
+
+export interface LaborLineItem {
+  id: string;
+  description: string;
+  laborHours: number;
+  hourlyRate: number;
+  subtotal: number;
+  proDemandLaborGuide?: string;
+  techNotes?: string;
+}
+
+export interface QuotePartItem {
+  id: string;
+  description: string;
+  partNumber?: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  sourcePartId?: string;
+}
+
+export interface RepairQuote {
+  id: string;
+  roId: string;
+  createdAt: string;
+  updatedAt: string;
+  initiatedByTechId: string;
+  initiatedByTechName: string;
+  status: QuoteStatus;
+  laborItems: LaborLineItem[];
+  partsItems: QuotePartItem[];
+  defaultLaborRate: number;
+  shopSuppliesFee: number;
+  taxRate: number;
+  taxAmount: number;
+  totalLaborHours: number;
+  totalLaborCost: number;
+  totalPartsCost: number;
+  grandTotal: number;
+  techNotes?: string;
+  advisorNotes?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  declinedAt?: string;
+  declinedReason?: string;
 }
 
 export type RecommendedServiceStatus = 'PENDING' | 'APPROVED' | 'DECLINED';
@@ -207,7 +257,7 @@ export interface UrgentNotification {
   message: string;
   timestamp: string;
   isUrgent: boolean;
-  type: 'STATUS_CHANGE' | 'PARTS_UPDATE' | 'NEW_MESSAGE' | 'DISPATCH' | 'RECOMMENDED_SERVICE' | 'SHOP_CHAT';
+  type: 'STATUS_CHANGE' | 'PARTS_UPDATE' | 'NEW_MESSAGE' | 'DISPATCH' | 'RECOMMENDED_SERVICE' | 'SHOP_CHAT' | 'QUOTE_UPDATE';
   read: boolean;
   targetRole?: UserRole;
   targetUserId?: string;

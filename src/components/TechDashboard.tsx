@@ -15,7 +15,10 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
-  FileText
+  FileText,
+  ExternalLink,
+  Calculator,
+  Copy
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
@@ -28,7 +31,7 @@ interface TechCauseCorrectionSectionProps {
 }
 
 const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({ ro }) => {
-  const { updateTechCauseAndCorrection } = useApp();
+  const { updateTechCauseAndCorrection, openQuoteModal } = useApp();
   const [cause, setCause] = useState(ro.cause || ro.diagnosticNotes || '');
   const [correction, setCorrection] = useState(ro.correction || '');
   const [isSavedRecently, setIsSavedRecently] = useState(false);
@@ -153,6 +156,50 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
             />
           </div>
 
+          {/* Tech Quick Actions: ProDemand Labor Lookup & Quote Builder */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-2 flex-wrap">
+              <a
+                href="https://www.prodemand.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-xs font-bold border border-blue-200 flex items-center gap-1.5 transition-colors"
+                title="Lookup OEM flat-rate labor times in Mitchell 1 ProDemand"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>ProDemand Labor Times ↗</span>
+              </a>
+
+              {ro.vehicle.vin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(ro.vehicle.vin);
+                    alert(`Copied VIN to clipboard: ${ro.vehicle.vin}`);
+                  }}
+                  className="px-2 py-1.5 bg-white hover:bg-slate-100 text-slate-600 rounded-md text-[11px] font-mono border border-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Copy VIN for ProDemand"
+                >
+                  <Copy className="w-3 h-3 text-slate-400" />
+                  <span>Copy VIN</span>
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openQuoteModal(ro.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer ${
+                ro.quote
+                  ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+              }`}
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>{ro.quote ? `View/Edit Quote ($${ro.quote.grandTotal.toFixed(2)})` : '+ Initiate Repair Quote'}</span>
+            </button>
+          </div>
+
           {/* Action Bar */}
           <div className="flex items-center justify-between pt-1">
             <span className="text-[11px] text-slate-500 italic">
@@ -194,7 +241,8 @@ export const TechDashboard: React.FC = () => {
     setSelectedRO, 
     updateROStatus, 
     startDiagnosis,
-    openDirectChat
+    openDirectChat,
+    openQuoteModal
   } = useApp();
 
   // Filter strictly to this technician's assigned ROs
@@ -407,6 +455,65 @@ export const TechDashboard: React.FC = () => {
                         </button>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* Tech Tools: ProDemand Labor Lookup & Repair Quote */}
+                <div 
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-2.5 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border-2 border-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <a
+                      href="https://www.prodemand.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-blue-700"
+                      title="Open Mitchell 1 ProDemand for OEM flat-rate labor times"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>ProDemand Labor ↗</span>
+                    </a>
+
+                    {ro.vehicle.vin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(ro.vehicle.vin);
+                          alert(`Copied VIN: ${ro.vehicle.vin}`);
+                        }}
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-mono font-medium border border-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Copy VIN for ProDemand"
+                      >
+                        <Copy className="w-3 h-3 text-slate-400" />
+                        <span>VIN: {ro.vehicle.vin.substring(0, 10)}...</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openQuoteModal(ro.id)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border-2 transition-all cursor-pointer shadow-xs ${
+                        ro.quote
+                          ? ro.quote.status === 'APPROVED'
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                            : ro.quote.status === 'SUBMITTED'
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+                      }`}
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      {ro.quote ? (
+                        <span>
+                          Quote: <strong>${ro.quote.grandTotal.toFixed(2)}</strong> ({ro.quote.status})
+                        </span>
+                      ) : (
+                        <span>+ Initiate Repair Quote</span>
+                      )}
+                    </button>
                   </div>
                 </div>
 

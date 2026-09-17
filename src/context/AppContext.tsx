@@ -11,7 +11,9 @@ import {
   CustomerContactOutcome,
   StatusHistory,
   RecommendedService,
-  ShopChatMessage
+  ShopChatMessage,
+  RepairQuote,
+  QuoteStatus
 } from '../types';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -168,6 +170,13 @@ interface AppContextType {
     status: 'APPROVED' | 'DECLINED', 
     declinedReason?: string
   ) => boolean;
+
+  // Repair Quote Workflow (Initiated by Technician)
+  activeQuoteRO: RepairOrder | null;
+  openQuoteModal: (roId: string) => void;
+  closeQuoteModal: () => void;
+  saveRepairQuote: (roId: string, quote: RepairQuote, submitToAdvisor?: boolean) => boolean;
+  updateQuoteStatus: (roId: string, status: 'APPROVED' | 'DECLINED', reason?: string) => boolean;
 }
 
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
@@ -323,6 +332,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [selectedROId, setSelectedROId] = useState<string | null>(null);
+  const [quoteModalROId, setQuoteModalROId] = useState<string | null>(null);
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
@@ -642,9 +652,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [users, currentUser]);
 
   const selectedRO = repairOrders.find(ro => ro.id === selectedROId) || null;
+  const activeQuoteRO = repairOrders.find(ro => ro.id === quoteModalROId) || null;
 
   const setSelectedRO = (ro: RepairOrder | null) => {
     setSelectedROId(ro ? ro.id : null);
+  };
+
+  const openQuoteModal = (roId: string) => {
+    setQuoteModalROId(roId);
+  };
+
+  const closeQuoteModal = () => {
+    setQuoteModalROId(null);
   };
 
   const setCurrentUser = (user: User) => {
@@ -1488,6 +1507,126 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Technician Repair Quote Workflow
+  const saveRepairQuote = (roId: string, quote: RepairQuote, submitToAdvisor: boolean = false): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const now = new Date().toISOString();
+    const nextStatus: QuoteStatus = submitToAdvisor ? 'SUBMITTED' : (quote.status || 'DRAFT');
+    const nextQuote: RepairQuote = {
+      ...quote,
+      status: nextStatus,
+      updatedAt: now,
+      submittedAt: submitToAdvisor ? (quote.submittedAt || now) : quote.submittedAt,
+    };
+
+    const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : targetRO.status;
+
+    const historyItem: StatusHistory = {
+      id: `hist_${Date.now()}`,
+      status: nextROStatus,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: submitToAdvisor
+        ? `Tech ${currentUser.name} submitted repair quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts). Sent to Advisor for authorization.`
+        : `Tech ${currentUser.name} saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)})`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      status: nextROStatus,
+      quote: nextQuote,
+      history: [...targetRO.history, historyItem],
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    if (submitToAdvisor) {
+      playNotificationChime(true);
+      triggerNotification(
+        updatedRO,
+        `Quote Ready: $${nextQuote.grandTotal.toFixed(2)}`,
+        `Tech ${currentUser.name} submitted repair quote for RO #${targetRO.id} ($${nextQuote.grandTotal.toFixed(2)}: ${nextQuote.totalLaborHours} hrs labor, $${nextQuote.totalPartsCost.toFixed(2)} parts). Awaiting customer authorization.`,
+        true,
+        'QUOTE_UPDATE'
+      );
+    }
+
+    return true;
+  };
+
+  const updateQuoteStatus = (roId: string, status: 'APPROVED' | 'DECLINED', reason?: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO || !targetRO.quote) return false;
+
+    const now = new Date().toISOString();
+    const updatedQuote: RepairQuote = {
+      ...targetRO.quote,
+      status,
+      updatedAt: now,
+      approvedAt: status === 'APPROVED' ? now : targetRO.quote.approvedAt,
+      approvedBy: status === 'APPROVED' ? currentUser.name : targetRO.quote.approvedBy,
+      declinedAt: status === 'DECLINED' ? now : targetRO.quote.declinedAt,
+      declinedReason: status === 'DECLINED' ? reason : targetRO.quote.declinedReason,
+    };
+
+    const targetROStatus: ROStatus = status === 'APPROVED' ? 'APPROVED' : 'DENIED';
+
+    const historyItem: StatusHistory = {
+      id: `hist_${Date.now()}`,
+      status: targetROStatus,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: status === 'APPROVED'
+        ? `${currentUser.name} authorized repair quote ($${updatedQuote.grandTotal.toFixed(2)}) on customer behalf`
+        : `${currentUser.name} marked repair quote as declined${reason ? `: ${reason}` : ''}`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      status: targetROStatus,
+      quote: updatedQuote,
+      history: [...targetRO.history, historyItem],
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      `Quote ${status === 'APPROVED' ? 'Approved' : 'Declined'}: RO #${targetRO.id}`,
+      `${currentUser.name} marked quote as ${status}${reason ? ` (${reason})` : ''}.`,
+      status === 'APPROVED',
+      'STATUS_CHANGE'
+    );
+
+    return true;
+  };
+
   const openDirectChat = (recipientUserId: string | 'ALL') => {
     setSelectedChatRecipientId(recipientUserId);
     setIsChatBoxOpen(true);
@@ -1963,6 +2102,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markShopMessagesAsRead,
         addRecommendedService,
         updateRecommendedServiceStatus,
+        activeQuoteRO,
+        openQuoteModal,
+        closeQuoteModal,
+        saveRepairQuote,
+        updateQuoteStatus,
       }}
     >
       {children}

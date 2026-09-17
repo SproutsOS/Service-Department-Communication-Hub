@@ -30,7 +30,9 @@ import {
   Loader2,
   Sparkles,
   RefreshCw,
-  Trash2
+  Trash2,
+  ExternalLink,
+  Calculator
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole } from '../types';
@@ -57,7 +59,8 @@ export const RODetailModal: React.FC = () => {
     updateRepairOrderDetails,
     updateTechCauseAndCorrection,
     deleteRepairOrder,
-    openDirectChat
+    openDirectChat,
+    openQuoteModal
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -380,7 +383,44 @@ export const RODetailModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* ProDemand Labor Guide Link */}
+            <a
+              href="https://www.prodemand.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shadow-2xs"
+              title="Open Mitchell 1 ProDemand flat rate labor times"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ProDemand</span> Labor ↗
+            </a>
+
+            {/* Repair Quote Initiation / Status */}
+            <button
+              type="button"
+              onClick={() => openQuoteModal(selectedRO.id)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                selectedRO.quote
+                  ? selectedRO.quote.status === 'APPROVED'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                    : selectedRO.quote.status === 'SUBMITTED'
+                    ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                    : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
+                  : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
+              }`}
+              title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              {selectedRO.quote ? (
+                <span>
+                  Quote: <strong>${selectedRO.quote.grandTotal.toFixed(2)}</strong>
+                </span>
+              ) : (
+                <span>+ Repair Quote</span>
+              )}
+            </button>
+
             {!isSales && (
               <button
                 type="button"
@@ -1134,6 +1174,130 @@ export const RODetailModal: React.FC = () => {
 
               {/* Technician Additional Recommended Services (Air filter, cabin filter, tires, scheduled maint) */}
               <TechRecommendationsSection ro={selectedRO} />
+
+              {/* Repair Quote & Labor Estimate Card */}
+              <div className="bg-white rounded-xl border-2 border-indigo-200 overflow-hidden shadow-2xs">
+                <div className="p-4 bg-indigo-50/70 border-b border-indigo-200 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-xs">
+                      <Calculator className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900">Repair Quote & Labor Estimate</h4>
+                        {selectedRO.quote ? (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            selectedRO.quote.status === 'APPROVED'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : selectedRO.quote.status === 'SUBMITTED'
+                              ? 'bg-blue-100 text-blue-800 border-blue-300'
+                              : selectedRO.quote.status === 'DECLINED'
+                              ? 'bg-red-100 text-red-800 border-red-300'
+                              : 'bg-amber-100 text-amber-800 border-amber-300'
+                          }`}>
+                            {selectedRO.quote.status}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                            Not Initiated
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Technician-initiated labor & parts estimate linked to Mitchell 1 ProDemand
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <a
+                      href="https://www.prodemand.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                      title="Open Mitchell 1 ProDemand for OEM flat rate labor times"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>ProDemand Labor ↗</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => openQuoteModal(selectedRO.id)}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      <span>{selectedRO.quote ? 'Open & Edit Quote' : '+ Initiate Repair Quote'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {selectedRO.quote ? (
+                  <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Labor Items</div>
+                        <div className="text-sm font-bold text-slate-800 mt-0.5">
+                          {selectedRO.quote.laborItems.length} lines ({selectedRO.quote.laborItems.reduce((s, i) => s + i.hours, 0).toFixed(1)} hrs)
+                        </div>
+                        <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                          ${selectedRO.quote.laborSubtotal.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Parts Required</div>
+                        <div className="text-sm font-bold text-slate-800 mt-0.5">
+                          {selectedRO.quote.partsItems.length} parts
+                        </div>
+                        <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                          ${selectedRO.quote.partsSubtotal.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Supplies & Tax</div>
+                        <div className="text-sm font-bold text-slate-800 mt-0.5">
+                          ${(selectedRO.quote.shopSupplies + selectedRO.quote.tax).toFixed(2)}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Supplies ${(selectedRO.quote.shopSupplies).toFixed(2)} • Tax ${(selectedRO.quote.tax).toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 bg-indigo-50/80 rounded-lg border border-indigo-200">
+                        <div className="text-[10px] uppercase font-bold text-indigo-700">Grand Total</div>
+                        <div className="text-lg font-black text-indigo-950 mt-0.5">
+                          ${selectedRO.quote.grandTotal.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] font-bold text-indigo-600">
+                          Rate: ${selectedRO.quote.hourlyLaborRate}/hr
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedRO.quote.advisorNotes && (
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900">
+                        <span className="font-bold">Advisor / Customer Notes: </span>
+                        <span>{selectedRO.quote.advisorNotes}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                    <p>
+                      No formal repair quote has been initiated for this repair order yet. Technicians can look up OEM labor times in ProDemand and build an itemized quote to present to the advisor and customer.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openQuoteModal(selectedRO.id)}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shrink-0 cursor-pointer shadow-xs"
+                    >
+                      Initiate Quote Now
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Order Metadata Grid: Created, Assigned, Advisor, Tech, Promised */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
