@@ -21,6 +21,8 @@
         "parts": { "type": "array" },
         "messages": { "type": "array" },
         "history": { "type": "array" },
+        "quote": { "type": "object" },
+        "timePunches": { "type": "array" },
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "customerName", "status", "advisorName"]

@@ -13,7 +13,9 @@ import {
   RecommendedService,
   ShopChatMessage,
   RepairQuote,
-  QuoteStatus
+  QuoteStatus,
+  WarrantyLaborTimePunch,
+  WarrantyOperationType
 } from '../types';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -116,8 +118,8 @@ interface AppContextType {
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
-  updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>) => boolean;
-  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string) => boolean;
+  updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
+  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
   logCustomerContact: (
     roId: string, 
     contactData: {
@@ -175,8 +177,28 @@ interface AppContextType {
   activeQuoteRO: RepairOrder | null;
   openQuoteModal: (roId: string) => void;
   closeQuoteModal: () => void;
-  saveRepairQuote: (roId: string, quote: RepairQuote, submitToAdvisor?: boolean) => boolean;
+  saveRepairQuote: (roId: string, quote: RepairQuote, submitToAdvisor?: boolean, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
   updateQuoteStatus: (roId: string, status: 'APPROVED' | 'DECLINED', reason?: string) => boolean;
+
+  // Warranty Labor Time Clock & Multi-Punch Tracking
+  clockInToRO: (
+    roId: string, 
+    notes?: string, 
+    operationType?: WarrantyOperationType
+  ) => { success: boolean; message: string; punch?: WarrantyLaborTimePunch };
+  clockOutOfRO: (
+    roId: string, 
+    punchId?: string, 
+    notes?: string
+  ) => { success: boolean; message: string; durationMinutes?: number };
+  addManualTimePunch: (roId: string, punch: Omit<WarrantyLaborTimePunch, 'id'>) => boolean;
+  updateTimePunch: (roId: string, punchId: string, updates: Partial<WarrantyLaborTimePunch>) => boolean;
+  deleteTimePunch: (roId: string, punchId: string) => boolean;
+
+  // Warranty Documentation & Print Feature
+  activeWarrantyPrintRO: RepairOrder | null;
+  openWarrantyPrintModal: (roId: string) => void;
+  closeWarrantyPrintModal: () => void;
 }
 
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
@@ -333,6 +355,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [selectedROId, setSelectedROId] = useState<string | null>(null);
   const [quoteModalROId, setQuoteModalROId] = useState<string | null>(null);
+  const [warrantyPrintROId, setWarrantyPrintROId] = useState<string | null>(null);
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
@@ -653,6 +676,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const selectedRO = repairOrders.find(ro => ro.id === selectedROId) || null;
   const activeQuoteRO = repairOrders.find(ro => ro.id === quoteModalROId) || null;
+  const activeWarrantyPrintRO = repairOrders.find(ro => ro.id === warrantyPrintROId) || null;
 
   const setSelectedRO = (ro: RepairOrder | null) => {
     setSelectedROId(ro ? ro.id : null);
@@ -664,6 +688,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const closeQuoteModal = () => {
     setQuoteModalROId(null);
+  };
+
+  const openWarrantyPrintModal = (roId: string) => {
+    setWarrantyPrintROId(roId);
+  };
+
+  const closeWarrantyPrintModal = () => {
+    setWarrantyPrintROId(null);
   };
 
   const setCurrentUser = (user: User) => {
@@ -1296,29 +1328,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Update core entered repair order details (Restricted to Service Manager)
-  const updateRepairOrderDetails = (roId: string, updates: Partial<RepairOrder>): boolean => {
+  const updateRepairOrderDetails = (
+    roId: string, 
+    updates: Partial<RepairOrder>,
+    options?: { isAutoSave?: boolean }
+  ): boolean => {
     if (currentUser.role !== 'SERVICE_MANAGER') {
-      alert('Permission Denied: Only the Service Manager has permission to modify core repair order records.');
+      if (!options?.isAutoSave) {
+        alert('Permission Denied: Only the Service Manager has permission to modify core repair order records.');
+      }
       return false;
     }
     setRepairOrders(prev => {
       const updated = prev.map(ro => {
         if (ro.id === roId) {
+          const isAutoSave = options?.isAutoSave ?? false;
+          const lastHist = ro.history[ro.history.length - 1];
+          const isRecentSame = lastHist && 
+            lastHist.updatedBy === currentUser.id && 
+            lastHist.notes.includes('core records') &&
+            (Date.now() - new Date(lastHist.timestamp).getTime() < 120000);
+
+          const newHistory = isAutoSave && isRecentSame
+            ? ro.history
+            : [
+                ...ro.history,
+                {
+                  id: `hist-${Date.now()}`,
+                  status: ro.status,
+                  updatedBy: currentUser.id,
+                  updatedByName: currentUser.name,
+                  userRole: currentUser.role,
+                  timestamp: new Date().toISOString(),
+                  notes: `Service Manager ${isAutoSave ? 'auto-saved' : 'updated'} core records (${Object.keys(updates).join(', ')})`
+                }
+              ];
+
           const updatedRO = {
             ...ro,
             ...updates,
-            history: [
-              ...ro.history,
-              {
-                id: `hist-${Date.now()}`,
-                status: ro.status,
-                updatedBy: currentUser.id,
-                updatedByName: currentUser.name,
-                userRole: currentUser.role,
-                timestamp: new Date().toISOString(),
-                notes: `Service Manager updated core records (${Object.keys(updates).join(', ')})`
-              }
-            ]
+            history: newHistory
           };
           syncRepairOrder(updatedRO);
           return updatedRO;
@@ -1336,14 +1385,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Technician & Staff: Update Cause & Correction for diagnostic & repair documentation
-  const updateTechCauseAndCorrection = (roId: string, cause: string, correction: string): boolean => {
+  const updateTechCauseAndCorrection = (
+    roId: string, 
+    cause: string, 
+    correction: string,
+    options?: { isAutoSave?: boolean; notify?: boolean }
+  ): boolean => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return false;
 
     const trimmedCause = cause.trim();
     const trimmedCorrection = correction.trim();
 
+    // If nothing changed, return true without doing redundant work
+    if (targetRO.cause === trimmedCause && targetRO.correction === trimmedCorrection) {
+      return true;
+    }
+
+    const isAutoSave = options?.isAutoSave ?? false;
+    const shouldNotify = options?.notify ?? (!isAutoSave);
+
     const now = new Date().toISOString();
+    const lastHist = targetRO.history[targetRO.history.length - 1];
+    const isRecentSame = lastHist && 
+      lastHist.updatedBy === currentUser.id && 
+      lastHist.notes.includes('Cause & Correction') &&
+      (Date.now() - new Date(lastHist.timestamp).getTime() < 120000);
+
     const newHistoryItem = {
       id: `hist_${Date.now()}`,
       status: targetRO.status,
@@ -1351,8 +1419,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedByName: currentUser.name,
       userRole: currentUser.role,
       timestamp: now,
-      notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) updated Cause & Correction documentation`,
+      notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) ${isAutoSave ? 'auto-saved' : 'updated'} Cause & Correction documentation`,
     };
+
+    const newHistory = isAutoSave && isRecentSame
+      ? targetRO.history
+      : [...targetRO.history, newHistoryItem];
 
     const updatedRO: RepairOrder = {
       ...targetRO,
@@ -1360,7 +1432,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       correction: trimmedCorrection,
       // For backwards compatibility, sync diagnosticNotes if empty
       diagnosticNotes: trimmedCause || targetRO.diagnosticNotes,
-      history: [...targetRO.history, newHistoryItem]
+      history: newHistory
     };
 
     setRepairOrders(prev => {
@@ -1375,14 +1447,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     syncRepairOrder(updatedRO);
 
-    // Notify team
-    triggerNotification(
-      updatedRO,
-      `Cause & Correction Updated`,
-      `${currentUser.name} documented Cause & Correction on RO #${targetRO.id}`,
-      false,
-      'STATUS_CHANGE'
-    );
+    // Notify team if requested or manual save
+    if (shouldNotify) {
+      triggerNotification(
+        updatedRO,
+        `Cause & Correction Updated`,
+        `${currentUser.name} documented Cause & Correction on RO #${targetRO.id}`,
+        false,
+        'STATUS_CHANGE'
+      );
+    }
 
     return true;
   };
@@ -1508,10 +1582,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Technician Repair Quote Workflow
-  const saveRepairQuote = (roId: string, quote: RepairQuote, submitToAdvisor: boolean = false): boolean => {
+  const saveRepairQuote = (
+    roId: string, 
+    quote: RepairQuote, 
+    submitToAdvisor: boolean = false,
+    options?: { isAutoSave?: boolean; notify?: boolean }
+  ): boolean => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return false;
 
+    const isAutoSave = options?.isAutoSave ?? false;
     const now = new Date().toISOString();
     const nextStatus: QuoteStatus = submitToAdvisor ? 'SUBMITTED' : (quote.status || 'DRAFT');
     const nextQuote: RepairQuote = {
@@ -1523,23 +1603,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : targetRO.status;
 
-    const historyItem: StatusHistory = {
-      id: `hist_${Date.now()}`,
-      status: nextROStatus,
-      updatedBy: currentUser.id,
-      updatedByName: currentUser.name,
-      userRole: currentUser.role,
-      timestamp: now,
-      notes: submitToAdvisor
-        ? `Tech ${currentUser.name} submitted repair quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts). Sent to Advisor for authorization.`
-        : `Tech ${currentUser.name} saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)})`,
-    };
+    let newHistory = [...targetRO.history];
+    if (submitToAdvisor) {
+      newHistory.push({
+        id: `hist_${Date.now()}`,
+        status: nextROStatus,
+        updatedBy: currentUser.id,
+        updatedByName: currentUser.name,
+        userRole: currentUser.role,
+        timestamp: now,
+        notes: `Tech ${currentUser.name} submitted repair quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts). Sent to Advisor for authorization.`,
+      });
+    } else if (!isAutoSave) {
+      newHistory.push({
+        id: `hist_${Date.now()}`,
+        status: nextROStatus,
+        updatedBy: currentUser.id,
+        updatedByName: currentUser.name,
+        userRole: currentUser.role,
+        timestamp: now,
+        notes: `Tech ${currentUser.name} saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)})`,
+      });
+    }
 
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: nextROStatus,
       quote: nextQuote,
-      history: [...targetRO.history, historyItem],
+      history: newHistory,
     };
 
     setRepairOrders(prev => {
@@ -1624,6 +1715,282 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'STATUS_CHANGE'
     );
 
+    return true;
+  };
+
+  // Warranty Labor Time Clock Operations (Multi-punch per ticket)
+  const clockInToRO = (
+    roId: string, 
+    notes?: string, 
+    operationType?: WarrantyOperationType
+  ): { success: boolean; message: string; punch?: WarrantyLaborTimePunch } => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return { success: false, message: 'Repair order not found.' };
+
+    const existingPunches = targetRO.timePunches || [];
+    // Check if the current user is already clocked in to this RO
+    const openPunch = existingPunches.find(p => !p.clockOut && p.techId === currentUser.id);
+    if (openPunch) {
+      return { 
+        success: false, 
+        message: `You are already clocked in to ticket #${targetRO.id} since ${new Date(openPunch.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` 
+      };
+    }
+
+    const now = new Date().toISOString();
+    const newPunch: WarrantyLaborTimePunch = {
+      id: `punch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      techId: currentUser.id,
+      techName: currentUser.name,
+      techEmployeeNumber: currentUser.employeeNumber,
+      clockIn: now,
+      notes: notes?.trim() || undefined,
+      operationType: operationType || (targetRO.status === 'IN_DIAG' ? 'DIAGNOSTIC' : 'REPAIR'),
+      createdAt: now,
+    };
+
+    const updatedPunches = [...existingPunches, newPunch];
+
+    const historyItem: StatusHistory = {
+      id: `hist_${Date.now()}`,
+      status: targetRO.status,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: `[Warranty Clock-In] ${currentUser.name}${currentUser.employeeNumber ? ` (#${currentUser.employeeNumber})` : ''} clocked in for ${newPunch.operationType || 'REPAIR'} work${notes ? `: "${notes}"` : ''}`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      timePunches: updatedPunches,
+      history: [...targetRO.history, historyItem],
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      `Tech Clocked In: RO #${targetRO.id}`,
+      `${currentUser.name} clocked in on ticket #${targetRO.id} (${newPunch.operationType || 'REPAIR'}).`,
+      false,
+      'STATUS_CHANGE'
+    );
+
+    return { 
+      success: true, 
+      message: `Clocked in to RO #${targetRO.id} at ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+      punch: newPunch
+    };
+  };
+
+  const clockOutOfRO = (
+    roId: string, 
+    punchId?: string, 
+    notes?: string
+  ): { success: boolean; message: string; durationMinutes?: number } => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO || !targetRO.timePunches || targetRO.timePunches.length === 0) {
+      return { success: false, message: 'No active clock-in session found on this repair order.' };
+    }
+
+    const now = new Date().toISOString();
+    let punchIndex = -1;
+    if (punchId) {
+      punchIndex = targetRO.timePunches.findIndex(p => p.id === punchId && !p.clockOut);
+    } else {
+      // Find open punch for current technician
+      punchIndex = targetRO.timePunches.findIndex(p => !p.clockOut && p.techId === currentUser.id);
+      if (punchIndex === -1 && (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR')) {
+        // Managers/Advisors can close any open punch if needed
+        punchIndex = targetRO.timePunches.findIndex(p => !p.clockOut);
+      }
+    }
+
+    if (punchIndex === -1) {
+      return { success: false, message: 'No open clock session found to clock out of.' };
+    }
+
+    const openPunch = targetRO.timePunches[punchIndex];
+    const inMs = new Date(openPunch.clockIn).getTime();
+    const outMs = new Date(now).getTime();
+    const durationMinutes = Math.max(1, Math.round((outMs - inMs) / 60000));
+    const hours = (durationMinutes / 60).toFixed(2);
+
+    const mergedNotes = notes?.trim() 
+      ? (openPunch.notes ? `${openPunch.notes} | ${notes.trim()}` : notes.trim())
+      : openPunch.notes;
+
+    const closedPunch: WarrantyLaborTimePunch = {
+      ...openPunch,
+      clockOut: now,
+      durationMinutes,
+      notes: mergedNotes,
+    };
+
+    const updatedPunches = [...targetRO.timePunches];
+    updatedPunches[punchIndex] = closedPunch;
+
+    const historyItem: StatusHistory = {
+      id: `hist_${Date.now()}`,
+      status: targetRO.status,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: `[Warranty Clock-Out] ${closedPunch.techName} clocked out. Elapsed: ${durationMinutes} min (${hours} hrs).${notes ? ` Work: "${notes}"` : ''}`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      timePunches: updatedPunches,
+      history: [...targetRO.history, historyItem],
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      `Tech Clocked Out: RO #${targetRO.id}`,
+      `${closedPunch.techName} clocked out of RO #${targetRO.id} (${hours} hrs recorded).`,
+      false,
+      'STATUS_CHANGE'
+    );
+
+    return { 
+      success: true, 
+      message: `Clocked out of RO #${targetRO.id}. Logged ${durationMinutes} min (${hours} hrs).`,
+      durationMinutes
+    };
+  };
+
+  const addManualTimePunch = (roId: string, punchData: Omit<WarrantyLaborTimePunch, 'id'>): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const inMs = new Date(punchData.clockIn).getTime();
+    const outMs = punchData.clockOut ? new Date(punchData.clockOut).getTime() : undefined;
+    const durationMinutes = (outMs && outMs > inMs) 
+      ? Math.max(1, Math.round((outMs - inMs) / 60000))
+      : punchData.durationMinutes;
+
+    const newPunch: WarrantyLaborTimePunch = {
+      ...punchData,
+      id: `punch_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      durationMinutes,
+      manuallyEntered: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedPunches = [...(targetRO.timePunches || []), newPunch];
+
+    const historyItem: StatusHistory = {
+      id: `hist_${Date.now()}`,
+      status: targetRO.status,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: new Date().toISOString(),
+      notes: `[Warranty Punch Added Manually] ${currentUser.name} recorded session for ${newPunch.techName} (${newPunch.durationMinutes ? `${(newPunch.durationMinutes / 60).toFixed(2)} hrs` : 'Open session'}).`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      timePunches: updatedPunches,
+      history: [...targetRO.history, historyItem],
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
+  const updateTimePunch = (roId: string, punchId: string, updates: Partial<WarrantyLaborTimePunch>): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO || !targetRO.timePunches) return false;
+
+    const updatedPunches = targetRO.timePunches.map(p => {
+      if (p.id !== punchId) return p;
+      const merged = { ...p, ...updates };
+      if (merged.clockIn && merged.clockOut) {
+        const inMs = new Date(merged.clockIn).getTime();
+        const outMs = new Date(merged.clockOut).getTime();
+        if (outMs > inMs) {
+          merged.durationMinutes = Math.max(1, Math.round((outMs - inMs) / 60000));
+        }
+      }
+      return merged;
+    });
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      timePunches: updatedPunches,
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
+  const deleteTimePunch = (roId: string, punchId: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO || !targetRO.timePunches) return false;
+
+    const updatedPunches = targetRO.timePunches.filter(p => p.id !== punchId);
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      timePunches: updatedPunches,
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
     return true;
   };
 
@@ -2107,6 +2474,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         closeQuoteModal,
         saveRepairQuote,
         updateQuoteStatus,
+        clockInToRO,
+        clockOutOfRO,
+        addManualTimePunch,
+        updateTimePunch,
+        deleteTimePunch,
+        activeWarrantyPrintRO,
+        openWarrantyPrintModal,
+        closeWarrantyPrintModal,
       }}
     >
       {children}

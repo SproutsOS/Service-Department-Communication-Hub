@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Wrench, 
   Clock, 
@@ -18,39 +18,97 @@ import {
   FileText,
   ExternalLink,
   Calculator,
-  Copy
+  Copy,
+  Printer,
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { ROStatus, RepairOrder } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly } from '../utils/formatters';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
+import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
 }
 
 const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({ ro }) => {
-  const { updateTechCauseAndCorrection, openQuoteModal } = useApp();
+  const { updateTechCauseAndCorrection, openQuoteModal, openWarrantyPrintModal } = useApp();
   const [cause, setCause] = useState(ro.cause || ro.diagnosticNotes || '');
   const [correction, setCorrection] = useState(ro.correction || '');
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
+  const [lastSavedTime, setLastSavedTime] = useState<string>('');
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const latestValuesRef = useRef({ cause, correction });
+
   // Sync state whenever ro prop changes
   useEffect(() => {
-    setCause(ro.cause || ro.diagnosticNotes || '');
-    setCorrection(ro.correction || '');
+    const currentROCause = ro.cause || ro.diagnosticNotes || '';
+    const currentROCorrection = ro.correction || '';
+    // Only update from prop if not actively editing
+    if (autoSaveStatus !== 'saving') {
+      setCause(currentROCause);
+      setCorrection(currentROCorrection);
+      latestValuesRef.current = { cause: currentROCause, correction: currentROCorrection };
+    }
   }, [ro.cause, ro.correction, ro.diagnosticNotes]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const hasContent = Boolean(cause.trim() || correction.trim());
   const isComplete = Boolean(cause.trim() && correction.trim());
 
-  const handleSave = (e: React.MouseEvent | React.FormEvent) => {
+  // Debounced auto-save function
+  const triggerAutoSave = (newCause: string, newCorrection: string) => {
+    latestValuesRef.current = { cause: newCause, correction: newCorrection };
+    setAutoSaveStatus('saving');
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      updateTechCauseAndCorrection(ro.id, newCause, newCorrection, { isAutoSave: true });
+      setAutoSaveStatus('saved');
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 600);
+  };
+
+  // Immediate save on blur
+  const handleBlurSave = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const { cause: c, correction: corr } = latestValuesRef.current;
+    updateTechCauseAndCorrection(ro.id, c, corr, { isAutoSave: true });
+    setAutoSaveStatus('saved');
+    setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  };
+
+  const handleManualSave = (e: React.MouseEvent | React.FormEvent) => {
     e.stopPropagation();
-    const success = updateTechCauseAndCorrection(ro.id, cause, correction);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const success = updateTechCauseAndCorrection(ro.id, cause, correction, { isAutoSave: false, notify: true });
     if (success) {
+      setAutoSaveStatus('saved');
       setIsSavedRecently(true);
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setTimeout(() => setIsSavedRecently(false), 2500);
     }
   };
@@ -58,7 +116,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      handleSave(e);
+      handleManualSave(e);
     }
   };
 
@@ -94,9 +152,19 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   Pending Entry
                 </span>
               )}
+              {/* Auto-Save Live Badge */}
+              {autoSaveStatus === 'saving' ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 flex items-center gap-1 animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin text-blue-600" /> Auto-Saving...
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600" /> Auto-Saved {lastSavedTime ? `at ${lastSavedTime}` : ''}
+                </span>
+              )}
             </div>
             <span className="text-[11px] text-slate-500">
-              Diagnostic failure cause & corrective repair work
+              Diagnostic failure cause & corrective repair work — <strong className="text-emerald-700 font-semibold">Auto-saves as you type</strong>
             </span>
           </div>
         </div>
@@ -127,12 +195,19 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
                 <span>Cause (Diagnostic Finding / Root Cause)</span>
               </label>
-              <span className="text-[10px] text-slate-500 font-medium">Why did it fail?</span>
+              <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                <Check className="w-3 h-3" /> Auto-saved as you type
+              </span>
             </div>
             <textarea
               rows={2}
               value={cause}
-              onChange={(e) => setCause(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCause(val);
+                triggerAutoSave(val, correction);
+              }}
+              onBlur={handleBlurSave}
               placeholder="Type diagnostic cause (e.g., Code P0300 - cylinder 3 spark plug fouled with oil due to leaking valve cover spark plug tube seal)..."
               className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
             />
@@ -145,12 +220,19 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 <span>Correction (Repair Completed / Corrective Action)</span>
               </label>
-              <span className="text-[10px] text-slate-500 font-medium">What repair was performed?</span>
+              <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                <Check className="w-3 h-3" /> Auto-saved as you type
+              </span>
             </div>
             <textarea
               rows={2}
               value={correction}
-              onChange={(e) => setCorrection(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCorrection(val);
+                triggerAutoSave(cause, val);
+              }}
+              onBlur={handleBlurSave}
               placeholder="Type repair correction (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, road tested 5 miles)..."
               className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
             />
@@ -201,31 +283,46 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
           </div>
 
           {/* Action Bar */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-[11px] text-slate-500 italic">
-              Press <kbd className="px-1.5 py-0.5 bg-slate-100 border-2 border-slate-400 rounded text-[10px] text-slate-700 font-mono font-bold">Ctrl+Enter</kbd> to save
-            </span>
-            <button
-              type="button"
-              onClick={handleSave}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 border-2 cursor-pointer ${
-                isSavedRecently 
-                  ? 'bg-emerald-600 text-white border-emerald-700' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
-              }`}
-            >
-              {isSavedRecently ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Saved!</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Cause & Correction</span>
-                </>
-              )}
-            </button>
+          <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-semibold text-emerald-800">Auto-Save active:</span>
+              <span>All typed information is saved automatically in real-time.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openWarrantyPrintModal(ro.id)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border-2 border-slate-400 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Print Cause & Correction with Work Start/End Times"
+              >
+                <Printer className="w-3.5 h-3.5 text-blue-600" />
+                <span>Print Warranty Sheet 🖨️</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleManualSave}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 border-2 cursor-pointer ${
+                  isSavedRecently || autoSaveStatus === 'saved'
+                    ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+                }`}
+                title="Information saves automatically as you type. Click to force immediate sync."
+              >
+                {autoSaveStatus === 'saving' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Auto-Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Auto-Saved ✓</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -242,7 +339,8 @@ export const TechDashboard: React.FC = () => {
     updateROStatus, 
     startDiagnosis,
     openDirectChat,
-    openQuoteModal
+    openQuoteModal,
+    openWarrantyPrintModal
   } = useApp();
 
   // Filter strictly to this technician's assigned ROs
@@ -491,7 +589,17 @@ export const TechDashboard: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openWarrantyPrintModal(ro.id)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      title="Print Cause & Correction with Work Start/End Times"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Print Warranty Sheet 🖨️</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => openQuoteModal(ro.id)}
@@ -589,6 +697,9 @@ export const TechDashboard: React.FC = () => {
 
                 {/* Technician Diagnosis & Repair Documentation: Cause & Correction */}
                 <TechCauseCorrectionSection ro={ro} />
+
+                {/* Official Warranty Labor Time Clock & Multi-Punch Tracking */}
+                <WarrantyTimeClockSection ro={ro} />
 
                 {/* Technician Additional Recommended Services (MPI Upsells / Filter / Tires / Scheduled Maint) */}
                 <TechRecommendationsSection ro={ro} />

@@ -165,6 +165,23 @@ export interface RepairOrder {
   nextContactDueDate?: string; // ISO date string when next call is due
   contactHistory?: CustomerContactRecord[];
   quote?: RepairQuote;
+  timePunches?: WarrantyLaborTimePunch[];
+}
+
+export type WarrantyOperationType = 'DIAGNOSTIC' | 'REPAIR' | 'ROAD_TEST' | 'WAITING_PARTS' | 'GENERAL';
+
+export interface WarrantyLaborTimePunch {
+  id: string;
+  techId: string;
+  techName: string;
+  techEmployeeNumber?: string;
+  clockIn: string; // ISO string
+  clockOut?: string; // ISO string (undefined if currently clocked in)
+  durationMinutes?: number; // total elapsed minutes
+  notes?: string; // e.g. "Pinpoint electrical testing", "Replaced timing belt and tensioner"
+  operationType?: WarrantyOperationType;
+  manuallyEntered?: boolean;
+  createdAt?: string;
 }
 
 export type QuoteStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'DECLINED';

@@ -137,7 +137,7 @@ export const StaffManagement: React.FC = () => {
     if (!isManager) return;
     setEditingUserId(null);
     setNameInput('');
-    setEmployeeNumberInput(String(100 + users.length + 1));
+    setEmployeeNumberInput(''); // Do NOT automatically assign an employee number if one is not entered
     setEmailInput('');
     setRoleInput(activeCategory === 'ALL' ? 'TECHNICIAN' : activeCategory);
     setTitleInput('');

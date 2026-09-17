@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Send, 
@@ -32,15 +32,17 @@ import {
   RefreshCw,
   Trash2,
   ExternalLink,
-  Calculator
+  Calculator,
+  Printer
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ROStatus, PartStatus, UserRole } from '../types';
+import { ROStatus, PartStatus, UserRole, RepairOrder } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
 import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
+import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 import { decodeVin } from '../utils/vinDecoder';
 
@@ -60,7 +62,8 @@ export const RODetailModal: React.FC = () => {
     updateTechCauseAndCorrection,
     deleteRepairOrder,
     openDirectChat,
-    openQuoteModal
+    openQuoteModal,
+    openWarrantyPrintModal
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -95,6 +98,141 @@ export const RODetailModal: React.FC = () => {
   const [techCauseInput, setTechCauseInput] = useState(selectedRO?.cause || selectedRO?.diagnosticNotes || '');
   const [techCorrectionInput, setTechCorrectionInput] = useState(selectedRO?.correction || '');
   const [techSaveSuccess, setTechSaveSuccess] = useState(false);
+
+  // Auto-save states & timers
+  const managerAutoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [managerAutoSaveStatus, setManagerAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
+  const [managerLastSaved, setManagerLastSaved] = useState<string>('');
+
+  const techFindingsAutoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [techFindingsAutoSaveStatus, setTechFindingsAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
+  const [techFindingsLastSaved, setTechFindingsLastSaved] = useState<string>('');
+
+  // Keep manager edit state synced when selectedRO updates (unless currently editing)
+  useEffect(() => {
+    if (!selectedRO || isEditingDetails) return;
+    setEditCustomerName(selectedRO.customerName || '');
+    setEditCustomerPhone(selectedRO.customerPhone || '');
+    setEditVehicleYear(selectedRO.vehicle.year || '');
+    setEditVehicleMake(selectedRO.vehicle.make || '');
+    setEditVehicleModel(selectedRO.vehicle.model || '');
+    setEditVehicleVin(selectedRO.vehicle.vin || '');
+    setEditPrimaryConcern(selectedRO.primaryConcern || '');
+    setEditConcerns(selectedRO.concerns && selectedRO.concerns.length > 0 ? selectedRO.concerns : [selectedRO.primaryConcern || '']);
+    setEditPromisedTime(selectedRO.promisedTime || '');
+    setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
+    setEditCause(selectedRO.cause || '');
+    setEditCorrection(selectedRO.correction || '');
+    setEditIsUrgent(selectedRO.isUrgent || false);
+    setEditIsWaiter(selectedRO.isWaiter || false);
+  }, [selectedRO, isEditingDetails]);
+
+  // Keep tech cause/correction synced when selectedRO changes and not editing
+  useEffect(() => {
+    if (!selectedRO || isEditingTechFindings) return;
+    setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
+    setTechCorrectionInput(selectedRO.correction || '');
+  }, [selectedRO, isEditingTechFindings]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (managerAutoSaveTimerRef.current) clearTimeout(managerAutoSaveTimerRef.current);
+      if (techFindingsAutoSaveTimerRef.current) clearTimeout(techFindingsAutoSaveTimerRef.current);
+    };
+  }, []);
+
+  const triggerManagerAutoSave = (overrides?: Partial<RepairOrder>) => {
+    if (!isManager || !selectedRO) return;
+    setManagerAutoSaveStatus('saving');
+    if (managerAutoSaveTimerRef.current) {
+      clearTimeout(managerAutoSaveTimerRef.current);
+    }
+    managerAutoSaveTimerRef.current = setTimeout(() => {
+      const validConcerns = (overrides?.concerns || editConcerns).map(c => c.trim()).filter(Boolean);
+      const finalPrimary = validConcerns[0] || (overrides?.primaryConcern ?? editPrimaryConcern).trim() || selectedRO.primaryConcern;
+
+      updateRepairOrderDetails(selectedRO.id, {
+        customerName: overrides?.customerName !== undefined ? overrides.customerName : editCustomerName.trim(),
+        customerPhone: overrides?.customerPhone !== undefined ? overrides.customerPhone : editCustomerPhone.trim(),
+        vehicle: {
+          ...selectedRO.vehicle,
+          year: overrides?.vehicle?.year !== undefined ? overrides.vehicle.year : (Number(editVehicleYear) || selectedRO.vehicle.year),
+          make: overrides?.vehicle?.make !== undefined ? overrides.vehicle.make : editVehicleMake.trim(),
+          model: overrides?.vehicle?.model !== undefined ? overrides.vehicle.model : editVehicleModel.trim(),
+          vin: overrides?.vehicle?.vin !== undefined ? overrides.vehicle.vin : editVehicleVin.trim().toUpperCase()
+        },
+        primaryConcern: finalPrimary,
+        concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
+        promisedTime: overrides?.promisedTime !== undefined ? overrides.promisedTime : editPromisedTime,
+        diagnosticNotes: overrides?.diagnosticNotes !== undefined ? overrides.diagnosticNotes : editDiagnosticNotes.trim(),
+        cause: overrides?.cause !== undefined ? overrides.cause : editCause.trim(),
+        correction: overrides?.correction !== undefined ? overrides.correction : editCorrection.trim(),
+        isUrgent: overrides?.isUrgent !== undefined ? overrides.isUrgent : editIsUrgent,
+        isWaiter: overrides?.isWaiter !== undefined ? overrides.isWaiter : editIsWaiter,
+        ...overrides
+      }, { isAutoSave: true });
+
+      setManagerAutoSaveStatus('saved');
+      setManagerLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 600);
+  };
+
+  const flushManagerAutoSave = () => {
+    if (managerAutoSaveTimerRef.current) {
+      clearTimeout(managerAutoSaveTimerRef.current);
+      managerAutoSaveTimerRef.current = null;
+    }
+    if (!isManager || !selectedRO) return;
+    const validConcerns = editConcerns.map(c => c.trim()).filter(Boolean);
+    const finalPrimary = validConcerns[0] || editPrimaryConcern.trim() || selectedRO.primaryConcern;
+
+    updateRepairOrderDetails(selectedRO.id, {
+      customerName: editCustomerName.trim(),
+      customerPhone: editCustomerPhone.trim(),
+      vehicle: {
+        ...selectedRO.vehicle,
+        year: Number(editVehicleYear) || selectedRO.vehicle.year,
+        make: editVehicleMake.trim(),
+        model: editVehicleModel.trim(),
+        vin: editVehicleVin.trim().toUpperCase()
+      },
+      primaryConcern: finalPrimary,
+      concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
+      promisedTime: editPromisedTime,
+      diagnosticNotes: editDiagnosticNotes.trim(),
+      cause: editCause.trim(),
+      correction: editCorrection.trim(),
+      isUrgent: editIsUrgent,
+      isWaiter: editIsWaiter
+    }, { isAutoSave: true });
+    setManagerAutoSaveStatus('saved');
+    setManagerLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  };
+
+  const triggerTechFindingsAutoSave = (c: string, corr: string) => {
+    if (!selectedRO) return;
+    setTechFindingsAutoSaveStatus('saving');
+    if (techFindingsAutoSaveTimerRef.current) {
+      clearTimeout(techFindingsAutoSaveTimerRef.current);
+    }
+    techFindingsAutoSaveTimerRef.current = setTimeout(() => {
+      updateTechCauseAndCorrection(selectedRO.id, c, corr, { isAutoSave: true });
+      setTechFindingsAutoSaveStatus('saved');
+      setTechFindingsLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 600);
+  };
+
+  const flushTechFindingsAutoSave = () => {
+    if (techFindingsAutoSaveTimerRef.current) {
+      clearTimeout(techFindingsAutoSaveTimerRef.current);
+      techFindingsAutoSaveTimerRef.current = null;
+    }
+    if (!selectedRO) return;
+    updateTechCauseAndCorrection(selectedRO.id, techCauseInput, techCorrectionInput, { isAutoSave: true });
+    setTechFindingsAutoSaveStatus('saved');
+    setTechFindingsLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  };
 
   const handleEditConcernChange = (index: number, val: string) => {
     setEditConcerns(prev => {
@@ -204,7 +342,7 @@ export const RODetailModal: React.FC = () => {
     }
   }, [selectedRO?.id]);
 
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS'>('DETAILS');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
   const [chatInput, setChatInput] = useState('');
   const [isUrgentMessage, setIsUrgentMessage] = useState(false);
   const [statusNote, setStatusNote] = useState('');
@@ -277,45 +415,19 @@ export const RODetailModal: React.FC = () => {
     e.preventDefault();
     if (!isManager || !selectedRO) return;
 
-    const validConcerns = editConcerns.map(c => c.trim()).filter(Boolean);
-    const finalPrimary = validConcerns[0] || editPrimaryConcern.trim() || selectedRO.primaryConcern;
-
-    const ok = updateRepairOrderDetails(selectedRO.id, {
-      customerName: editCustomerName.trim(),
-      customerPhone: editCustomerPhone.trim(),
-      vehicle: {
-        ...selectedRO.vehicle,
-        year: Number(editVehicleYear) || selectedRO.vehicle.year,
-        make: editVehicleMake.trim(),
-        model: editVehicleModel.trim(),
-        vin: editVehicleVin.trim().toUpperCase()
-      },
-      primaryConcern: finalPrimary,
-      concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
-      promisedTime: editPromisedTime,
-      diagnosticNotes: editDiagnosticNotes.trim(),
-      cause: editCause.trim(),
-      correction: editCorrection.trim(),
-      isUrgent: editIsUrgent,
-      isWaiter: editIsWaiter
-    });
-
-    if (ok) {
-      setIsEditingDetails(false);
-      setManagerActionFeedback('Repair order details updated and logged to audit trail.');
-      setTimeout(() => setManagerActionFeedback(null), 3500);
-    }
+    flushManagerAutoSave();
+    setIsEditingDetails(false);
+    setManagerActionFeedback('All repair order information auto-saved and recorded to audit trail.');
+    setTimeout(() => setManagerActionFeedback(null), 3500);
   };
 
   const handleSaveTechFindings = (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
     if (!selectedRO) return;
-    const ok = updateTechCauseAndCorrection(selectedRO.id, techCauseInput, techCorrectionInput);
-    if (ok) {
-      setIsEditingTechFindings(false);
-      setTechSaveSuccess(true);
-      setTimeout(() => setTechSaveSuccess(false), 3000);
-    }
+    flushTechFindingsAutoSave();
+    setIsEditingTechFindings(false);
+    setTechSaveSuccess(true);
+    setTimeout(() => setTechSaveSuccess(false), 3000);
   };
 
   const handleConfirmDelete = () => {
@@ -469,6 +581,17 @@ export const RODetailModal: React.FC = () => {
             )}
 
             <button
+              id="header-print-warranty-btn"
+              type="button"
+              onClick={() => openWarrantyPrintModal(selectedRO.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs"
+              title="Print Warranty Sheet with Cause, Correction, and Start/End Punch Clock Times"
+            >
+              <Printer className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Print Warranty</span>
+            </button>
+
+            <button
               id="close-ro-detail-btn"
               onClick={() => setSelectedRO(null)}
               className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
@@ -492,11 +615,11 @@ export const RODetailModal: React.FC = () => {
             </span>
           </div>
         )}
-        <div className="flex border-b border-slate-200 px-4 sm:px-6 bg-white gap-2">
+        <div className="flex border-b border-slate-200 px-4 sm:px-6 bg-white gap-2 overflow-x-auto">
           <button
             id="ro-tab-details"
             onClick={() => setActiveTab('DETAILS')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'DETAILS'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -509,7 +632,7 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-chat"
             onClick={() => setActiveTab('CHAT')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer ${
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap ${
               activeTab === 'CHAT'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -525,9 +648,27 @@ export const RODetailModal: React.FC = () => {
           </button>
 
           <button
+            id="ro-tab-warranty"
+            onClick={() => setActiveTab('WARRANTY')}
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              activeTab === 'WARRANTY'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-indigo-600" />
+            <span>Warranty Time Clock</span>
+            {(selectedRO.timePunches?.length || 0) > 0 && (
+              <span className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                {selectedRO.timePunches?.length}
+              </span>
+            )}
+          </button>
+
+          <button
             id="ro-tab-parts"
             onClick={() => setActiveTab('PARTS')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer ${
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap ${
               activeTab === 'PARTS'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -545,7 +686,7 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-history"
             onClick={() => setActiveTab('HISTORY')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'HISTORY'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -558,7 +699,7 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-contacts"
             onClick={() => setActiveTab('CONTACTS')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'CONTACTS'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -615,39 +756,70 @@ export const RODetailModal: React.FC = () => {
               {/* Service Manager Edit Form */}
               {isManager && isEditingDetails && (
                 <form onSubmit={handleSaveDetails} className="bg-white rounded-xl p-5 border-2 border-blue-500 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <Edit3 className="w-4 h-4 text-blue-600" />
                       <h4 className="text-sm font-bold text-slate-900">
                         Service Manager: Edit Repair Order Information
                       </h4>
                     </div>
-                    <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                      Manager Authority Active
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {managerAutoSaveStatus === 'saving' ? (
+                        <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 animate-pulse">
+                          <Loader2 className="w-3 h-3 animate-spin text-blue-600" /> Auto-Saving...
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-600" /> Auto-Saved {managerLastSaved ? `at ${managerLastSaved}` : ''}
+                        </span>
+                      )}
+                      <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                        Manager Authority Active
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Customer Full Name
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Customer Full Name
+                        </label>
+                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Auto-saved
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={editCustomerName}
-                        onChange={(e) => setEditCustomerName(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditCustomerName(val);
+                          triggerManagerAutoSave({ customerName: val.trim() });
+                        }}
+                        onBlur={flushManagerAutoSave}
                         required
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Customer Phone Number
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Customer Phone Number
+                        </label>
+                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Auto-saved
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={editCustomerPhone}
-                        onChange={(e) => setEditCustomerPhone(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditCustomerPhone(val);
+                          triggerManagerAutoSave({ customerPhone: val.trim() });
+                        }}
+                        onBlur={flushManagerAutoSave}
                         required
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
@@ -689,7 +861,16 @@ export const RODetailModal: React.FC = () => {
                     <input
                       type="text"
                       value={editVehicleVin}
-                      onChange={handleEditVinChange}
+                      onChange={(e) => {
+                        handleEditVinChange(e);
+                        triggerManagerAutoSave({
+                          vehicle: {
+                            ...selectedRO.vehicle,
+                            vin: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                          }
+                        });
+                      }}
+                      onBlur={flushManagerAutoSave}
                       maxLength={17}
                       required
                       placeholder="Enter 17-digit VIN to auto-fill Year, Make & Model"
@@ -704,7 +885,17 @@ export const RODetailModal: React.FC = () => {
                         <input
                           type="number"
                           value={editVehicleYear}
-                          onChange={(e) => setEditVehicleYear(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditVehicleYear(val);
+                            triggerManagerAutoSave({
+                              vehicle: {
+                                ...selectedRO.vehicle,
+                                year: Number(val) || selectedRO.vehicle.year
+                              }
+                            });
+                          }}
+                          onBlur={flushManagerAutoSave}
                           required
                           className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                         />
@@ -716,7 +907,17 @@ export const RODetailModal: React.FC = () => {
                         <input
                           type="text"
                           value={editVehicleMake}
-                          onChange={(e) => setEditVehicleMake(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditVehicleMake(val);
+                            triggerManagerAutoSave({
+                              vehicle: {
+                                ...selectedRO.vehicle,
+                                make: val.trim()
+                              }
+                            });
+                          }}
+                          onBlur={flushManagerAutoSave}
                           required
                           className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                         />
@@ -728,7 +929,17 @@ export const RODetailModal: React.FC = () => {
                         <input
                           type="text"
                           value={editVehicleModel}
-                          onChange={(e) => setEditVehicleModel(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditVehicleModel(val);
+                            triggerManagerAutoSave({
+                              vehicle: {
+                                ...selectedRO.vehicle,
+                                model: val.trim()
+                              }
+                            });
+                          }}
+                          onBlur={flushManagerAutoSave}
                           required
                           className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                         />
@@ -744,7 +955,10 @@ export const RODetailModal: React.FC = () => {
                       </label>
                       <button
                         type="button"
-                        onClick={handleAddEditConcern}
+                        onClick={() => {
+                          handleAddEditConcern();
+                          triggerManagerAutoSave({ concerns: [...editConcerns, ''] });
+                        }}
                         className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-md border-2 border-blue-300 shadow-2xs"
                       >
                         <Plus className="w-3.5 h-3.5" /> Add Line
@@ -761,7 +975,11 @@ export const RODetailModal: React.FC = () => {
                             {editConcerns.length > 1 && (
                               <button
                                 type="button"
-                                onClick={() => handleRemoveEditConcern(idx)}
+                                onClick={() => {
+                                  const updatedConcerns = editConcerns.filter((_, i) => i !== idx);
+                                  handleRemoveEditConcern(idx);
+                                  triggerManagerAutoSave({ concerns: updatedConcerns });
+                                }}
                                 className="text-[10px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded"
                                 title="Remove line"
                               >
@@ -772,7 +990,14 @@ export const RODetailModal: React.FC = () => {
                           <textarea
                             rows={2}
                             value={c}
-                            onChange={e => handleEditConcernChange(idx, e.target.value)}
+                            onChange={e => {
+                              const val = e.target.value;
+                              handleEditConcernChange(idx, val);
+                              const next = [...editConcerns];
+                              next[idx] = val;
+                              triggerManagerAutoSave({ concerns: next });
+                            }}
+                            onBlur={flushManagerAutoSave}
                             placeholder={idx === 0 ? "Customer primary concern / complaint..." : `Additional concern / complaint line ${idx + 1}...`}
                             className="w-full px-2.5 py-1.5 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                           />
@@ -783,28 +1008,45 @@ export const RODetailModal: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Customer Promised Time
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Customer Promised Time
+                        </label>
+                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Auto-saved
+                        </span>
+                      </div>
                       <input
                         type="datetime-local"
                         value={editPromisedTime ? new Date(editPromisedTime).toISOString().slice(0, 16) : ''}
                         onChange={(e) => {
                           const dt = e.target.value ? new Date(e.target.value).toISOString() : selectedRO.promisedTime;
                           setEditPromisedTime(dt);
+                          triggerManagerAutoSave({ promisedTime: dt });
                         }}
+                        onBlur={flushManagerAutoSave}
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                        <span>Diagnostic Cause (Why it failed)</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                          <span>Diagnostic Cause (Why it failed)</span>
+                        </label>
+                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Auto-saved
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={editCause}
-                        onChange={(e) => setEditCause(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditCause(val);
+                          triggerManagerAutoSave({ cause: val.trim() });
+                        }}
+                        onBlur={flushManagerAutoSave}
                         placeholder="Root cause (e.g., Code P0300 cylinder 3 plug fouled with oil, broken belt tensioner)..."
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
@@ -813,26 +1055,46 @@ export const RODetailModal: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                        <span>Correction (Repair Performed)</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                          <span>Correction (Repair Performed)</span>
+                        </label>
+                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Auto-saved
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={editCorrection}
-                        onChange={(e) => setEditCorrection(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditCorrection(val);
+                          triggerManagerAutoSave({ correction: val.trim() });
+                        }}
+                        onBlur={flushManagerAutoSave}
                         placeholder="Corrective repair (e.g., Replaced spark plug tube seals & plugs, road tested 5 mi)..."
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Technician Diagnostic Notes
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Technician Diagnostic Notes
+                        </label>
+                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Auto-saved
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={editDiagnosticNotes}
-                        onChange={(e) => setEditDiagnosticNotes(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditDiagnosticNotes(val);
+                          triggerManagerAutoSave({ diagnosticNotes: val.trim() });
+                        }}
+                        onBlur={flushManagerAutoSave}
                         placeholder="Diagnostic notes, inspection findings..."
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
@@ -843,7 +1105,11 @@ export const RODetailModal: React.FC = () => {
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       type="button"
-                      onClick={() => setEditIsUrgent(!editIsUrgent)}
+                      onClick={() => {
+                        const newVal = !editIsUrgent;
+                        setEditIsUrgent(newVal);
+                        triggerManagerAutoSave({ isUrgent: newVal });
+                      }}
                       className={`px-3.5 py-2 rounded-lg border-2 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer select-none ${
                         editIsUrgent
                           ? 'border-red-600 bg-red-50 text-red-600 shadow-sm ring-1 ring-red-500'
@@ -861,7 +1127,11 @@ export const RODetailModal: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => setEditIsWaiter(!editIsWaiter)}
+                      onClick={() => {
+                        const newVal = !editIsWaiter;
+                        setEditIsWaiter(newVal);
+                        triggerManagerAutoSave({ isWaiter: newVal });
+                      }}
                       className={`px-3.5 py-2 rounded-lg border-2 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer select-none ${
                         editIsWaiter
                           ? 'border-red-600 bg-red-50 text-red-600 shadow-sm ring-1 ring-red-500'
@@ -878,21 +1148,30 @@ export const RODetailModal: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingDetails(false)}
-                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
                       <Check className="w-3.5 h-3.5" />
-                      Save Changes to Order
-                    </button>
+                      <span>Auto-Save active: All typed information is saved automatically to the repair order.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          flushManagerAutoSave();
+                          setIsEditingDetails(false);
+                        }}
+                        className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Close
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Done Editing (Auto-Saved ✓)</span>
+                      </button>
+                    </div>
                   </div>
                 </form>
               )}
@@ -1029,59 +1308,96 @@ export const RODetailModal: React.FC = () => {
                     {/* 2 & 3: CAUSE & CORRECTION (Either Interactive Form or Documented Cards) */}
                     {isEditingTechFindings ? (
                       <form onSubmit={handleSaveTechFindings} className="bg-white p-4 rounded-xl border-2 border-slate-600 shadow-xs space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b-2 border-slate-200">
+                        <div className="flex items-center justify-between pb-2 border-b-2 border-slate-200 flex-wrap gap-2">
                           <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                             <Wrench className="w-3.5 h-3.5 text-blue-600" />
                             <span>Technician Diagnostic Findings: Cause & Correction</span>
                           </h5>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            Enter root cause and corrective repair
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {techFindingsAutoSaveStatus === 'saving' ? (
+                              <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 animate-pulse">
+                                <Loader2 className="w-3 h-3 animate-spin text-blue-600" /> Auto-Saving...
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-600" /> Auto-Saved {techFindingsLastSaved ? `at ${techFindingsLastSaved}` : ''}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                            <span>2. Cause (Diagnostic Finding / Root Cause)</span>
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                              <span>2. Cause (Diagnostic Finding / Root Cause)</span>
+                            </label>
+                            <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5" /> Auto-saved
+                            </span>
+                          </div>
                           <textarea
                             rows={3}
                             value={techCauseInput}
-                            onChange={(e) => setTechCauseInput(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTechCauseInput(val);
+                              triggerTechFindingsAutoSave(val, techCorrectionInput);
+                            }}
+                            onBlur={flushTechFindingsAutoSave}
                             placeholder="Type diagnostic cause (e.g., Code P0300 set due to cylinder 3 spark plug fouled with oil from leaking valve cover gasket tube seal)..."
                             className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                            <span>3. Correction (Repair Completed / Corrective Action)</span>
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                              <span>3. Correction (Repair Completed / Corrective Action)</span>
+                            </label>
+                            <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5" /> Auto-saved
+                            </span>
+                          </div>
                           <textarea
                             rows={3}
                             value={techCorrectionInput}
-                            onChange={(e) => setTechCorrectionInput(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTechCorrectionInput(val);
+                              triggerTechFindingsAutoSave(techCauseInput, val);
+                            }}
+                            onBlur={flushTechFindingsAutoSave}
                             placeholder="Type corrective repair (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, verified 5-mile road test)..."
                             className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
 
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t-2 border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => setIsEditingTechFindings(false)}
-                            className="px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border-2 border-slate-400 transition-colors cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Save Cause & Correction</span>
-                          </button>
+                        <div className="flex items-center justify-between pt-2 border-t-2 border-slate-200 flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Auto-Save active: Changes save automatically as you type.</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                flushTechFindingsAutoSave();
+                                setIsEditingTechFindings(false);
+                              }}
+                              className="px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border-2 border-slate-400 transition-colors cursor-pointer"
+                            >
+                              Close
+                            </button>
+                            <button
+                              type="submit"
+                              className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Done Editing (Auto-Saved ✓)</span>
+                            </button>
+                          </div>
                         </div>
                       </form>
                     ) : (
@@ -1982,6 +2298,13 @@ export const RODetailModal: React.FC = () => {
             </div>
           )}
 
+          {/* TAB 6: WARRANTY TIME CLOCK & AUDIT PUNCHES */}
+          {activeTab === 'WARRANTY' && (
+            <div className="space-y-4">
+              <WarrantyTimeClockSection ro={selectedRO} />
+            </div>
+          )}
+
         </div>
 
         {/* Footer */}
@@ -1997,6 +2320,16 @@ export const RODetailModal: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openWarrantyPrintModal(selectedRO.id)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition-colors cursor-pointer shadow-2xs"
+              title="Print official warranty claim sheet with start/end punches, total hours, cause, and correction"
+            >
+              <Printer className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Print Warranty Sheet</span>
+            </button>
+
             {isManager && (
               <button
                 type="button"

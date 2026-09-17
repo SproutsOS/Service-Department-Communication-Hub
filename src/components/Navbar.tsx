@@ -175,11 +175,12 @@ export const Navbar: React.FC = () => {
                     id="urgent-shop-alerts-close-btn"
                     type="button"
                     onClick={() => setShowNotifMenu(false)}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors cursor-pointer shadow-2xs"
                     title="Close Urgent Alerts"
                     aria-label="Close Urgent Shop Alerts"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
+                    <span>Close</span>
                   </button>
                 </div>
               </div>
@@ -233,18 +234,19 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
 
-              {/* Drawer Footer with Close button */}
-              <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span className="text-[11px]">
+              {/* Drawer Footer with prominent Close button */}
+              <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+                <span className="text-[11px] font-medium text-slate-600">
                   {notifications.length} total alert{notifications.length === 1 ? '' : 's'}
                 </span>
                 <button
                   id="urgent-shop-alerts-footer-close-btn"
                   type="button"
                   onClick={() => setShowNotifMenu(false)}
-                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded text-xs transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-md text-xs transition-colors cursor-pointer border border-slate-300 flex items-center gap-1.5 shadow-2xs"
                 >
-                  Close
+                  <X className="w-3.5 h-3.5" />
+                  <span>Close Alerts</span>
                 </button>
               </div>
             </div>
@@ -275,19 +277,19 @@ export const Navbar: React.FC = () => {
           }
         >
           <MessageSquare className={`w-4 h-4 ${unreadShopCount > 0 ? 'text-amber-300 animate-bounce' : ''}`} />
-          <span className="hidden md:inline text-xs font-semibold">Shop Chat</span>
-          {unreadShopCount > 0 && (
-            <>
-              {latestUnreadShopMessage && (
-                <span className="hidden lg:inline-flex items-center gap-1 text-[11px] font-bold text-amber-200 bg-amber-950/90 border border-amber-500/50 px-2 py-0.5 rounded-full max-w-[170px] truncate shadow-2xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
-                  <span className="truncate">From: {latestUnreadShopMessage.senderName}</span>
-                </span>
-              )}
-              <span className="flex h-4 min-w-[18px] px-1 items-center justify-center rounded-full text-[10px] font-extrabold text-white bg-red-600 shadow-sm animate-pulse">
-                {unreadShopCount}
+          <span className="text-xs font-semibold flex items-center gap-1.5">
+            <span className="hidden sm:inline">Shop Chat</span>
+            {unreadShopCount > 0 && latestUnreadShopMessage && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-200 bg-amber-950/90 border border-amber-500/60 px-2 py-0.5 rounded-full max-w-[180px] truncate shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                <span className="truncate">From: {latestUnreadShopMessage.senderName}</span>
               </span>
-            </>
+            )}
+          </span>
+          {unreadShopCount > 0 && (
+            <span className="flex h-4 min-w-[18px] px-1 items-center justify-center rounded-full text-[10px] font-extrabold text-white bg-red-600 shadow-sm animate-pulse">
+              {unreadShopCount}
+            </span>
           )}
         </button>
 

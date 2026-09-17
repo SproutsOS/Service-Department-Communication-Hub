@@ -17,6 +17,7 @@ import {
   Bell
 } from 'lucide-react';
 import { UserRole, User as UserType } from '../types';
+import { formatRelativeTime } from '../utils/formatters';
 
 interface ShopChatDrawerProps {
   isOpen: boolean;
@@ -191,6 +192,18 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
       }
     });
   }, [unreadShopMessages, isGeneralChannel, activeRecipient?.id, currentUser.id]);
+
+  // Latest message received from another colleague across the shop
+  const latestIncomingMessage = useMemo(() => {
+    const incoming = shopMessages.filter(m => m.senderId !== currentUser.id);
+    if (incoming.length === 0) return null;
+    return incoming[incoming.length - 1];
+  }, [shopMessages, currentUser.id]);
+
+  const latestSenderUser = useMemo(() => {
+    if (!latestIncomingMessage) return null;
+    return users.find(u => u.id === latestIncomingMessage.senderId);
+  }, [latestIncomingMessage, users]);
 
   // Automatically mark visible incoming messages as read
   useEffect(() => {
@@ -443,14 +456,56 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
             </div>
           </div>
 
-          {/* Incoming Message Notification Banner (if message arrives from outside active chat) */}
+          {/* Prominent Latest Incoming Message Banner - Clearly Identifies Who Sent Chat */}
+          {latestIncomingMessage && (
+            <div className="px-3.5 py-2 bg-blue-50/90 border-b border-blue-200 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0 text-xs">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0" />
+                <div className="truncate">
+                  <span className="text-slate-500 font-medium">Last message received from: </span>
+                  <strong className="font-black text-blue-900">
+                    {latestIncomingMessage.senderName}
+                  </strong>
+                  {latestSenderUser?.employeeNumber && (
+                    <span className="ml-1 font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                      #{latestSenderUser.employeeNumber}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-500 ml-1">
+                    ({formatRelativeTime(latestIncomingMessage.timestamp)})
+                  </span>
+                  <span className="italic text-slate-700 ml-1.5 truncate hidden sm:inline">
+                    "{latestIncomingMessage.content}"
+                  </span>
+                </div>
+              </div>
+              {selectedChatRecipientId !== (latestIncomingMessage.recipientId === 'ALL' || !latestIncomingMessage.recipientId ? 'ALL' : latestIncomingMessage.senderId) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!latestIncomingMessage.recipientId || latestIncomingMessage.recipientId === 'ALL') {
+                      setSelectedChatRecipientId('ALL');
+                    } else {
+                      setSelectedChatRecipientId(latestIncomingMessage.senderId);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-md shrink-0 cursor-pointer shadow-xs transition-colors flex items-center gap-1"
+                >
+                  <span>View {latestIncomingMessage.senderName.split(' ')[0]}'s Chat</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Incoming Message Notification Banner (if unread message arrives from outside active chat) */}
           {otherUnreadMessage && (
             <div className="px-3.5 py-2 bg-amber-50 border-b border-amber-300 flex items-center justify-between gap-2 shrink-0 animate-fadeIn">
               <div className="flex items-center gap-2 min-w-0 text-xs">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-red-600 animate-ping shrink-0" />
                 <div className="truncate">
                   <span className="font-extrabold text-amber-950">
-                    New message from {otherUnreadMessage.senderName}
+                    Unread message from {otherUnreadMessage.senderName}
                     {users.find(u => u.id === otherUnreadMessage.senderId)?.employeeNumber ? ` (${users.find(u => u.id === otherUnreadMessage.senderId)?.employeeNumber})` : ''}:
                   </span>
                   <span className="italic text-slate-700 ml-1.5 truncate">

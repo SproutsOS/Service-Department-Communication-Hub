@@ -13,6 +13,7 @@ import { LoginModal } from './components/LoginModal';
 import { LoginScreen } from './components/LoginScreen';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { RepairQuoteModal } from './components/RepairQuoteModal';
+import { WarrantyPrintModal } from './components/WarrantyPrintModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { 
@@ -496,6 +497,7 @@ const MainContent: React.FC = () => {
       <LoginModal />
       <InitialSetupModal />
       <RepairQuoteModal />
+      <WarrantyPrintModal />
       <UrgentToastStack />
 
       {/* Floating Quick Chat Launcher (visible when chat box is closed) */}

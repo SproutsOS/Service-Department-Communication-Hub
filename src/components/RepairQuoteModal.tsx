@@ -18,7 +18,8 @@ import {
   Package, 
   FileText,
   AlertCircle,
-  Calculator
+  Calculator,
+  Loader2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RepairQuote, LaborLineItem, QuotePartItem, QuoteStatus } from '../types';
@@ -60,9 +61,125 @@ export const RepairQuoteModal: React.FC = () => {
   const [declineReason, setDeclineReason] = useState<string>('');
   const [showDeclinePrompt, setShowDeclinePrompt] = useState<boolean>(false);
 
+  // Auto-Save System State & Tracking
+  const [quoteAutoSaveStatus, setQuoteAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [quoteLastSavedTime, setQuoteLastSavedTime] = useState<string | null>(null);
+  const quoteAutoSaveTimerRef = React.useRef<any>(null);
+  const hasInitializedRef = React.useRef(false);
+
+  const latestQuoteValuesRef = React.useRef({
+    laborItems,
+    partsItems,
+    defaultRate,
+    applyShopSupplies,
+    shopSuppliesFee,
+    taxRatePercent,
+    techNotes,
+  });
+
+  useEffect(() => {
+    latestQuoteValuesRef.current = {
+      laborItems,
+      partsItems,
+      defaultRate,
+      applyShopSupplies,
+      shopSuppliesFee,
+      taxRatePercent,
+      techNotes,
+    };
+  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, techNotes]);
+
+  // Flush pending quote auto-save immediately to storage
+  const flushQuoteAutoSave = () => {
+    if (quoteAutoSaveTimerRef.current) {
+      clearTimeout(quoteAutoSaveTimerRef.current);
+      quoteAutoSaveTimerRef.current = null;
+    }
+    if (!activeQuoteRO) return;
+
+    const {
+      laborItems: curLabor,
+      partsItems: curParts,
+      defaultRate: curRate,
+      applyShopSupplies: curApplySupplies,
+      shopSuppliesFee: curSuppliesFee,
+      taxRatePercent: curTaxPercent,
+      techNotes: curTechNotes,
+    } = latestQuoteValuesRef.current;
+
+    // Only auto-save if there is something meaningful in the quote
+    if (curLabor.length === 0 && curParts.length === 0 && !curTechNotes.trim()) return;
+
+    const curLaborHours = Number(curLabor.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0).toFixed(2));
+    const curLaborCost = Number(curLabor.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
+    const fivePercent = curLaborCost * 0.05;
+    const curShopSupplies = !curApplySupplies ? 0 : Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 50) : curSuppliesFee).toFixed(2));
+    const curPartsCost = Number(curParts.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
+    const curTax = Number((curPartsCost * ((curTaxPercent || 0) / 100)).toFixed(2));
+    const curGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + curTax).toFixed(2));
+
+    const autoQuote: RepairQuote = {
+      id: activeQuoteRO.quote?.id || `quote_${Date.now()}`,
+      roId: activeQuoteRO.id,
+      createdAt: activeQuoteRO.quote?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      initiatedByTechId: activeQuoteRO.quote?.initiatedByTechId || currentUser.id,
+      initiatedByTechName: activeQuoteRO.quote?.initiatedByTechName || currentUser.name,
+      status: activeQuoteRO.quote?.status || 'DRAFT',
+      laborItems: curLabor,
+      partsItems: curParts,
+      defaultLaborRate: curRate,
+      shopSuppliesFee: curShopSupplies,
+      taxRate: (curTaxPercent || 0) / 100,
+      taxAmount: curTax,
+      totalLaborHours: curLaborHours,
+      totalLaborCost: curLaborCost,
+      totalPartsCost: curPartsCost,
+      grandTotal: curGrandTotal,
+      techNotes: curTechNotes.trim() || undefined,
+      advisorNotes: activeQuoteRO.quote?.advisorNotes,
+      submittedAt: activeQuoteRO.quote?.submittedAt,
+      approvedAt: activeQuoteRO.quote?.approvedAt,
+      approvedBy: activeQuoteRO.quote?.approvedBy,
+      declinedAt: activeQuoteRO.quote?.declinedAt,
+      declinedReason: activeQuoteRO.quote?.declinedReason,
+    };
+
+    saveRepairQuote(activeQuoteRO.id, autoQuote, false, { isAutoSave: true });
+    setQuoteAutoSaveStatus('saved');
+    setQuoteLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  };
+
+  const triggerQuoteAutoSave = () => {
+    if (!activeQuoteRO || !hasInitializedRef.current) return;
+    setQuoteAutoSaveStatus('saving');
+    if (quoteAutoSaveTimerRef.current) {
+      clearTimeout(quoteAutoSaveTimerRef.current);
+    }
+    quoteAutoSaveTimerRef.current = setTimeout(() => {
+      flushQuoteAutoSave();
+    }, 750);
+  };
+
+  // Safe close that flushes auto-save before closing
+  const handleCloseModal = () => {
+    flushQuoteAutoSave();
+    closeQuoteModal();
+  };
+
+  // Clean up timer on unmount and flush any pending auto-save
+  useEffect(() => {
+    return () => {
+      if (quoteAutoSaveTimerRef.current) {
+        clearTimeout(quoteAutoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
   // Initialize quote from active RO or defaults
   useEffect(() => {
     if (!activeQuoteRO) return;
+    hasInitializedRef.current = false;
 
     if (activeQuoteRO.quote) {
       const q = activeQuoteRO.quote;
@@ -127,7 +244,18 @@ export const RepairQuoteModal: React.FC = () => {
     }
     setSaveSuccessMsg(null);
     setShowDeclinePrompt(false);
+    // Mark initialized on next frame
+    const timer = setTimeout(() => {
+      hasInitializedRef.current = true;
+    }, 100);
+    return () => clearTimeout(timer);
   }, [activeQuoteRO]);
+
+  // Watch for any changes to form fields and trigger auto-save
+  useEffect(() => {
+    if (!hasInitializedRef.current) return;
+    triggerQuoteAutoSave();
+  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, techNotes]);
 
   if (!activeQuoteRO) return null;
 
@@ -441,19 +569,40 @@ export const RepairQuoteModal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 print:hidden">
+            {/* Auto-Save Status Badge */}
+            <div 
+              id="quote-autosave-badge"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 select-none"
+              title="All changes to labor operations, parts, and notes are automatically saved to the system"
+            >
+              {quoteAutoSaveStatus === 'saving' ? (
+                <span className="flex items-center gap-1.5 text-blue-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span className="hidden sm:inline">Auto-Saving...</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">
+                    {quoteLastSavedTime ? `Auto-Saved (${quoteLastSavedTime})` : 'Auto-Save Active'}
+                  </span>
+                </span>
+              )}
+            </div>
+
             <button
               id="print-quote-btn"
               onClick={handlePrint}
               title="Print official repair quote"
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors"
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span className="hidden sm:inline">Print Quote</span>
             </button>
             <button
               id="close-quote-modal-btn"
-              onClick={closeQuoteModal}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+              onClick={handleCloseModal}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               title="Close quote editor"
             >
               <X className="w-5 h-5" />
@@ -1086,7 +1235,7 @@ export const RepairQuoteModal: React.FC = () => {
             <button
               id="close-quote-footer-btn"
               type="button"
-              onClick={closeQuoteModal}
+              onClick={handleCloseModal}
               className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer w-full sm:w-auto text-center"
             >
               Close
@@ -1102,6 +1251,23 @@ export const RepairQuoteModal: React.FC = () => {
               <Printer className="w-4 h-4 text-slate-500" />
               <span>Print Quote</span>
             </button>
+
+            {/* Auto-Save Footer Feedback */}
+            <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 font-medium pl-2">
+              {quoteAutoSaveStatus === 'saving' ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                  <span className="text-blue-600 font-semibold">Auto-saving quote changes...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>
+                    Auto-saved {quoteLastSavedTime ? `at ${quoteLastSavedTime}` : 'live'}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto justify-end">
