@@ -183,6 +183,8 @@ export interface RepairOrder {
   contactHistory?: CustomerContactRecord[];
   quote?: RepairQuote;
   timePunches?: WarrantyLaborTimePunch[];
+  isTaxExempt?: boolean; // Customer tax exemption status (0% sales tax vs default 7%)
+  taxExemptNumber?: string; // Optional tax exempt resale or state certificate number
 }
 
 export type WarrantyOperationType = 'DIAGNOSTIC' | 'REPAIR' | 'ROAD_TEST' | 'WAITING_PARTS' | 'GENERAL';
@@ -237,6 +239,8 @@ export interface RepairQuote {
   shopSuppliesFee: number;
   taxRate: number;
   taxAmount: number;
+  isTaxExempt?: boolean;
+  taxExemptNumber?: string;
   totalLaborHours: number;
   totalLaborCost: number;
   totalPartsCost: number;

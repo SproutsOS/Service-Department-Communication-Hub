@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, FileText, Send, User, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench } from 'lucide-react';
+import { X, Plus, FileText, Send, User, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { decodeVin } from '../utils/vinDecoder';
 import { ConcernPayType } from '../types';
@@ -34,6 +34,7 @@ export const NewROModal: React.FC = () => {
   const [bay, setBay] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [isWaiter, setIsWaiter] = useState(false);
+  const [isTaxExempt, setIsTaxExempt] = useState(false);
 
   // Initialize all fields to completely empty when modal opens
   useEffect(() => {
@@ -53,6 +54,7 @@ export const NewROModal: React.FC = () => {
       setBay('');
       setIsUrgent(false);
       setIsWaiter(false);
+      setIsTaxExempt(false);
       setVinDecodedMsg(null);
       setVinError(null);
       setConcernPayTypes(['CUSTOMER_PAY']);
@@ -211,6 +213,7 @@ export const NewROModal: React.FC = () => {
       bay: bay || undefined,
       isUrgent,
       isWaiter,
+      isTaxExempt,
     });
 
     setIsNewROModalOpen(false);
@@ -320,9 +323,28 @@ export const NewROModal: React.FC = () => {
 
           {/* Customer Section */}
           <div className="bg-slate-50 p-4 rounded-xl border-2 border-slate-400">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-blue-600" /> Customer Information
-            </h3>
+            <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-blue-600" /> Customer Information
+              </h3>
+              
+              {/* Tax Exempt Button on Customer Screen */}
+              <button
+                type="button"
+                id="new-ro-tax-exempt-btn"
+                onClick={() => setIsTaxExempt(!isTaxExempt)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border shadow-2xs ${
+                  isTaxExempt
+                    ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 ring-1 ring-emerald-500'
+                    : 'bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-400'
+                }`}
+                title={isTaxExempt ? "Customer is marked Tax Exempt (0% sales tax). Click to remove." : "Click if customer is Tax Exempt (0% sales tax instead of 7%)"}
+              >
+                <ShieldCheck className={`w-3.5 h-3.5 ${isTaxExempt ? 'text-white' : 'text-slate-400'}`} />
+                <span>{isTaxExempt ? 'Tax Exempt Customer (0% Tax) ✓' : 'Tax Exempt? Click if exempt'}</span>
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Customer Full Name *</label>

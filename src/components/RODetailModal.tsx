@@ -65,7 +65,8 @@ export const RODetailModal: React.FC = () => {
     openQuoteModal,
     openWarrantyPrintModal,
     updateConcernPayType,
-    updateConcernTech
+    updateConcernTech,
+    toggleCustomerTaxExempt
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -602,6 +603,22 @@ export const RODetailModal: React.FC = () => {
                 <Phone className="w-3 h-3 text-slate-400" />
                 {selectedRO.customerPhone}
               </span>
+              <span>•</span>
+              {/* Customer Tax Exemption Toggle Button */}
+              <button
+                type="button"
+                id="btn-ro-customer-tax-exempt"
+                onClick={() => toggleCustomerTaxExempt(selectedRO.id)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all cursor-pointer border shadow-2xs ${
+                  selectedRO.isTaxExempt
+                    ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 ring-1 ring-emerald-500'
+                    : 'bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-400'
+                }`}
+                title={selectedRO.isTaxExempt ? "Customer is marked Tax Exempt (0% sales tax). Click to change to taxable (7%)." : "Click if customer is Tax Exempt (0% sales tax instead of 7%)"}
+              >
+                <ShieldCheck className={`w-3.5 h-3.5 ${selectedRO.isTaxExempt ? 'text-white' : 'text-slate-400'}`} />
+                <span>{selectedRO.isTaxExempt ? 'Tax Exempt (0% Tax)' : 'Tax Exempt? Click if exempt'}</span>
+              </button>
               <span>•</span>
               <span className="font-medium text-slate-700">
                 {selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model}

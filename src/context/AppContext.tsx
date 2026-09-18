@@ -117,8 +117,11 @@ interface AppContextType {
     bay?: string;
     isUrgent?: boolean;
     isWaiter?: boolean;
+    isTaxExempt?: boolean;
+    taxExemptNumber?: string;
   }) => string;
   
+  toggleCustomerTaxExempt: (roId: string, taxExemptNumber?: string) => boolean;
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
@@ -1068,6 +1071,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     bay?: string;
     isUrgent?: boolean;
     isWaiter?: boolean;
+    isTaxExempt?: boolean;
+    taxExemptNumber?: string;
   }): string => {
     let newId: string;
     const cleanRoInput = data.roNumber?.trim().toUpperCase();
@@ -1118,6 +1123,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: initialStatus,
       isUrgent: !!data.isUrgent,
       isWaiter: !!data.isWaiter,
+      isTaxExempt: !!data.isTaxExempt,
+      taxExemptNumber: data.taxExemptNumber?.trim() || undefined,
       promisedTime: data.promisedTime || new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
       primaryConcern: primaryConcernText,
       concerns: cleanConcernsList.length > 0 ? cleanConcernsList : [primaryConcernText],
@@ -1376,15 +1383,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Update core entered repair order details (Restricted to Service Manager)
+  // Update core entered repair order details (Service Manager & Advisor)
   const updateRepairOrderDetails = (
     roId: string, 
     updates: Partial<RepairOrder>,
     options?: { isAutoSave?: boolean }
   ): boolean => {
-    if (currentUser.role !== 'SERVICE_MANAGER') {
+    const canEdit = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
+    if (!canEdit) {
       if (!options?.isAutoSave) {
-        alert('Permission Denied: Only the Service Manager has permission to modify core repair order records.');
+        alert('Permission Denied: Only the Service Manager or Service Advisor has permission to modify core repair order records.');
       }
       return false;
     }
@@ -1398,6 +1406,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             lastHist.notes.includes('core records') &&
             (Date.now() - new Date(lastHist.timestamp).getTime() < 120000);
 
+          let updatedQuote = ro.quote;
+          if (updates.isTaxExempt !== undefined && ro.quote) {
+            const nextIsTaxExempt = !!updates.isTaxExempt;
+            const q = ro.quote;
+            const curLaborCost = Number((q.totalLaborCost || 0).toFixed(2));
+            const curPartsCost = Number((q.totalPartsCost || 0).toFixed(2));
+            const curShopSupplies = Number((q.shopSuppliesFee || 0).toFixed(2));
+            const newTaxRate = nextIsTaxExempt ? 0 : 0.07;
+            const newTaxAmount = nextIsTaxExempt ? 0 : Number((curPartsCost * 0.07).toFixed(2));
+            const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
+            updatedQuote = {
+              ...q,
+              isTaxExempt: nextIsTaxExempt,
+              taxRate: newTaxRate,
+              taxAmount: newTaxAmount,
+              grandTotal: newGrandTotal,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+
           const newHistory = isAutoSave && isRecentSame
             ? ro.history
             : [
@@ -1409,13 +1437,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   updatedByName: currentUser.name,
                   userRole: currentUser.role,
                   timestamp: new Date().toISOString(),
-                  notes: `Service Manager ${isAutoSave ? 'auto-saved' : 'updated'} core records (${Object.keys(updates).join(', ')})`
+                  notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) ${isAutoSave ? 'auto-saved' : 'updated'} records (${Object.keys(updates).join(', ')})`
                 }
               ];
 
           const updatedRO = {
             ...ro,
             ...updates,
+            quote: updatedQuote,
             history: newHistory
           };
           syncRepairOrder(updatedRO);
@@ -1430,6 +1459,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     });
+    return true;
+  };
+
+  // Customer Tax Exemption Toggle (Advisors & Managers)
+  const toggleCustomerTaxExempt = (roId: string, taxExemptNumber?: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const nextIsTaxExempt = !targetRO.isTaxExempt;
+    const nextTaxNumber = taxExemptNumber !== undefined ? taxExemptNumber : targetRO.taxExemptNumber;
+
+    let updatedQuote = targetRO.quote;
+    if (targetRO.quote) {
+      const q = targetRO.quote;
+      const curLaborCost = Number((q.totalLaborCost || 0).toFixed(2));
+      const curPartsCost = Number((q.totalPartsCost || 0).toFixed(2));
+      const curShopSupplies = Number((q.shopSuppliesFee || 0).toFixed(2));
+      
+      const newTaxRate = nextIsTaxExempt ? 0 : 0.07;
+      const newTaxAmount = nextIsTaxExempt ? 0 : Number((curPartsCost * 0.07).toFixed(2));
+      const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
+
+      updatedQuote = {
+        ...q,
+        isTaxExempt: nextIsTaxExempt,
+        taxExemptNumber: nextTaxNumber,
+        taxRate: newTaxRate,
+        taxAmount: newTaxAmount,
+        grandTotal: newGrandTotal,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      isTaxExempt: nextIsTaxExempt,
+      taxExemptNumber: nextTaxNumber,
+      quote: updatedQuote,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist-${Date.now()}`,
+          status: targetRO.status,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: new Date().toISOString(),
+          notes: `${currentUser.name} marked customer as ${nextIsTaxExempt ? 'Tax Exempt (0% sales tax)' : 'Taxable (7% sales tax)'}${nextTaxNumber ? ` [Cert #${nextTaxNumber}]` : ''}.`,
+        }
+      ]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
     return true;
   };
 
@@ -1747,8 +1839,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isAutoSave = options?.isAutoSave ?? false;
     const now = new Date().toISOString();
     const nextStatus: QuoteStatus = submitToAdvisor ? 'SUBMITTED' : (quote.status || 'DRAFT');
+    
+    const isExempt = targetRO.isTaxExempt || quote.isTaxExempt;
+    const finalTaxRate = isExempt ? 0 : (quote.taxRate !== undefined ? quote.taxRate : 0.07);
+    const finalTaxAmount = isExempt ? 0 : Number(((quote.totalPartsCost || 0) * finalTaxRate).toFixed(2));
+    const finalGrandTotal = Number(((quote.totalLaborCost || 0) + (quote.totalPartsCost || 0) + (quote.shopSuppliesFee || 0) + finalTaxAmount).toFixed(2));
+
     const nextQuote: RepairQuote = {
       ...quote,
+      isTaxExempt: isExempt,
+      taxRate: finalTaxRate,
+      taxAmount: finalTaxAmount,
+      grandTotal: finalGrandTotal,
       status: nextStatus,
       updatedAt: now,
       submittedAt: submitToAdvisor ? (quote.submittedAt || now) : quote.submittedAt,
@@ -2601,6 +2703,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAllNotificationsRead,
         deleteRepairOrder,
         updateRepairOrderDetails,
+        toggleCustomerTaxExempt,
         updateTechCauseAndCorrection,
         updateConcernPayType,
         updateConcernTech,

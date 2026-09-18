@@ -19,7 +19,8 @@ import {
   FileText,
   AlertCircle,
   Calculator,
-  Loader2
+  Loader2,
+  ShieldCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RepairQuote, LaborLineItem, QuotePartItem, QuoteStatus } from '../types';
@@ -43,7 +44,8 @@ export const RepairQuoteModal: React.FC = () => {
     closeQuoteModal, 
     saveRepairQuote, 
     updateQuoteStatus, 
-    currentUser 
+    currentUser,
+    shopName
   } = useApp();
 
   const [copiedVin, setCopiedVin] = useState(false);
@@ -56,7 +58,9 @@ export const RepairQuoteModal: React.FC = () => {
   const [partsItems, setPartsItems] = useState<QuotePartItem[]>([]);
   const [applyShopSupplies, setApplyShopSupplies] = useState<boolean>(true);
   const [shopSuppliesFee, setShopSuppliesFee] = useState<number>(25);
-  const [taxRatePercent, setTaxRatePercent] = useState<number>(8.25);
+  const [taxRatePercent, setTaxRatePercent] = useState<number>(7.0);
+  const [isTaxExempt, setIsTaxExempt] = useState<boolean>(false);
+  const [taxExemptNumber, setTaxExemptNumber] = useState<string>('');
   const [techNotes, setTechNotes] = useState<string>('');
   const [declineReason, setDeclineReason] = useState<string>('');
   const [showDeclinePrompt, setShowDeclinePrompt] = useState<boolean>(false);
@@ -79,6 +83,8 @@ export const RepairQuoteModal: React.FC = () => {
     applyShopSupplies,
     shopSuppliesFee,
     taxRatePercent,
+    isTaxExempt,
+    taxExemptNumber,
     techNotes,
   });
 
@@ -90,9 +96,11 @@ export const RepairQuoteModal: React.FC = () => {
       applyShopSupplies,
       shopSuppliesFee,
       taxRatePercent,
+      isTaxExempt,
+      taxExemptNumber,
       techNotes,
     };
-  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, techNotes]);
+  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, isTaxExempt, taxExemptNumber, techNotes]);
 
   // Flush pending quote auto-save immediately to storage
   const flushQuoteAutoSave = () => {
@@ -110,6 +118,8 @@ export const RepairQuoteModal: React.FC = () => {
       applyShopSupplies: curApplySupplies,
       shopSuppliesFee: curSuppliesFee,
       taxRatePercent: curTaxPercent,
+      isTaxExempt: curIsExempt,
+      taxExemptNumber: curExemptNum,
       techNotes: curTechNotes,
     } = latestQuoteValuesRef.current;
 
@@ -121,7 +131,7 @@ export const RepairQuoteModal: React.FC = () => {
     const fivePercent = curLaborCost * 0.05;
     const curShopSupplies = !curApplySupplies ? 0 : Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 50) : curSuppliesFee).toFixed(2));
     const curPartsCost = Number(curParts.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
-    const curTax = Number((curPartsCost * ((curTaxPercent || 0) / 100)).toFixed(2));
+    const curTax = curIsExempt ? 0 : Number((curPartsCost * ((curTaxPercent || 0) / 100)).toFixed(2));
     const curGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + curTax).toFixed(2));
 
     const autoQuote: RepairQuote = {
@@ -136,8 +146,10 @@ export const RepairQuoteModal: React.FC = () => {
       partsItems: curParts,
       defaultLaborRate: curRate,
       shopSuppliesFee: curShopSupplies,
-      taxRate: (curTaxPercent || 0) / 100,
+      taxRate: curIsExempt ? 0 : (curTaxPercent || 0) / 100,
       taxAmount: curTax,
+      isTaxExempt: curIsExempt,
+      taxExemptNumber: curExemptNum || undefined,
       totalLaborHours: curLaborHours,
       totalLaborCost: curLaborCost,
       totalPartsCost: curPartsCost,
@@ -187,6 +199,10 @@ export const RepairQuoteModal: React.FC = () => {
     if (!activeQuoteRO) return;
     hasInitializedRef.current = false;
 
+    const isExemptCustomer = Boolean(activeQuoteRO.isTaxExempt || activeQuoteRO.quote?.isTaxExempt);
+    setIsTaxExempt(isExemptCustomer);
+    setTaxExemptNumber(activeQuoteRO.taxExemptNumber || activeQuoteRO.quote?.taxExemptNumber || '');
+
     if (activeQuoteRO.quote) {
       const q = activeQuoteRO.quote;
       setDefaultRate(q.defaultLaborRate || 150);
@@ -194,7 +210,7 @@ export const RepairQuoteModal: React.FC = () => {
       setPartsItems(q.partsItems || []);
       setApplyShopSupplies((q.shopSuppliesFee || 0) > 0);
       setShopSuppliesFee(q.shopSuppliesFee || 0);
-      setTaxRatePercent((q.taxRate || 0.0825) * 100);
+      setTaxRatePercent(isExemptCustomer ? 0 : (q.taxRate !== undefined ? q.taxRate * 100 : 7.0));
       setTechNotes(q.techNotes || '');
     } else {
       // Tech is initiating a brand new quote
@@ -241,7 +257,7 @@ export const RepairQuoteModal: React.FC = () => {
 
       setApplyShopSupplies(true);
       setShopSuppliesFee(25);
-      setTaxRatePercent(8.25);
+      setTaxRatePercent(isExemptCustomer ? 0 : 7.0);
       setTechNotes(
         activeQuoteRO.cause && activeQuoteRO.correction
           ? `Technician Findings:\nCause: ${activeQuoteRO.cause}\nCorrection: ${activeQuoteRO.correction}`
@@ -257,11 +273,22 @@ export const RepairQuoteModal: React.FC = () => {
     return () => clearTimeout(timer);
   }, [activeQuoteRO?.id]);
 
+  // Handle Tax Exemption Toggle
+  const handleToggleTaxExempt = () => {
+    const nextExempt = !isTaxExempt;
+    setIsTaxExempt(nextExempt);
+    if (nextExempt) {
+      setTaxRatePercent(0);
+    } else {
+      setTaxRatePercent(7.0);
+    }
+  };
+
   // Watch for any changes to form fields and trigger auto-save
   useEffect(() => {
     if (!hasInitializedRef.current) return;
     triggerQuoteAutoSave();
-  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, techNotes]);
+  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, isTaxExempt, taxExemptNumber, techNotes]);
 
   // Calculations (must remain before any early return to obey React Rules of Hooks)
   const totalLaborHours = useMemo(() => {
@@ -284,10 +311,11 @@ export const RepairQuoteModal: React.FC = () => {
   }, [partsItems]);
 
   const estimatedTaxAmount = useMemo(() => {
+    if (isTaxExempt) return 0;
     const rate = (taxRatePercent || 0) / 100;
-    // Sales tax applied to parts
+    // Sales tax applied to parts at 7% standard rate (or custom rate if adjusted)
     return Number((totalPartsCost * rate).toFixed(2));
-  }, [totalPartsCost, taxRatePercent]);
+  }, [totalPartsCost, taxRatePercent, isTaxExempt]);
 
   const grandTotal = useMemo(() => {
     return Number(((totalLaborCost || 0) + (totalPartsCost || 0) + (calculatedShopSupplies || 0) + (estimatedTaxAmount || 0)).toFixed(2));
@@ -463,8 +491,10 @@ export const RepairQuoteModal: React.FC = () => {
       partsItems,
       defaultLaborRate: defaultRate,
       shopSuppliesFee: calculatedShopSupplies,
-      taxRate: (taxRatePercent || 0) / 100,
-      taxAmount: estimatedTaxAmount,
+      isTaxExempt,
+      taxExemptNumber: taxExemptNumber.trim() || undefined,
+      taxRate: isTaxExempt ? 0 : (taxRatePercent || 0) / 100,
+      taxAmount: isTaxExempt ? 0 : estimatedTaxAmount,
       totalLaborHours,
       totalLaborCost,
       totalPartsCost,
@@ -520,17 +550,42 @@ export const RepairQuoteModal: React.FC = () => {
     }, 1500);
   };
 
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const roNumber = activeQuoteRO?.id || '';
+      const vehicleDesc = activeQuoteRO?.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
+      document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
+    };
+    const handleAfterPrint = () => {
+      document.title = 'Service Department & Repair Order Hub';
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [activeQuoteRO?.id, activeQuoteRO?.vehicle]);
+
   const handlePrint = () => {
+    const originalTitle = document.title;
+    const roNumber = activeQuoteRO?.id || '';
+    const vehicleDesc = activeQuoteRO?.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
+    document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
     window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
   };
 
   const isAdvisorOrManager = currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto print:z-auto print:overflow-visible print:block">
       <div 
         id="repair-quote-modal-container"
-        className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col print:shadow-none print:border-none print:max-h-none"
+        className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col no-print"
       >
         {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 print:bg-white print:text-black print:border-b-2 print:border-black">
@@ -570,8 +625,22 @@ export const RepairQuoteModal: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
+              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2.5 flex-wrap">
                 <span>Customer: <strong className="text-slate-200">{activeQuoteRO.customerName}</strong></span>
+                <span>•</span>
+                <button
+                  type="button"
+                  onClick={handleToggleTaxExempt}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                    isTaxExempt 
+                      ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/60 hover:bg-emerald-600/40' 
+                      : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700 hover:border-slate-500 hover:bg-slate-700'
+                  }`}
+                  title={isTaxExempt ? "Customer is Tax Exempt (0% sales tax). Click to change to taxable." : "Click if customer is Tax Exempt (0% sales tax)"}
+                >
+                  <ShieldCheck className={`w-3.5 h-3.5 ${isTaxExempt ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <span>{isTaxExempt ? 'Tax Exempt Customer (0% Tax)' : 'Tax Exempt? Click if exempt'}</span>
+                </button>
                 <span>•</span>
                 <span>Vehicle: <strong className="text-slate-200">{vehicle.year} {vehicle.make} {vehicle.model}</strong></span>
                 {vehicle.vin && (
@@ -1102,23 +1171,46 @@ export const RepairQuoteModal: React.FC = () => {
                 </div>
 
                 {/* Sales Tax */}
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-700">Estimated Sales Tax on Parts:</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        step="0.25"
-                        min="0"
-                        max="20"
-                        value={taxRatePercent}
-                        onChange={(e) => setTaxRatePercent(Number(e.target.value) || 0)}
-                        className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-bold"
-                      />
-                      <span className="text-xs text-slate-500 font-bold">%</span>
-                    </div>
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-slate-700">Sales Tax on Parts:</span>
+                    {!isTaxExempt ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.25"
+                          min="0"
+                          max="20"
+                          value={taxRatePercent}
+                          onChange={(e) => setTaxRatePercent(Number(e.target.value) || 0)}
+                          className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-bold"
+                          title="Standard 7% sales tax rate"
+                        />
+                        <span className="text-xs text-slate-500 font-bold">%</span>
+                      </div>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded border border-emerald-300 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        0% Tax Exempt
+                      </span>
+                    )}
+
+                    {/* Tax Exempt Toggle Button */}
+                    <button
+                      type="button"
+                      onClick={handleToggleTaxExempt}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
+                        isTaxExempt 
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs hover:bg-emerald-700' 
+                          : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-300'
+                      }`}
+                      title={isTaxExempt ? "Customer is marked Tax Exempt. Click to remove exemption." : "Click if customer is Tax Exempt (0% sales tax)"}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>{isTaxExempt ? 'Tax Exempt Active ✓' : 'Click if Tax Exempt'}</span>
+                    </button>
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-800">
+                  <span className={`text-xs font-mono font-bold ${isTaxExempt ? 'text-emerald-600' : 'text-slate-800'}`}>
                     ${estimatedTaxAmount.toFixed(2)}
                   </span>
                 </div>
@@ -1172,8 +1264,8 @@ export const RepairQuoteModal: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between text-slate-300 print:text-black">
-                    <span>Sales Tax ({taxRatePercent}% on parts):</span>
-                    <span className="font-mono font-bold text-white print:text-black">${estimatedTaxAmount.toFixed(2)}</span>
+                    <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
+                    <span className={`font-mono font-bold print:text-black ${isTaxExempt ? 'text-emerald-400' : 'text-white'}`}>${estimatedTaxAmount.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -1336,6 +1428,331 @@ export const RepairQuoteModal: React.FC = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* Official Printable Repair Quote Document (Rendered only during Print) */}
+      <div 
+        id="printable-quote-document"
+        className="hidden print:block bg-white text-slate-950 max-w-4xl mx-auto space-y-4 font-sans text-xs"
+      >
+        {/* Dealership & Repair Quote Header */}
+        <div className="border-b-2 border-slate-950 pb-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-2xl font-black tracking-tight text-slate-950 uppercase">
+                {shopName || 'Precision Auto & Truck Service'}
+              </div>
+              <div className="text-xs font-bold text-slate-700 tracking-wider uppercase mt-0.5">
+                Official Repair Quote & Estimate • Service Department
+              </div>
+              <div className="text-[11px] text-slate-600 mt-0.5">
+                Certified Automotive Service • OEM & High-Grade Replacement Specifications
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <div className="inline-block px-3 py-1 bg-slate-950 text-white font-mono font-black text-sm rounded">
+                RO #{activeQuoteRO.id}
+              </div>
+              <div className="text-[11px] text-slate-800 font-semibold mt-1 font-mono">
+                Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className="text-[11px] font-bold mt-0.5">
+                Status:{' '}
+                {quoteStatus === 'APPROVED' && <span className="text-emerald-700 font-black">AUTHORIZED BY CUSTOMER</span>}
+                {quoteStatus === 'SUBMITTED' && <span className="text-blue-700 font-black">PENDING AUTHORIZATION</span>}
+                {quoteStatus === 'DECLINED' && <span className="text-rose-700 font-black">DECLINED BY CUSTOMER</span>}
+                {quoteStatus === 'DRAFT' && <span className="text-amber-700 font-black">ESTIMATE DRAFT</span>}
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                Advisor: {activeQuoteRO.advisorName}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer & Vehicle Information Grid */}
+        <div className="grid grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-300 text-xs">
+          <div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">Customer Information</span>
+            <span className="font-bold text-slate-950 text-sm block">{activeQuoteRO.customerName}</span>
+            <span className="text-slate-700 block text-[11px] font-medium">{activeQuoteRO.customerPhone}</span>
+            <div className="mt-1">
+              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
+                isTaxExempt ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-slate-200 text-slate-800 border-slate-300'
+              }`}>
+                {isTaxExempt ? `0.00% Tax Exempt${taxExemptNumber ? ` (Cert #${taxExemptNumber})` : ''}` : 'Taxable (7.00%)'}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle Year / Make / Model</span>
+            <span className="font-bold text-slate-950 text-sm block">
+              {vehicle.year} {vehicle.make} {vehicle.model}
+            </span>
+            <span className="text-slate-700 block text-[11px]">
+              Mileage: {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : 'N/A'}
+            </span>
+            {vehicle.engine && (
+              <span className="text-slate-600 block text-[10px]">Engine: {vehicle.engine}</span>
+            )}
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle VIN (17-Digit)</span>
+            <span className="font-mono font-black text-slate-950 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 inline-block text-[11px]">
+              {vehicle.vin || 'N/A'}
+            </span>
+            <span className="text-slate-600 block text-[11px] mt-0.5 font-mono">
+              Tag: RO #{activeQuoteRO.id}
+            </span>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">Service Assignment</span>
+            <span className="text-slate-800 block">
+              Advisor: <strong className="font-bold text-slate-950">{activeQuoteRO.advisorName}</strong>
+            </span>
+            <span className="text-slate-800 block">
+              Technician: <strong className="font-bold text-slate-950">{activeQuoteRO.techName || quote?.initiatedByTechName || 'Assigned Tech'}</strong>
+            </span>
+            <span className="text-slate-600 block text-[11px]">
+              Bay: {activeQuoteRO.bay || 'General Service'}
+            </span>
+          </div>
+        </div>
+
+        {/* Customer Stated Complaints / Concerns */}
+        {((activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0) || activeQuoteRO.primaryConcern) && (
+          <div>
+            <div className="text-xs font-black text-slate-950 uppercase tracking-wider mb-1 flex items-center gap-1.5 border-b border-slate-300 pb-1">
+              <span>Customer Stated Concern(s):</span>
+            </div>
+            <div className="space-y-1">
+              {(activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0 ? activeQuoteRO.concerns : [activeQuoteRO.primaryConcern!]).map((c, idx) => (
+                <div key={idx} className="bg-slate-50 p-1.5 rounded border border-slate-300 text-xs flex items-start gap-2">
+                  <span className="text-[10px] font-mono font-bold bg-slate-200 px-1.5 py-0.2 rounded shrink-0">Line {idx + 1}</span>
+                  <span className="font-medium text-slate-900">{c}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Technician Findings / Diagnostics */}
+        {(activeQuoteRO.cause || activeQuoteRO.correction || techNotes) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {activeQuoteRO.cause && (
+              <div className="bg-amber-50/60 p-2 rounded-lg border border-amber-300">
+                <span className="text-[10px] font-bold text-amber-900 uppercase block mb-0.5">Diagnostic Finding / Cause:</span>
+                <p className="font-mono text-slate-900 leading-snug">{activeQuoteRO.cause}</p>
+              </div>
+            )}
+            {activeQuoteRO.correction && (
+              <div className="bg-emerald-50/60 p-2 rounded-lg border border-emerald-300">
+                <span className="text-[10px] font-bold text-emerald-900 uppercase block mb-0.5">Recommended Correction:</span>
+                <p className="font-mono text-slate-900 leading-snug">{activeQuoteRO.correction}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Section: Labor Operations */}
+        <div className="space-y-1">
+          <div className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center justify-between border-b border-slate-300 pb-1">
+            <span>Labor Operations & Flat-Rate Procedures</span>
+            <span className="text-[11px] font-bold text-slate-600 font-mono">
+              Shop Labor Rate: ${defaultRate.toFixed(2)}/hr
+            </span>
+          </div>
+
+          <table className="w-full text-left text-xs border-collapse border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-300 text-[11px] font-bold text-slate-700 uppercase">
+                <th className="py-1.5 px-2 w-10 text-center border-r border-slate-300">#</th>
+                <th className="py-1.5 px-3 border-r border-slate-300">Operation Description & Procedures</th>
+                <th className="py-1.5 px-2.5 w-24 text-center border-r border-slate-300">Hours</th>
+                <th className="py-1.5 px-2.5 w-24 text-right border-r border-slate-300">Rate</th>
+                <th className="py-1.5 px-3 w-28 text-right">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {laborItems.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-2.5 text-center text-slate-500 italic">No labor items on this estimate</td>
+                </tr>
+              ) : (
+                laborItems.map((item, idx) => (
+                  <tr key={item.id} className="border-b border-slate-200">
+                    <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 border-r border-slate-200">{idx + 1}</td>
+                    <td className="py-1.5 px-3 border-r border-slate-200">
+                      <div className="font-bold text-slate-900">{item.description}</div>
+                      {item.techNotes && (
+                        <div className="text-[10px] text-slate-600 font-mono mt-0.5">{item.techNotes}</div>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-2.5 text-center font-mono font-semibold border-r border-slate-200">
+                      {(Number(item.laborHours) || 0).toFixed(1)} hrs
+                    </td>
+                    <td className="py-1.5 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">
+                      ${(Number(item.hourlyRate) || 0).toFixed(2)}
+                    </td>
+                    <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-950">
+                      ${(Number(item.subtotal) || 0).toFixed(2)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50 border-t-2 border-slate-400 font-bold">
+                <td colSpan={2} className="py-1.5 px-3 text-right text-slate-700 uppercase text-[11px]">
+                  Total Labor:
+                </td>
+                <td className="py-1.5 px-2.5 text-center font-mono text-slate-900">
+                  {totalLaborHours.toFixed(1)} hrs
+                </td>
+                <td className="py-1.5 px-2.5 text-right text-slate-500"></td>
+                <td className="py-1.5 px-3 text-right font-mono font-black text-slate-950 text-sm">
+                  ${totalLaborCost.toFixed(2)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Section: Parts & Materials */}
+        <div className="space-y-1">
+          <div className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center justify-between border-b border-slate-300 pb-1">
+            <span>Required Parts & Materials</span>
+            <span className="text-[11px] font-bold text-slate-600">
+              Total Items: {partsItems.length}
+            </span>
+          </div>
+
+          <table className="w-full text-left text-xs border-collapse border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-300 text-[11px] font-bold text-slate-700 uppercase">
+                <th className="py-1.5 px-2 w-10 text-center border-r border-slate-300">#</th>
+                <th className="py-1.5 px-3 border-r border-slate-300">Part Description</th>
+                <th className="py-1.5 px-3 w-36 border-r border-slate-300">Part Number</th>
+                <th className="py-1.5 px-2 w-16 text-center border-r border-slate-300">Qty</th>
+                <th className="py-1.5 px-2.5 w-24 text-right border-r border-slate-300">Unit Price</th>
+                <th className="py-1.5 px-3 w-28 text-right">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {partsItems.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-2.5 text-center text-slate-500 italic">No replacement parts required for this estimate (Labor only)</td>
+                </tr>
+              ) : (
+                partsItems.map((part, idx) => (
+                  <tr key={part.id} className="border-b border-slate-200">
+                    <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 border-r border-slate-200">{idx + 1}</td>
+                    <td className="py-1.5 px-3 font-semibold text-slate-900 border-r border-slate-200">{part.description}</td>
+                    <td className="py-1.5 px-3 font-mono text-slate-700 text-[11px] border-r border-slate-200">{part.partNumber || 'OEM / Standard'}</td>
+                    <td className="py-1.5 px-2 text-center font-mono font-semibold border-r border-slate-200">{part.quantity}</td>
+                    <td className="py-1.5 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">${(Number(part.unitPrice) || 0).toFixed(2)}</td>
+                    <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-950">${(Number(part.subtotal) || 0).toFixed(2)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50 border-t-2 border-slate-400 font-bold">
+                <td colSpan={5} className="py-1.5 px-3 text-right text-slate-700 uppercase text-[11px]">
+                  Total Parts & Materials:
+                </td>
+                <td className="py-1.5 px-3 text-right font-mono font-black text-slate-950 text-sm">
+                  ${totalPartsCost.toFixed(2)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Financial Totals & Policies */}
+        <div className="grid grid-cols-2 gap-4 pt-1 break-inside-avoid">
+          {/* Left: Notes & Policies */}
+          <div className="space-y-2 text-[11px] text-slate-600">
+            <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-300 space-y-1">
+              <span className="font-bold text-slate-900 uppercase tracking-wider block text-[10px]">Warranty & Terms</span>
+              <p className="leading-snug text-[10px]">
+                All parts and labor are backed by our standard 12-Month / 12,000-Mile Warranty. Shop supplies and environmental hazmat fees cover consumables, fluid recycling, and shop equipment.
+              </p>
+              {techNotes && (
+                <div className="pt-1 border-t border-slate-200">
+                  <span className="font-bold text-slate-800 block text-[10px]">Technician Notes:</span>
+                  <p className="font-mono text-slate-800 text-[10px] leading-tight whitespace-pre-wrap">{techNotes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Totals Table */}
+          <div className="border border-slate-400 rounded-lg overflow-hidden">
+            <div className="bg-slate-100 px-3 py-1 border-b border-slate-300 font-black text-xs uppercase tracking-wider text-slate-900">
+              Official Quote Summary
+            </div>
+            <div className="p-2.5 space-y-1 text-xs">
+              <div className="flex justify-between text-slate-700">
+                <span>Labor Total ({totalLaborHours.toFixed(1)} hrs):</span>
+                <span className="font-mono font-bold text-slate-950">${totalLaborCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span>Parts & Materials ({partsItems.length} items):</span>
+                <span className="font-mono font-bold text-slate-950">${totalPartsCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span>Shop Supplies & Environmental:</span>
+                <span className="font-mono font-bold text-slate-950">${calculatedShopSupplies.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
+                <span className="font-mono font-bold text-slate-950">${estimatedTaxAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1.5 mt-1 border-t-2 border-slate-950 font-black">
+                <span className="text-slate-950 uppercase text-xs">Grand Total Estimate:</span>
+                <span className="font-mono text-slate-950 text-lg font-black">${grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Authorization & Signature Block */}
+        <div className="border-2 border-slate-400 rounded-lg p-3 space-y-2 break-inside-avoid">
+          <p className="text-[10px] text-slate-600 leading-tight">
+            I hereby authorize the repair work listed above to be performed along with necessary materials. Precision Auto Care and its employees are granted permission to operate the vehicle described on streets and highways for testing and inspection purposes.
+          </p>
+
+          <div className="grid grid-cols-2 gap-6 pt-1">
+            <div>
+              <div className="border-b-2 border-slate-900 pb-1 h-6"></div>
+              <div className="flex justify-between text-[10px] font-bold text-slate-700 mt-1 uppercase">
+                <span>Customer Signature</span>
+                <span>Date</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="border-b-2 border-slate-900 pb-1 h-6 flex items-end">
+                <span className="text-xs font-semibold text-slate-800">{activeQuoteRO.advisorName}</span>
+              </div>
+              <div className="flex justify-between text-[10px] font-bold text-slate-700 mt-1 uppercase">
+                <span>Service Advisor Signature</span>
+                <span>Date: {new Date().toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Document Bottom Bar */}
+        <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-200">
+          <span>RO #{activeQuoteRO.id} • {shopName || 'Precision Auto & Truck Service'}</span>
+          <span>Official Customer Copy</span>
+        </div>
       </div>
     </div>
   );
