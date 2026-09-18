@@ -181,7 +181,11 @@ export const RepairQuoteModal: React.FC = () => {
 
   // Safe close that flushes auto-save before closing
   const handleCloseModal = () => {
-    flushQuoteAutoSave();
+    try {
+      flushQuoteAutoSave();
+    } catch (e) {
+      console.error('Error flushing quote auto-save:', e);
+    }
     closeQuoteModal();
   };
 
@@ -193,6 +197,26 @@ export const RepairQuoteModal: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle print event and document title formatting (Must be declared before any early return)
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      if (!activeQuoteRO) return;
+      const roNumber = activeQuoteRO.id || '';
+      const vehicleDesc = activeQuoteRO.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
+      document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
+    };
+    const handleAfterPrint = () => {
+      document.title = 'Service Department & Repair Order Hub';
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [activeQuoteRO]);
 
   // Initialize quote from active RO or defaults
   useEffect(() => {
@@ -549,24 +573,6 @@ export const RepairQuoteModal: React.FC = () => {
       closeQuoteModal();
     }, 1500);
   };
-
-  useEffect(() => {
-    const handleBeforePrint = () => {
-      const roNumber = activeQuoteRO?.id || '';
-      const vehicleDesc = activeQuoteRO?.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
-      document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
-    };
-    const handleAfterPrint = () => {
-      document.title = 'Service Department & Repair Order Hub';
-    };
-
-    window.addEventListener('beforeprint', handleBeforePrint);
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => {
-      window.removeEventListener('beforeprint', handleBeforePrint);
-      window.removeEventListener('afterprint', handleAfterPrint);
-    };
-  }, [activeQuoteRO?.id, activeQuoteRO?.vehicle]);
 
   const handlePrint = () => {
     const originalTitle = document.title;
@@ -1344,9 +1350,10 @@ export const RepairQuoteModal: React.FC = () => {
               id="close-quote-footer-btn"
               type="button"
               onClick={handleCloseModal}
-              className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer w-full sm:w-auto text-center"
+              className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer w-full sm:w-auto text-center flex items-center justify-center gap-1.5"
             >
-              Close
+              <X className="w-4 h-4 text-slate-400" />
+              <span>Exit Quote</span>
             </button>
 
             {/* Print button */}
