@@ -29,6 +29,37 @@ export function formatDateTime(dateStr?: string): string {
   return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${timeStr}`;
 }
 
+const MONTH_NAMES_UPPER = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+export function formatMilitaryDate(dateInput?: string | number | Date): string {
+  if (!dateInput) return 'N/A';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  const day = date.getDate();
+  const month = MONTH_NAMES_UPPER[date.getMonth()];
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day} ${month} ${year}`;
+}
+
+export function formatMilitaryTime(dateInput?: string | number | Date): string {
+  if (!dateInput) return '--:--';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+export function formatMilitaryDateTime(dateInput?: string | number | Date): string {
+  if (!dateInput) return 'N/A';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  return `${formatMilitaryDate(date)} ${formatMilitaryTime(date)}`;
+}
+
 export function formatTimeOnly(dateStr?: string): string {
   if (!dateStr) return '--:--';
   const date = new Date(dateStr);

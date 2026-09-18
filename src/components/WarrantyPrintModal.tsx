@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WarrantyLaborTimePunch } from '../types';
+import { formatMilitaryDate, formatMilitaryTime, formatMilitaryDateTime } from '../utils/formatters';
 
 export const WarrantyPrintModal: React.FC = () => {
   const { 
@@ -66,19 +67,7 @@ export const WarrantyPrintModal: React.FC = () => {
 
   const formatDateTime = (isoString?: string) => {
     if (!isoString) return 'Active / In-Progress';
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch {
-      return isoString;
-    }
+    return formatMilitaryDateTime(isoString);
   };
 
   const handleCopySummary = () => {
@@ -87,7 +76,7 @@ export const WarrantyPrintModal: React.FC = () => {
       `WARRANTY REPAIR DOCUMENTATION & TIME VERIFICATION`,
       `Shop / Dealership: ${shopName}`,
       `Repair Order #: ${ro.id}`,
-      `Date Created: ${ro.createdAt ? new Date(ro.createdAt).toLocaleDateString() : 'N/A'}`,
+      `Date Created: ${ro.createdAt ? formatMilitaryDate(ro.createdAt) : 'N/A'}`,
       `Customer: ${ro.customerName} | Phone: ${ro.customerPhone}`,
       `Vehicle: ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`,
       `VIN: ${ro.vehicle.vin}`,
@@ -216,8 +205,13 @@ export const WarrantyPrintModal: React.FC = () => {
                   <div className="inline-block px-3 py-1 bg-slate-950 text-white font-mono font-black text-sm rounded">
                     RO #{ro.id}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-medium mt-1">
-                    Print Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {ro.createdAt && (
+                    <div className="text-[11px] text-slate-600 font-medium mt-1 font-mono">
+                      RO Date: {formatMilitaryDate(ro.createdAt)}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-slate-500 font-medium mt-0.5 font-mono">
+                    Print Date: {formatMilitaryDateTime(new Date())}
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono">
                     Printed By: {currentUser.name} ({currentUser.role.replace(/_/g, ' ')})
@@ -264,7 +258,10 @@ export const WarrantyPrintModal: React.FC = () => {
                 <span className="font-medium text-slate-800 block">
                   Tech: <strong className="font-bold">{ro.techName || 'Unassigned'}</strong>
                 </span>
-                <span className="text-slate-500 block text-[11px]">Bay: {ro.bay || 'General'}</span>
+                <span className="text-slate-500 block text-[11px]">
+                  Bay: {ro.bay || 'General'}
+                  {ro.createdAt && ` | Date: ${formatMilitaryDate(ro.createdAt)}`}
+                </span>
               </div>
             </div>
 

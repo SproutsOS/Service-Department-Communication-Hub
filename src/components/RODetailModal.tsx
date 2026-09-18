@@ -64,7 +64,8 @@ export const RODetailModal: React.FC = () => {
     openDirectChat,
     openQuoteModal,
     openWarrantyPrintModal,
-    updateConcernPayType
+    updateConcernPayType,
+    updateConcernTech
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -91,6 +92,11 @@ export const RODetailModal: React.FC = () => {
     selectedRO?.concernPayTypes && selectedRO.concernPayTypes.length > 0
       ? selectedRO.concernPayTypes
       : (selectedRO?.concerns || [selectedRO?.primaryConcern || '']).map(() => 'CUSTOMER_PAY')
+  );
+  const [editConcernTechIds, setEditConcernTechIds] = useState<(string | undefined)[]>(
+    selectedRO?.concernTechIds && selectedRO.concernTechIds.length > 0
+      ? selectedRO.concernTechIds
+      : (selectedRO?.concerns || [selectedRO?.primaryConcern || '']).map(() => selectedRO?.techId)
   );
   const [editPromisedTime, setEditPromisedTime] = useState(selectedRO?.promisedTime || '');
   const [editDiagnosticNotes, setEditDiagnosticNotes] = useState(selectedRO?.diagnosticNotes || '');
@@ -130,6 +136,11 @@ export const RODetailModal: React.FC = () => {
         ? selectedRO.concernPayTypes
         : (selectedRO.concerns || [selectedRO.primaryConcern || '']).map(() => 'CUSTOMER_PAY')
     );
+    setEditConcernTechIds(
+      selectedRO.concernTechIds && selectedRO.concernTechIds.length > 0
+        ? selectedRO.concernTechIds
+        : (selectedRO.concerns || [selectedRO.primaryConcern || '']).map(() => selectedRO.techId)
+    );
     setEditPromisedTime(selectedRO.promisedTime || '');
     setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
     setEditCause(selectedRO.cause || '');
@@ -162,6 +173,7 @@ export const RODetailModal: React.FC = () => {
     managerAutoSaveTimerRef.current = setTimeout(() => {
       const validConcerns = (overrides?.concerns || editConcerns).map(c => c.trim()).filter(Boolean);
       const finalPrimary = validConcerns[0] || (overrides?.primaryConcern ?? editPrimaryConcern).trim() || selectedRO.primaryConcern;
+      const finalConcernTechIds = overrides?.concernTechIds !== undefined ? overrides.concernTechIds : editConcernTechIds;
 
       updateRepairOrderDetails(selectedRO.id, {
         customerName: overrides?.customerName !== undefined ? overrides.customerName : editCustomerName.trim(),
@@ -175,6 +187,9 @@ export const RODetailModal: React.FC = () => {
         },
         primaryConcern: finalPrimary,
         concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
+        concernPayTypes: overrides?.concernPayTypes !== undefined ? overrides.concernPayTypes : editConcernPayTypes,
+        concernTechIds: finalConcernTechIds,
+        concernTechNames: finalConcernTechIds.map(id => id ? users.find(u => u.id === id)?.name : undefined),
         promisedTime: overrides?.promisedTime !== undefined ? overrides.promisedTime : editPromisedTime,
         diagnosticNotes: overrides?.diagnosticNotes !== undefined ? overrides.diagnosticNotes : editDiagnosticNotes.trim(),
         cause: overrides?.cause !== undefined ? overrides.cause : editCause.trim(),
@@ -210,6 +225,9 @@ export const RODetailModal: React.FC = () => {
       },
       primaryConcern: finalPrimary,
       concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
+      concernPayTypes: editConcernPayTypes,
+      concernTechIds: editConcernTechIds,
+      concernTechNames: editConcernTechIds.map(id => id ? users.find(u => u.id === id)?.name : undefined),
       promisedTime: editPromisedTime,
       diagnosticNotes: editDiagnosticNotes.trim(),
       cause: editCause.trim(),
@@ -256,6 +274,7 @@ export const RODetailModal: React.FC = () => {
   const handleAddEditConcern = () => {
     setEditConcerns(prev => [...prev, '']);
     setEditConcernPayTypes(prev => [...prev, 'CUSTOMER_PAY']);
+    setEditConcernTechIds(prev => [...prev, selectedRO?.techId || undefined]);
   };
 
   const handleRemoveEditConcern = (index: number) => {
@@ -265,6 +284,10 @@ export const RODetailModal: React.FC = () => {
     });
     setEditConcernPayTypes(prev => {
       if (prev.length <= 1) return ['CUSTOMER_PAY'];
+      return prev.filter((_, i) => i !== index);
+    });
+    setEditConcernTechIds(prev => {
+      if (prev.length <= 1) return [undefined];
       return prev.filter((_, i) => i !== index);
     });
   };
@@ -277,6 +300,16 @@ export const RODetailModal: React.FC = () => {
     });
     if (selectedRO) {
       updateConcernPayType(selectedRO.id, index, payType);
+    }
+  };
+
+  const handleEditConcernTechChange = (index: number, tId: string) => {
+    const nextTechIds = [...editConcernTechIds];
+    nextTechIds[index] = tId || undefined;
+    setEditConcernTechIds(nextTechIds);
+    if (selectedRO) {
+      const t = users.find(u => u.id === tId);
+      updateConcernTech(selectedRO.id, index, tId, t?.name);
     }
   };
 
@@ -356,6 +389,16 @@ export const RODetailModal: React.FC = () => {
         ? selectedRO.concerns
         : [selectedRO.primaryConcern || ''];
       setEditConcerns(initialConcerns);
+      setEditConcernPayTypes(
+        selectedRO.concernPayTypes && selectedRO.concernPayTypes.length > 0
+          ? selectedRO.concernPayTypes
+          : initialConcerns.map(() => 'CUSTOMER_PAY')
+      );
+      setEditConcernTechIds(
+        selectedRO.concernTechIds && selectedRO.concernTechIds.length > 0
+          ? selectedRO.concernTechIds
+          : initialConcerns.map(() => selectedRO.techId)
+      );
       setEditPromisedTime(selectedRO.promisedTime);
       setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
       setEditCause(selectedRO.cause || '');
@@ -366,8 +409,11 @@ export const RODetailModal: React.FC = () => {
       setTechCorrectionInput(selectedRO.correction || '');
       setIsEditingDetails(false);
       setIsEditingTechFindings(false);
+      if (currentUser.role === 'PARTS_SPECIALIST') {
+        setActiveTab('PARTS');
+      }
     }
-  }, [selectedRO?.id]);
+  }, [selectedRO?.id, currentUser.role]);
 
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
   const [chatInput, setChatInput] = useState('');
@@ -376,12 +422,30 @@ export const RODetailModal: React.FC = () => {
   const [isUrgentStatusUpdate, setIsUrgentStatusUpdate] = useState(false);
 
   // New Part Form state
+  const DEFAULT_MODAL_VENDORS = ['STELLANTIS', 'OREILLY', 'AUTOZONE', 'HOLLANDS', 'RICKS PRO TRUCK'];
+  const [modalVendors, setModalVendors] = useState<string[]>(DEFAULT_MODAL_VENDORS);
+  const DEFAULT_MODAL_STATUSES = [
+    { id: 'IN_STOCK', label: 'IN STOCK' },
+    { id: 'DAILY_ORDER', label: 'DAILY ORDER' },
+    { id: 'SPECIAL_ORDER_1_5_DAYS', label: 'SPECIAL ORDER 1-5 DAYS' },
+    { id: 'VOR_UPGRADE', label: 'VOR UPGRADE' },
+  ];
+  const [modalStatuses, setModalStatuses] = useState<Array<{ id: string; label: string }>>(DEFAULT_MODAL_STATUSES);
+  const [isModalAddingCustomStatus, setIsModalAddingCustomStatus] = useState(false);
+  const [modalCustomStatusInput, setModalCustomStatusInput] = useState('');
+  const [customStatusEditingPartId, setCustomStatusEditingPartId] = useState<string | null>(null);
+  const [partQuickCustomStatusInput, setPartQuickCustomStatusInput] = useState('');
+
   const [showAddPart, setShowAddPart] = useState(false);
   const [partNumber, setPartNumber] = useState('');
   const [partDescription, setPartDescription] = useState('');
   const [partQuantity, setPartQuantity] = useState(1);
-  const [partVendor, setPartVendor] = useState('');
-  const [partEtaTime, setPartEtaTime] = useState('');
+  const [partVendor, setPartVendor] = useState(DEFAULT_MODAL_VENDORS[0]);
+  const [isModalAddingCustomVendor, setIsModalAddingCustomVendor] = useState(false);
+  const [modalCustomVendorInput, setModalCustomVendorInput] = useState('');
+  const [partInitialStatus, setPartInitialStatus] = useState<PartStatus>('IN_STOCK');
+  const [partPrice, setPartPrice] = useState('');
+  const [partEtaTime, setPartEtaTime] = useState('17:00');
   const [partTracking, setPartTracking] = useState('');
 
   // Dispatch selector state
@@ -420,21 +484,45 @@ export const RODetailModal: React.FC = () => {
     const [hours, minutes] = partEtaTime ? partEtaTime.split(':') : ['17', '00'];
     const etaDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hours || '17'), parseInt(minutes || '00'));
 
+    const effectiveVendor = isModalAddingCustomVendor && modalCustomVendorInput.trim()
+      ? modalCustomVendorInput.trim().toUpperCase()
+      : partVendor;
+
+    if (isModalAddingCustomVendor && modalCustomVendorInput.trim() && !modalVendors.includes(effectiveVendor)) {
+      setModalVendors(prev => [...prev, effectiveVendor]);
+    }
+
+    const effectiveStatus = isModalAddingCustomStatus && modalCustomStatusInput.trim()
+      ? modalCustomStatusInput.trim().toUpperCase().replace(/\s+/g, '_')
+      : partInitialStatus;
+
+    if (isModalAddingCustomStatus && modalCustomStatusInput.trim()) {
+      const label = modalCustomStatusInput.trim().toUpperCase();
+      if (!modalStatuses.some(s => s.id === effectiveStatus)) {
+        setModalStatuses(prev => [...prev, { id: effectiveStatus, label }]);
+      }
+    }
+
     addPartOrder(selectedRO.id, {
-      partNumber: partNumber.trim(),
+      partNumber: partNumber.trim().toUpperCase(),
       description: partDescription.trim(),
       quantity: partQuantity || 1,
-      status: 'ORDERED',
-      vendor: partVendor.trim() || 'Direct Parts Supplier',
-      estimatedArrival: etaDate.toISOString(),
+      status: effectiveStatus,
+      vendor: effectiveVendor || 'STELLANTIS',
+      estimatedArrival: effectiveStatus === 'IN_STOCK' ? new Date().toISOString() : etaDate.toISOString(),
       trackingNumber: partTracking.trim() || undefined,
+      price: partPrice ? parseFloat(partPrice) : undefined,
     });
 
     setPartNumber('');
     setPartDescription('');
-    setPartVendor('');
-    setPartEtaTime('');
+    setPartQuantity(1);
+    setPartPrice('');
     setPartTracking('');
+    setIsModalAddingCustomVendor(false);
+    setModalCustomVendorInput('');
+    setIsModalAddingCustomStatus(false);
+    setModalCustomStatusInput('');
     setShowAddPart(false);
   };
 
@@ -1002,44 +1090,65 @@ export const RODetailModal: React.FC = () => {
                                 {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
                               </span>
 
-                              <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
-                                <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditPayTypeChange(idx, 'CUSTOMER_PAY')}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                    currentPayType === 'CUSTOMER_PAY'
-                                      ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                  }`}
-                                  title="Mark as Customer Pay"
-                                >
-                                  Customer Pay
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditPayTypeChange(idx, 'WARRANTY')}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                    currentPayType === 'WARRANTY'
-                                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                  }`}
-                                  title="Mark as Warranty"
-                                >
-                                  Warranty
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditPayTypeChange(idx, 'INTERNAL')}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                    currentPayType === 'INTERNAL'
-                                      ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                  }`}
-                                  title="Mark as Internal"
-                                >
-                                  Internal
-                                </button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                                  <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditPayTypeChange(idx, 'CUSTOMER_PAY')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      currentPayType === 'CUSTOMER_PAY'
+                                        ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                    }`}
+                                    title="Mark as Customer Pay"
+                                  >
+                                    Customer Pay
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditPayTypeChange(idx, 'WARRANTY')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      currentPayType === 'WARRANTY'
+                                        ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                    }`}
+                                    title="Mark as Warranty"
+                                  >
+                                    Warranty
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditPayTypeChange(idx, 'INTERNAL')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      currentPayType === 'INTERNAL'
+                                        ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                    }`}
+                                    title="Mark as Internal"
+                                  >
+                                    Internal
+                                  </button>
+                                </div>
+
+                                {/* Tech assignment for this line */}
+                                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
+                                  <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
+                                  <select
+                                    value={editConcernTechIds[idx] || ''}
+                                    onChange={e => handleEditConcernTechChange(idx, e.target.value)}
+                                    className="text-[11px] font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                                    title="Assign specific technician to this line item"
+                                  >
+                                    <option value="">{selectedRO?.techName ? `(Primary: ${selectedRO.techName})` : 'Unassigned'}</option>
+                                    {technicians.map(tech => (
+                                      <option key={tech.id} value={tech.id}>
+                                        {tech.name}{tech.employeeNumber ? ` #${tech.employeeNumber}` : ''}{tech.bayNumber ? ` (Bay ${tech.bayNumber})` : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
 
                               {editConcerns.length > 1 && (
@@ -1103,7 +1212,7 @@ export const RODetailModal: React.FC = () => {
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                          <span>Diagnostic Cause (Why it failed)</span>
+                          <span>Cause</span>
                         </label>
                         <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
                           <Check className="w-2.5 h-2.5" /> Auto-saved
@@ -1129,7 +1238,7 @@ export const RODetailModal: React.FC = () => {
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                          <span>Correction (Repair Performed)</span>
+                          <span>Correction</span>
                         </label>
                         <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
                           <Check className="w-2.5 h-2.5" /> Auto-saved
@@ -1376,50 +1485,84 @@ export const RODetailModal: React.FC = () => {
                                 </p>
                               </div>
 
-                              <div className="flex items-center gap-1 shrink-0 self-end sm:self-center bg-slate-50 p-1 rounded-md border border-slate-300">
-                                <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'CUSTOMER_PAY');
-                                  }}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                    currentPayType === 'CUSTOMER_PAY'
-                                      ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                  }`}
-                                  title="Customer Pay"
-                                >
-                                  Customer Pay
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'WARRANTY');
-                                  }}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                    currentPayType === 'WARRANTY'
-                                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                  }`}
-                                  title="Warranty"
-                                >
-                                  Warranty
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'INTERNAL');
-                                  }}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                    currentPayType === 'INTERNAL'
-                                      ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                  }`}
-                                  title="Internal"
-                                >
-                                  Internal
-                                </button>
+                              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center">
+                                {/* Pay Type Selector */}
+                                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                                  <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'CUSTOMER_PAY');
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      currentPayType === 'CUSTOMER_PAY'
+                                        ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                    }`}
+                                    title="Customer Pay"
+                                  >
+                                    Customer Pay
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'WARRANTY');
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      currentPayType === 'WARRANTY'
+                                        ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                    }`}
+                                    title="Warranty"
+                                  >
+                                    Warranty
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'INTERNAL');
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      currentPayType === 'INTERNAL'
+                                        ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                    }`}
+                                    title="Internal"
+                                  >
+                                    Internal
+                                  </button>
+                                </div>
+
+                                {/* Line Technician Selector / Indicator */}
+                                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
+                                  <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
+                                  {!isSales ? (
+                                    <select
+                                      value={selectedRO.concernTechIds?.[idx] || ''}
+                                      onChange={e => {
+                                        const tId = e.target.value;
+                                        const t = technicians.find(u => u.id === tId);
+                                        updateConcernTech(selectedRO.id, idx, tId, t?.name);
+                                      }}
+                                      className="text-[11px] font-bold bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-900 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                                      title="Assign technician to this specific line item"
+                                    >
+                                      <option value="">
+                                        {selectedRO.techName ? `(Primary: ${selectedRO.techName})` : 'Unassigned'}
+                                      </option>
+                                      {technicians.map(t => (
+                                        <option key={t.id} value={t.id}>
+                                          {t.name}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}{t.bayNumber ? ` (Bay ${t.bayNumber})` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-[11px] font-bold text-slate-800">
+                                      {selectedRO.concernTechNames?.[idx] || selectedRO.techName || 'Unassigned'}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -1433,7 +1576,7 @@ export const RODetailModal: React.FC = () => {
                         <div className="flex items-center justify-between pb-2 border-b-2 border-slate-200 flex-wrap gap-2">
                           <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                             <Wrench className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Technician Diagnostic Findings: Cause & Correction</span>
+                            <span>Cause & Correction</span>
                           </h5>
                           <div className="flex items-center gap-2">
                             {techFindingsAutoSaveStatus === 'saving' ? (
@@ -1452,7 +1595,7 @@ export const RODetailModal: React.FC = () => {
                           <div className="flex items-center justify-between mb-1">
                             <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                              <span>2. Cause (Diagnostic Finding / Root Cause)</span>
+                              <span>2. Cause</span>
                             </label>
                             <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
                               <Check className="w-2.5 h-2.5" /> Auto-saved
@@ -1467,7 +1610,7 @@ export const RODetailModal: React.FC = () => {
                               triggerTechFindingsAutoSave(val, techCorrectionInput);
                             }}
                             onBlur={flushTechFindingsAutoSave}
-                            placeholder="Type diagnostic cause (e.g., Code P0300 set due to cylinder 3 spark plug fouled with oil from leaking valve cover gasket tube seal)..."
+                            placeholder="Type cause findings (e.g., Code P0300 set due to cylinder 3 spark plug fouled with oil from leaking valve cover gasket tube seal)..."
                             className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
@@ -1476,7 +1619,7 @@ export const RODetailModal: React.FC = () => {
                           <div className="flex items-center justify-between mb-1">
                             <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                              <span>3. Correction (Repair Completed / Corrective Action)</span>
+                              <span>3. Correction</span>
                             </label>
                             <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
                               <Check className="w-2.5 h-2.5" /> Auto-saved
@@ -1499,7 +1642,7 @@ export const RODetailModal: React.FC = () => {
                         <div className="flex items-center justify-between pt-2 border-t-2 border-slate-200 flex-wrap gap-2">
                           <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
                             <Check className="w-3.5 h-3.5" />
-                            <span>Auto-Save active: Changes save automatically as you type.</span>
+                            <span>Auto-Save active</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -1529,7 +1672,7 @@ export const RODetailModal: React.FC = () => {
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                              <span>2. Cause (Diagnostic Finding / Root Cause)</span>
+                              <span>2. Cause</span>
                             </span>
                             {hasTechCause ? (
                               <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 uppercase">
@@ -1556,7 +1699,7 @@ export const RODetailModal: React.FC = () => {
                             </p>
                           ) : (
                             <p className="text-xs text-slate-400 italic py-1">
-                              No diagnostic root cause documented yet. Technician can type it directly by clicking "Type In Cause" above.
+                              No cause documented yet. Technician can type it directly by clicking "Type In Cause" above.
                             </p>
                           )}
                         </div>
@@ -1566,7 +1709,7 @@ export const RODetailModal: React.FC = () => {
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                              <span>3. Correction (Repair Completed / Corrective Action)</span>
+                              <span>3. Correction</span>
                             </span>
                             {hasTechCorrection ? (
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
@@ -1593,7 +1736,7 @@ export const RODetailModal: React.FC = () => {
                             </p>
                           ) : (
                             <p className="text-xs text-slate-400 italic py-1">
-                              No corrective repair documented yet. Technician can type it directly by clicking "Type In Correction" above.
+                              No correction documented yet. Technician can type it directly by clicking "Type In Correction" above.
                             </p>
                           )}
                         </div>
@@ -2100,21 +2243,21 @@ export const RODetailModal: React.FC = () => {
                   onSubmit={handleAddPartSubmit}
                   className="p-4 bg-slate-50 rounded-xl border-2 border-slate-400 space-y-3 animate-in fade-in duration-100 shadow-sm"
                 >
-                  <h5 className="text-xs font-bold text-slate-900">Order Parts from Supplier</h5>
+                  <h5 className="text-xs font-bold text-slate-900">Add / Order Parts</h5>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Number</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Number *</label>
                       <input
                         type="text"
                         placeholder="e.g. ML3Z-8C419-A"
                         value={partNumber}
                         onChange={e => setPartNumber(e.target.value)}
                         required
-                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
+                        className="w-full text-xs font-mono font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 uppercase"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Description</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Description *</label>
                       <input
                         type="text"
                         placeholder="e.g. Auxiliary Coolant Pump"
@@ -2124,25 +2267,205 @@ export const RODetailModal: React.FC = () => {
                         className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                       />
                     </div>
+
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Supplier / Vendor</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Ford Motorcraft, AutoZone, NAPA..."
-                        value={partVendor}
-                        onChange={e => setPartVendor(e.target.value)}
-                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Supplier / Vendor *</label>
+                        {!isModalAddingCustomVendor && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsModalAddingCustomVendor(true);
+                              setModalCustomVendorInput('');
+                            }}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                          >
+                            + Add Custom
+                          </button>
+                        )}
+                      </div>
+
+                      {!isModalAddingCustomVendor ? (
+                        <select
+                          value={partVendor}
+                          onChange={e => {
+                            if (e.target.value === '__ADD_NEW__') {
+                              setIsModalAddingCustomVendor(true);
+                              setModalCustomVendorInput('');
+                            } else {
+                              setPartVendor(e.target.value);
+                            }
+                          }}
+                          className="w-full text-xs font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800"
+                        >
+                          {modalVendors.map(v => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                          <option value="__ADD_NEW__">+ Add Other Vendor...</option>
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            placeholder="Vendor name..."
+                            value={modalCustomVendorInput}
+                            onChange={e => setModalCustomVendorInput(e.target.value)}
+                            autoFocus
+                            className="flex-1 text-xs font-bold px-2.5 py-1.5 bg-white border-2 border-blue-500 rounded-lg focus:outline-none uppercase text-slate-800"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const trimmed = modalCustomVendorInput.trim().toUpperCase();
+                                if (trimmed) {
+                                  if (!modalVendors.includes(trimmed)) setModalVendors(prev => [...prev, trimmed]);
+                                  setPartVendor(trimmed);
+                                  setIsModalAddingCustomVendor(false);
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const trimmed = modalCustomVendorInput.trim().toUpperCase();
+                              if (trimmed) {
+                                if (!modalVendors.includes(trimmed)) setModalVendors(prev => [...prev, trimmed]);
+                                setPartVendor(trimmed);
+                                setIsModalAddingCustomVendor(false);
+                              }
+                            }}
+                            className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsModalAddingCustomVendor(false)}
+                            className="px-2 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
+
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Estimated Arrival Time Today (ETA)</label>
-                      <input
-                        type="time"
-                        value={partEtaTime}
-                        onChange={e => setPartEtaTime(e.target.value)}
-                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Initial Part Status *</label>
+                        {!isModalAddingCustomStatus && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsModalAddingCustomStatus(true);
+                              setModalCustomStatusInput('');
+                            }}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                          >
+                            + Add Custom
+                          </button>
+                        )}
+                      </div>
+
+                      {!isModalAddingCustomStatus ? (
+                        <select
+                          value={partInitialStatus}
+                          onChange={e => {
+                            if (e.target.value === '__ADD_NEW_STATUS__') {
+                              setIsModalAddingCustomStatus(true);
+                              setModalCustomStatusInput('');
+                            } else {
+                              setPartInitialStatus(e.target.value as PartStatus);
+                            }
+                          }}
+                          className="w-full text-xs font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800"
+                        >
+                          {modalStatuses.map(st => (
+                            <option key={st.id} value={st.id}>
+                              {st.label}
+                            </option>
+                          ))}
+                          <option value="__ADD_NEW_STATUS__">+ Add Custom Status...</option>
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            placeholder="e.g. TIRE WAREHOUSE..."
+                            value={modalCustomStatusInput}
+                            onChange={e => setModalCustomStatusInput(e.target.value)}
+                            autoFocus
+                            className="flex-1 text-xs font-bold px-2.5 py-1.5 bg-white border-2 border-blue-500 rounded-lg focus:outline-none uppercase text-slate-800"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const trimmed = modalCustomStatusInput.trim().toUpperCase();
+                                if (trimmed) {
+                                  const cleanId = trimmed.replace(/\s+/g, '_');
+                                  if (!modalStatuses.some(s => s.id === cleanId)) {
+                                    setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
+                                  }
+                                  setPartInitialStatus(cleanId);
+                                  setIsModalAddingCustomStatus(false);
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const trimmed = modalCustomStatusInput.trim().toUpperCase();
+                              if (trimmed) {
+                                const cleanId = trimmed.replace(/\s+/g, '_');
+                                if (!modalStatuses.some(s => s.id === cleanId)) {
+                                  setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
+                                }
+                                setPartInitialStatus(cleanId);
+                                setIsModalAddingCustomStatus(false);
+                              }
+                            }}
+                            className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsModalAddingCustomStatus(false)}
+                            className="px-2 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Price</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={partPrice}
+                          onChange={e => setPartPrice(e.target.value)}
+                          className="w-full text-xs pl-6 pr-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {partInitialStatus !== 'IN_STOCK' && (
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Estimated Arrival Time Today (ETA)</label>
+                        <input
+                          type="time"
+                          value={partEtaTime}
+                          onChange={e => setPartEtaTime(e.target.value)}
+                          className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-end gap-2 pt-2">
@@ -2180,30 +2503,41 @@ export const RODetailModal: React.FC = () => {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                                 #{part.partNumber}
                               </span>
                               <span className="text-xs font-bold text-slate-800">
                                 {part.description} (Qty: {part.quantity})
                               </span>
+                              {part.price !== undefined && (
+                                <span className="text-xs font-semibold text-slate-600">
+                                  • Price: ${part.price.toFixed(2)}
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-500 mt-1">
-                              Vendor: {part.vendor} {part.trackingNumber ? `• Tracking: ${part.trackingNumber}` : ''}
+                              Vendor: <strong>{part.vendor}</strong> {part.trackingNumber ? `• Tracking: ${part.trackingNumber}` : ''}
                             </div>
                           </div>
 
                           <div className="text-right">
                             <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                              part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
+                              part.status === 'IN_STOCK' || part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
                                 ? 'bg-green-100 text-green-700 border-green-200'
+                                : part.status === 'VOR_UPGRADE'
+                                ? 'bg-rose-100 text-rose-700 border-rose-200 font-black'
+                                : part.status === 'SPECIAL_ORDER' || part.status === 'SPECIAL_ORDER_1_5_DAYS'
+                                ? 'bg-amber-100 text-amber-700 border-amber-200'
                                 : part.status === 'IN_TRANSIT'
                                 ? 'bg-orange-100 text-orange-700 border-orange-200'
                                 : 'bg-blue-100 text-blue-700 border-blue-200'
                             }`}>
-                              {part.status.replace('_', ' ')}
+                              {part.status === 'SPECIAL_ORDER' || part.status === 'SPECIAL_ORDER_1_5_DAYS'
+                                ? 'SPECIAL ORDER 1-5 DAYS'
+                                : part.status.replace(/_/g, ' ')}
                             </span>
-                            {part.estimatedArrival && (
+                            {part.status !== 'IN_STOCK' && part.status !== 'ISSUED_TO_TECH' && part.estimatedArrival && (
                               <div className="mt-1">
                                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                                   etaBadge.pastDue
@@ -2218,23 +2552,98 @@ export const RODetailModal: React.FC = () => {
                         </div>
 
                         {/* Part Status Transition Actions */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                          <span className="text-[11px] text-slate-400 font-medium">Quick Update Status:</span>
-                          <div className="flex gap-1.5">
-                            {(['ORDERED', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[]).map(st => (
+                        <div className="pt-2 border-t border-slate-100 space-y-2 text-xs">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-[11px] text-slate-400 font-medium">Quick Update Status:</span>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {(['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[])
+                                .concat(
+                                  modalStatuses
+                                    .filter(s => !['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'].includes(s.id))
+                                    .map(s => s.id)
+                                )
+                                .map(st => (
+                                  <button
+                                    key={st}
+                                    type="button"
+                                    onClick={() => updatePartStatus(selectedRO.id, part.id, st)}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
+                                      part.status === st
+                                        ? 'bg-slate-900 text-white shadow-xs'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    {st === 'ISSUED_TO_TECH' ? 'Issued to Tech' : st === 'SPECIAL_ORDER_1_5_DAYS' ? 'Special Order 1-5 Days' : st.replace(/_/g, ' ')}
+                                  </button>
+                                ))}
+
                               <button
-                                key={st}
-                                onClick={() => updatePartStatus(selectedRO.id, part.id, st)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
-                                  part.status === st
-                                    ? 'bg-slate-900 text-white shadow-xs'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
+                                type="button"
+                                onClick={() => {
+                                  if (customStatusEditingPartId === part.id) {
+                                    setCustomStatusEditingPartId(null);
+                                  } else {
+                                    setCustomStatusEditingPartId(part.id);
+                                    setPartQuickCustomStatusInput('');
+                                  }
+                                }}
+                                className="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 cursor-pointer"
                               >
-                                {st === 'ISSUED_TO_TECH' ? 'Issued to Tech' : st.replace('_', ' ')}
+                                + Custom Status
                               </button>
-                            ))}
+                            </div>
                           </div>
+
+                          {customStatusEditingPartId === part.id && (
+                            <div className="flex items-center gap-1.5 p-2 bg-blue-50/50 rounded-lg border border-blue-200 animate-in fade-in duration-100">
+                              <input
+                                type="text"
+                                placeholder="Enter custom status (e.g. TIRE WAREHOUSE, CORE RETURN)..."
+                                value={partQuickCustomStatusInput}
+                                onChange={e => setPartQuickCustomStatusInput(e.target.value)}
+                                autoFocus
+                                className="flex-1 text-xs font-bold px-2.5 py-1 bg-white border border-blue-400 rounded-md focus:outline-none uppercase text-slate-800"
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
+                                    if (trimmed) {
+                                      const cleanId = trimmed.replace(/\s+/g, '_');
+                                      if (!modalStatuses.some(s => s.id === cleanId)) {
+                                        setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
+                                      }
+                                      updatePartStatus(selectedRO.id, part.id, cleanId);
+                                      setCustomStatusEditingPartId(null);
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
+                                  if (trimmed) {
+                                    const cleanId = trimmed.replace(/\s+/g, '_');
+                                    if (!modalStatuses.some(s => s.id === cleanId)) {
+                                      setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
+                                    }
+                                    updatePartStatus(selectedRO.id, part.id, cleanId);
+                                    setCustomStatusEditingPartId(null);
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                              >
+                                Set Status
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCustomStatusEditingPartId(null)}
+                                className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-xs font-bold hover:bg-slate-300 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

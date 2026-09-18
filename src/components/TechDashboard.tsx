@@ -137,7 +137,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-slate-900">
-                Tech Findings: Cause & Correction
+                Cause & Correction
               </span>
               {isComplete ? (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border-2 border-emerald-400 flex items-center gap-1">
@@ -190,11 +190,8 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                <span>Cause (Diagnostic Finding / Root Cause)</span>
+                <span>Cause</span>
               </label>
-              <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                <Check className="w-3 h-3" /> Auto-saved as you type
-              </span>
             </div>
             <textarea
               rows={2}
@@ -205,7 +202,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 triggerAutoSave(val, correction);
               }}
               onBlur={handleBlurSave}
-              placeholder="Type diagnostic cause (e.g., Code P0300 - cylinder 3 spark plug fouled with oil due to leaking valve cover spark plug tube seal)..."
+              placeholder="Type cause findings (e.g., Code P0300 - cylinder 3 spark plug fouled with oil due to leaking valve cover spark plug tube seal)..."
               className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
@@ -215,11 +212,8 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                <span>Correction (Repair Completed / Corrective Action)</span>
+                <span>Correction</span>
               </label>
-              <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                <Check className="w-3 h-3" /> Auto-saved as you type
-              </span>
             </div>
             <textarea
               rows={2}
@@ -230,7 +224,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 triggerAutoSave(cause, val);
               }}
               onBlur={handleBlurSave}
-              placeholder="Type repair correction (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, road tested 5 miles)..."
+              placeholder="Type correction performed (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, road tested 5 miles)..."
               className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
@@ -338,11 +332,12 @@ export const TechDashboard: React.FC = () => {
     openDirectChat,
     openQuoteModal,
     openWarrantyPrintModal,
-    updateConcernPayType
+    updateConcernPayType,
+    updateConcernTech
   } = useApp();
 
-  // Filter strictly to this technician's assigned ROs
-  const myROs = repairOrders.filter(ro => ro.techId === currentUser.id);
+  // Filter to this technician's assigned ROs (primary tech or assigned to an individual line)
+  const myROs = repairOrders.filter(ro => ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id));
 
   const activeROs = myROs.filter(ro => 
     ro.status !== 'CLOSED' && 
@@ -693,60 +688,95 @@ export const TechDashboard: React.FC = () => {
                             <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded uppercase tracking-wider shrink-0 mt-0.5">
                               Line {idx + 1}
                             </span>
+                            {ro.concernTechIds?.[idx] === currentUser.id && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 bg-blue-600 text-white rounded uppercase tracking-wider shrink-0 mt-0.5 shadow-2xs">
+                                Your Line
+                              </span>
+                            )}
                             <span className="text-slate-800 font-medium leading-relaxed break-words">{concern}</span>
                           </div>
 
                           <div 
                             onClick={(e) => e.stopPropagation()} 
                             onMouseDown={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 shrink-0 self-start sm:self-center bg-slate-50 p-1 rounded-md border border-slate-300"
+                            className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-center"
                           >
-                            <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Type:</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY');
-                              }}
-                              className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                currentPayType === 'CUSTOMER_PAY'
-                                  ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                              }`}
-                              title="Customer Pay"
-                            >
-                              Customer Pay
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateConcernPayType(ro.id, idx, 'WARRANTY');
-                              }}
-                              className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                currentPayType === 'WARRANTY'
-                                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                              }`}
-                              title="Warranty"
-                            >
-                              Warranty
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateConcernPayType(ro.id, idx, 'INTERNAL');
-                              }}
-                              className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                currentPayType === 'INTERNAL'
-                                  ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                              }`}
-                              title="Internal"
-                            >
-                              Internal
-                            </button>
+                            <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                              <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Type:</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY');
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                  currentPayType === 'CUSTOMER_PAY'
+                                    ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                }`}
+                                title="Customer Pay"
+                              >
+                                Customer Pay
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateConcernPayType(ro.id, idx, 'WARRANTY');
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                  currentPayType === 'WARRANTY'
+                                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                }`}
+                                title="Warranty"
+                              >
+                                Warranty
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateConcernPayType(ro.id, idx, 'INTERNAL');
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                  currentPayType === 'INTERNAL'
+                                    ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                }`}
+                                title="Internal"
+                              >
+                                Internal
+                              </button>
+                            </div>
+
+                            {/* Line Technician Selector */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
+                              <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
+                              <select
+                                value={ro.concernTechIds?.[idx] || ''}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const tId = e.target.value;
+                                  const t = users.find(u => u.id === tId);
+                                  updateConcernTech(ro.id, idx, tId, t?.name);
+                                }}
+                                className={`text-[11px] font-bold bg-white border rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer ${
+                                  ro.concernTechIds?.[idx] === currentUser.id
+                                    ? 'border-blue-500 text-blue-800 bg-blue-50/50'
+                                    : 'border-slate-300 text-slate-800'
+                                }`}
+                                title="Assign technician to this line"
+                              >
+                                <option value="">{ro.techName ? `(Primary: ${ro.techName})` : 'Unassigned'}</option>
+                                {users.filter(u => u.role === 'TECHNICIAN').map(t => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}{t.id === currentUser.id ? ' (You)' : ''}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </div>
                       );

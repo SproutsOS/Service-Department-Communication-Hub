@@ -110,6 +110,8 @@ interface AppContextType {
     primaryConcern?: string;
     concerns?: string[];
     concernPayTypes?: ConcernPayType[];
+    concernTechIds?: (string | undefined)[];
+    concernTechNames?: (string | undefined)[];
     promisedTime?: string;
     techId?: string;
     bay?: string;
@@ -123,6 +125,7 @@ interface AppContextType {
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
+  updateConcernTech: (roId: string, concernIndex: number, techId: string, techName?: string) => boolean;
   logCustomerContact: (
     roId: string, 
     contactData: {
@@ -933,20 +936,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       orderedAt: part.orderedAt || new Date().toISOString(),
     };
 
+    const isWaitingOnDelivery = 
+      part.status === 'DAILY_ORDER' || 
+      part.status === 'SPECIAL_ORDER_1_5_DAYS' ||
+      part.status === 'SPECIAL_ORDER' || 
+      part.status === 'VOR_UPGRADE' || 
+      part.status === 'ORDERED' || 
+      part.status === 'IN_TRANSIT' || 
+      part.status === 'REQUESTED';
+    const newROStatus = isWaitingOnDelivery ? 'WAITING_PARTS' : targetRO.status;
+    
+    let historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. Status: ${part.status.replace(/_/g, ' ')}`;
+    if (part.status === 'IN_STOCK' || part.status === 'ISSUED_TO_TECH') {
+      historyNote = `[Parts Dept] Added IN STOCK part #${part.partNumber} (${part.description}) from ${part.vendor || 'inventory'}.`;
+    } else if (part.status === 'DAILY_ORDER') {
+      historyNote = `[Parts Dept] Placed DAILY ORDER for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
+    } else if (part.status === 'SPECIAL_ORDER_1_5_DAYS' || part.status === 'SPECIAL_ORDER') {
+      historyNote = `[Parts Dept] Placed SPECIAL ORDER 1-5 DAYS for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
+    } else if (part.status === 'VOR_UPGRADE') {
+      historyNote = `[Parts Dept] Placed VOR UPGRADE order for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
+    } else if (part.status === 'RECEIVED') {
+      historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) as in-stock/received.`;
+    }
+
     const updatedRO: RepairOrder = {
       ...targetRO,
-      status: 'WAITING_PARTS',
+      status: newROStatus,
       parts: [...targetRO.parts, newPart],
       history: [
         ...targetRO.history,
         {
           id: `hist_${Date.now()}`,
-          status: 'WAITING_PARTS',
+          status: newROStatus,
           updatedBy: currentUser.id,
           updatedByName: currentUser.name,
           userRole: currentUser.role,
           timestamp: new Date().toISOString(),
-          notes: `Ordered part #${part.partNumber} (${part.description}). ETA: ${part.estimatedArrival}`,
+          notes: historyNote,
         },
       ],
     };
@@ -956,8 +982,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     triggerNotification(
       updatedRO,
-      `Parts Ordered: ${part.description}`,
-      `Part #${part.partNumber} ordered from ${part.vendor}. Expected Arrival: ${part.estimatedArrival}`,
+      part.status === 'ISSUED_TO_TECH'
+        ? `Parts Issued: ${part.description}`
+        : `Parts Added: ${part.description}`,
+      `Part #${part.partNumber} (${part.description}) added by ${currentUser.name}. Status: ${part.status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : part.status.replace(/_/g, ' ')}`,
       true,
       'PARTS_UPDATE'
     );
@@ -1007,7 +1035,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedByName: currentUser.name,
           userRole: currentUser.role,
           timestamp: new Date().toISOString(),
-          notes: `Part ${partDescription} status updated to ${status.replace('_', ' ')}.${nextROStatus === 'REPAIR_IN_PROGRESS' ? ' All parts present, RO transitioned to Repair in Progress.' : nextROStatus === 'PARTS_IN_TO_TECH' ? ' Parts arrived, staged for tech.' : ''}`,
+          notes: `Part ${partDescription} status updated to ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}.${nextROStatus === 'REPAIR_IN_PROGRESS' ? ' All parts present, RO transitioned to Repair in Progress.' : nextROStatus === 'PARTS_IN_TO_TECH' ? ' Parts arrived, staged for tech.' : ''}`,
         },
       ],
     };
@@ -1017,7 +1045,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     triggerNotification(
       updatedRO,
-      `Part ${status.replace('_', ' ')}: ${partDescription}`,
+      `Part ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}: ${partDescription}`,
       `Status updated by ${currentUser.name}. ${eta ? `New ETA: ${eta}.` : ''}`,
       isUrgent,
       'PARTS_UPDATE'
@@ -1033,6 +1061,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     primaryConcern?: string;
     concerns?: string[];
     concernPayTypes?: ConcernPayType[];
+    concernTechIds?: (string | undefined)[];
+    concernTechNames?: (string | undefined)[];
     promisedTime?: string;
     techId?: string;
     bay?: string;
@@ -1053,14 +1083,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const now = new Date().toISOString();
 
-    const tech = data.techId ? users.find(u => u.id === data.techId) : undefined;
-    const initialStatus: ROStatus = 'WAITING_DIAGNOSTICS';
-
     const cleanConcernsList = data.concerns && data.concerns.length > 0
       ? data.concerns.map(c => c.trim()).filter(Boolean)
       : (data.primaryConcern?.trim() ? [data.primaryConcern.trim()] : []);
     
     const primaryConcernText = cleanConcernsList[0] || data.primaryConcern?.trim() || 'General Inspection / Service';
+
+    const initialConcernTechIds: (string | undefined)[] = data.concernTechIds && data.concernTechIds.length > 0
+      ? data.concernTechIds
+      : cleanConcernsList.map(() => data.techId);
+
+    const initialConcernTechNames: (string | undefined)[] = data.concernTechNames && data.concernTechNames.length > 0
+      ? data.concernTechNames
+      : initialConcernTechIds.map(tId => (tId ? users.find(u => u.id === tId)?.name : undefined));
+
+    // Resolve primary tech from explicit data.techId, or fallback to first assigned line tech
+    const effectiveTechId = data.techId || initialConcernTechIds.find(Boolean);
+    const tech = effectiveTechId ? users.find(u => u.id === effectiveTechId) : undefined;
+    const initialStatus: ROStatus = 'WAITING_DIAGNOSTICS';
 
     const newRO: RepairOrder = {
       id: newId,
@@ -1084,6 +1124,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       concernPayTypes: data.concernPayTypes && data.concernPayTypes.length > 0
         ? data.concernPayTypes
         : cleanConcernsList.map(() => 'CUSTOMER_PAY'),
+      concernTechIds: initialConcernTechIds,
+      concernTechNames: initialConcernTechNames,
       parts: [],
       messages: [],
       history: [
@@ -1499,6 +1541,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedRO) {
       syncRepairOrder(updatedRO);
+    }
+    return true;
+  };
+
+  // Update Assigned Technician for a specific customer complaint / concern line item
+  const updateConcernTech = (roId: string, concernIndex: number, techId: string, techName?: string): boolean => {
+    let updatedRO: RepairOrder | null = null;
+    const resolvedTechName = techName || (techId ? users.find(u => u.id === techId)?.name : undefined);
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const concernCount = Math.max(ro.concerns?.length || 1, concernIndex + 1);
+
+          const currentTechIds: (string | undefined)[] = ro.concernTechIds && ro.concernTechIds.length >= concernCount
+            ? [...ro.concernTechIds]
+            : Array.from({ length: concernCount }, (_, i) => ro.concernTechIds?.[i] || ro.techId);
+
+          const currentTechNames: (string | undefined)[] = ro.concernTechNames && ro.concernTechNames.length >= concernCount
+            ? [...ro.concernTechNames]
+            : Array.from({ length: concernCount }, (_, i) => ro.concernTechNames?.[i] || ro.techName);
+
+          currentTechIds[concernIndex] = techId || undefined;
+          currentTechNames[concernIndex] = resolvedTechName || undefined;
+
+          // If the RO has no overall tech, use this assigned tech as primary
+          const fallbackTechId = ro.techId || techId || undefined;
+          const fallbackTechName = ro.techName || resolvedTechName || undefined;
+
+          const updatedItem: RepairOrder = {
+            ...ro,
+            techId: fallbackTechId,
+            techName: fallbackTechName,
+            concernTechIds: currentTechIds,
+            concernTechNames: currentTechNames
+          };
+          updatedRO = updatedItem;
+          return updatedItem;
+        }
+        return ro;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (updatedRO) {
+      syncRepairOrder(updatedRO);
+
+      // Trigger notification if assigned to another technician
+      if (techId && techId !== currentUser?.id) {
+        const notif: UrgentNotification = {
+          id: `notif_assign_${Date.now()}`,
+          roId,
+          roNumber: roId,
+          title: `Assigned to Line ${concernIndex + 1} on RO #${roId}`,
+          message: `${currentUser.name} assigned you to concern line ${concernIndex + 1}: "${updatedRO.concerns[concernIndex] || ''}"`,
+          timestamp: new Date().toISOString(),
+          isUrgent: false,
+          type: 'STATUS_CHANGE',
+          read: false,
+          targetUserId: techId,
+        };
+        setNotifications(prev => [notif, ...prev.slice(0, 49)]);
+        syncNotification(notif);
+      }
     }
     return true;
   };
@@ -2437,7 +2548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return repairOrders.filter(ro => ro.advisorId === currentUser.id);
     }
     if (currentUser.role === 'TECHNICIAN') {
-      return repairOrders.filter(ro => ro.techId === currentUser.id);
+      return repairOrders.filter(ro => ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id));
     }
     return repairOrders;
   };
@@ -2492,6 +2603,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateRepairOrderDetails,
         updateTechCauseAndCorrection,
         updateConcernPayType,
+        updateConcernTech,
         logCustomerContact,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,

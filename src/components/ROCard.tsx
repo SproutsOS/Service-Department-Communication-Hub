@@ -143,7 +143,7 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
             )}
             {ro.correction && (
               <div className="flex items-start gap-1.5 truncate">
-                <span className="font-bold text-emerald-800 shrink-0">Corr:</span>
+                <span className="font-bold text-emerald-800 shrink-0">Correction:</span>
                 <span className="text-slate-700 truncate font-mono text-[10px]">{ro.correction}</span>
               </div>
             )}
@@ -183,15 +183,26 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
         {/* When Assigned & Tech Name */}
         <div className="flex items-center gap-1.5 text-slate-600">
           <Send className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          {ro.techName ? (
+          {ro.techName || (ro.concernTechNames && ro.concernTechNames.some(Boolean)) ? (
             <span className="truncate text-[11px] inline-flex items-center gap-1 flex-wrap">
               <strong className="font-medium text-slate-700">Tech:</strong> 
-              <span>{ro.techName}</span>
+              <span>{ro.techName || ro.concernTechNames?.find(Boolean)}</span>
               {techUser?.employeeNumber && (
                 <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
                   {techUser.employeeNumber}
                 </span>
               )}
+              {(() => {
+                const uniqueLineTechs = Array.from(new Set(ro.concernTechNames?.filter(Boolean) || []));
+                if (uniqueLineTechs.length > 1) {
+                  return (
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-purple-50 text-purple-700 rounded border border-purple-200">
+                      {uniqueLineTechs.length} Techs
+                    </span>
+                  );
+                }
+                return null;
+              })()}
               {ro.dispatchedAt ? ` (${formatTimeOnly(ro.dispatchedAt)})` : ''}
               {ro.bay ? ` • ${ro.bay}` : ''}
             </span>

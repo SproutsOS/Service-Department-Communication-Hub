@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, FileText, Send, User, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2 } from 'lucide-react';
+import { X, Plus, FileText, Send, User, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { decodeVin } from '../utils/vinDecoder';
 import { ConcernPayType } from '../types';
@@ -28,6 +28,7 @@ export const NewROModal: React.FC = () => {
   const [mileage, setMileage] = useState<number | string>('');
   const [concerns, setConcerns] = useState<string[]>(['']);
   const [concernPayTypes, setConcernPayTypes] = useState<ConcernPayType[]>(['CUSTOMER_PAY']);
+  const [concernTechIds, setConcernTechIds] = useState<string[]>(['']);
   const [promisedTime, setPromisedTime] = useState('');
   const [techId, setTechId] = useState('');
   const [bay, setBay] = useState('');
@@ -46,6 +47,7 @@ export const NewROModal: React.FC = () => {
       setVin('');
       setMileage('');
       setConcerns(['']);
+      setConcernTechIds(['']);
       setPromisedTime('');
       setTechId('');
       setBay('');
@@ -71,9 +73,10 @@ export const NewROModal: React.FC = () => {
     });
   };
 
-  const handleAddConcern = (initialText = '', payType: ConcernPayType = 'CUSTOMER_PAY') => {
+  const handleAddConcern = (initialText = '', payType: ConcernPayType = 'CUSTOMER_PAY', assignedTechId = '') => {
     setConcerns(prev => [...prev, initialText]);
     setConcernPayTypes(prev => [...prev, payType]);
+    setConcernTechIds(prev => [...prev, assignedTechId]);
   };
 
   const handleRemoveConcern = (index: number) => {
@@ -85,12 +88,24 @@ export const NewROModal: React.FC = () => {
       if (prev.length <= 1) return ['CUSTOMER_PAY'];
       return prev.filter((_, i) => i !== index);
     });
+    setConcernTechIds(prev => {
+      if (prev.length <= 1) return [''];
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handlePayTypeChange = (index: number, payType: ConcernPayType) => {
     setConcernPayTypes(prev => {
       const next = [...prev];
       next[index] = payType;
+      return next;
+    });
+  };
+
+  const handleConcernTechChange = (index: number, tId: string) => {
+    setConcernTechIds(prev => {
+      const next = [...prev];
+      next[index] = tId;
       return next;
     });
   };
@@ -186,6 +201,11 @@ export const NewROModal: React.FC = () => {
       primaryConcern: validConcerns[0],
       concerns: validConcerns,
       concernPayTypes: validConcerns.map((_, i) => concernPayTypes[i] || 'CUSTOMER_PAY'),
+      concernTechIds: validConcerns.map((_, i) => concernTechIds[i] || techId || undefined),
+      concernTechNames: validConcerns.map((_, i) => {
+        const tId = concernTechIds[i] || techId;
+        return tId ? users.find(u => u.id === tId)?.name : undefined;
+      }),
       promisedTime: promisedTime || undefined,
       techId: techId || undefined,
       bay: bay || undefined,
@@ -469,44 +489,66 @@ export const NewROModal: React.FC = () => {
                         {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
                       </span>
 
-                      <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
-                        <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
-                        <button
-                          type="button"
-                          onClick={() => handlePayTypeChange(idx, 'CUSTOMER_PAY')}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                            currentPayType === 'CUSTOMER_PAY'
-                              ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                          }`}
-                          title="Mark as Customer Pay"
-                        >
-                          Customer Pay
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePayTypeChange(idx, 'WARRANTY')}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                            currentPayType === 'WARRANTY'
-                              ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                          }`}
-                          title="Mark as Warranty"
-                        >
-                          Warranty
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePayTypeChange(idx, 'INTERNAL')}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                            currentPayType === 'INTERNAL'
-                              ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                          }`}
-                          title="Mark as Internal"
-                        >
-                          Internal
-                        </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Pay Type Selector */}
+                        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                          <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                          <button
+                            type="button"
+                            onClick={() => handlePayTypeChange(idx, 'CUSTOMER_PAY')}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              currentPayType === 'CUSTOMER_PAY'
+                                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                            }`}
+                            title="Mark as Customer Pay"
+                          >
+                            Customer Pay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePayTypeChange(idx, 'WARRANTY')}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              currentPayType === 'WARRANTY'
+                                ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                            }`}
+                            title="Mark as Warranty"
+                          >
+                            Warranty
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePayTypeChange(idx, 'INTERNAL')}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              currentPayType === 'INTERNAL'
+                                ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                            }`}
+                            title="Mark as Internal"
+                          >
+                            Internal
+                          </button>
+                        </div>
+
+                        {/* Assigned Tech Selector for this line */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
+                          <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
+                          <select
+                            value={concernTechIds[idx] || ''}
+                            onChange={e => handleConcernTechChange(idx, e.target.value)}
+                            className="text-[11px] font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                            title="Assign specific technician to this line"
+                          >
+                            <option value="">{techId ? `Default (${users.find(u => u.id === techId)?.name || 'Assigned'})` : 'Unassigned'}</option>
+                            {technicians.map(t => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}{t.bayNumber ? ` (Bay ${t.bayNumber})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       {concerns.length > 1 && (

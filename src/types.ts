@@ -49,13 +49,20 @@ export type ROStatus =
   | 'QC_TEST'
   | 'COMPLETED';
 
-export type PartStatus = 
+export type PredefinedPartStatus = 
+  | 'IN_STOCK'
+  | 'DAILY_ORDER'
+  | 'SPECIAL_ORDER_1_5_DAYS'
+  | 'SPECIAL_ORDER'
+  | 'VOR_UPGRADE'
   | 'REQUESTED' 
   | 'ORDERED' 
   | 'IN_TRANSIT' 
   | 'RECEIVED' 
   | 'ISSUED_TO_TECH'
   | 'BACKORDERED';
+
+export type PartStatus = PredefinedPartStatus | (string & {});
 
 export interface PartItem {
   id: string;
@@ -159,6 +166,8 @@ export interface RepairOrder {
   primaryConcern: string;
   concerns?: string[]; // Multiple customer complaints / line items
   concernPayTypes?: ConcernPayType[]; // Pay type for each customer complaint line item ('CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL')
+  concernTechIds?: (string | undefined)[]; // Assigned technician ID for each complaint / line item
+  concernTechNames?: (string | undefined)[]; // Assigned technician name for each complaint / line item
   diagnosticNotes?: string;
   cause?: string; // Diagnostic finding: root cause of failure/complaint
   correction?: string; // Repair performed: corrective action taken by technician
