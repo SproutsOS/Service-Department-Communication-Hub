@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, 
   ExternalLink, 
@@ -201,18 +202,21 @@ export const RepairQuoteModal: React.FC = () => {
   // Handle print event and document title formatting (Must be declared before any early return)
   useEffect(() => {
     const handleBeforePrint = () => {
+      document.body.classList.add('printing-quote');
       if (!activeQuoteRO) return;
       const roNumber = activeQuoteRO.id || '';
       const vehicleDesc = activeQuoteRO.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
       document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
     };
     const handleAfterPrint = () => {
+      document.body.classList.remove('printing-quote');
       document.title = 'Service Department & Repair Order Hub';
     };
 
     window.addEventListener('beforeprint', handleBeforePrint);
     window.addEventListener('afterprint', handleAfterPrint);
     return () => {
+      document.body.classList.remove('printing-quote');
       window.removeEventListener('beforeprint', handleBeforePrint);
       window.removeEventListener('afterprint', handleAfterPrint);
     };
@@ -575,12 +579,14 @@ export const RepairQuoteModal: React.FC = () => {
   };
 
   const handlePrint = () => {
+    document.body.classList.add('printing-quote');
     const originalTitle = document.title;
     const roNumber = activeQuoteRO?.id || '';
     const vehicleDesc = activeQuoteRO?.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
     document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
     window.print();
     setTimeout(() => {
+      document.body.classList.remove('printing-quote');
       document.title = originalTitle;
     }, 1000);
   };
@@ -588,11 +594,15 @@ export const RepairQuoteModal: React.FC = () => {
   const isAdvisorOrManager = currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto print:z-auto print:overflow-visible print:block">
+    <>
       <div 
-        id="repair-quote-modal-container"
-        className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col no-print"
+        id="repair-quote-modal-backdrop"
+        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto no-print"
       >
+        <div 
+          id="repair-quote-modal-container"
+          className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col"
+        >
         {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 print:bg-white print:text-black print:border-b-2 print:border-black">
           <div className="flex items-center gap-3">
@@ -1436,12 +1446,14 @@ export const RepairQuoteModal: React.FC = () => {
         </div>
 
       </div>
+      </div>
 
-      {/* Official Printable Repair Quote Document (Rendered only during Print) */}
-      <div 
-        id="printable-quote-document"
-        className="hidden print:block bg-white text-slate-950 max-w-4xl mx-auto space-y-4 font-sans text-xs"
-      >
+      {/* Official Printable Repair Quote Document (Rendered via Portal directly under document.body for clean print output) */}
+      {typeof document !== 'undefined' && createPortal(
+        <div 
+          id="printable-quote-document"
+          className="bg-white text-slate-950 max-w-4xl mx-auto space-y-4 font-sans text-xs"
+        >
         {/* Dealership & Repair Quote Header */}
         <div className="border-b-2 border-slate-950 pb-3">
           <div className="flex items-start justify-between gap-4">
@@ -1760,7 +1772,9 @@ export const RepairQuoteModal: React.FC = () => {
           <span>RO #{activeQuoteRO.id} • {shopName || 'Precision Auto & Truck Service'}</span>
           <span>Official Customer Copy</span>
         </div>
-      </div>
-    </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 };

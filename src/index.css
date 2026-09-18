@@ -35,28 +35,61 @@ textarea.border-red-500 {
 /* 
  * Official Clean Print Stylesheet for Warranty Documentation & Repair Quotes
  */
+@media screen {
+  #printable-quote-document {
+    display: none !important;
+  }
+}
+
 @media print {
   html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
     overflow: visible !important;
     height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Hide everything on page except designated printable documents */
-  body * {
-    visibility: hidden;
+  /* When printing a quote, hide the interactive app tree completely */
+  body.printing-quote #root,
+  body:has(#printable-quote-document) #root {
+    display: none !important;
   }
 
-  #printable-warranty-document,
-  #printable-warranty-document *,
-  #printable-quote-document,
+  /* Hide interactive controls explicitly */
+  .no-print,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Official Printable Repair Quote Document */
+  #printable-quote-document {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 8.5in !important;
+    margin: 0 auto !important;
+    padding: 0.25in !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
   #printable-quote-document * {
     visibility: visible !important;
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
-  #printable-warranty-document,
-  #printable-quote-document {
+  /* Support for printable warranty document */
+  #printable-warranty-document {
+    display: block !important;
+    visibility: visible !important;
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
@@ -68,12 +101,10 @@ textarea.border-red-500 {
     box-shadow: none !important;
     border: none !important;
     z-index: 99999 !important;
-    display: block !important;
   }
 
-  .no-print,
-  .print\:hidden {
-    display: none !important;
+  #printable-warranty-document * {
+    visibility: visible !important;
   }
 }
 
