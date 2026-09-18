@@ -136,6 +136,8 @@ export interface CustomerContactRecord {
   nextScheduledContactDate?: string;
 }
 
+export type ConcernPayType = 'CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL';
+
 export interface RepairOrder {
   id: string; // e.g. "RO-8821"
   customerName: string;
@@ -156,6 +158,7 @@ export interface RepairOrder {
   promisedTime?: string;
   primaryConcern: string;
   concerns?: string[]; // Multiple customer complaints / line items
+  concernPayTypes?: ConcernPayType[]; // Pay type for each customer complaint line item ('CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL')
   diagnosticNotes?: string;
   cause?: string; // Diagnostic finding: root cause of failure/complaint
   correction?: string; // Repair performed: corrective action taken by technician

@@ -36,7 +36,7 @@ import {
   Printer
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ROStatus, PartStatus, UserRole, RepairOrder } from '../types';
+import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
 import { TicketFlowStepper } from './TicketFlowStepper';
@@ -63,7 +63,8 @@ export const RODetailModal: React.FC = () => {
     deleteRepairOrder,
     openDirectChat,
     openQuoteModal,
-    openWarrantyPrintModal
+    openWarrantyPrintModal,
+    updateConcernPayType
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -85,6 +86,11 @@ export const RODetailModal: React.FC = () => {
     selectedRO?.concerns && selectedRO.concerns.length > 0
       ? selectedRO.concerns
       : [selectedRO?.primaryConcern || '']
+  );
+  const [editConcernPayTypes, setEditConcernPayTypes] = useState<ConcernPayType[]>(
+    selectedRO?.concernPayTypes && selectedRO.concernPayTypes.length > 0
+      ? selectedRO.concernPayTypes
+      : (selectedRO?.concerns || [selectedRO?.primaryConcern || '']).map(() => 'CUSTOMER_PAY')
   );
   const [editPromisedTime, setEditPromisedTime] = useState(selectedRO?.promisedTime || '');
   const [editDiagnosticNotes, setEditDiagnosticNotes] = useState(selectedRO?.diagnosticNotes || '');
@@ -119,6 +125,11 @@ export const RODetailModal: React.FC = () => {
     setEditVehicleVin(selectedRO.vehicle.vin || '');
     setEditPrimaryConcern(selectedRO.primaryConcern || '');
     setEditConcerns(selectedRO.concerns && selectedRO.concerns.length > 0 ? selectedRO.concerns : [selectedRO.primaryConcern || '']);
+    setEditConcernPayTypes(
+      selectedRO.concernPayTypes && selectedRO.concernPayTypes.length > 0
+        ? selectedRO.concernPayTypes
+        : (selectedRO.concerns || [selectedRO.primaryConcern || '']).map(() => 'CUSTOMER_PAY')
+    );
     setEditPromisedTime(selectedRO.promisedTime || '');
     setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
     setEditCause(selectedRO.cause || '');
@@ -244,6 +255,7 @@ export const RODetailModal: React.FC = () => {
 
   const handleAddEditConcern = () => {
     setEditConcerns(prev => [...prev, '']);
+    setEditConcernPayTypes(prev => [...prev, 'CUSTOMER_PAY']);
   };
 
   const handleRemoveEditConcern = (index: number) => {
@@ -251,6 +263,21 @@ export const RODetailModal: React.FC = () => {
       if (prev.length <= 1) return [''];
       return prev.filter((_, i) => i !== index);
     });
+    setEditConcernPayTypes(prev => {
+      if (prev.length <= 1) return ['CUSTOMER_PAY'];
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleEditPayTypeChange = (index: number, payType: ConcernPayType) => {
+    setEditConcernPayTypes(prev => {
+      const next = [...prev];
+      next[index] = payType;
+      return next;
+    });
+    if (selectedRO) {
+      updateConcernPayType(selectedRO.id, index, payType);
+    }
   };
 
   // Auto-VIN Decoding state for edit modal
@@ -966,43 +993,87 @@ export const RODetailModal: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                      {editConcerns.map((c, idx) => (
-                        <div key={idx} className="bg-white p-2.5 rounded-lg border-2 border-slate-400 space-y-1 shadow-2xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider">
-                              {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
-                            </span>
-                            {editConcerns.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updatedConcerns = editConcerns.filter((_, i) => i !== idx);
-                                  handleRemoveEditConcern(idx);
-                                  triggerManagerAutoSave({ concerns: updatedConcerns });
-                                }}
-                                className="text-[10px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded"
-                                title="Remove line"
-                              >
-                                <Trash2 className="w-3 h-3" /> Remove
-                              </button>
-                            )}
+                      {editConcerns.map((c, idx) => {
+                        const currentPayType: ConcernPayType = editConcernPayTypes[idx] || 'CUSTOMER_PAY';
+                        return (
+                          <div key={idx} className="bg-white p-2.5 rounded-lg border-2 border-slate-400 space-y-2 shadow-2xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider">
+                                {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
+                              </span>
+
+                              <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                                <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditPayTypeChange(idx, 'CUSTOMER_PAY')}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'CUSTOMER_PAY'
+                                      ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Mark as Customer Pay"
+                                >
+                                  Customer Pay
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditPayTypeChange(idx, 'WARRANTY')}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'WARRANTY'
+                                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Mark as Warranty"
+                                >
+                                  Warranty
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditPayTypeChange(idx, 'INTERNAL')}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'INTERNAL'
+                                      ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Mark as Internal"
+                                >
+                                  Internal
+                                </button>
+                              </div>
+
+                              {editConcerns.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updatedConcerns = editConcerns.filter((_, i) => i !== idx);
+                                    handleRemoveEditConcern(idx);
+                                    triggerManagerAutoSave({ concerns: updatedConcerns });
+                                  }}
+                                  className="text-[10px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded ml-auto"
+                                  title="Remove line"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Remove
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              rows={2}
+                              value={c}
+                              onChange={e => {
+                                const val = e.target.value;
+                                handleEditConcernChange(idx, val);
+                                const next = [...editConcerns];
+                                next[idx] = val;
+                                triggerManagerAutoSave({ concerns: next });
+                              }}
+                              onBlur={flushManagerAutoSave}
+                              placeholder={idx === 0 ? "Customer primary concern / complaint..." : `Additional concern / complaint line ${idx + 1}...`}
+                              className="w-full px-2.5 py-1.5 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                            />
                           </div>
-                          <textarea
-                            rows={2}
-                            value={c}
-                            onChange={e => {
-                              const val = e.target.value;
-                              handleEditConcernChange(idx, val);
-                              const next = [...editConcerns];
-                              next[idx] = val;
-                              triggerManagerAutoSave({ concerns: next });
-                            }}
-                            onBlur={flushManagerAutoSave}
-                            placeholder={idx === 0 ? "Customer primary concern / complaint..." : `Additional concern / complaint line ${idx + 1}...`}
-                            className="w-full px-2.5 py-1.5 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
-                          />
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1292,16 +1363,67 @@ export const RODetailModal: React.FC = () => {
                       </div>
 
                       <div className="space-y-1.5">
-                        {displayConcerns.map((concern, idx) => (
-                          <div key={idx} className="bg-white p-3 rounded-lg border-2 border-slate-300 shadow-2xs flex items-start gap-2.5">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 uppercase tracking-wider shrink-0 mt-0.5">
-                              {idx === 0 ? 'Line 1 (Primary)' : `Line ${idx + 1}`}
-                            </span>
-                            <p className="text-xs text-slate-900 font-medium leading-relaxed flex-1">
-                              {concern}
-                            </p>
-                          </div>
-                        ))}
+                        {displayConcerns.map((concern, idx) => {
+                          const currentPayType: ConcernPayType = selectedRO?.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
+                          return (
+                            <div key={idx} className="bg-white p-3 rounded-lg border-2 border-slate-300 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                              <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 uppercase tracking-wider shrink-0 mt-0.5">
+                                  {idx === 0 ? 'Line 1 (Primary)' : `Line ${idx + 1}`}
+                                </span>
+                                <p className="text-xs text-slate-900 font-medium leading-relaxed break-words">
+                                  {concern}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0 self-end sm:self-center bg-slate-50 p-1 rounded-md border border-slate-300">
+                                <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'CUSTOMER_PAY');
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'CUSTOMER_PAY'
+                                      ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Customer Pay"
+                                >
+                                  Customer Pay
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'WARRANTY');
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'WARRANTY'
+                                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Warranty"
+                                >
+                                  Warranty
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'INTERNAL');
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'INTERNAL'
+                                      ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Internal"
+                                >
+                                  Internal
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 

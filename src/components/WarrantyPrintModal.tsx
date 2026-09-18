@@ -457,45 +457,6 @@ export const WarrantyPrintModal: React.FC = () => {
               </div>
             )}
 
-            {/* Section 6: Official Warranty Signatures & Certification */}
-            <div className="pt-6 border-t-2 border-slate-900 space-y-6">
-              <div className="text-[11px] text-slate-600 font-medium italic">
-                Certification: I hereby certify that the stated diagnostic causes, corrective repairs, parts installed, and actual labor start/end time punches documented on this ticket are complete, true, and performed in accordance with manufacturer technical specifications and warranty procedures.
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4">
-                <div>
-                  <div className="border-b border-slate-900 pb-1 mb-1 h-8 flex items-end">
-                    <span className="font-mono text-xs text-slate-400 italic">Signature</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-900">Technician Signature</div>
-                  <div className="text-[10px] text-slate-500">
-                    {ro.techName || 'Assigned Technician'} | Date: _________________
-                  </div>
-                </div>
-
-                <div>
-                  <div className="border-b border-slate-900 pb-1 mb-1 h-8 flex items-end">
-                    <span className="font-mono text-xs text-slate-400 italic">Signature</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-900">Service Advisor Certification</div>
-                  <div className="text-[10px] text-slate-500">
-                    {ro.advisorName} | Date: _________________
-                  </div>
-                </div>
-
-                <div>
-                  <div className="border-b border-slate-900 pb-1 mb-1 h-8 flex items-end">
-                    <span className="font-mono text-xs text-slate-400 italic">Signature</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-900">Service Manager / Warranty Admin</div>
-                  <div className="text-[10px] text-slate-500">
-                    Authorization | Date: _________________
-                  </div>
-                </div>
-              </div>
-            </div>
-
           </div>
 
         </div>

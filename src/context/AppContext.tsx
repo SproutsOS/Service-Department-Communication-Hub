@@ -15,7 +15,8 @@ import {
   RepairQuote,
   QuoteStatus,
   WarrantyLaborTimePunch,
-  WarrantyOperationType
+  WarrantyOperationType,
+  ConcernPayType
 } from '../types';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -108,6 +109,7 @@ interface AppContextType {
     vehicle: RepairOrder['vehicle'];
     primaryConcern?: string;
     concerns?: string[];
+    concernPayTypes?: ConcernPayType[];
     promisedTime?: string;
     techId?: string;
     bay?: string;
@@ -120,6 +122,7 @@ interface AppContextType {
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
+  updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
   logCustomerContact: (
     roId: string, 
     contactData: {
@@ -1029,6 +1032,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     vehicle: RepairOrder['vehicle'];
     primaryConcern?: string;
     concerns?: string[];
+    concernPayTypes?: ConcernPayType[];
     promisedTime?: string;
     techId?: string;
     bay?: string;
@@ -1077,6 +1081,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       promisedTime: data.promisedTime || new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
       primaryConcern: primaryConcernText,
       concerns: cleanConcernsList.length > 0 ? cleanConcernsList : [primaryConcernText],
+      concernPayTypes: data.concernPayTypes && data.concernPayTypes.length > 0
+        ? data.concernPayTypes
+        : cleanConcernsList.map(() => 'CUSTOMER_PAY'),
       parts: [],
       messages: [],
       history: [
@@ -1458,6 +1465,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    return true;
+  };
+
+  // Update Pay Type for a specific customer complaint / concern line item (Customer Pay, Warranty, or Internal)
+  const updateConcernPayType = (roId: string, concernIndex: number, payType: ConcernPayType): boolean => {
+    let updatedRO: RepairOrder | null = null;
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const concernCount = Math.max(ro.concerns?.length || 1, concernIndex + 1);
+          const currentTypes: ConcernPayType[] = ro.concernPayTypes && ro.concernPayTypes.length >= concernCount
+            ? [...ro.concernPayTypes]
+            : Array.from({ length: concernCount }, (_, i) => ro.concernPayTypes?.[i] || 'CUSTOMER_PAY');
+          currentTypes[concernIndex] = payType;
+
+          const updatedItem: RepairOrder = {
+            ...ro,
+            concernPayTypes: currentTypes
+          };
+          updatedRO = updatedItem;
+          return updatedItem;
+        }
+        return ro;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (updatedRO) {
+      syncRepairOrder(updatedRO);
+    }
     return true;
   };
 
@@ -2449,6 +2491,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteRepairOrder,
         updateRepairOrderDetails,
         updateTechCauseAndCorrection,
+        updateConcernPayType,
         logCustomerContact,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,

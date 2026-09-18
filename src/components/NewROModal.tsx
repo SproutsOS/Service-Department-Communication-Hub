@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, FileText, Send, User, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { decodeVin } from '../utils/vinDecoder';
+import { ConcernPayType } from '../types';
 
 
 export const NewROModal: React.FC = () => {
@@ -26,6 +27,7 @@ export const NewROModal: React.FC = () => {
   const [vin, setVin] = useState('');
   const [mileage, setMileage] = useState<number | string>('');
   const [concerns, setConcerns] = useState<string[]>(['']);
+  const [concernPayTypes, setConcernPayTypes] = useState<ConcernPayType[]>(['CUSTOMER_PAY']);
   const [promisedTime, setPromisedTime] = useState('');
   const [techId, setTechId] = useState('');
   const [bay, setBay] = useState('');
@@ -51,6 +53,7 @@ export const NewROModal: React.FC = () => {
       setIsWaiter(false);
       setVinDecodedMsg(null);
       setVinError(null);
+      setConcernPayTypes(['CUSTOMER_PAY']);
     }
   }, [isNewROModalOpen]);
 
@@ -68,14 +71,27 @@ export const NewROModal: React.FC = () => {
     });
   };
 
-  const handleAddConcern = (initialText = '') => {
+  const handleAddConcern = (initialText = '', payType: ConcernPayType = 'CUSTOMER_PAY') => {
     setConcerns(prev => [...prev, initialText]);
+    setConcernPayTypes(prev => [...prev, payType]);
   };
 
   const handleRemoveConcern = (index: number) => {
     setConcerns(prev => {
       if (prev.length <= 1) return [''];
       return prev.filter((_, i) => i !== index);
+    });
+    setConcernPayTypes(prev => {
+      if (prev.length <= 1) return ['CUSTOMER_PAY'];
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handlePayTypeChange = (index: number, payType: ConcernPayType) => {
+    setConcernPayTypes(prev => {
+      const next = [...prev];
+      next[index] = payType;
+      return next;
     });
   };
 
@@ -169,6 +185,7 @@ export const NewROModal: React.FC = () => {
       },
       primaryConcern: validConcerns[0],
       concerns: validConcerns,
+      concernPayTypes: validConcerns.map((_, i) => concernPayTypes[i] || 'CUSTOMER_PAY'),
       promisedTime: promisedTime || undefined,
       techId: techId || undefined,
       bay: bay || undefined,
@@ -178,6 +195,7 @@ export const NewROModal: React.FC = () => {
 
     setIsNewROModalOpen(false);
     setConcerns(['']);
+    setConcernPayTypes(['CUSTOMER_PAY']);
 
     // Automatically open newly created RO
     setTimeout(() => {
@@ -442,24 +460,67 @@ export const NewROModal: React.FC = () => {
 
             {/* List of Concerns */}
             <div className="space-y-2.5">
-              {concerns.map((concern, idx) => (
-                <div key={idx} className="bg-white p-3 rounded-lg border-2 border-slate-400 shadow-2xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider">
-                      {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
-                    </span>
-                    {concerns.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveConcern(idx)}
-                        className="text-[11px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded transition-colors"
-                        title="Remove this line item"
-                      >
-                        <Trash2 className="w-3 h-3" /> Remove Line
-                      </button>
-                    )}
-                  </div>
-                  <textarea
+              {concerns.map((concern, idx) => {
+                const currentPayType: ConcernPayType = concernPayTypes[idx] || 'CUSTOMER_PAY';
+                return (
+                  <div key={idx} className="bg-white p-3 rounded-lg border-2 border-slate-400 shadow-2xs space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider">
+                        {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
+                      </span>
+
+                      <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                        <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                        <button
+                          type="button"
+                          onClick={() => handlePayTypeChange(idx, 'CUSTOMER_PAY')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            currentPayType === 'CUSTOMER_PAY'
+                              ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                          }`}
+                          title="Mark as Customer Pay"
+                        >
+                          Customer Pay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePayTypeChange(idx, 'WARRANTY')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            currentPayType === 'WARRANTY'
+                              ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                          }`}
+                          title="Mark as Warranty"
+                        >
+                          Warranty
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePayTypeChange(idx, 'INTERNAL')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            currentPayType === 'INTERNAL'
+                              ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                          }`}
+                          title="Mark as Internal"
+                        >
+                          Internal
+                        </button>
+                      </div>
+
+                      {concerns.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveConcern(idx)}
+                          className="text-[11px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded transition-colors ml-auto"
+                          title="Remove this line item"
+                        >
+                          <Trash2 className="w-3 h-3" /> Remove Line
+                        </button>
+                      )}
+                    </div>
+                    <textarea
                     rows={2}
                     required={idx === 0}
                     placeholder={
@@ -472,8 +533,9 @@ export const NewROModal: React.FC = () => {
                     className="w-full text-xs p-2.5 border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed bg-white text-slate-900 font-medium"
                   />
                 </div>
-              ))}
-            </div>
+              );
+            })}
+          </div>
 
           </div>
 

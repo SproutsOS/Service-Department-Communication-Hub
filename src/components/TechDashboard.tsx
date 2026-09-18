@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { ROStatus, RepairOrder } from '../types';
+import { ROStatus, RepairOrder, ConcernPayType } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly } from '../utils/formatters';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
@@ -163,9 +163,6 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-slate-500">
-              Diagnostic failure cause & corrective repair work — <strong className="text-emerald-700 font-semibold">Auto-saves as you type</strong>
-            </span>
           </div>
         </div>
 
@@ -340,7 +337,8 @@ export const TechDashboard: React.FC = () => {
     startDiagnosis,
     openDirectChat,
     openQuoteModal,
-    openWarrantyPrintModal
+    openWarrantyPrintModal,
+    updateConcernPayType
   } = useApp();
 
   // Filter strictly to this technician's assigned ROs
@@ -668,10 +666,15 @@ export const TechDashboard: React.FC = () => {
                 )}
 
                 {/* Customer Complaints & Concerns */}
-                <div className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 text-xs space-y-1.5">
+                <div 
+                  onClick={(e) => e.stopPropagation()} 
+                  onMouseDown={(e) => e.stopPropagation()} 
+                  className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 text-xs space-y-2"
+                >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-700">
-                      Customer Complaints & Concerns:
+                    <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Customer Complaints & Concerns:</span>
                     </span>
                     {ro.concerns && ro.concerns.length > 1 && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
@@ -679,20 +682,76 @@ export const TechDashboard: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {ro.concerns && ro.concerns.length > 1 ? (
-                    <div className="space-y-1.5 pt-1">
-                      {ro.concerns.map((concern, idx) => (
-                        <div key={idx} className="flex items-start gap-2 bg-white p-2 rounded border-2 border-slate-300">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded uppercase tracking-wider shrink-0 mt-0.5">
-                            Line {idx + 1}
-                          </span>
-                          <span className="text-slate-800 font-medium leading-relaxed">{concern}</span>
+
+                  {/* Complaint Lines with Pay Type Selector (Customer Pay, Warranty, Internal) */}
+                  <div className="space-y-2">
+                    {((ro.concerns && ro.concerns.length > 0) ? ro.concerns : [ro.primaryConcern || 'Customer Concern']).map((concern, idx) => {
+                      const currentPayType: ConcernPayType = ro.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
+                      return (
+                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-2.5 rounded-lg border-2 border-slate-300 shadow-2xs">
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded uppercase tracking-wider shrink-0 mt-0.5">
+                              Line {idx + 1}
+                            </span>
+                            <span className="text-slate-800 font-medium leading-relaxed break-words">{concern}</span>
+                          </div>
+
+                          <div 
+                            onClick={(e) => e.stopPropagation()} 
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 shrink-0 self-start sm:self-center bg-slate-50 p-1 rounded-md border border-slate-300"
+                          >
+                            <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Type:</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY');
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                currentPayType === 'CUSTOMER_PAY'
+                                  ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                              }`}
+                              title="Customer Pay"
+                            >
+                              Customer Pay
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateConcernPayType(ro.id, idx, 'WARRANTY');
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                currentPayType === 'WARRANTY'
+                                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                              }`}
+                              title="Warranty"
+                            >
+                              Warranty
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateConcernPayType(ro.id, idx, 'INTERNAL');
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                currentPayType === 'INTERNAL'
+                                  ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                              }`}
+                              title="Internal"
+                            >
+                              Internal
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-800 font-medium">{ro.primaryConcern}</p>
-                  )}
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Technician Diagnosis & Repair Documentation: Cause & Correction */}
