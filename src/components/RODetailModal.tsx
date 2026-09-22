@@ -35,7 +35,8 @@ import {
   ExternalLink,
   Calculator,
   Printer,
-  Camera
+  Camera,
+  ListFilter
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
@@ -46,6 +47,7 @@ import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 import { VehiclePhotoManager } from './VehiclePhotoManager';
+import { ROLineBreakdown } from './ROLineBreakdown';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 import { decodeVin } from '../utils/vinDecoder';
 import { DynamicROWorkflow } from './DynamicROWorkflow';
@@ -443,7 +445,7 @@ export const RODetailModal: React.FC = () => {
     }
   }, [selectedRO?.id, selectedROModalTab, currentUser.role, activeRoleView, setSelectedROModalTab]);
 
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PHOTOS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'LINES' | 'PHOTOS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
 
   useEffect(() => {
     if (selectedROModalTab) {
@@ -701,6 +703,22 @@ export const RODetailModal: React.FC = () => {
                 </button>
               )}
 
+              {/* Line View (Itemized Concerns & Labor Lines) Quick Toggle */}
+              <button
+                type="button"
+                id="ro-modal-line-view-toggle"
+                onClick={() => setActiveTab(activeTab === 'LINES' ? 'DETAILS' : 'LINES')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
+                  activeTab === 'LINES'
+                    ? 'bg-blue-600 text-white border-blue-700'
+                    : 'bg-white hover:bg-blue-50 text-slate-700 border-slate-300'
+                }`}
+                title="Toggle between Workflow and Itemized Line View"
+              >
+                <ListFilter className="w-3.5 h-3.5 text-blue-600" />
+                <span>{activeTab === 'LINES' ? 'Workflow View' : 'Line View'}</span>
+              </button>
+
               {/* Repair Quote Initiation / Status */}
               <button
                 type="button"
@@ -889,6 +907,25 @@ export const RODetailModal: React.FC = () => {
           >
             <FileText className="w-3.5 h-3.5 shrink-0" />
             <span>{isTechScreen ? 'Technician Workflow & Tasks' : 'RO Details & Assignment'}</span>
+          </button>
+
+          {/* Line View (Concerns & Pay Types & Tech Breakdown) */}
+          <button
+            id="ro-tab-lines"
+            onClick={() => setActiveTab('LINES')}
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              activeTab === 'LINES'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <ListFilter className="w-3.5 h-3.5 shrink-0" />
+            <span>Line View</span>
+            {((selectedRO.concerns?.length || 1) > 0) && (
+              <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                {selectedRO.concerns?.length || 1}
+              </span>
+            )}
           </button>
 
           {/* Vehicle Photos Tab: Exclusively on Advisor board (isAdvisorScreen) or Manager overview */}
@@ -1564,6 +1601,23 @@ export const RODetailModal: React.FC = () => {
                 updateConcernPayType={updateConcernPayType}
                 updateConcernTech={updateConcernTech}
                 isTechScreen={isTechScreen}
+              />
+            </div>
+          )}
+
+          {/* TAB: ITEM & LINE BREAKDOWN (Concerns, Pay Types, Tech Assignments) */}
+          {activeTab === 'LINES' && (
+            <div className="space-y-4">
+              <ROLineBreakdown
+                ro={selectedRO}
+                users={users}
+                canEdit={canSelectPayType}
+                onAssignTech={(idx, techId, techName) => {
+                  updateConcernTech(selectedRO.id, idx, techId, techName);
+                }}
+                onUpdatePayType={(idx, payType) => {
+                  updateConcernPayType(selectedRO.id, idx, payType);
+                }}
               />
             </div>
           )}

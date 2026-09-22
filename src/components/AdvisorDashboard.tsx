@@ -13,10 +13,12 @@ import {
   Calculator,
   ShieldCheck,
   PhoneCall,
-  LayoutGrid
+  LayoutGrid,
+  ListFilter
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
+import { ROLineRow } from './ROLineRow';
 import { ROStatus, RepairOrder } from '../types';
 import { normalizeROStatus } from '../data/mockData';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
@@ -24,9 +26,10 @@ import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const AdvisorDashboard: React.FC = () => {
-  const { currentUser, repairOrders, setSelectedRO, setIsNewROModalOpen } = useApp();
+  const { currentUser, repairOrders, setSelectedRO, setIsNewROModalOpen, users } = useApp();
   
   const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET'>('BOARD');
+  const [displayMode, setDisplayMode] = useState<'CARD' | 'LINE'>('CARD');
   const [activeTab, setActiveTab] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
@@ -359,16 +362,50 @@ export const AdvisorDashboard: React.FC = () => {
 
           </div>
 
-          {/* Search Filter */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-600 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Filter my ROs by customer, vehicle, RO number, or technician..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full text-sm pl-9 pr-3 py-1.5 bg-white border-2 border-slate-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs text-slate-900 placeholder:text-slate-500 font-medium"
-            />
+          {/* Search Filter & View Mode Toggle */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-600 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Filter my ROs by customer, vehicle, RO number, or technician..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full text-sm pl-9 pr-3 py-1.5 bg-white border-2 border-slate-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs text-slate-900 placeholder:text-slate-500 font-medium"
+              />
+            </div>
+
+            {/* Card View vs Line View Toggle */}
+            <div className="flex items-center self-end sm:self-auto bg-slate-100 p-1 rounded-lg border-2 border-slate-800 shrink-0">
+              <button
+                type="button"
+                id="advisor-card-view-btn"
+                onClick={() => setDisplayMode('CARD')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  displayMode === 'CARD'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+                title="Card View (Standard Grid)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Card View</span>
+              </button>
+              <button
+                type="button"
+                id="advisor-line-view-btn"
+                onClick={() => setDisplayMode('LINE')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  displayMode === 'LINE'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+                title="Line View (Compact Detailed Table)"
+              >
+                <ListFilter className="w-3.5 h-3.5" />
+                <span>Line View</span>
+              </button>
+            </div>
           </div>
 
           {/* Repair Orders List */}
@@ -383,7 +420,7 @@ export const AdvisorDashboard: React.FC = () => {
                     : "No orders match the selected filter."}
                 </p>
               </div>
-            ) : (
+            ) : displayMode === 'CARD' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-2">
                 {displayROs.map(ro => (
                   <ROCard 
@@ -392,6 +429,42 @@ export const AdvisorDashboard: React.FC = () => {
                     onClick={() => setSelectedRO(ro)} 
                   />
                 ))}
+              </div>
+            ) : (
+              /* Line View Table (Detailed Row Format) */
+              <div className="bg-white rounded-xl border-2 border-slate-800 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-100 border-b-2 border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-700">
+                      <tr>
+                        <th className="px-3 py-2.5">RO # & Priority</th>
+                        <th className="px-3 py-2.5">Customer & Phone</th>
+                        <th className="px-3 py-2.5">Vehicle & Mileage</th>
+                        <th className="px-3 py-2.5">Customer Concern / 3 C's</th>
+                        <th className="px-3 py-2.5">Ticket Status</th>
+                        <th className="px-3 py-2.5">Promised Time</th>
+                        <th className="px-3 py-2.5">Assigned Tech</th>
+                        <th className="px-3 py-2.5">Follow-Up (2x/Wk)</th>
+                        <th className="px-3 py-2.5 text-right">Items / Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {displayROs.map(ro => (
+                        <ROLineRow
+                          key={ro.id}
+                          ro={ro}
+                          users={users}
+                          onClick={() => setSelectedRO(ro)}
+                          showCadence={true}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 font-medium">
+                  <span>Showing {displayROs.length} repair order{displayROs.length === 1 ? '' : 's'} in Line View</span>
+                  <span className="text-[11px] text-slate-500">Click any row to open the complete repair order</span>
+                </div>
               </div>
             )}
           </div>
