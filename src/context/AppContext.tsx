@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   User, 
+  UserRole,
   RepairOrder, 
   ROStatus, 
   PartStatus, 
@@ -16,7 +17,9 @@ import {
   QuoteStatus,
   WarrantyLaborTimePunch,
   WarrantyOperationType,
-  ConcernPayType
+  ConcernPayType,
+  Customer,
+  VehiclePhoto
 } from '../types';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -27,12 +30,15 @@ import {
   subscribeToNotifications,
   subscribeToShopSettings,
   subscribeToShopMessages,
+  subscribeToCustomers,
   saveShopMessage,
   syncRepairOrder,
   deleteRepairOrderDoc,
   syncUser,
   deleteUserDoc,
   syncNotification,
+  syncCustomer,
+  deleteCustomerDoc,
   markNotificationReadDoc,
   markAllNotificationsReadDocs,
   syncShopSettings,
@@ -53,11 +59,14 @@ interface AppContextType {
   currentUser: User;
   users: User[];
   repairOrders: RepairOrder[];
+  customers: Customer[];
   notifications: UrgentNotification[];
   selectedRO: RepairOrder | null;
   isNewROModalOpen: boolean;
   isLoginModalOpen: boolean;
   isStaffManagementOpen: boolean;
+  isCustomerDirectoryOpen: boolean;
+  prefilledCustomerForNewRO: Customer | null;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
   isAuthenticated: boolean;
@@ -66,9 +75,16 @@ interface AppContextType {
   // Actions
   setCurrentUser: (user: User) => void;
   setSelectedRO: (ro: RepairOrder | null) => void;
+  openROWithTab: (ro: RepairOrder, tab?: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS') => void;
+  selectedROModalTab: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null;
+  setSelectedROModalTab: (tab: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null) => void;
   setIsNewROModalOpen: (isOpen: boolean) => void;
   setIsLoginModalOpen: (isOpen: boolean) => void;
   setIsStaffManagementOpen: (isOpen: boolean) => void;
+  setIsCustomerDirectoryOpen: (isOpen: boolean) => void;
+  setPrefilledCustomerForNewRO: (cust: Customer | null) => void;
+  saveCustomer: (customer: Customer) => Promise<boolean>;
+  deleteCustomer: (customerId: string) => Promise<void>;
   toggleSound: () => void;
   requestPushPermission: () => Promise<void>;
   
@@ -99,6 +115,7 @@ interface AppContextType {
   updateROStatus: (roId: string, newStatus: ROStatus, notes?: string, makeUrgent?: boolean) => void;
   startDiagnosis: (roId: string, notes?: string) => void;
   dispatchRO: (roId: string, techId: string, bay?: string) => void;
+  reassignServiceWriter: (roId: string, newAdvisorId: string, notes?: string) => boolean;
   sendMessage: (roId: string, content: string, isUrgent?: boolean) => void;
   addPartOrder: (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => void;
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
@@ -107,6 +124,8 @@ interface AppContextType {
     customerName: string;
     customerPhone: string;
     vehicle: RepairOrder['vehicle'];
+    advisorId?: string;
+    advisorName?: string;
     primaryConcern?: string;
     concerns?: string[];
     concernPayTypes?: ConcernPayType[];
@@ -122,6 +141,8 @@ interface AppContextType {
   }) => string;
   
   toggleCustomerTaxExempt: (roId: string, taxExemptNumber?: string) => boolean;
+  addVehiclePhoto: (roId: string, photo: VehiclePhoto) => boolean;
+  deleteVehiclePhoto: (roId: string, photoId: string) => boolean;
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
@@ -204,6 +225,10 @@ interface AppContextType {
   updateTimePunch: (roId: string, punchId: string, updates: Partial<WarrantyLaborTimePunch>) => boolean;
   deleteTimePunch: (roId: string, punchId: string) => boolean;
 
+  // Active Workstation / Role View
+  activeRoleView: UserRole;
+  setActiveRoleView: (role: UserRole | null) => void;
+
   // Warranty Documentation & Print Feature
   activeWarrantyPrintRO: RepairOrder | null;
   openWarrantyPrintModal: (roId: string) => void;
@@ -218,6 +243,7 @@ const STORAGE_KEY_SHOP_NAME = 'precision_auto_shop_name_v6_clean';
 const STORAGE_KEY_SETUP_DONE = 'precision_auto_setup_completed_v6_clean';
 const STORAGE_KEY_WIPE_PERFORMED = 'precision_auto_wipe_performed_v6_clean';
 const STORAGE_KEY_SESSION_AUTH = 'dealership_session_authenticated_v1';
+const STORAGE_KEY_CUSTOMERS = 'woolwine_customers_cloud_cache_v1';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -362,7 +388,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return [];
   });
 
+  // Cloud Customers State
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const [isCustomerDirectoryOpen, setIsCustomerDirectoryOpen] = useState(false);
+  const [prefilledCustomerForNewRO, setPrefilledCustomerForNewRO] = useState<Customer | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(customers));
+    } catch {
+      // ignore
+    }
+  }, [customers]);
+
   const [selectedROId, setSelectedROId] = useState<string | null>(null);
+  const [selectedROModalTab, setSelectedROModalTab] = useState<'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null>(null);
   const [quoteModalROId, setQuoteModalROId] = useState<string | null>(null);
   const [warrantyPrintROId, setWarrantyPrintROId] = useState<string | null>(null);
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
@@ -394,6 +446,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
+
+  // Active Workstation / Role View state (Managers can inspect any workstation; other roles locked to their role)
+  const [viewOverride, setViewOverride] = useState<UserRole | null>(null);
+  const activeRoleView: UserRole = currentUser.role === 'SERVICE_MANAGER' ? (viewOverride || 'SERVICE_MANAGER') : currentUser.role;
+  const setActiveRoleView = useCallback((role: UserRole | null) => {
+    setViewOverride(role);
+  }, []);
+
+  // When currentUser changes, reset role view override
+  useEffect(() => {
+    setViewOverride(null);
+  }, [currentUser.id, currentUser.role]);
 
   // When currentUser changes, reload their read message IDs
   useEffect(() => {
@@ -632,12 +696,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // Subscribe to real-time Customers in Google Cloud Firestore
+    const unsubscribeCustomers = subscribeToCustomers((cloudCustomers) => {
+      if (cloudCustomers.length > 0) {
+        setCustomers(cloudCustomers);
+      }
+    });
+
     return () => {
       unsubscribeROs();
       unsubscribeUsers();
       unsubscribeNotifs();
       unsubscribeSettings();
       unsubscribeMessages();
+      unsubscribeCustomers();
     };
   }, []);
 
@@ -689,6 +761,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setSelectedRO = (ro: RepairOrder | null) => {
     setSelectedROId(ro ? ro.id : null);
+    if (!ro) {
+      setSelectedROModalTab(null);
+    }
+  };
+
+  const openROWithTab = (ro: RepairOrder, tab: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' = 'DETAILS') => {
+    setSelectedROId(ro.id);
+    setSelectedROModalTab(tab);
   };
 
   const openQuoteModal = (roId: string) => {
@@ -839,8 +919,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Dispatch RO to a technician
-  const dispatchRO = (roId: string, techId: string, bay?: string) => {
-    if (currentUser.role === 'SALES') {
+  const dispatchRO = (roId: string, techId: string, _bay?: string) => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'SERVICE_ADVISOR') {
+      console.warn('Technician assignment is only permitted by Service Manager and Service Advisor');
       return;
     }
     const tech = users.find(u => u.id === techId);
@@ -850,7 +931,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!targetRO) return;
 
     const now = new Date().toISOString();
-    const assignedBay = bay || tech.bayNumber || 'Unassigned Bay';
 
     const newHistory = {
       id: `hist_${Date.now()}`,
@@ -859,7 +939,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedByName: currentUser.name,
       userRole: currentUser.role,
       timestamp: now,
-      notes: `Assigned by ${currentUser.name} to ${tech.name} (${assignedBay}). Staged and waiting to be diagnosed.`,
+      notes: `Assigned by ${currentUser.name} to ${tech.name}. Staged and waiting to be diagnosed.`,
     };
 
     const updatedRO: RepairOrder = {
@@ -867,7 +947,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'WAITING_DIAGNOSTICS',
       techId: tech.id,
       techName: tech.name,
-      bay: assignedBay,
+      bay: '',
       dispatchedAt: now,
       waitingDiagnosisAt: now,
       history: [...targetRO.history, newHistory],
@@ -879,10 +959,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerNotification(
       updatedRO,
       `Job Assigned to ${tech.name}`,
-      `Repair Order ${targetRO.id} for ${targetRO.customerName} (${targetRO.vehicle.year} ${targetRO.vehicle.make} ${targetRO.vehicle.model}) assigned to ${assignedBay}. Staged and waiting to be diagnosed.`,
+      `Repair Order ${targetRO.id} for ${targetRO.customerName} (${targetRO.vehicle.year} ${targetRO.vehicle.make} ${targetRO.vehicle.model}) assigned to ${tech.name}. Staged and waiting to be diagnosed.`,
       true,
       'DISPATCH'
     );
+  };
+
+  // Reassign Service Writer (Advisor / Manager)
+  const reassignServiceWriter = (roId: string, newAdvisorId: string, notes?: string): boolean => {
+    if (currentUser.role === 'SALES' || currentUser.role === 'TECHNICIAN' || currentUser.role === 'PARTS_SPECIALIST') {
+      alert('Permission Denied: Only Service Managers and Service Advisors can reassign Service Writers.');
+      return false;
+    }
+    const newAdvisor = users.find(u => u.id === newAdvisorId);
+    if (!newAdvisor) return false;
+
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const prevAdvisorName = targetRO.advisorName || 'Unassigned';
+    const now = new Date().toISOString();
+
+    const newHistory = {
+      id: `hist_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      status: targetRO.status,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: notes || `Service Writer reassigned from ${prevAdvisorName} to ${newAdvisor.name}${newAdvisor.employeeNumber ? ` (#${newAdvisor.employeeNumber})` : ''} by ${currentUser.name}.`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      advisorId: newAdvisor.id,
+      advisorName: newAdvisor.name,
+      history: [...targetRO.history, newHistory],
+    };
+
+    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
+    syncRepairOrder(updatedRO);
+
+    triggerNotification(
+      updatedRO,
+      `Service Writer Reassigned`,
+      `RO #${targetRO.id} (${targetRO.customerName}) reassigned to Service Writer ${newAdvisor.name}.`,
+      false,
+      'STATUS_CHANGE'
+    );
+
+    return true;
   };
 
   // Send message on an RO
@@ -932,34 +1058,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return;
 
+    // Service Advisor and unauthorized roles cannot arbitrarily set initial status to IN_STOCK, DAILY_ORDER, etc.
+    const isAuthorizedForPartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && activeRoleView !== 'SERVICE_ADVISOR';
+    const effectivePartStatus: PartStatus = isAuthorizedForPartStatus 
+      ? part.status 
+      : (part.status === 'NEEDED' || part.status === 'REQUESTED' ? part.status : 'REQUESTED');
+
     const newPart: PartItem = {
       ...part,
+      status: effectivePartStatus,
       id: `prt_${Date.now()}`,
       roId,
       orderedAt: part.orderedAt || new Date().toISOString(),
     };
 
     const isWaitingOnDelivery = 
-      part.status === 'DAILY_ORDER' || 
-      part.status === 'SPECIAL_ORDER_1_5_DAYS' ||
-      part.status === 'SPECIAL_ORDER' || 
-      part.status === 'VOR_UPGRADE' || 
-      part.status === 'ORDERED' || 
-      part.status === 'IN_TRANSIT' || 
-      part.status === 'REQUESTED';
+      effectivePartStatus === 'DAILY_ORDER' || 
+      effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' ||
+      effectivePartStatus === 'SPECIAL_ORDER' || 
+      effectivePartStatus === 'VOR_UPGRADE' || 
+      effectivePartStatus === 'ORDERED' || 
+      effectivePartStatus === 'IN_TRANSIT' || 
+      effectivePartStatus === 'REQUESTED';
     const newROStatus = isWaitingOnDelivery ? 'WAITING_PARTS' : targetRO.status;
     
-    let historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. Status: ${part.status.replace(/_/g, ' ')}`;
-    if (part.status === 'IN_STOCK' || part.status === 'ISSUED_TO_TECH') {
+    let historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. Status: ${effectivePartStatus.replace(/_/g, ' ')}`;
+    if (effectivePartStatus === 'IN_STOCK' || effectivePartStatus === 'ISSUED_TO_TECH') {
       historyNote = `[Parts Dept] Added IN STOCK part #${part.partNumber} (${part.description}) from ${part.vendor || 'inventory'}.`;
-    } else if (part.status === 'DAILY_ORDER') {
+    } else if (effectivePartStatus === 'DAILY_ORDER') {
       historyNote = `[Parts Dept] Placed DAILY ORDER for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
-    } else if (part.status === 'SPECIAL_ORDER_1_5_DAYS' || part.status === 'SPECIAL_ORDER') {
+    } else if (effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' || effectivePartStatus === 'SPECIAL_ORDER') {
       historyNote = `[Parts Dept] Placed SPECIAL ORDER 1-5 DAYS for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
-    } else if (part.status === 'VOR_UPGRADE') {
+    } else if (effectivePartStatus === 'VOR_UPGRADE') {
       historyNote = `[Parts Dept] Placed VOR UPGRADE order for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
-    } else if (part.status === 'RECEIVED') {
+    } else if (effectivePartStatus === 'RECEIVED') {
       historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) as in-stock/received.`;
+    } else if (effectivePartStatus === 'REQUESTED') {
+      historyNote = `[Parts Request] Part request submitted for #${part.partNumber} (${part.description}). Pending classification by Parts/Service Manager.`;
     }
 
     const updatedRO: RepairOrder = {
@@ -985,10 +1120,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     triggerNotification(
       updatedRO,
-      part.status === 'ISSUED_TO_TECH'
+      effectivePartStatus === 'ISSUED_TO_TECH'
         ? `Parts Issued: ${part.description}`
         : `Parts Added: ${part.description}`,
-      `Part #${part.partNumber} (${part.description}) added by ${currentUser.name}. Status: ${part.status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : part.status.replace(/_/g, ' ')}`,
+      `Part #${part.partNumber} (${part.description}) added by ${currentUser.name}. Status: ${effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : effectivePartStatus.replace(/_/g, ' ')}`,
       true,
       'PARTS_UPDATE'
     );
@@ -1002,6 +1137,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     eta?: string, 
     notes?: string
   ) => {
+    // Restrict part status changes: only Service Manager and Parts Manager, and disabled on the Service Advisor screen
+    if (activeRoleView === 'SERVICE_ADVISOR' || (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'PARTS_SPECIALIST')) {
+      console.warn('Unauthorized: Part order status changes are restricted to Service Manager and Parts Manager, and disabled on the Service Advisor screen.');
+      return;
+    }
+
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return;
 
@@ -1061,6 +1202,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customerName: string;
     customerPhone: string;
     vehicle: RepairOrder['vehicle'];
+    advisorId?: string;
+    advisorName?: string;
     primaryConcern?: string;
     concerns?: string[];
     concernPayTypes?: ConcernPayType[];
@@ -1107,14 +1250,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const tech = effectiveTechId ? users.find(u => u.id === effectiveTechId) : undefined;
     const initialStatus: ROStatus = 'WAITING_DIAGNOSTICS';
 
+    const chosenAdvisor = data.advisorId ? users.find(u => u.id === data.advisorId) : undefined;
+    const fallbackAdvisor = users.find(u => u.role === 'SERVICE_ADVISOR') || users.find(u => u.role === 'SERVICE_MANAGER') || currentUser;
+    const effectiveAdvisorId = chosenAdvisor?.id || (currentUser.role === 'SERVICE_ADVISOR' ? currentUser.id : fallbackAdvisor.id);
+    const effectiveAdvisorName = data.advisorName || chosenAdvisor?.name || (currentUser.role === 'SERVICE_ADVISOR' ? currentUser.name : fallbackAdvisor.name);
+
     const newRO: RepairOrder = {
       id: newId,
       customerName: data.customerName,
       customerPhone: data.customerPhone,
       vehicle: data.vehicle,
       createdAt: now,
-      advisorId: currentUser.role === 'SERVICE_ADVISOR' ? currentUser.id : 'usr_adv_1',
-      advisorName: currentUser.role === 'SERVICE_ADVISOR' ? currentUser.name : 'Sarah Jenkins',
+      advisorId: effectiveAdvisorId,
+      advisorName: effectiveAdvisorName,
       techId: tech?.id,
       techName: tech?.name,
       dispatchedAt: tech ? now : undefined,
@@ -1153,6 +1301,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRepairOrders(prev => [newRO, ...prev]);
     syncRepairOrder(newRO);
 
+    // Automatically persist customer in cloud database for future visits
+    try {
+      const custName = (data.customerName || '').trim();
+      const custPhone = (data.customerPhone || '').trim();
+      if (custName) {
+        setCustomers(prev => {
+          const match = prev.find(c => 
+            (custPhone && c.phone && c.phone.replace(/\D/g, '') === custPhone.replace(/\D/g, '')) ||
+            (c.name.toLowerCase() === custName.toLowerCase())
+          );
+          let targetCust: Customer;
+          if (match) {
+            const vehicles = [...match.vehicles];
+            if (data.vehicle?.vin && !vehicles.some(v => v.vin === data.vehicle.vin)) {
+              vehicles.push(data.vehicle);
+            }
+            targetCust = {
+              ...match,
+              name: custName,
+              phone: custPhone || match.phone,
+              isTaxExempt: data.isTaxExempt !== undefined ? data.isTaxExempt : match.isTaxExempt,
+              taxExemptNumber: data.taxExemptNumber || match.taxExemptNumber,
+              vehicles,
+              lastVisit: now,
+              totalVisits: (match.totalVisits || 1) + 1,
+              updatedAt: now,
+            };
+            syncCustomer(targetCust);
+            return prev.map(c => c.id === targetCust.id ? targetCust : c);
+          } else {
+            targetCust = {
+              id: `cust_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              name: custName,
+              phone: custPhone,
+              email: '',
+              isTaxExempt: !!data.isTaxExempt,
+              taxExemptNumber: data.taxExemptNumber || '',
+              notes: '',
+              vehicles: data.vehicle ? [data.vehicle] : [],
+              lastVisit: now,
+              totalVisits: 1,
+              createdAt: now,
+              updatedAt: now,
+            };
+            syncCustomer(targetCust);
+            return [targetCust, ...prev];
+          }
+        });
+      }
+    } catch (e) {
+      console.error('Error auto-syncing customer to cloud:', e);
+    }
+
     triggerNotification(
       newRO,
       `New RO Created: ${newRO.id}`,
@@ -1162,6 +1363,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     return newId;
+  };
+
+  // Customer Management in the Cloud
+  const saveCustomer = async (cust: Customer): Promise<boolean> => {
+    setCustomers(prev => {
+      const idx = prev.findIndex(c => c.id === cust.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = cust;
+        return next;
+      }
+      return [cust, ...prev];
+    });
+    return await syncCustomer(cust);
+  };
+
+  const deleteCustomer = async (customerId: string): Promise<void> => {
+    setCustomers(prev => prev.filter(c => c.id !== customerId));
+    await deleteCustomerDoc(customerId);
   };
 
   const markNotificationRead = (notifId: string) => {
@@ -1525,6 +1745,83 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Vehicle Photos Management (Advisor Desk / Walkaround / Tablet)
+  const addVehiclePhoto = (roId: string, photo: VehiclePhoto): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const currentPhotos = targetRO.vehiclePhotos || [];
+    const updatedPhotos = [photo, ...currentPhotos];
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      vehiclePhotos: updatedPhotos,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist-${Date.now()}`,
+          status: targetRO.status,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: new Date().toISOString(),
+          notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) attached vehicle photo (${photo.caption || 'Vehicle Intake'}).`,
+        }
+      ]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
+  const deleteVehiclePhoto = (roId: string, photoId: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const currentPhotos = targetRO.vehiclePhotos || [];
+    const updatedPhotos = currentPhotos.filter(p => p.id !== photoId);
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      vehiclePhotos: updatedPhotos,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist-${Date.now()}`,
+          status: targetRO.status,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: new Date().toISOString(),
+          notes: `${currentUser.name} removed vehicle photo.`,
+        }
+      ]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
   // Technician & Staff: Update Cause & Correction for diagnostic & repair documentation
   const updateTechCauseAndCorrection = (
     roId: string, 
@@ -1604,6 +1901,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update Pay Type for a specific customer complaint / concern line item (Customer Pay, Warranty, or Internal)
   const updateConcernPayType = (roId: string, concernIndex: number, payType: ConcernPayType): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'SERVICE_ADVISOR') {
+      console.warn('Selecting Pay Type is only permitted by Service Manager and Service Advisor');
+      return false;
+    }
     let updatedRO: RepairOrder | null = null;
     setRepairOrders(prev => {
       const updated = prev.map(ro => {
@@ -1639,6 +1940,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update Assigned Technician for a specific customer complaint / concern line item
   const updateConcernTech = (roId: string, concernIndex: number, techId: string, techName?: string): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'SERVICE_ADVISOR') {
+      console.warn('Changing technicians is only permitted by Service Manager and Service Advisor');
+      return false;
+    }
     let updatedRO: RepairOrder | null = null;
     const resolvedTechName = techName || (techId ? users.find(u => u.id === techId)?.name : undefined);
 
@@ -2669,20 +2974,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser,
         users,
         repairOrders,
+        customers,
         notifications,
         selectedRO,
         isNewROModalOpen,
         isLoginModalOpen,
         isStaffManagementOpen,
+        isCustomerDirectoryOpen,
+        prefilledCustomerForNewRO,
         isSoundEnabled,
         pushPermission,
         isAuthenticated,
         setIsAuthenticated,
         setCurrentUser,
         setSelectedRO,
+        openROWithTab,
+        selectedROModalTab,
+        setSelectedROModalTab,
         setIsNewROModalOpen,
         setIsLoginModalOpen,
         setIsStaffManagementOpen,
+        setIsCustomerDirectoryOpen,
+        setPrefilledCustomerForNewRO,
+        saveCustomer,
+        deleteCustomer,
         toggleSound,
         requestPushPermission,
         addUser,
@@ -2695,6 +3010,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateROStatus,
         startDiagnosis,
         dispatchRO,
+        reassignServiceWriter,
         sendMessage,
         addPartOrder,
         updatePartStatus,
@@ -2704,6 +3020,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteRepairOrder,
         updateRepairOrderDetails,
         toggleCustomerTaxExempt,
+        addVehiclePhoto,
+        deleteVehiclePhoto,
         updateTechCauseAndCorrection,
         updateConcernPayType,
         updateConcernTech,
@@ -2740,6 +3058,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeWarrantyPrintRO,
         openWarrantyPrintModal,
         closeWarrantyPrintModal,
+        activeRoleView,
+        setActiveRoleView,
       }}
     >
       {children}

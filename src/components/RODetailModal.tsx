@@ -6,6 +6,8 @@ import {
   Clock, 
   Calendar, 
   User, 
+  UserCheck,
+  Car,
   Wrench, 
   Package, 
   MessageSquare, 
@@ -26,14 +28,14 @@ import {
   Eye,
   PhoneCall,
   Voicemail,
-  PhoneForwarded,
   Loader2,
   Sparkles,
   RefreshCw,
   Trash2,
   ExternalLink,
   Calculator,
-  Printer
+  Printer,
+  Camera
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
@@ -43,18 +45,23 @@ import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
+import { VehiclePhotoManager } from './VehiclePhotoManager';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 import { decodeVin } from '../utils/vinDecoder';
+import { DynamicROWorkflow } from './DynamicROWorkflow';
 
 export const RODetailModal: React.FC = () => {
   const { 
     selectedRO, 
     setSelectedRO, 
+    selectedROModalTab,
+    setSelectedROModalTab,
     currentUser, 
     users, 
     updateROStatus, 
     startDiagnosis,
     dispatchRO, 
+    reassignServiceWriter,
     sendMessage, 
     addPartOrder, 
     updatePartStatus,
@@ -66,11 +73,22 @@ export const RODetailModal: React.FC = () => {
     openWarrantyPrintModal,
     updateConcernPayType,
     updateConcernTech,
-    toggleCustomerTaxExempt
+    toggleCustomerTaxExempt,
+    addVehiclePhoto,
+    deleteVehiclePhoto,
+    activeRoleView
   } = useApp();
 
-  const isManager = currentUser.role === 'SERVICE_MANAGER';
-  const isSales = currentUser.role === 'SALES';
+  const isTechScreen = activeRoleView === 'TECHNICIAN' || currentUser.role === 'TECHNICIAN';
+  const isAdvisorScreen = (activeRoleView === 'SERVICE_ADVISOR' || (currentUser.role === 'SERVICE_ADVISOR' && !activeRoleView)) && !isTechScreen;
+  const isManager = (currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER') && !isAdvisorScreen && !isTechScreen;
+  const isAdvisor = isAdvisorScreen;
+  const isPartsManager = currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST';
+  const isSales = currentUser.role === 'SALES' || activeRoleView === 'SALES';
+  const canChangePartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && !isAdvisorScreen && !isTechScreen;
+  const canSelectPayType = isManager || isAdvisor;
+  const canAssignTech = isManager || isAdvisor;
+  const canReassignServiceWriter = !isTechScreen && (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR');
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
@@ -83,6 +101,7 @@ export const RODetailModal: React.FC = () => {
   const [editVehicleMake, setEditVehicleMake] = useState(selectedRO?.vehicle.make || '');
   const [editVehicleModel, setEditVehicleModel] = useState(selectedRO?.vehicle.model || '');
   const [editVehicleVin, setEditVehicleVin] = useState(selectedRO?.vehicle.vin || '');
+  const [editVehicleMileage, setEditVehicleMileage] = useState<number | string>(selectedRO?.vehicle.mileage ?? '');
   const [editPrimaryConcern, setEditPrimaryConcern] = useState(selectedRO?.primaryConcern || '');
   const [editConcerns, setEditConcerns] = useState<string[]>(
     selectedRO?.concerns && selectedRO.concerns.length > 0
@@ -130,6 +149,7 @@ export const RODetailModal: React.FC = () => {
     setEditVehicleMake(selectedRO.vehicle.make || '');
     setEditVehicleModel(selectedRO.vehicle.model || '');
     setEditVehicleVin(selectedRO.vehicle.vin || '');
+    setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
     setEditPrimaryConcern(selectedRO.primaryConcern || '');
     setEditConcerns(selectedRO.concerns && selectedRO.concerns.length > 0 ? selectedRO.concerns : [selectedRO.primaryConcern || '']);
     setEditConcernPayTypes(
@@ -184,7 +204,8 @@ export const RODetailModal: React.FC = () => {
           year: overrides?.vehicle?.year !== undefined ? overrides.vehicle.year : (Number(editVehicleYear) || selectedRO.vehicle.year),
           make: overrides?.vehicle?.make !== undefined ? overrides.vehicle.make : editVehicleMake.trim(),
           model: overrides?.vehicle?.model !== undefined ? overrides.vehicle.model : editVehicleModel.trim(),
-          vin: overrides?.vehicle?.vin !== undefined ? overrides.vehicle.vin : editVehicleVin.trim().toUpperCase()
+          vin: overrides?.vehicle?.vin !== undefined ? overrides.vehicle.vin : editVehicleVin.trim().toUpperCase(),
+          mileage: overrides?.vehicle?.mileage !== undefined ? overrides.vehicle.mileage : (Number(editVehicleMileage) || selectedRO.vehicle.mileage || 0)
         },
         primaryConcern: finalPrimary,
         concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
@@ -222,7 +243,8 @@ export const RODetailModal: React.FC = () => {
         year: Number(editVehicleYear) || selectedRO.vehicle.year,
         make: editVehicleMake.trim(),
         model: editVehicleModel.trim(),
-        vin: editVehicleVin.trim().toUpperCase()
+        vin: editVehicleVin.trim().toUpperCase(),
+        mileage: Number(editVehicleMileage) || selectedRO.vehicle.mileage || 0
       },
       primaryConcern: finalPrimary,
       concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
@@ -410,13 +432,25 @@ export const RODetailModal: React.FC = () => {
       setTechCorrectionInput(selectedRO.correction || '');
       setIsEditingDetails(false);
       setIsEditingTechFindings(false);
-      if (currentUser.role === 'PARTS_SPECIALIST') {
+      if (selectedROModalTab) {
+        setActiveTab(selectedROModalTab);
+        setSelectedROModalTab(null);
+      } else if (currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST') {
         setActiveTab('PARTS');
+      } else {
+        setActiveTab('DETAILS');
       }
     }
-  }, [selectedRO?.id, currentUser.role]);
+  }, [selectedRO?.id, selectedROModalTab, currentUser.role, activeRoleView, setSelectedROModalTab]);
 
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
+  const [activeTab, setActiveTab] = useState<'DETAILS' | 'PHOTOS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
+
+  useEffect(() => {
+    if (selectedROModalTab) {
+      setActiveTab(selectedROModalTab);
+      setSelectedROModalTab(null);
+    }
+  }, [selectedROModalTab, setSelectedROModalTab]);
   const [chatInput, setChatInput] = useState('');
   const [isUrgentMessage, setIsUrgentMessage] = useState(false);
   const [statusNote, setStatusNote] = useState('');
@@ -451,7 +485,20 @@ export const RODetailModal: React.FC = () => {
 
   // Dispatch selector state
   const [selectedTechId, setSelectedTechId] = useState(selectedRO?.techId || '');
-  const [selectedBay, setSelectedBay] = useState(selectedRO?.bay || '');
+  const [techAssignSuccess, setTechAssignSuccess] = useState(false);
+
+  // Service Writer (Advisor) selector state
+  const [selectedAdvisorId, setSelectedAdvisorId] = useState(selectedRO?.advisorId || '');
+  const [advisorReassignSuccess, setAdvisorReassignSuccess] = useState(false);
+  const [isReassigningAdvisorInline, setIsReassigningAdvisorInline] = useState(false);
+
+  // Sync state when selectedRO changes
+  useEffect(() => {
+    if (selectedRO) {
+      setSelectedAdvisorId(selectedRO.advisorId || '');
+      setSelectedTechId(selectedRO.techId || '');
+    }
+  }, [selectedRO?.id, selectedRO?.advisorId, selectedRO?.techId]);
 
   if (!selectedRO) return null;
 
@@ -465,15 +512,20 @@ export const RODetailModal: React.FC = () => {
     setIsUrgentMessage(false);
   };
 
-  const handleStatusChange = (newStatus: ROStatus) => {
-    updateROStatus(selectedRO.id, newStatus, statusNote, isUrgentStatusUpdate);
+  const handleStatusChange = (newStatus: ROStatus, note?: string) => {
+    updateROStatus(selectedRO.id, newStatus, note || statusNote, isUrgentStatusUpdate);
     setStatusNote('');
     setIsUrgentStatusUpdate(false);
   };
 
-  const handleDispatch = () => {
-    if (!selectedTechId) return;
-    dispatchRO(selectedRO.id, selectedTechId, selectedBay);
+  const handleAssignTech = (techId: string) => {
+    if (!selectedRO) return;
+    setSelectedTechId(techId);
+    if (techId) {
+      dispatchRO(selectedRO.id, techId);
+      setTechAssignSuccess(true);
+      setTimeout(() => setTechAssignSuccess(false), 3000);
+    }
   };
 
   const handleAddPartSubmit = (e: React.FormEvent) => {
@@ -493,11 +545,13 @@ export const RODetailModal: React.FC = () => {
       setModalVendors(prev => [...prev, effectiveVendor]);
     }
 
-    const effectiveStatus = isModalAddingCustomStatus && modalCustomStatusInput.trim()
-      ? modalCustomStatusInput.trim().toUpperCase().replace(/\s+/g, '_')
-      : partInitialStatus;
+    const effectiveStatus = canChangePartStatus
+      ? (isModalAddingCustomStatus && modalCustomStatusInput.trim()
+          ? modalCustomStatusInput.trim().toUpperCase().replace(/\s+/g, '_')
+          : partInitialStatus)
+      : 'REQUESTED';
 
-    if (isModalAddingCustomStatus && modalCustomStatusInput.trim()) {
+    if (canChangePartStatus && isModalAddingCustomStatus && modalCustomStatusInput.trim()) {
       const label = modalCustomStatusInput.trim().toUpperCase();
       if (!modalStatuses.some(s => s.id === effectiveStatus)) {
         setModalStatuses(prev => [...prev, { id: effectiveStatus, label }]);
@@ -553,6 +607,20 @@ export const RODetailModal: React.FC = () => {
   };
 
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
+  const serviceWriters = users.filter(u => 
+    (u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER') && !u.isDeactivated
+  );
+
+  const handleReassignAdvisor = (newAdvId?: string) => {
+    const targetAdvisorId = newAdvId || selectedAdvisorId;
+    if (!targetAdvisorId || !selectedRO) return;
+    const ok = reassignServiceWriter(selectedRO.id, targetAdvisorId);
+    if (ok) {
+      setAdvisorReassignSuccess(true);
+      setIsReassigningAdvisorInline(false);
+      setTimeout(() => setAdvisorReassignSuccess(false), 3500);
+    }
+  };
   const statusOptions: ROStatus[] = [
     'WAITING_DIAGNOSTICS',
     'IN_DIAG',
@@ -572,170 +640,231 @@ export const RODetailModal: React.FC = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
       <div 
         id="ro-detail-modal"
-        className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl sm:max-w-[1060px] w-full max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Top Header */}
-        <div className="p-4 sm:p-6 border-b border-slate-200 flex items-start justify-between bg-slate-50 gap-4">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
+        <div className="p-3 sm:px-6 sm:py-3.5 border-b border-slate-200 bg-slate-50 shrink-0">
+          {/* Top Row: RO number, status badge, priority/waiter tags on the left; Action buttons & close on the right */}
+          <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap shrink-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
               <span className="font-bold text-lg sm:text-xl text-blue-600 tracking-tight">
                 #{selectedRO.id}
               </span>
+              {isTechScreen && (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border-2 border-blue-400 flex items-center gap-1">
+                  <Wrench className="w-3 h-3 text-blue-600" />
+                  <span>Technician Station</span>
+                </span>
+              )}
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${currentStatusInfo.badgeClass}`}>
                 {currentStatusInfo.label}
               </span>
-              {selectedRO.isUrgent && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> HIGH PRIORITY
-                </span>
-              )}
               {selectedRO.isWaiter && (
                 <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
                   <Clock className="w-3.5 h-3.5 text-red-600" /> WAITER
                 </span>
               )}
+              {selectedRO.isUrgent && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> HIGH PRIORITY
+                </span>
+              )}
             </div>
 
-            <div className="mt-1 flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-              <span className="font-semibold text-slate-800">{selectedRO.customerName}</span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <Phone className="w-3 h-3 text-slate-400" />
-                {selectedRO.customerPhone}
-              </span>
-              <span>•</span>
-              {/* Customer Tax Exemption Toggle Button */}
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* ProDemand Labor Guide Link */}
+              <a
+                href="https://www.prodemand.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shadow-2xs shrink-0"
+                title="Open Mitchell 1 ProDemand flat rate labor times"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">ProDemand</span> Labor ↗
+              </a>
+
+              {/* Advisor Quick Photos Action */}
+              {isAdvisorScreen && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('PHOTOS')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
+                    activeTab === 'PHOTOS'
+                      ? 'bg-blue-600 text-white border-blue-700'
+                      : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-300'
+                  }`}
+                  title="Vehicle Intake & Walkaround Photos"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Photos ({(selectedRO.vehiclePhotos?.length || 0)})</span>
+                </button>
+              )}
+
+              {/* Repair Quote Initiation / Status */}
               <button
                 type="button"
-                id="btn-ro-customer-tax-exempt"
-                onClick={() => toggleCustomerTaxExempt(selectedRO.id)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all cursor-pointer border shadow-2xs ${
-                  selectedRO.isTaxExempt
-                    ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 ring-1 ring-emerald-500'
-                    : 'bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-400'
+                onClick={() => openQuoteModal(selectedRO.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs shrink-0 ${
+                  selectedRO.quote
+                    ? selectedRO.quote.status === 'APPROVED'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                      : selectedRO.quote.status === 'SUBMITTED'
+                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                      : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
+                    : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
                 }`}
-                title={selectedRO.isTaxExempt ? "Customer is marked Tax Exempt (0% sales tax). Click to change to taxable (7%)." : "Click if customer is Tax Exempt (0% sales tax instead of 7%)"}
+                title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
               >
-                <ShieldCheck className={`w-3.5 h-3.5 ${selectedRO.isTaxExempt ? 'text-white' : 'text-slate-400'}`} />
-                <span>{selectedRO.isTaxExempt ? 'Tax Exempt (0% Tax)' : 'Tax Exempt? Click if exempt'}</span>
+                <Calculator className="w-3.5 h-3.5" />
+                {selectedRO.quote ? (
+                  <span>
+                    Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
+                  </span>
+                ) : (
+                  <span>+ Repair Quote</span>
+                )}
               </button>
-              <span>•</span>
-              <span className="font-medium text-slate-700">
-                {selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model}
-              </span>
-              <span className="text-slate-400">({selectedRO.vehicle.vin})</span>
+
+              {isManager ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEditingDetails && selectedRO) {
+                      setEditCustomerName(selectedRO.customerName);
+                      setEditCustomerPhone(selectedRO.customerPhone);
+                      setEditVehicleYear(selectedRO.vehicle.year);
+                      setEditVehicleMake(selectedRO.vehicle.make);
+                      setEditVehicleModel(selectedRO.vehicle.model);
+                      setEditVehicleVin(selectedRO.vehicle.vin);
+                      setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
+                      setEditPrimaryConcern(selectedRO.primaryConcern);
+                      setEditPromisedTime(selectedRO.promisedTime);
+                      setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
+                      setActiveTab('DETAILS');
+                    }
+                    setIsEditingDetails(!isEditingDetails);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border shrink-0 ${
+                    isEditingDetails 
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 shadow-2xs'
+                  }`}
+                  title="Service Manager: Edit core repair order details"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
+                </button>
+              ) : (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-200/80 border border-slate-300 text-slate-700 text-xs font-semibold shrink-0">
+                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Info Locked</span>
+                </span>
+              )}
+
+              <button
+                id="header-print-warranty-btn"
+                type="button"
+                onClick={() => openWarrantyPrintModal(selectedRO.id)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs shrink-0"
+                title="Print Warranty Sheet with Cause, Correction, and Start/End Punch Clock Times"
+              >
+                <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="hidden sm:inline">Print Warranty</span>
+              </button>
+
+              <button
+                id="close-ro-detail-btn"
+                onClick={() => setSelectedRO(null)}
+                className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {/* ProDemand Labor Guide Link */}
-            <a
-              href="https://www.prodemand.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shadow-2xs"
-              title="Open Mitchell 1 ProDemand flat rate labor times"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">ProDemand</span> Labor ↗
-            </a>
-
-            {/* Repair Quote Initiation / Status */}
-            <button
-              type="button"
-              onClick={() => openQuoteModal(selectedRO.id)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
-                selectedRO.quote
-                  ? selectedRO.quote.status === 'APPROVED'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                    : selectedRO.quote.status === 'SUBMITTED'
-                    ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                    : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
-                  : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
-              }`}
-              title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
-            >
-              <Calculator className="w-3.5 h-3.5" />
-              {selectedRO.quote ? (
-                <span>
-                  Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
-                </span>
-              ) : (
-                <span>+ Repair Quote</span>
+          {/* Sub-Header Strip: Customer & Service Advisor on the left, Vehicle, VIN & Mileage on the right */}
+          <div className="mt-3 pt-2.5 border-t border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shrink-0">
+            {/* Customer & Advisor */}
+            <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap shrink-0 min-h-[34px]">
+              {selectedRO.customerName && selectedRO.customerName.trim().toLowerCase() !== 'woolwine cdjr' && (
+                <>
+                  <div className="flex items-center gap-1.5 font-bold text-slate-900 text-sm">
+                    <User className="w-4 h-4 text-slate-500" />
+                    <span>{selectedRO.customerName}</span>
+                  </div>
+                  {selectedRO.customerPhone && (
+                    <span className="text-slate-500 text-xs font-medium">({selectedRO.customerPhone})</span>
+                  )}
+                  <span className="text-slate-300 font-light">|</span>
+                </>
               )}
-            </button>
 
-            {!isSales && (
-              <button
-                type="button"
-                onClick={() => setIsFollowUpModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer shadow-2xs"
-                title="Log customer call or follow-up note"
-              >
-                <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
-                <span>Log Customer Follow-Up</span>
-              </button>
-            )}
+              {/* Service Advisor with Dropdown */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 shrink-0">
+                  <UserCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-slate-700">Advisor:</span>
+                </div>
+                {canReassignServiceWriter ? (
+                  <select
+                    id="header-reassign-advisor-select"
+                    value={selectedRO.advisorId || selectedAdvisorId}
+                    onChange={e => {
+                      const newId = e.target.value;
+                      setSelectedAdvisorId(newId);
+                      if (newId && newId !== selectedRO.advisorId) {
+                        handleReassignAdvisor(newId);
+                      }
+                    }}
+                    className="text-xs px-2.5 py-1 bg-white border-2 border-slate-600 hover:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-900 font-bold cursor-pointer shrink-0"
+                    title="Change Service Advisor"
+                  >
+                    {serviceWriters.map(writer => (
+                      <option key={writer.id} value={writer.id}>
+                        {writer.name}{writer.employeeNumber ? ` (#${writer.employeeNumber})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs font-bold text-slate-900 shrink-0">
+                    {selectedRO.advisorName}
+                  </span>
+                )}
+                {advisorReassignSuccess && (
+                  <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Updated
+                  </span>
+                )}
+              </div>
+            </div>
 
-            {isManager ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isEditingDetails && selectedRO) {
-                    setEditCustomerName(selectedRO.customerName);
-                    setEditCustomerPhone(selectedRO.customerPhone);
-                    setEditVehicleYear(selectedRO.vehicle.year);
-                    setEditVehicleMake(selectedRO.vehicle.make);
-                    setEditVehicleModel(selectedRO.vehicle.model);
-                    setEditVehicleVin(selectedRO.vehicle.vin);
-                    setEditPrimaryConcern(selectedRO.primaryConcern);
-                    setEditPromisedTime(selectedRO.promisedTime);
-                    setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
-                    setActiveTab('DETAILS');
-                  }
-                  setIsEditingDetails(!isEditingDetails);
-                }}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
-                  isEditingDetails 
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 shadow-2xs'
-                }`}
-                title="Service Manager: Edit core repair order details"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
-              </button>
-            ) : (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-200/80 border border-slate-300 text-slate-700 text-xs font-semibold">
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Info Locked</span>
+            {/* Vehicle, VIN & Miles */}
+            <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-lg border border-slate-200/90 shadow-2xs self-start md:self-auto flex-wrap shrink-0 min-h-[36px]">
+              <Car className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="font-bold text-slate-900 text-sm whitespace-nowrap">
+                {selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model}
               </span>
-            )}
-
-            <button
-              id="header-print-warranty-btn"
-              type="button"
-              onClick={() => openWarrantyPrintModal(selectedRO.id)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs"
-              title="Print Warranty Sheet with Cause, Correction, and Start/End Punch Clock Times"
-            >
-              <Printer className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="hidden sm:inline">Print Warranty</span>
-            </button>
-
-            <button
-              id="close-ro-detail-btn"
-              onClick={() => setSelectedRO(null)}
-              className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+              <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
+              <span 
+                className="font-bold text-slate-900 text-sm whitespace-nowrap select-all shrink-0" 
+                title={`VIN: ${selectedRO.vehicle.vin}`}
+              >
+                {selectedRO.vehicle.vin}
+              </span>
+              <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
+              <span className="font-bold text-slate-900 text-sm whitespace-nowrap shrink-0">
+                {selectedRO.vehicle.mileage !== undefined && selectedRO.vehicle.mileage !== null && Number(selectedRO.vehicle.mileage) > 0
+                  ? `${Number(selectedRO.vehicle.mileage).toLocaleString()} mi`
+                  : 'N/A'}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Navigation Tabs */}
         {isSales && (
-          <div className="bg-teal-50 border-b border-teal-200 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs text-teal-950">
+          <div className="bg-teal-50 border-b border-teal-200 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs text-teal-950 shrink-0">
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-teal-600 shrink-0" />
               <span>
@@ -747,30 +876,52 @@ export const RODetailModal: React.FC = () => {
             </span>
           </div>
         )}
-        <div className="flex border-b border-slate-200 px-4 sm:px-6 bg-white gap-2 overflow-x-auto">
+
+        <div className="flex flex-wrap border-b border-slate-200 px-3 sm:px-6 bg-white gap-1 sm:gap-2 overflow-x-auto shrink-0">
           <button
             id="ro-tab-details"
             onClick={() => setActiveTab('DETAILS')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'DETAILS'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <FileText className="w-4 h-4" />
-            <span>RO Details & Assignment</span>
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span>{isTechScreen ? 'Technician Workflow & Tasks' : 'RO Details & Assignment'}</span>
           </button>
+
+          {/* Vehicle Photos Tab: Exclusively on Advisor board (isAdvisorScreen) or Manager overview */}
+          {isAdvisorScreen && (
+            <button
+              id="ro-tab-photos"
+              onClick={() => setActiveTab('PHOTOS')}
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'PHOTOS'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5 shrink-0" />
+              <span>Vehicle Photos</span>
+              {(selectedRO.vehiclePhotos?.length || 0) > 0 && (
+                <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  {selectedRO.vehiclePhotos?.length}
+                </span>
+              )}
+            </button>
+          )}
 
           <button
             id="ro-tab-chat"
             onClick={() => setActiveTab('CHAT')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'CHAT'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
             <span>Live Communication</span>
             {selectedRO.messages.length > 0 && (
               <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
@@ -782,13 +933,13 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-warranty"
             onClick={() => setActiveTab('WARRANTY')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'WARRANTY'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Clock className="w-4 h-4 text-indigo-600" />
+            <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
             <span>Warranty Time Clock</span>
             {(selectedRO.timePunches?.length || 0) > 0 && (
               <span className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
@@ -800,14 +951,14 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-parts"
             onClick={() => setActiveTab('PARTS')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'PARTS'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Package className="w-4 h-4" />
-            <span>Parts & ETA Tracking</span>
+            <Package className="w-3.5 h-3.5 shrink-0" />
+            <span>Parts ETA</span>
             {selectedRO.parts.length > 0 && (
               <span className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
                 {selectedRO.parts.length}
@@ -818,27 +969,27 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-history"
             onClick={() => setActiveTab('HISTORY')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'HISTORY'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <History className="w-4 h-4" />
+            <History className="w-3.5 h-3.5 shrink-0" />
             <span>Audit History ({selectedRO.history.length})</span>
           </button>
 
           <button
             id="ro-tab-contacts"
             onClick={() => setActiveTab('CONTACTS')}
-            className={`py-3 px-3 border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'CONTACTS'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Phone className="w-4 h-4" />
-            <span>Customer Follow-Ups</span>
+            <Phone className="w-3.5 h-3.5 shrink-0" />
+            <span>Follow-Ups</span>
             {(selectedRO.contactHistory?.length || 0) > 0 && (
               <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
                 {selectedRO.contactHistory?.length}
@@ -848,7 +999,7 @@ export const RODetailModal: React.FC = () => {
         </div>
 
         {/* Tab Content Area */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">
 
           {/* TAB 1: DETAILS & ASSIGNMENT & QUICK STATUS CHANGE */}
           {activeTab === 'DETAILS' && (
@@ -862,29 +1013,6 @@ export const RODetailModal: React.FC = () => {
                 </div>
               )}
 
-              {/* Security & Data Locking Banner */}
-              <div className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs ${
-                isManager 
-                  ? 'bg-blue-50/70 border-blue-200 text-blue-900' 
-                  : 'bg-slate-100/90 border-slate-200 text-slate-700'
-              }`}>
-                {isManager ? (
-                  <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                ) : (
-                  <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                )}
-                <div className="leading-relaxed">
-                  <span className="font-bold">
-                    {isManager ? 'Service Manager Administration: ' : 'Data Integrity Lock: '}
-                  </span>
-                  <span>
-                    {isManager
-                      ? 'You have administrative permission to modify all entered customer, vehicle, and work order details, or delete records. Use "Edit RO Info" in the top right to edit.'
-                      : 'All customer information, vehicle specs, and repair order details are locked to preserve data integrity. Only the Service Manager has permission to alter or delete entered information.'}
-                  </span>
-                </div>
-              </div>
-
               {/* Service Manager Edit Form */}
               {isManager && isEditingDetails && (
                 <form onSubmit={handleSaveDetails} className="bg-white rounded-xl p-5 border-2 border-blue-500 shadow-sm space-y-4">
@@ -897,12 +1025,12 @@ export const RODetailModal: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       {managerAutoSaveStatus === 'saving' ? (
-                        <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 animate-pulse">
-                          <Loader2 className="w-3 h-3 animate-spin text-blue-600" /> Auto-Saving...
+                        <span className="text-xs font-medium text-blue-600 flex items-center gap-1 animate-pulse">
+                          <Loader2 className="w-3 h-3 animate-spin text-blue-600" /> Saving...
                         </span>
                       ) : (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
-                          <Check className="w-3 h-3 text-emerald-600" /> Auto-Saved {managerLastSaved ? `at ${managerLastSaved}` : ''}
+                        <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Saved
                         </span>
                       )}
                       <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
@@ -911,15 +1039,12 @@ export const RODetailModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700">
                           Customer Full Name
                         </label>
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Auto-saved
-                        </span>
                       </div>
                       <input
                         type="text"
@@ -939,9 +1064,6 @@ export const RODetailModal: React.FC = () => {
                         <label className="block text-xs font-bold text-slate-700">
                           Customer Phone Number
                         </label>
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Auto-saved
-                        </span>
                       </div>
                       <input
                         type="text"
@@ -955,6 +1077,29 @@ export const RODetailModal: React.FC = () => {
                         required
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <UserCheck className="w-3 h-3 text-blue-600" />
+                          <span>Service Writer</span>
+                        </label>
+                      </div>
+                      <select
+                        value={selectedAdvisorId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedAdvisorId(val);
+                          handleReassignAdvisor(val);
+                        }}
+                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                      >
+                        {serviceWriters.map(writer => (
+                          <option key={writer.id} value={writer.id}>
+                            {writer.name}{writer.employeeNumber ? ` (#${writer.employeeNumber})` : ''} ({writer.title || writer.role})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -1006,10 +1151,10 @@ export const RODetailModal: React.FC = () => {
                       maxLength={17}
                       required
                       placeholder="Enter 17-digit VIN to auto-fill Year, Make & Model"
-                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono font-bold uppercase focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-bold text-slate-900 uppercase focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                     />
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Year
@@ -1054,7 +1199,7 @@ export const RODetailModal: React.FC = () => {
                           className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                         />
                       </div>
-                      <div className="col-span-2 sm:col-span-1">
+                      <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Model
                         </label>
@@ -1073,6 +1218,28 @@ export const RODetailModal: React.FC = () => {
                           }}
                           onBlur={flushManagerAutoSave}
                           required
+                          className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Mileage (mi)
+                        </label>
+                        <input
+                          type="number"
+                          value={editVehicleMileage}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditVehicleMileage(val);
+                            triggerManagerAutoSave({
+                              vehicle: {
+                                ...selectedRO.vehicle,
+                                mileage: Number(val) || 0
+                              }
+                            });
+                          }}
+                          onBlur={flushManagerAutoSave}
+                          placeholder="e.g. 74500"
                           className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                         />
                       </div>
@@ -1108,63 +1275,84 @@ export const RODetailModal: React.FC = () => {
                               </span>
 
                               <div className="flex flex-wrap items-center gap-2">
-                                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
-                                  <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditPayTypeChange(idx, 'CUSTOMER_PAY')}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                {canSelectPayType ? (
+                                  <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                                    <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditPayTypeChange(idx, 'CUSTOMER_PAY')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                        currentPayType === 'CUSTOMER_PAY'
+                                          ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                      }`}
+                                      title="Mark as Customer Pay"
+                                    >
+                                      Customer Pay
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditPayTypeChange(idx, 'WARRANTY')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                        currentPayType === 'WARRANTY'
+                                          ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                      }`}
+                                      title="Mark as Warranty"
+                                    >
+                                      Warranty
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditPayTypeChange(idx, 'INTERNAL')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                        currentPayType === 'INTERNAL'
+                                          ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                      }`}
+                                      title="Mark as Internal"
+                                    >
+                                      Internal
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pay:</span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                       currentPayType === 'CUSTOMER_PAY'
-                                        ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                    title="Mark as Customer Pay"
-                                  >
-                                    Customer Pay
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditPayTypeChange(idx, 'WARRANTY')}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                      currentPayType === 'WARRANTY'
-                                        ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                    title="Mark as Warranty"
-                                  >
-                                    Warranty
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditPayTypeChange(idx, 'INTERNAL')}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                      currentPayType === 'INTERNAL'
-                                        ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                    title="Mark as Internal"
-                                  >
-                                    Internal
-                                  </button>
-                                </div>
+                                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                        : currentPayType === 'WARRANTY'
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    }`}>
+                                      {currentPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : currentPayType === 'WARRANTY' ? 'Warranty' : 'Internal'}
+                                    </span>
+                                  </div>
+                                )}
 
                                 {/* Tech assignment for this line */}
                                 <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
                                   <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
                                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
-                                  <select
-                                    value={editConcernTechIds[idx] || ''}
-                                    onChange={e => handleEditConcernTechChange(idx, e.target.value)}
-                                    className="text-[11px] font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
-                                    title="Assign specific technician to this line item"
-                                  >
-                                    <option value="">{selectedRO?.techName ? `(Primary: ${selectedRO.techName})` : 'Unassigned'}</option>
-                                    {technicians.map(tech => (
-                                      <option key={tech.id} value={tech.id}>
-                                        {tech.name}{tech.employeeNumber ? ` #${tech.employeeNumber}` : ''}{tech.bayNumber ? ` (Bay ${tech.bayNumber})` : ''}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  {canAssignTech ? (
+                                    <select
+                                      value={editConcernTechIds[idx] || ''}
+                                      onChange={e => handleEditConcernTechChange(idx, e.target.value)}
+                                      className="text-[11px] font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                                      title="Assign specific technician to this line item"
+                                    >
+                                      <option value="">{selectedRO?.techName ? `(Primary: ${selectedRO.techName})` : 'Unassigned'}</option>
+                                      {technicians.map(tech => (
+                                        <option key={tech.id} value={tech.id}>
+                                          {tech.name}{tech.employeeNumber ? ` #${tech.employeeNumber}` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-[11px] font-bold text-slate-800">
+                                      {technicians.find(t => t.id === editConcernTechIds[idx])?.name || selectedRO?.techName || 'Unassigned'}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -1209,9 +1397,6 @@ export const RODetailModal: React.FC = () => {
                         <label className="block text-xs font-bold text-slate-700">
                           Customer Promised Time
                         </label>
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Auto-saved
-                        </span>
                       </div>
                       <input
                         type="datetime-local"
@@ -1231,9 +1416,6 @@ export const RODetailModal: React.FC = () => {
                           <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
                           <span>Cause</span>
                         </label>
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Auto-saved
-                        </span>
                       </div>
                       <input
                         type="text"
@@ -1257,9 +1439,6 @@ export const RODetailModal: React.FC = () => {
                           <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                           <span>Correction</span>
                         </label>
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Auto-saved
-                        </span>
                       </div>
                       <input
                         type="text"
@@ -1279,9 +1458,6 @@ export const RODetailModal: React.FC = () => {
                         <label className="block text-xs font-bold text-slate-700">
                           Technician Diagnostic Notes
                         </label>
-                        <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Auto-saved
-                        </span>
                       </div>
                       <input
                         type="text"
@@ -1345,765 +1521,67 @@ export const RODetailModal: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                  <div className="flex items-center justify-end pt-3 border-t border-slate-100 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        flushManagerAutoSave();
+                        setIsEditingDetails(false);
+                      }}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
                       <Check className="w-3.5 h-3.5" />
-                      <span>Auto-Save active: All typed information is saved automatically to the repair order.</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          flushManagerAutoSave();
-                          setIsEditingDetails(false);
-                        }}
-                        className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                      >
-                        Close
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Done Editing (Auto-Saved ✓)</span>
-                      </button>
-                    </div>
+                      <span>Done</span>
+                    </button>
                   </div>
                 </form>
               )}
               
-              {/* Customer Follow-Up & Cadence Card (Twice-Per-Week Cadence) */}
-              {(() => {
-                const cadence = getContactCadenceStatus(selectedRO);
-                return (
-                  <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs ${
-                    cadence.isOverdue 
-                      ? 'bg-red-50/70 border-red-200' 
-                      : cadence.isDueToday
-                      ? 'bg-amber-50/70 border-amber-200'
-                      : 'bg-emerald-50/50 border-emerald-200'
-                  }`}>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                          <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Customer Communication Cadence:</span>
-                        </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cadence.badgeClass}`}>
-                          {cadence.label}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-600">
-                          (Twice per week standard)
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-700 mt-1">
-                        <strong>Last Contact:</strong> {cadence.lastContactText} • <strong>Next Call Due:</strong> {cadence.nextDueText}
-                      </div>
-                    </div>
-
-                    {!isSales && (
-                      <button
-                        type="button"
-                        onClick={() => setIsFollowUpModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
-                      >
-                        <PhoneCall className="w-3.5 h-3.5" />
-                        <span>Log Customer Touchpoint</span>
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Customer Complaints / Concerns & Technician Three C's (Complaint, Cause, Correction) */}
-              {(() => {
-                const displayConcerns = selectedRO.concerns && selectedRO.concerns.length > 0
-                  ? selectedRO.concerns
-                  : [selectedRO.primaryConcern];
-                const hasTechCause = Boolean(selectedRO.cause?.trim());
-                const hasTechCorrection = Boolean(selectedRO.correction?.trim());
-                const hasBoth = hasTechCause && hasTechCorrection;
-
-                return (
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-4">
-                    {/* Header with quick action */}
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Customer Intake & Technician Three C's
-                        </h4>
-                        {hasBoth ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cause & Correction Documented
-                          </span>
-                        ) : (hasTechCause || hasTechCorrection) ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                            Partially Documented
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                            Cause & Correction Pending
-                          </span>
-                        )}
-                      </div>
-
-                      {!isSales && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
-                            setTechCorrectionInput(selectedRO.correction || '');
-                            setIsEditingTechFindings(!isEditingTechFindings);
-                          }}
-                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg border-2 shadow-2xs transition-colors cursor-pointer ${
-                            isEditingTechFindings
-                              ? 'bg-slate-100 text-slate-800 border-slate-600 hover:bg-slate-200'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
-                          }`}
-                        >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>{isEditingTechFindings ? 'Close Cause & Correction' : (hasBoth ? 'Edit Cause & Correction' : 'Type In Cause & Correction')}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {techSaveSuccess && (
-                      <div className="p-3 bg-emerald-50 border-2 border-emerald-500 rounded-lg text-xs font-bold text-emerald-800 flex items-center gap-2 animate-in fade-in">
-                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Cause and Correction saved to repair order and updated across all workstations.</span>
-                      </div>
-                    )}
-
-                    {/* 1. COMPLAINT: Customer Complaints */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-blue-600 inline-block"></span>
-                          <span>1. Customer Complaints / Concerns (Complaint):</span>
-                        </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                          {displayConcerns.length} {displayConcerns.length === 1 ? 'Line Item' : 'Line Items'}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        {displayConcerns.map((concern, idx) => {
-                          const currentPayType: ConcernPayType = selectedRO?.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
-                          return (
-                            <div key={idx} className="bg-white p-3 rounded-lg border-2 border-slate-300 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                              <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 uppercase tracking-wider shrink-0 mt-0.5">
-                                  {idx === 0 ? 'Line 1 (Primary)' : `Line ${idx + 1}`}
-                                </span>
-                                <p className="text-xs text-slate-900 font-medium leading-relaxed break-words">
-                                  {concern}
-                                </p>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center">
-                                {/* Pay Type Selector */}
-                                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
-                                  <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Pay:</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'CUSTOMER_PAY');
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                      currentPayType === 'CUSTOMER_PAY'
-                                        ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                    title="Customer Pay"
-                                  >
-                                    Customer Pay
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'WARRANTY');
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                      currentPayType === 'WARRANTY'
-                                        ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                    title="Warranty"
-                                  >
-                                    Warranty
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (selectedRO) updateConcernPayType(selectedRO.id, idx, 'INTERNAL');
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                      currentPayType === 'INTERNAL'
-                                        ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                    title="Internal"
-                                  >
-                                    Internal
-                                  </button>
-                                </div>
-
-                                {/* Line Technician Selector / Indicator */}
-                                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
-                                  <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
-                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
-                                  {!isSales ? (
-                                    <select
-                                      value={selectedRO.concernTechIds?.[idx] || ''}
-                                      onChange={e => {
-                                        const tId = e.target.value;
-                                        const t = technicians.find(u => u.id === tId);
-                                        updateConcernTech(selectedRO.id, idx, tId, t?.name);
-                                      }}
-                                      className="text-[11px] font-bold bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-900 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
-                                      title="Assign technician to this specific line item"
-                                    >
-                                      <option value="">
-                                        {selectedRO.techName ? `(Primary: ${selectedRO.techName})` : 'Unassigned'}
-                                      </option>
-                                      {technicians.map(t => (
-                                        <option key={t.id} value={t.id}>
-                                          {t.name}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}{t.bayNumber ? ` (Bay ${t.bayNumber})` : ''}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <span className="text-[11px] font-bold text-slate-800">
-                                      {selectedRO.concernTechNames?.[idx] || selectedRO.techName || 'Unassigned'}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 2 & 3: CAUSE & CORRECTION (Either Interactive Form or Documented Cards) */}
-                    {isEditingTechFindings ? (
-                      <form onSubmit={handleSaveTechFindings} className="bg-white p-4 rounded-xl border-2 border-slate-600 shadow-xs space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b-2 border-slate-200 flex-wrap gap-2">
-                          <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                            <Wrench className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Cause & Correction</span>
-                          </h5>
-                          <div className="flex items-center gap-2">
-                            {techFindingsAutoSaveStatus === 'saving' ? (
-                              <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 animate-pulse">
-                                <Loader2 className="w-3 h-3 animate-spin text-blue-600" /> Auto-Saving...
-                              </span>
-                            ) : (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
-                                <Check className="w-3 h-3 text-emerald-600" /> Auto-Saved {techFindingsLastSaved ? `at ${techFindingsLastSaved}` : ''}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                              <span>2. Cause</span>
-                            </label>
-                            <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                              <Check className="w-2.5 h-2.5" /> Auto-saved
-                            </span>
-                          </div>
-                          <textarea
-                            rows={3}
-                            value={techCauseInput}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setTechCauseInput(val);
-                              triggerTechFindingsAutoSave(val, techCorrectionInput);
-                            }}
-                            onBlur={flushTechFindingsAutoSave}
-                            placeholder="Type cause findings (e.g., Code P0300 set due to cylinder 3 spark plug fouled with oil from leaking valve cover gasket tube seal)..."
-                            className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                              <span>3. Correction</span>
-                            </label>
-                            <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                              <Check className="w-2.5 h-2.5" /> Auto-saved
-                            </span>
-                          </div>
-                          <textarea
-                            rows={3}
-                            value={techCorrectionInput}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setTechCorrectionInput(val);
-                              triggerTechFindingsAutoSave(techCauseInput, val);
-                            }}
-                            onBlur={flushTechFindingsAutoSave}
-                            placeholder="Type corrective repair (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, verified 5-mile road test)..."
-                            className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between pt-2 border-t-2 border-slate-200 flex-wrap gap-2">
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Auto-Save active</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                flushTechFindingsAutoSave();
-                                setIsEditingTechFindings(false);
-                              }}
-                              className="px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border-2 border-slate-400 transition-colors cursor-pointer"
-                            >
-                              Close
-                            </button>
-                            <button
-                              type="submit"
-                              className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Done Editing (Auto-Saved ✓)</span>
-                            </button>
-                          </div>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {/* 2. CAUSE */}
-                        <div className="bg-white p-3.5 rounded-lg border-2 border-slate-300 shadow-2xs">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                              <span>2. Cause</span>
-                            </span>
-                            {hasTechCause ? (
-                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 uppercase">
-                                Diagnosed
-                              </span>
-                            ) : !isSales && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
-                                  setTechCorrectionInput(selectedRO.correction || '');
-                                  setIsEditingTechFindings(true);
-                                }}
-                                className="text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-0.5 rounded border border-amber-300 transition-colors cursor-pointer flex items-center gap-1"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Type In Cause</span>
-                              </button>
-                            )}
-                          </div>
-                          {hasTechCause ? (
-                            <p className="text-xs text-slate-900 font-medium leading-relaxed font-mono bg-slate-50 p-2.5 rounded border border-slate-300">
-                              {selectedRO.cause}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-slate-400 italic py-1">
-                              No cause documented yet. Technician can type it directly by clicking "Type In Cause" above.
-                            </p>
-                          )}
-                        </div>
-
-                        {/* 3. CORRECTION */}
-                        <div className="bg-white p-3.5 rounded-lg border-2 border-slate-300 shadow-2xs">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                              <span>3. Correction</span>
-                            </span>
-                            {hasTechCorrection ? (
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase">
-                                Repaired
-                              </span>
-                            ) : !isSales && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTechCauseInput(selectedRO.cause || selectedRO.diagnosticNotes || '');
-                                  setTechCorrectionInput(selectedRO.correction || '');
-                                  setIsEditingTechFindings(true);
-                                }}
-                                className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-0.5 rounded border border-emerald-300 transition-colors cursor-pointer flex items-center gap-1"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Type In Correction</span>
-                              </button>
-                            )}
-                          </div>
-                          {hasTechCorrection ? (
-                            <p className="text-xs text-slate-900 font-medium leading-relaxed font-mono bg-slate-50 p-2.5 rounded border border-slate-300">
-                              {selectedRO.correction}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-slate-400 italic py-1">
-                              No correction documented yet. Technician can type it directly by clicking "Type In Correction" above.
-                            </p>
-                          )}
-                        </div>
-
-                        {selectedRO.diagnosticNotes && selectedRO.diagnosticNotes !== selectedRO.cause && (
-                          <div className="bg-white p-3 rounded-lg border-2 border-slate-300 text-xs">
-                            <span className="font-bold text-slate-700 block mb-1">Additional Diagnostic Notes:</span>
-                            <p className="text-slate-600 font-mono leading-relaxed">{selectedRO.diagnosticNotes}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Technician Additional Recommended Services (Air filter, cabin filter, tires, scheduled maint) */}
-              <TechRecommendationsSection ro={selectedRO} />
-
-              {/* Repair Quote & Labor Estimate Card */}
-              <div className="bg-white rounded-xl border-2 border-indigo-200 overflow-hidden shadow-2xs">
-                <div className="p-4 bg-indigo-50/70 border-b border-indigo-200 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-xs">
-                      <Calculator className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-slate-900">Repair Quote & Labor Estimate</h4>
-                        {selectedRO.quote ? (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            selectedRO.quote.status === 'APPROVED'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : selectedRO.quote.status === 'SUBMITTED'
-                              ? 'bg-blue-100 text-blue-800 border-blue-300'
-                              : selectedRO.quote.status === 'DECLINED'
-                              ? 'bg-red-100 text-red-800 border-red-300'
-                              : 'bg-amber-100 text-amber-800 border-amber-300'
-                          }`}>
-                            {selectedRO.quote.status}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                            Not Initiated
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        Technician-initiated labor & parts estimate linked to Mitchell 1 ProDemand
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <a
-                      href="https://www.prodemand.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
-                      title="Open Mitchell 1 ProDemand for OEM flat rate labor times"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>ProDemand Labor ↗</span>
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => openQuoteModal(selectedRO.id)}
-                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                    >
-                      <Calculator className="w-3.5 h-3.5" />
-                      <span>{selectedRO.quote ? 'Open & Edit Quote' : '+ Initiate Repair Quote'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {selectedRO.quote ? (
-                  <div className="p-4 space-y-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="text-[10px] uppercase font-bold text-slate-500">Labor Items</div>
-                        <div className="text-sm font-bold text-slate-800 mt-0.5">
-                          {(selectedRO.quote.laborItems || []).length} lines ({((selectedRO.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs)
-                        </div>
-                        <div className="text-xs font-semibold text-slate-600 mt-0.5">
-                          ${(Number(selectedRO.quote.totalLaborCost ?? (selectedRO.quote as any).laborSubtotal) || 0).toFixed(2)}
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="text-[10px] uppercase font-bold text-slate-500">Parts Required</div>
-                        <div className="text-sm font-bold text-slate-800 mt-0.5">
-                          {(selectedRO.quote.partsItems || []).length} parts
-                        </div>
-                        <div className="text-xs font-semibold text-slate-600 mt-0.5">
-                          ${(Number(selectedRO.quote.totalPartsCost ?? (selectedRO.quote as any).partsSubtotal) || 0).toFixed(2)}
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="text-[10px] uppercase font-bold text-slate-500">Supplies & Tax</div>
-                        <div className="text-sm font-bold text-slate-800 mt-0.5">
-                          ${((Number(selectedRO.quote.shopSuppliesFee ?? (selectedRO.quote as any).shopSupplies) || 0) + (Number(selectedRO.quote.taxAmount ?? (selectedRO.quote as any).tax) || 0)).toFixed(2)}
-                        </div>
-                        <div className="text-[11px] text-slate-500">
-                          Supplies ${((Number(selectedRO.quote.shopSuppliesFee ?? (selectedRO.quote as any).shopSupplies) || 0)).toFixed(2)} • Tax ${((Number(selectedRO.quote.taxAmount ?? (selectedRO.quote as any).tax) || 0)).toFixed(2)}
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 bg-indigo-50/80 rounded-lg border border-indigo-200">
-                        <div className="text-[10px] uppercase font-bold text-indigo-700">Grand Total</div>
-                        <div className="text-lg font-black text-indigo-950 mt-0.5">
-                          ${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}
-                        </div>
-                        <div className="text-[10px] font-bold text-indigo-600">
-                          Rate: ${(selectedRO.quote.defaultLaborRate ?? (selectedRO.quote as any).hourlyLaborRate ?? 150)}/hr
-                        </div>
-                      </div>
-                    </div>
-
-                    {selectedRO.quote.advisorNotes && (
-                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900">
-                        <span className="font-bold">Advisor / Customer Notes: </span>
-                        <span>{selectedRO.quote.advisorNotes}</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-                    <p>
-                      No formal repair quote has been initiated for this repair order yet. Technicians can look up OEM labor times in ProDemand and build an itemized quote to present to the advisor and customer.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => openQuoteModal(selectedRO.id)}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shrink-0 cursor-pointer shadow-xs"
-                    >
-                      Initiate Quote Now
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Order Metadata Grid: Created, Assigned, Advisor, Tech, Promised */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                
-                {/* Date Repair Order Made */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    Date RO Was Made
-                  </div>
-                  <div className="text-sm font-bold text-slate-900 mt-1">
-                    {formatDateTime(selectedRO.createdAt)}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
-                    <span>Logged by {selectedRO.advisorName}</span>
-                    {(() => {
-                      const adv = users.find(u => u.id === selectedRO.advisorId || u.name === selectedRO.advisorName);
-                      return adv?.employeeNumber ? (
-                        <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                          {adv.employeeNumber}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                </div>
-
-                {/* When Assigned and to Which Tech */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                      <Send className="w-3.5 h-3.5 text-indigo-500" />
-                      When Assigned & Tech
-                    </div>
-                    {selectedRO.techId && selectedRO.techId !== currentUser.id && (
-                      <button
-                        type="button"
-                        onClick={() => openDirectChat(selectedRO.techId!)}
-                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
-                        title={`Direct message ${selectedRO.techName}`}
-                      >
-                        <MessageSquare className="w-2.5 h-2.5" />
-                        <span>Chat</span>
-                      </button>
-                    )}
-                  </div>
-                  <div className="text-sm font-bold text-slate-900 mt-1 flex items-center gap-1.5 flex-wrap">
-                    <span>{selectedRO.techName ? selectedRO.techName : 'Unassigned'}</span>
-                    {selectedRO.techName && (() => {
-                      const tch = users.find(u => u.id === selectedRO.techId || u.name === selectedRO.techName);
-                      return tch?.employeeNumber ? (
-                        <span className="font-mono text-sm font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                          {tch.employeeNumber}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    {selectedRO.dispatchedAt ? (
-                      `Assigned: ${formatDateTime(selectedRO.dispatchedAt)} • ${selectedRO.bay || 'Bay Pending'}`
-                    ) : (
-                      <span className="text-amber-600 font-semibold">Not yet assigned</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Promised Completion Time */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      Customer Promised Time
-                    </div>
-                    {selectedRO.advisorId && selectedRO.advisorId !== currentUser.id && (
-                      <button
-                        type="button"
-                        onClick={() => openDirectChat(selectedRO.advisorId)}
-                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
-                        title={`Direct message ${selectedRO.advisorName}`}
-                      >
-                        <MessageSquare className="w-2.5 h-2.5" />
-                        <span>Chat</span>
-                      </button>
-                    )}
-                  </div>
-                  <div className="text-sm font-bold text-slate-900 mt-1">
-                    {formatDateTime(selectedRO.promisedTime)}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
-                    <span>Service Advisor: {selectedRO.advisorName}</span>
-                    {(() => {
-                      const adv = users.find(u => u.id === selectedRO.advisorId || u.name === selectedRO.advisorName);
-                      return adv?.employeeNumber ? (
-                        <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                          {adv.employeeNumber}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Diagnostic Phase Tracking Box: Waiting to be Diagnosed vs Being Diagnosed */}
-              {selectedRO.status === 'WAITING_DIAGNOSIS' && (
-                <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/90 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-start sm:items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0">
-                      <Clock className="w-4 h-4 text-amber-700" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-amber-950 uppercase tracking-wide">
-                        Vehicle is Waiting to be Diagnosed
-                      </div>
-                      <div className="text-xs text-amber-800 mt-0.5">
-                        Staged in {selectedRO.bay || 'technician bay'} awaiting initial scan & teardown. Placed in queue at{' '}
-                        <strong className="font-semibold">{formatTimeOnly(selectedRO.waitingDiagnosisAt)}</strong> ({formatDurationSince(selectedRO.waitingDiagnosisAt)} wait time).
-                      </div>
-                    </div>
-                  </div>
-                  {!isSales && (
-                    <button
-                      onClick={() => startDiagnosis(selectedRO.id)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                    >
-                      <Wrench className="w-3.5 h-3.5" />
-                      <span>Begin Diagnosis Now</span>
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {(selectedRO.status === 'BEING_DIAGNOSED' || selectedRO.status === 'IN_BAY') && (
-                <div className="p-4 rounded-xl border border-blue-300 bg-blue-50/90 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-start sm:items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-blue-100 text-blue-800 shrink-0">
-                      <Wrench className="w-4 h-4 text-blue-700" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-blue-950 uppercase tracking-wide">
-                        Vehicle is Being Diagnosed
-                      </div>
-                      <div className="text-xs text-blue-800 mt-0.5">
-                        Active testing & inspection underway by <strong className="font-semibold">{selectedRO.techName || 'assigned technician'}</strong> in {selectedRO.bay || 'bay'}.
-                        Commenced at <strong className="font-semibold">{formatTimeOnly(selectedRO.diagnosisStartedAt)}</strong> ({formatDurationSince(selectedRO.diagnosisStartedAt)} active duration).
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold text-blue-700 bg-blue-100/90 px-3 py-1 rounded-full border border-blue-200 uppercase tracking-wider shrink-0">
-                    Active Inspection
-                  </span>
-                </div>
-              )}
-
-              {/* Visual Ticket Flow Pipeline Stepper */}
-              <TicketFlowStepper 
-                ro={selectedRO} 
-                onUpdateStatus={handleStatusChange} 
-                canEdit={!isSales}
+              {/* Dynamic RO Workflow with Fluid Next Action Promoted to Top (Option B) */}
+              <DynamicROWorkflow
+                ro={selectedRO}
+                currentUser={currentUser}
+                technicians={technicians}
+                serviceAdvisors={serviceWriters}
+                isManager={isManager}
+                isAdvisor={isAdvisor}
+                isSales={isSales}
+                canAssignTech={canAssignTech}
+                canSelectPayType={canSelectPayType}
+                handleAssignTech={handleAssignTech}
+                handleStatusChange={handleStatusChange}
+                startDiagnosis={startDiagnosis}
+                openQuoteModal={openQuoteModal}
+                setIsFollowUpModalOpen={setIsFollowUpModalOpen}
+                setActiveTab={setActiveTab}
+                updateTechCauseAndCorrection={updateTechCauseAndCorrection}
+                updateConcernPayType={updateConcernPayType}
+                updateConcernTech={updateConcernTech}
+                isTechScreen={isTechScreen}
               />
+            </div>
+          )}
 
-              {/* Technician Assignment Section (For Manager & Advisors) */}
-              {(currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR') && (
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 shadow-sm">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                    Technician & Bay Assignment
-                  </h4>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    <select
-                      id="dispatch-tech-select"
-                      value={selectedTechId}
-                      onChange={e => {
-                        const techId = e.target.value;
-                        setSelectedTechId(techId);
-                        const tech = technicians.find(t => t.id === techId);
-                        if (tech?.bayNumber) {
-                          setSelectedBay(tech.bayNumber);
-                        }
-                      }}
-                      className="text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-semibold"
-                    >
-                      <option value="">Select Technician...</option>
-                      {technicians.map(tech => (
-                        <option key={tech.id} value={tech.id}>
-                          {tech.name}{tech.employeeNumber ? ` ${tech.employeeNumber}` : ''} — {tech.title} ({tech.bayNumber || 'No Bay'})
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      type="text"
-                      placeholder="Bay / Stall (e.g. Bay 3)"
-                      value={selectedBay}
-                      onChange={e => setSelectedBay(e.target.value)}
-                      className="text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg sm:w-44 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
-                    />
-
-                    <button
-                      id="confirm-dispatch-btn"
-                      onClick={handleDispatch}
-                      disabled={!selectedTechId}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm transition-colors whitespace-nowrap cursor-pointer border-2 border-blue-700"
-                    >
-                      {selectedRO.techId ? 'Re-Assign Job' : 'Assign to Tech'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
+          {/* TAB: VEHICLE PHOTOS (Advisor Board & Intake Inspection) */}
+          {activeTab === 'PHOTOS' && isAdvisorScreen && (
+            <div className="space-y-4">
+              <VehiclePhotoManager
+                roId={selectedRO.id}
+                vehicleYear={selectedRO.vehicle.year}
+                vehicleMake={selectedRO.vehicle.make}
+                vehicleModel={selectedRO.vehicle.model}
+                vin={selectedRO.vehicle.vin}
+                photos={selectedRO.vehiclePhotos || []}
+                currentUser={{ id: currentUser.id, name: currentUser.name }}
+                onAddPhoto={addVehiclePhoto}
+                onDeletePhoto={deleteVehiclePhoto}
+              />
             </div>
           )}
 
@@ -2371,7 +1849,7 @@ export const RODetailModal: React.FC = () => {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Initial Part Status *</label>
-                        {!isModalAddingCustomStatus && (
+                        {canChangePartStatus && !isModalAddingCustomStatus && (
                           <button
                             type="button"
                             onClick={() => {
@@ -2385,38 +1863,54 @@ export const RODetailModal: React.FC = () => {
                         )}
                       </div>
 
-                      {!isModalAddingCustomStatus ? (
-                        <select
-                          value={partInitialStatus}
-                          onChange={e => {
-                            if (e.target.value === '__ADD_NEW_STATUS__') {
-                              setIsModalAddingCustomStatus(true);
-                              setModalCustomStatusInput('');
-                            } else {
-                              setPartInitialStatus(e.target.value as PartStatus);
-                            }
-                          }}
-                          className="w-full text-xs font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800"
-                        >
-                          {modalStatuses.map(st => (
-                            <option key={st.id} value={st.id}>
-                              {st.label}
-                            </option>
-                          ))}
-                          <option value="__ADD_NEW_STATUS__">+ Add Custom Status...</option>
-                        </select>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            placeholder="e.g. TIRE WAREHOUSE..."
-                            value={modalCustomStatusInput}
-                            onChange={e => setModalCustomStatusInput(e.target.value)}
-                            autoFocus
-                            className="flex-1 text-xs font-bold px-2.5 py-1.5 bg-white border-2 border-blue-500 rounded-lg focus:outline-none uppercase text-slate-800"
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
+                      {canChangePartStatus ? (
+                        !isModalAddingCustomStatus ? (
+                          <select
+                            value={partInitialStatus}
+                            onChange={e => {
+                              if (e.target.value === '__ADD_NEW_STATUS__') {
+                                setIsModalAddingCustomStatus(true);
+                                setModalCustomStatusInput('');
+                              } else {
+                                setPartInitialStatus(e.target.value as PartStatus);
+                              }
+                            }}
+                            className="w-full text-xs font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800"
+                          >
+                            {modalStatuses.map(st => (
+                              <option key={st.id} value={st.id}>
+                                {st.label}
+                              </option>
+                            ))}
+                            <option value="__ADD_NEW_STATUS__">+ Add Custom Status...</option>
+                          </select>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              placeholder="e.g. TIRE WAREHOUSE..."
+                              value={modalCustomStatusInput}
+                              onChange={e => setModalCustomStatusInput(e.target.value)}
+                              autoFocus
+                              className="flex-1 text-xs font-bold px-2.5 py-1.5 bg-white border-2 border-blue-500 rounded-lg focus:outline-none uppercase text-slate-800"
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const trimmed = modalCustomStatusInput.trim().toUpperCase();
+                                  if (trimmed) {
+                                    const cleanId = trimmed.replace(/\s+/g, '_');
+                                    if (!modalStatuses.some(s => s.id === cleanId)) {
+                                      setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
+                                    }
+                                    setPartInitialStatus(cleanId);
+                                    setIsModalAddingCustomStatus(false);
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
                                 const trimmed = modalCustomStatusInput.trim().toUpperCase();
                                 if (trimmed) {
                                   const cleanId = trimmed.replace(/\s+/g, '_');
@@ -2426,33 +1920,27 @@ export const RODetailModal: React.FC = () => {
                                   setPartInitialStatus(cleanId);
                                   setIsModalAddingCustomStatus(false);
                                 }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const trimmed = modalCustomStatusInput.trim().toUpperCase();
-                              if (trimmed) {
-                                const cleanId = trimmed.replace(/\s+/g, '_');
-                                if (!modalStatuses.some(s => s.id === cleanId)) {
-                                  setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
-                                }
-                                setPartInitialStatus(cleanId);
-                                setIsModalAddingCustomStatus(false);
-                              }
-                            }}
-                            className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
-                          >
-                            Add
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsModalAddingCustomStatus(false)}
-                            className="px-2 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold"
-                          >
-                            Cancel
-                          </button>
+                              }}
+                              className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
+                            >
+                              Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsModalAddingCustomStatus(false)}
+                              className="px-2 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="flex items-center justify-between px-3 py-2 bg-slate-100 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-700">
+                          <span className="flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>REQUESTED (Pending Parts Classification)</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase">Parts Mgr Auth Required</span>
                         </div>
                       )}
                     </div>
@@ -2464,7 +1952,7 @@ export const RODetailModal: React.FC = () => {
                         <input
                           type="number"
                           step="0.01"
-                          placeholder="0.00"
+                          placeholder=""
                           value={partPrice}
                           onChange={e => setPartPrice(e.target.value)}
                           className="w-full text-xs pl-6 pr-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
@@ -2569,60 +2057,76 @@ export const RODetailModal: React.FC = () => {
                         </div>
 
                         {/* Part Status Transition Actions */}
-                        <div className="pt-2 border-t border-slate-100 space-y-2 text-xs">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <span className="text-[11px] text-slate-400 font-medium">Quick Update Status:</span>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {(['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[])
-                                .concat(
-                                  modalStatuses
-                                    .filter(s => !['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'].includes(s.id))
-                                    .map(s => s.id)
-                                )
-                                .map(st => (
-                                  <button
-                                    key={st}
-                                    type="button"
-                                    onClick={() => updatePartStatus(selectedRO.id, part.id, st)}
-                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
-                                      part.status === st
-                                        ? 'bg-slate-900 text-white shadow-xs'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                                  >
-                                    {st === 'ISSUED_TO_TECH' ? 'Issued to Tech' : st === 'SPECIAL_ORDER_1_5_DAYS' ? 'Special Order 1-5 Days' : st.replace(/_/g, ' ')}
-                                  </button>
-                                ))}
+                        {canChangePartStatus ? (
+                          <div className="pt-2 border-t border-slate-100 space-y-2 text-xs">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <span className="text-[11px] text-slate-400 font-medium">Quick Update Status:</span>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {(['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[])
+                                  .concat(
+                                    modalStatuses
+                                      .filter(s => !['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'].includes(s.id))
+                                      .map(s => s.id)
+                                  )
+                                  .map(st => (
+                                    <button
+                                      key={st}
+                                      type="button"
+                                      onClick={() => updatePartStatus(selectedRO.id, part.id, st)}
+                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
+                                        part.status === st
+                                          ? 'bg-slate-900 text-white shadow-xs'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                      }`}
+                                    >
+                                      {st === 'ISSUED_TO_TECH' ? 'Issued to Tech' : st === 'SPECIAL_ORDER_1_5_DAYS' ? 'Special Order 1-5 Days' : st.replace(/_/g, ' ')}
+                                    </button>
+                                  ))}
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (customStatusEditingPartId === part.id) {
-                                    setCustomStatusEditingPartId(null);
-                                  } else {
-                                    setCustomStatusEditingPartId(part.id);
-                                    setPartQuickCustomStatusInput('');
-                                  }
-                                }}
-                                className="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 cursor-pointer"
-                              >
-                                + Custom Status
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (customStatusEditingPartId === part.id) {
+                                      setCustomStatusEditingPartId(null);
+                                    } else {
+                                      setCustomStatusEditingPartId(part.id);
+                                      setPartQuickCustomStatusInput('');
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                                >
+                                  + Custom Status
+                                </button>
+                              </div>
                             </div>
-                          </div>
 
-                          {customStatusEditingPartId === part.id && (
-                            <div className="flex items-center gap-1.5 p-2 bg-blue-50/50 rounded-lg border border-blue-200 animate-in fade-in duration-100">
-                              <input
-                                type="text"
-                                placeholder="Enter custom status (e.g. TIRE WAREHOUSE, CORE RETURN)..."
-                                value={partQuickCustomStatusInput}
-                                onChange={e => setPartQuickCustomStatusInput(e.target.value)}
-                                autoFocus
-                                className="flex-1 text-xs font-bold px-2.5 py-1 bg-white border border-blue-400 rounded-md focus:outline-none uppercase text-slate-800"
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
+                            {customStatusEditingPartId === part.id && (
+                              <div className="flex items-center gap-1.5 p-2 bg-blue-50/50 rounded-lg border border-blue-200 animate-in fade-in duration-100">
+                                <input
+                                  type="text"
+                                  placeholder="Enter custom status (e.g. TIRE WAREHOUSE, CORE RETURN)..."
+                                  value={partQuickCustomStatusInput}
+                                  onChange={e => setPartQuickCustomStatusInput(e.target.value)}
+                                  autoFocus
+                                  className="flex-1 text-xs font-bold px-2.5 py-1 bg-white border border-blue-400 rounded-md focus:outline-none uppercase text-slate-800"
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
+                                      if (trimmed) {
+                                        const cleanId = trimmed.replace(/\s+/g, '_');
+                                        if (!modalStatuses.some(s => s.id === cleanId)) {
+                                          setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
+                                        }
+                                        updatePartStatus(selectedRO.id, part.id, cleanId);
+                                        setCustomStatusEditingPartId(null);
+                                      }
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
                                     if (trimmed) {
                                       const cleanId = trimmed.replace(/\s+/g, '_');
@@ -2632,36 +2136,32 @@ export const RODetailModal: React.FC = () => {
                                       updatePartStatus(selectedRO.id, part.id, cleanId);
                                       setCustomStatusEditingPartId(null);
                                     }
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
-                                  if (trimmed) {
-                                    const cleanId = trimmed.replace(/\s+/g, '_');
-                                    if (!modalStatuses.some(s => s.id === cleanId)) {
-                                      setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
-                                    }
-                                    updatePartStatus(selectedRO.id, part.id, cleanId);
-                                    setCustomStatusEditingPartId(null);
-                                  }
-                                }}
-                                className="px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-bold hover:bg-blue-700 cursor-pointer"
-                              >
-                                Set Status
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setCustomStatusEditingPartId(null)}
-                                className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-xs font-bold hover:bg-slate-300 cursor-pointer"
-                              >
-                                Cancel
-                              </button>
+                                  }}
+                                  className="px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                                >
+                                  Set Status
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomStatusEditingPartId(null)}
+                                  className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-xs font-bold hover:bg-slate-300 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>Status updates (In Stock, Daily Order, Special Order 1-5 Days, VOR) restricted to Service Manager & Parts Manager</span>
                             </div>
-                          )}
-                        </div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Advisor Screen (Read-Only)
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2748,21 +2248,6 @@ export const RODetailModal: React.FC = () => {
                   </div>
                 );
               })()}
-
-              {/* Direct Phone Dial Quick Banner */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-800">{selectedRO.customerName}</span>
-                  <span className="font-mono text-slate-600 font-semibold">{selectedRO.customerPhone}</span>
-                </div>
-                <a
-                  href={`tel:${selectedRO.customerPhone}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  <PhoneForwarded className="w-3.5 h-3.5" />
-                  <span>Call {selectedRO.customerPhone}</span>
-                </a>
-              </div>
 
               {/* Contact History List */}
               <div className="space-y-3">

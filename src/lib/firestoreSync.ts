@@ -13,10 +13,11 @@ import {
   limit
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { RepairOrder, User, UrgentNotification, ShopChatMessage } from '../types';
+import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer } from '../types';
 
 // Collection references
 export const REPAIR_ORDERS_COL = 'repairOrders';
+export const CUSTOMERS_COL = 'customers';
 export const USERS_COL = 'users';
 export const NOTIFICATIONS_COL = 'notifications';
 export const SETTINGS_COL = 'settings';
@@ -138,6 +139,21 @@ export function subscribeToShopMessages(callback: (messages: ShopChatMessage[]) 
   });
 }
 
+// Subscribe to real-time customers collection in the cloud
+export function subscribeToCustomers(callback: (customers: Customer[]) => void) {
+  const colRef = collection(db, CUSTOMERS_COL);
+  return onSnapshot(colRef, (snapshot) => {
+    const list: Customer[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push(docSnap.data() as Customer);
+    });
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(list);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, CUSTOMERS_COL);
+  });
+}
+
 // Save a shop chat message
 export async function saveShopMessage(msg: ShopChatMessage) {
   const docRef = doc(db, SHOP_MESSAGES_COL, msg.id);
@@ -243,6 +259,43 @@ export async function deleteUserDoc(userId: string) {
     await deleteDoc(docRef);
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `${USERS_COL}/${userId}`);
+  }
+}
+
+// Save or update a customer profile in the cloud
+export async function syncCustomer(customer: Customer): Promise<boolean> {
+  try {
+    const cleanCustomer = sanitizeForFirestore({
+      id: customer.id,
+      name: (customer.name || '').trim(),
+      phone: (customer.phone || '').trim(),
+      email: (customer.email || '').trim().toLowerCase(),
+      address: (customer.address || '').trim(),
+      isTaxExempt: !!customer.isTaxExempt,
+      taxExemptNumber: (customer.taxExemptNumber || '').trim(),
+      notes: (customer.notes || '').trim(),
+      vehicles: customer.vehicles || [],
+      lastVisit: customer.lastVisit || new Date().toISOString(),
+      totalVisits: Number(customer.totalVisits) || 1,
+      createdAt: customer.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const docRef = doc(db, CUSTOMERS_COL, customer.id);
+    await setDoc(docRef, cleanCustomer, { merge: true });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${CUSTOMERS_COL}/${customer.id}`);
+    return false;
+  }
+}
+
+// Delete a customer profile from the cloud
+export async function deleteCustomerDoc(customerId: string) {
+  try {
+    const docRef = doc(db, CUSTOMERS_COL, customerId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${CUSTOMERS_COL}/${customerId}`);
   }
 }
 
@@ -382,6 +435,51 @@ export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: R
         batch.set(docRef, sanitizeForFirestore(ro));
       });
       await batch.commit();
+    }
+
+    const custSnap = await getDocs(collection(db, CUSTOMERS_COL));
+    if (custSnap.empty && initialROs.length > 0) {
+      console.log('Populating cloud customer profiles from repair orders...');
+      const customerMap = new Map<string, Customer>();
+      initialROs.forEach(ro => {
+        const key = (ro.customerPhone || ro.customerName).trim().toLowerCase();
+        if (!key) return;
+        const existing = customerMap.get(key);
+        if (existing) {
+          if (!existing.vehicles.some(v => v.vin === ro.vehicle.vin)) {
+            existing.vehicles.push(ro.vehicle);
+          }
+          existing.totalVisits += 1;
+          if (new Date(ro.createdAt) > new Date(existing.lastVisit || '')) {
+            existing.lastVisit = ro.createdAt;
+          }
+        } else {
+          const custId = `cust_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+          customerMap.set(key, {
+            id: custId,
+            name: ro.customerName,
+            phone: ro.customerPhone || '',
+            email: '',
+            isTaxExempt: !!ro.isTaxExempt,
+            taxExemptNumber: ro.taxExemptNumber || '',
+            notes: '',
+            vehicles: [ro.vehicle],
+            lastVisit: ro.createdAt,
+            totalVisits: 1,
+            createdAt: ro.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      });
+
+      if (customerMap.size > 0) {
+        const custBatch = writeBatch(db);
+        customerMap.forEach(cust => {
+          const docRef = doc(db, CUSTOMERS_COL, cust.id);
+          custBatch.set(docRef, sanitizeForFirestore(cust));
+        });
+        await custBatch.commit();
+      }
     }
 
     await setDoc(settingsDoc, {

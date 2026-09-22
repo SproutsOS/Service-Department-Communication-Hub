@@ -21,7 +21,8 @@ import {
   Copy,
   Printer,
   ShieldCheck,
-  Loader2
+  Loader2,
+  ArrowRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
@@ -326,7 +327,6 @@ export const TechDashboard: React.FC = () => {
     currentUser, 
     users,
     repairOrders, 
-    setSelectedRO, 
     updateROStatus, 
     startDiagnosis,
     openDirectChat,
@@ -335,6 +335,9 @@ export const TechDashboard: React.FC = () => {
     updateConcernPayType,
     updateConcernTech
   } = useApp();
+
+  const canSelectPayType = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
+  const canAssignTech = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
 
   // Filter to this technician's assigned ROs (primary tech or assigned to an individual line)
   const myROs = repairOrders.filter(ro => ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id));
@@ -484,13 +487,103 @@ export const TechDashboard: React.FC = () => {
               <div
                 key={ro.id}
                 id={`tech-ro-card-${ro.id}`}
-                onClick={() => setSelectedRO(ro)}
-                className={`bg-white rounded-xl border-2 p-5 shadow-sm transition-all cursor-pointer space-y-4 ${
+                className={`bg-white rounded-xl border-2 p-5 shadow-sm space-y-4 ${
                   ro.isUrgent || ro.isWaiter
-                    ? 'border-red-400 ring-2 ring-red-400/20 hover:border-red-600'
-                    : 'border-slate-400 hover:border-blue-600'
+                    ? 'border-red-400 ring-2 ring-red-400/20'
+                    : 'border-slate-400'
                 }`}
               >
+                {/* Status Updates (Moved above repair order number) */}
+                <div 
+                  onClick={(e) => e.stopPropagation()}
+                  className="pb-3 border-b border-slate-200"
+                >
+                  <div className="text-xs font-bold uppercase text-slate-500 mb-2">
+                    Status Updates:
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_DIAGNOSTICS')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        normalizeROStatus(ro.status) === 'WAITING_DIAGNOSTICS'
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      Waiting Diag
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'IN_DIAG')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        normalizeROStatus(ro.status) === 'IN_DIAG'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      In Diag
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'ESTIMATE_DONE')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        normalizeROStatus(ro.status) === 'ESTIMATE_DONE'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      Estimate Done
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'PARTS_IN_TO_TECH')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        normalizeROStatus(ro.status) === 'PARTS_IN_TO_TECH'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      Parts In / To Tech
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_IN_PROGRESS')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        normalizeROStatus(ro.status) === 'REPAIR_IN_PROGRESS'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      Repair in Progress
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_COMPLETE')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        normalizeROStatus(ro.status) === 'REPAIR_COMPLETE'
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      Repair Complete
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickStatus(e, ro.id, 'READY_FOR_PICKUP')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-black text-white ml-auto cursor-pointer"
+                    >
+                      Ready for Pickup
+                    </button>
+                  </div>
+                </div>
+
                 {/* Header: RO, Customer, Vehicle, Assigned Time */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                   <div>
@@ -701,81 +794,102 @@ export const TechDashboard: React.FC = () => {
                             onMouseDown={(e) => e.stopPropagation()}
                             className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-center"
                           >
-                            <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
-                              <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Type:</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY');
-                                }}
-                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            {canSelectPayType ? (
+                              <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-300">
+                                <span className="text-[10px] font-bold text-slate-500 mr-1 hidden xs:inline uppercase tracking-wider">Type:</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY');
+                                  }}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'CUSTOMER_PAY'
+                                      ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Customer Pay"
+                                >
+                                  Customer Pay
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateConcernPayType(ro.id, idx, 'WARRANTY');
+                                  }}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'WARRANTY'
+                                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Warranty"
+                                >
+                                  Warranty
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateConcernPayType(ro.id, idx, 'INTERNAL');
+                                  }}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    currentPayType === 'INTERNAL'
+                                      ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Internal"
+                                >
+                                  Internal
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Type:</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                   currentPayType === 'CUSTOMER_PAY'
-                                    ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                }`}
-                                title="Customer Pay"
-                              >
-                                Customer Pay
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateConcernPayType(ro.id, idx, 'WARRANTY');
-                                }}
-                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                  currentPayType === 'WARRANTY'
-                                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                }`}
-                                title="Warranty"
-                              >
-                                Warranty
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateConcernPayType(ro.id, idx, 'INTERNAL');
-                                }}
-                                className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                                  currentPayType === 'INTERNAL'
-                                    ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                }`}
-                                title="Internal"
-                              >
-                                Internal
-                              </button>
-                            </div>
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : currentPayType === 'WARRANTY'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                }`}>
+                                  {currentPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : currentPayType === 'WARRANTY' ? 'Warranty' : 'Internal'}
+                                </span>
+                              </div>
+                            )}
 
                             {/* Line Technician Selector */}
                             <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
                               <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
-                              <select
-                                value={ro.concernTechIds?.[idx] || ''}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  const tId = e.target.value;
-                                  const t = users.find(u => u.id === tId);
-                                  updateConcernTech(ro.id, idx, tId, t?.name);
-                                }}
-                                className={`text-[11px] font-bold bg-white border rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer ${
-                                  ro.concernTechIds?.[idx] === currentUser.id
-                                    ? 'border-blue-500 text-blue-800 bg-blue-50/50'
-                                    : 'border-slate-300 text-slate-800'
-                                }`}
-                                title="Assign technician to this line"
-                              >
-                                <option value="">{ro.techName ? `(Primary: ${ro.techName})` : 'Unassigned'}</option>
-                                {users.filter(u => u.role === 'TECHNICIAN').map(t => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name}{t.id === currentUser.id ? ' (You)' : ''}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}
-                                  </option>
-                                ))}
-                              </select>
+                              {canAssignTech ? (
+                                <select
+                                  value={ro.concernTechIds?.[idx] || ''}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    const tId = e.target.value;
+                                    const t = users.find(u => u.id === tId);
+                                    updateConcernTech(ro.id, idx, tId, t?.name);
+                                  }}
+                                  className={`text-[11px] font-bold bg-white border rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer ${
+                                    ro.concernTechIds?.[idx] === currentUser.id
+                                      ? 'border-blue-500 text-blue-800 bg-blue-50/50'
+                                      : 'border-slate-300 text-slate-800'
+                                  }`}
+                                  title="Assign technician to this line"
+                                >
+                                  <option value="">{ro.techName ? `(Primary: ${ro.techName})` : 'Unassigned'}</option>
+                                  {users.filter(u => u.role === 'TECHNICIAN').map(t => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name}{t.id === currentUser.id ? ' (You)' : ''}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-[11px] font-bold text-slate-800">
+                                  {ro.concernTechNames?.[idx] || ro.techName || 'Unassigned'}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -795,7 +909,10 @@ export const TechDashboard: React.FC = () => {
 
                 {/* Prominent Parts Arrival Tracker */}
                 {ro.parts.length > 0 && (
-                  <div className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 space-y-2">
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 space-y-2 select-text"
+                  >
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-800 flex items-center gap-1.5">
                         <Package className="w-4 h-4 text-orange-600" />
@@ -814,6 +931,7 @@ export const TechDashboard: React.FC = () => {
                         return (
                           <div 
                             key={part.id} 
+                            onClick={(e) => e.stopPropagation()}
                             className="flex items-center justify-between text-xs bg-white p-2 rounded-md border-2 border-slate-300"
                           >
                             <div className="truncate pr-2">
@@ -843,96 +961,34 @@ export const TechDashboard: React.FC = () => {
                   </div>
                 )}
 
-                {/* Quick Real-Time Technician Status Actions */}
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="text-xs font-bold uppercase text-slate-500 mb-2">
-                    Quick Bay Status Updates:
+                {/* Card Footer: Technician Station Details & Advisor Direct Communication */}
+                <div 
+                  id={`tech-ro-card-footer-${ro.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="pt-2.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 -mx-5 -mb-5 px-5 py-3 rounded-b-xl bg-slate-50/80"
+                >
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="text-slate-600">
+                      Advisor: <strong className="text-slate-900 font-semibold">{ro.advisorName}</strong>
+                    </span>
+                    {ro.advisorId && ro.advisorId !== currentUser.id && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDirectChat(ro.advisorId);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200 transition-colors cursor-pointer text-xs shadow-2xs"
+                        title={`Direct message advisor ${ro.advisorName}`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Chat with {ro.advisorName.split(' ')[0]}</span>
+                      </button>
+                    )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_DIAGNOSTICS')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'WAITING_DIAGNOSTICS'
-                          ? 'bg-amber-500 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Waiting Diag
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'IN_DIAG')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'IN_DIAG'
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      In Diag
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'ESTIMATE_DONE')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'ESTIMATE_DONE'
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Estimate Done
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'PARTS_IN_TO_TECH')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'PARTS_IN_TO_TECH'
-                          ? 'bg-purple-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Parts In / To Tech
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_IN_PROGRESS')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'REPAIR_IN_PROGRESS'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Repair in Progress
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_COMPLETE')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'REPAIR_COMPLETE'
-                          ? 'bg-teal-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Repair Complete
-                    </button>
-
-                    <button
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'READY_FOR_PICKUP')}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-black text-white ml-auto cursor-pointer"
-                    >
-                      Ready for Pickup
-                    </button>
+                  <div className="flex items-center gap-2 text-slate-500 font-medium text-xs">
+                    <span>Assigned Bay: <strong className="text-slate-800 font-bold">{ro.bay ? `Bay ${ro.bay}` : 'Standard Bay'}</strong></span>
                   </div>
-                </div>
-
-                {/* Card Footer */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{ro.messages.length} messages with {ro.advisorName}</span>
-                  </div>
-                  <span className="text-blue-600 font-bold">
-                    Open Full RO Thread &rarr;
-                  </span>
                 </div>
 
               </div>

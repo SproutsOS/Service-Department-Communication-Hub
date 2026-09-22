@@ -185,6 +185,18 @@ export interface RepairOrder {
   timePunches?: WarrantyLaborTimePunch[];
   isTaxExempt?: boolean; // Customer tax exemption status (0% sales tax vs default 7%)
   taxExemptNumber?: string; // Optional tax exempt resale or state certificate number
+  vehiclePhotos?: VehiclePhoto[]; // Photos of vehicle (walkaround, damage, odometer, tech findings)
+}
+
+export interface VehiclePhoto {
+  id: string;
+  dataUrl: string; // Compressed high clarity JPEG
+  thumbnailUrl?: string;
+  caption?: string; // e.g. "Front bumper scratch", "Odometer check-in", "Right front tire wear"
+  uploadedAt: string; // ISO string
+  uploadedBy: string; // User ID
+  uploadedByName: string; // Name of staff who uploaded
+  fileSizeBytes?: number;
 }
 
 export type WarrantyOperationType = 'DIAGNOSTIC' | 'REPAIR' | 'ROAD_TEST' | 'WAITING_PARTS' | 'GENERAL';
@@ -300,3 +312,20 @@ export interface UrgentNotification {
   targetRole?: UserRole;
   targetUserId?: string;
 }
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  isTaxExempt?: boolean;
+  taxExemptNumber?: string;
+  notes?: string;
+  vehicles: VehicleInfo[];
+  lastVisit?: string;
+  totalVisits: number;
+  createdAt: string;
+  updatedAt: string;
+}
+

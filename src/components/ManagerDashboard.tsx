@@ -37,11 +37,15 @@ export const ManagerDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
   const [techFilter, setTechFilter] = useState<string>('ALL');
+  const [advisorFilter, setAdvisorFilter] = useState<string>('ALL');
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARDS'>('TABLE');
 
-  // Technicians
+  // Technicians & Service Writers
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
+  const serviceWriters = users.filter(u => 
+    (u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER') && !u.isDeactivated
+  );
 
   // Cadence tracking (Twice-per-week policy dealership overview)
   const eligibleROs = repairOrders.filter(r => isEligibleForCadence(r));
@@ -88,6 +92,7 @@ export const ManagerDashboard: React.FC = () => {
       }
     }
     if (techFilter !== 'ALL' && ro.techId !== techFilter) return false;
+    if (advisorFilter !== 'ALL' && ro.advisorId !== advisorFilter && ro.advisorName !== advisorFilter) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -217,8 +222,12 @@ export const ManagerDashboard: React.FC = () => {
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm'
               }`}
             >
-              <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 truncate">Open RO's</div>
-              <div className="text-lg sm:text-xl font-black">{openROsCount}</div>
+              <div className={`text-[10px] font-bold uppercase mb-1 truncate ${statusFilter === 'ALL' ? 'text-slate-300' : 'text-slate-500'}`}>
+                Open RO's
+              </div>
+              <div className={`text-lg sm:text-xl font-black ${statusFilter === 'ALL' ? 'text-white' : 'text-slate-950'}`}>
+                {openROsCount}
+              </div>
             </button>
 
             {/* Cadence filter */}
@@ -226,15 +235,17 @@ export const ManagerDashboard: React.FC = () => {
               onClick={() => setStatusFilter(statusFilter === 'CALLS_DUE' ? 'ALL' : 'CALLS_DUE')}
               className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 statusFilter === 'CALLS_DUE'
-                  ? 'bg-red-600 text-white border-red-700 shadow-sm'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-red-50/50 shadow-sm'
+                  ? 'bg-red-100 border-2 border-red-500 ring-2 ring-red-400/30 shadow-sm'
+                  : 'bg-white border-slate-200 hover:bg-red-50/40 shadow-sm'
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Calls Due (2x/Wk)</span>
-                <PhoneCall className="w-3.5 h-3.5 text-red-500" />
+                <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'CALLS_DUE' ? 'text-red-900' : 'text-slate-500'}`}>
+                  Calls Due (2x/Wk)
+                </span>
+                <PhoneCall className="w-3.5 h-3.5 text-red-600" />
               </div>
-              <div className="text-lg sm:text-xl font-black text-red-600">{totalCallsDue}</div>
+              <div className="text-lg sm:text-xl font-black text-slate-950">{totalCallsDue}</div>
             </button>
 
         {/* 2. Waiting Diag */}
@@ -242,15 +253,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'WAITING_DIAGNOSTICS' ? 'ALL' : 'WAITING_DIAGNOSTICS')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'WAITING_DIAGNOSTICS'
-              ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50 shadow-sm'
+              ? 'bg-amber-100 border-2 border-amber-500 ring-2 ring-amber-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-amber-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Waiting Diag</span>
-            <Clock className="w-3.5 h-3.5 text-amber-500" />
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'WAITING_DIAGNOSTICS' ? 'text-amber-900' : 'text-slate-500'}`}>
+              Waiting Diag
+            </span>
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-amber-600">{waitingDiagCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{waitingDiagCount}</div>
         </button>
 
         {/* 3. In Diag */}
@@ -258,15 +271,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'IN_DIAG' ? 'ALL' : 'IN_DIAG')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'IN_DIAG'
-              ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50/50 shadow-sm'
+              ? 'bg-blue-100 border-2 border-blue-500 ring-2 ring-blue-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-blue-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">In Diag</span>
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'IN_DIAG' ? 'text-blue-900' : 'text-slate-500'}`}>
+              In Diag
+            </span>
             <Wrench className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-blue-600">{inDiagCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{inDiagCount}</div>
         </button>
 
         {/* 4. Estimate Done */}
@@ -274,15 +289,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'ESTIMATE_DONE' ? 'ALL' : 'ESTIMATE_DONE')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'ESTIMATE_DONE'
-              ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50/50 shadow-sm'
+              ? 'bg-indigo-100 border-2 border-indigo-500 ring-2 ring-indigo-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-indigo-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Estimate Done</span>
-            <Calculator className="w-3.5 h-3.5 text-indigo-500" />
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'ESTIMATE_DONE' ? 'text-indigo-900' : 'text-slate-500'}`}>
+              Estimate Done
+            </span>
+            <Calculator className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-indigo-600">{estimateDoneCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{estimateDoneCount}</div>
         </button>
 
         {/* 5. Needs Approval */}
@@ -290,15 +307,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'WAITING_FOR_APPROVAL' ? 'ALL' : 'WAITING_FOR_APPROVAL')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'WAITING_FOR_APPROVAL'
-              ? 'bg-orange-500 text-white border-orange-600 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-orange-50/50 shadow-sm'
+              ? 'bg-orange-100 border-2 border-orange-500 ring-2 ring-orange-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-orange-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Needs Approval</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'WAITING_FOR_APPROVAL' ? 'text-orange-900' : 'text-slate-500'}`}>
+              Needs Approval
+            </span>
+            <AlertTriangle className="w-3.5 h-3.5 text-orange-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-orange-600">{waitingApprovalCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{waitingApprovalCount}</div>
         </button>
 
         {/* 6. Approved */}
@@ -306,15 +325,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'APPROVED'
-              ? 'bg-teal-600 text-white border-teal-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-teal-50/50 shadow-sm'
+              ? 'bg-teal-100 border-2 border-teal-500 ring-2 ring-teal-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-teal-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Approved</span>
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'APPROVED' ? 'text-teal-900' : 'text-slate-500'}`}>
+              Approved
+            </span>
             <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-teal-600">{approvedCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{approvedCount}</div>
         </button>
 
         {/* 7. Parts Ordered */}
@@ -322,15 +343,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'PARTS_ORDERED' ? 'ALL' : 'PARTS_ORDERED')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'PARTS_ORDERED'
-              ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-50/50 shadow-sm'
+              ? 'bg-purple-100 border-2 border-purple-500 ring-2 ring-purple-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-purple-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Parts Ordered</span>
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'PARTS_ORDERED' ? 'text-purple-900' : 'text-slate-500'}`}>
+              Parts Ordered
+            </span>
             <Package className="w-3.5 h-3.5 text-purple-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-purple-600">{partsOrderedCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{partsOrderedCount}</div>
         </button>
 
         {/* 8. In Repair */}
@@ -338,15 +361,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'REPAIR_IN_PROGRESS' ? 'ALL' : 'REPAIR_IN_PROGRESS')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'REPAIR_IN_PROGRESS'
-              ? 'bg-cyan-600 text-white border-cyan-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-cyan-50/50 shadow-sm'
+              ? 'bg-cyan-100 border-2 border-cyan-500 ring-2 ring-cyan-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-cyan-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">In Repair</span>
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'REPAIR_IN_PROGRESS' ? 'text-cyan-900' : 'text-slate-500'}`}>
+              In Repair
+            </span>
             <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-cyan-600">{inRepairCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{inRepairCount}</div>
         </button>
 
         {/* 9. Ready/Pickup */}
@@ -354,15 +379,17 @@ export const ManagerDashboard: React.FC = () => {
           onClick={() => setStatusFilter(statusFilter === 'READY_FOR_PICKUP' ? 'ALL' : 'READY_FOR_PICKUP')}
           className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
             statusFilter === 'READY_FOR_PICKUP'
-              ? 'bg-green-600 text-white border-green-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-green-50/50 shadow-sm'
+              ? 'bg-emerald-100 border-2 border-emerald-500 ring-2 ring-emerald-400/30 shadow-sm'
+              : 'bg-white border-slate-200 hover:bg-emerald-50/40 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase text-slate-400 truncate">Ready/Pickup</span>
-            <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+            <span className={`text-[10px] font-bold uppercase truncate ${statusFilter === 'READY_FOR_PICKUP' ? 'text-emerald-900' : 'text-slate-500'}`}>
+              Ready/Pickup
+            </span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <div className="text-lg sm:text-xl font-black text-green-600">{readyPickupCount + completedCount}</div>
+          <div className="text-lg sm:text-xl font-black text-slate-950">{readyPickupCount + completedCount}</div>
         </button>
 
       </div>
@@ -377,13 +404,13 @@ export const ManagerDashboard: React.FC = () => {
             </h2>
           </div>
           <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-            {technicians.length} technician stall{technicians.length === 1 ? '' : 's'}
+            {technicians.length} active technician{technicians.length === 1 ? '' : 's'}
           </span>
         </div>
 
         {technicians.length === 0 ? (
           <div className="p-6 text-center border border-dashed border-slate-200 rounded-lg text-slate-400 text-xs">
-            No technicians registered yet. Open the Setup Wizard or Staff Directory to add technicians and assign bay numbers.
+            No technicians registered yet. Open the Setup Wizard or Staff Directory to add technicians.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -416,7 +443,7 @@ export const ManagerDashboard: React.FC = () => {
                       </div>
                       <div className="text-[10px] text-blue-700 font-semibold truncate flex items-center gap-1">
                         <Award className="w-2.5 h-2.5 text-blue-500 shrink-0" />
-                        <span className="truncate">{tech.certificationLevel || tech.bayNumber || 'Technician'}</span>
+                        <span className="truncate">{tech.certificationLevel || tech.title || 'Technician'}</span>
                       </div>
                     </div>
                   </div>
@@ -436,11 +463,11 @@ export const ManagerDashboard: React.FC = () => {
                           {currentJob.vehicle.year} {currentJob.vehicle.make} {currentJob.vehicle.model}
                         </div>
 
-                        {/* Diagnostic Status helper in Bay card */}
+                        {/* Diagnostic Status helper in Tech card */}
                         {(currentJob.status === 'WAITING_DIAGNOSTICS' || currentJob.status === 'WAITING_DIAGNOSIS') && (
                           <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-amber-700 font-medium">
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-amber-600" />
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
                               Waiting Diag ({formatDurationSince(currentJob.waitingDiagnosisAt)})
                             </span>
                             <button
@@ -463,7 +490,7 @@ export const ManagerDashboard: React.FC = () => {
                       </div>
                     ) : (
                       <div className="text-slate-400 text-[11px] italic">
-                        Bay idle • Ready for assignment
+                        Tech available • Ready for assignment
                       </div>
                     )}
                   </div>
@@ -582,6 +609,20 @@ export const ManagerDashboard: React.FC = () => {
               <option value="REPAIR_COMPLETE">9. Repair Complete</option>
               <option value="READY_FOR_PICKUP">10. Ready for Pickup</option>
               <option value="CLOSED">11. Closed</option>
+            </select>
+
+            {/* Service Writer (Advisor) Filter */}
+            <select
+              value={advisorFilter}
+              onChange={e => setAdvisorFilter(e.target.value)}
+              className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="ALL">All Service Writers</option>
+              {serviceWriters.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.name}{w.employeeNumber ? ` #${w.employeeNumber}` : ''}
+                </option>
+              ))}
             </select>
 
             {/* Tech Filter */}
@@ -764,11 +805,6 @@ export const ManagerDashboard: React.FC = () => {
                                     ) : null;
                                   })()}
                                 </div>
-                                {ro.bay && (
-                                  <span className="text-[10px] text-slate-400 block">
-                                    {ro.bay}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           ) : (

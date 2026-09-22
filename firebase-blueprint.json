@@ -27,6 +27,7 @@
         "history": { "type": "array" },
         "quote": { "type": "object" },
         "timePunches": { "type": "array" },
+        "vehiclePhotos": { "type": "array" },
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "customerName", "status", "advisorName"]
@@ -77,12 +78,37 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["shopName"]
+    },
+    "customers": {
+      "title": "Customer",
+      "description": "Customer directory profiles, contact information, tax exemption status, and vehicle history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "isTaxExempt": { "type": "boolean" },
+        "taxExemptNumber": { "type": "string" },
+        "notes": { "type": "string" },
+        "vehicles": { "type": "array" },
+        "lastVisit": { "type": "string" },
+        "totalVisits": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
     }
   },
   "firestore": {
     "/repairOrders/{roId}": {
       "schema": "#/entities/repairOrders",
       "description": "Repair order document"
+    },
+    "/customers/{customerId}": {
+      "schema": "#/entities/customers",
+      "description": "Customer profile and vehicle history document"
     },
     "/users/{userId}": {
       "schema": "#/entities/users",

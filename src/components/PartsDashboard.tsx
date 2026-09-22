@@ -17,7 +17,13 @@ import {
   Layers,
   X,
   Calendar,
-  DollarSign
+  DollarSign,
+  Hash,
+  User,
+  RotateCcw,
+  Eye,
+  EyeOff,
+  Filter
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PartItem, PartStatus, RepairOrder } from '../types';
@@ -43,6 +49,14 @@ export const PartsDashboard: React.FC = () => {
 
   // Active view: 'RO_LIST' (Access all ROs directly) or 'PARTS_LIST' (Tracked Logistics)
   const [activeTab, setActiveTab] = useState<'RO_LIST' | 'PARTS_LIST'>('RO_LIST');
+
+  // Dedicated lookup fields to pull up orders respectively
+  const [lookupRoNumber, setLookupRoNumber] = useState('');
+  const [lookupCustomer, setLookupCustomer] = useState('');
+  const [lookupVin, setLookupVin] = useState('');
+  const [lookupTech, setLookupTech] = useState('');
+  const [lookupAdvisor, setLookupAdvisor] = useState('');
+  const [showAllBackgroundROs, setShowAllBackgroundROs] = useState(false);
 
   // Search and filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +92,49 @@ export const PartsDashboard: React.FC = () => {
   const activeROs = useMemo(() => {
     return repairOrders.filter(ro => ro.status !== 'COMPLETED');
   }, [repairOrders]);
+
+  // Technicians and Service Advisors for datalists & lookups
+  const technicians = useMemo(() => {
+    return users.filter(u => u.role === 'TECHNICIAN');
+  }, [users]);
+
+  const serviceAdvisors = useMemo(() => {
+    return users.filter(u => u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER');
+  }, [users]);
+
+  // Check whether any lookup field or search query is entered
+  const isAnyLookupActive = useMemo(() => {
+    return Boolean(
+      lookupRoNumber.trim() ||
+      lookupCustomer.trim() ||
+      lookupVin.trim() ||
+      lookupTech.trim() ||
+      lookupAdvisor.trim() ||
+      searchQuery.trim()
+    );
+  }, [lookupRoNumber, lookupCustomer, lookupVin, lookupTech, lookupAdvisor, searchQuery]);
+
+  const activeCriteriaCount = useMemo(() => {
+    return [
+      lookupRoNumber.trim(),
+      lookupCustomer.trim(),
+      lookupVin.trim(),
+      lookupTech.trim(),
+      lookupAdvisor.trim(),
+      searchQuery.trim()
+    ].filter(Boolean).length;
+  }, [lookupRoNumber, lookupCustomer, lookupVin, lookupTech, lookupAdvisor, searchQuery]);
+
+  // Helper to reset lookups back to hidden background state
+  const clearAllLookups = () => {
+    setLookupRoNumber('');
+    setLookupCustomer('');
+    setLookupVin('');
+    setLookupTech('');
+    setLookupAdvisor('');
+    setSearchQuery('');
+    setShowAllBackgroundROs(false);
+  };
 
   // Dynamically collect custom statuses present in any RO part
   const existingCustomStatuses = useMemo(() => {
@@ -140,16 +197,64 @@ export const PartsDashboard: React.FC = () => {
   const vorUpgradeCount = allParts.filter(p => p.status === 'VOR_UPGRADE').length;
   const receivedCount = allParts.filter(p => p.status === 'RECEIVED').length;
 
-  // Filtered ROs for RO Directory Tab
+  // Filtered ROs for RO Directory Tab - Hidden in background by default until entered or revealed
   const filteredROs = useMemo(() => {
+    // If no search input is provided and user has not clicked reveal, repair orders remain hidden in the background
+    if (!isAnyLookupActive && !showAllBackgroundROs) {
+      return [];
+    }
+
     return activeROs.filter(ro => {
-      // Status filter
+      // 1. RO Status filter
       if (roStatusFilter === 'NEEDS_PARTS' && ro.parts.length > 0) return false;
       if (roStatusFilter === 'HAS_PARTS' && ro.parts.length === 0) return false;
       if (roStatusFilter === 'WAITING_PARTS' && ro.status !== 'WAITING_PARTS') return false;
       if (roStatusFilter === 'IN_BAY' && ro.status !== 'IN_BAY' && ro.status !== 'IN_REPAIR') return false;
 
-      // Search query
+      // 2. Repair Order Number lookup (e.g. 1042 or RO-1042)
+      if (lookupRoNumber.trim()) {
+        const cleanRoInput = lookupRoNumber.trim().toLowerCase().replace(/^#|^ro-?/, '');
+        const cleanRoId = ro.id.toLowerCase().replace(/^#|^ro-?/, '');
+        if (!cleanRoId.includes(cleanRoInput)) return false;
+      }
+
+      // 3. Customer Name lookup
+      if (lookupCustomer.trim()) {
+        const custQuery = lookupCustomer.trim().toLowerCase();
+        const matchesCustomer = ro.customerName.toLowerCase().includes(custQuery) || 
+                                ro.customerPhone.includes(custQuery);
+        if (!matchesCustomer) return false;
+      }
+
+      // 4. VIN lookup (full VIN or partial / last 8)
+      if (lookupVin.trim()) {
+        const vinQuery = lookupVin.trim().toLowerCase();
+        const matchesVin = ro.vehicle.vin.toLowerCase().includes(vinQuery);
+        if (!matchesVin) return false;
+      }
+
+      // 5. Technician lookup (matches tech name, employee number, or concern line tech)
+      if (lookupTech.trim()) {
+        const techQuery = lookupTech.trim().toLowerCase();
+        const assignedTech = users.find(u => u.id === ro.techId);
+        const matchesTech = (ro.techName && ro.techName.toLowerCase().includes(techQuery)) ||
+                            (ro.techId && ro.techId.toLowerCase() === techQuery) ||
+                            (assignedTech?.employeeNumber && assignedTech.employeeNumber.toLowerCase().includes(techQuery)) ||
+                            (ro.concernTechNames && ro.concernTechNames.some(t => t && t.toLowerCase().includes(techQuery)));
+        if (!matchesTech) return false;
+      }
+
+      // 6. Service Advisor lookup (matches advisor name, ID, or employee number)
+      if (lookupAdvisor.trim()) {
+        const advQuery = lookupAdvisor.trim().toLowerCase();
+        const advisorUser = users.find(u => u.id === ro.advisorId);
+        const matchesAdv = (ro.advisorName && ro.advisorName.toLowerCase().includes(advQuery)) ||
+                           (ro.advisorId && ro.advisorId.toLowerCase() === advQuery) ||
+                           (advisorUser?.employeeNumber && advisorUser.employeeNumber.toLowerCase().includes(advQuery));
+        if (!matchesAdv) return false;
+      }
+
+      // 7. General search fallback (if typed into universal search)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchRO = ro.id.toLowerCase().includes(q);
@@ -159,12 +264,26 @@ export const PartsDashboard: React.FC = () => {
         const matchAdvisor = ro.advisorName.toLowerCase().includes(q);
         const matchConcerns = ro.concerns.some(c => c.toLowerCase().includes(q)) || (ro.primaryConcern && ro.primaryConcern.toLowerCase().includes(q));
         const matchParts = ro.parts.some(p => p.partNumber.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-        return matchRO || matchCustomer || matchVehicle || matchTech || matchAdvisor || matchConcerns || matchParts;
+        if (!matchRO && !matchCustomer && !matchVehicle && !matchTech && !matchAdvisor && !matchConcerns && !matchParts) {
+          return false;
+        }
       }
 
       return true;
     });
-  }, [activeROs, roStatusFilter, searchQuery]);
+  }, [
+    activeROs, 
+    roStatusFilter, 
+    lookupRoNumber, 
+    lookupCustomer, 
+    lookupVin, 
+    lookupTech, 
+    lookupAdvisor, 
+    searchQuery, 
+    isAnyLookupActive, 
+    showAllBackgroundROs, 
+    users
+  ]);
 
   // Filtered Parts for Logistics Tab
   const filteredParts = useMemo(() => {
@@ -175,6 +294,29 @@ export const PartsDashboard: React.FC = () => {
         } else if (p.status !== statusFilter) {
           return false;
         }
+      }
+
+      if (lookupRoNumber.trim()) {
+        const cleanRoInput = lookupRoNumber.trim().toLowerCase().replace(/^#|^ro-?/, '');
+        const cleanRoId = p.roId.toLowerCase().replace(/^#|^ro-?/, '');
+        if (!cleanRoId.includes(cleanRoInput)) return false;
+      }
+
+      if (lookupCustomer.trim()) {
+        if (!p.customerName.toLowerCase().includes(lookupCustomer.trim().toLowerCase())) return false;
+      }
+
+      if (lookupVin.trim()) {
+        const matchingRo = repairOrders.find(r => r.id === p.roId);
+        if (!matchingRo || !matchingRo.vehicle.vin.toLowerCase().includes(lookupVin.trim().toLowerCase())) return false;
+      }
+
+      if (lookupTech.trim()) {
+        if (!p.techName || !p.techName.toLowerCase().includes(lookupTech.trim().toLowerCase())) return false;
+      }
+
+      if (lookupAdvisor.trim()) {
+        if (!p.advisorName || !p.advisorName.toLowerCase().includes(lookupAdvisor.trim().toLowerCase())) return false;
       }
 
       if (searchQuery.trim()) {
@@ -189,7 +331,17 @@ export const PartsDashboard: React.FC = () => {
 
       return true;
     });
-  }, [allParts, statusFilter, searchQuery]);
+  }, [
+    allParts, 
+    statusFilter, 
+    lookupRoNumber, 
+    lookupCustomer, 
+    lookupVin, 
+    lookupTech, 
+    lookupAdvisor, 
+    searchQuery, 
+    repairOrders
+  ]);
 
   const handleQuickReceive = (roId: string, partId: string) => {
     updatePartStatus(roId, partId, 'RECEIVED', undefined, 'Marked received by parts department. Ready for technician.');
@@ -393,65 +545,70 @@ export const PartsDashboard: React.FC = () => {
       </div>
 
       {/* KPI Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <div 
-          onClick={() => { setActiveTab('RO_LIST'); setRoStatusFilter('ALL'); }}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-blue-300 transition-colors cursor-pointer"
+          onClick={() => { 
+            setActiveTab('RO_LIST'); 
+            setShowAllBackgroundROs(prev => !prev); 
+          }}
+          className="bg-white p-3 sm:p-3.5 rounded-xl border-2 border-slate-600 shadow-xs hover:border-blue-500 transition-colors cursor-pointer"
         >
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-            <span>Total Active ROs</span>
-            <FileText className="w-3.5 h-3.5 text-slate-400" />
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center justify-between">
+            <span>ROs In Background</span>
+            <FileText className="w-3.5 h-3.5 text-slate-600" />
           </div>
-          <div className="text-2xl font-black text-slate-800 mt-1">{totalRoCount}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">{rosNeedingPartsCount} without parts</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{totalRoCount}</div>
+          <div className="text-[10px] text-slate-600 font-semibold mt-0.5">
+            {showAllBackgroundROs ? 'Revealed in list' : 'Hidden until pulled up'}
+          </div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('IN_STOCK'); }}
-          className="bg-white p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-xs hover:border-emerald-400 transition-colors cursor-pointer"
+          className="bg-white p-3 sm:p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/20 shadow-xs hover:border-emerald-600 transition-colors cursor-pointer"
         >
           <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center justify-between">
             <span>In Stock</span>
             <Package className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <div className="text-2xl font-black text-emerald-600 mt-1">{inStockCount}</div>
-          <div className="text-[10px] text-emerald-700 mt-0.5">Inventory ready</div>
+          <div className="text-2xl font-black text-emerald-700 mt-1">{inStockCount}</div>
+          <div className="text-[10px] text-emerald-800 font-semibold mt-0.5">Inventory ready</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('DAILY_ORDER'); }}
-          className="bg-white p-4 rounded-xl border border-blue-200 shadow-xs hover:border-blue-400 transition-colors cursor-pointer"
+          className="bg-white p-3 sm:p-3.5 rounded-xl border-2 border-blue-500 shadow-xs hover:border-blue-600 transition-colors cursor-pointer"
         >
           <div className="text-[11px] font-bold uppercase tracking-wider text-blue-800 flex items-center justify-between">
             <span>Daily Order</span>
             <Truck className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <div className="text-2xl font-black text-blue-600 mt-1">{dailyOrderCount}</div>
-          <div className="text-[10px] text-blue-700 mt-0.5">Regular replenishment</div>
+          <div className="text-2xl font-black text-blue-700 mt-1">{dailyOrderCount}</div>
+          <div className="text-[10px] text-blue-800 font-semibold mt-0.5">Regular replenishment</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('SPECIAL_ORDER_1_5_DAYS'); }}
-          className="bg-white p-4 rounded-xl border border-amber-200 shadow-xs hover:border-amber-400 transition-colors cursor-pointer"
+          className="bg-white p-3 sm:p-3.5 rounded-xl border-2 border-amber-500 shadow-xs hover:border-amber-600 transition-colors cursor-pointer"
         >
           <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800 flex items-center justify-between">
             <span>Special Order 1-5 Days</span>
             <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
-          <div className="text-2xl font-black text-amber-600 mt-1">{specialOrderCount}</div>
-          <div className="text-[10px] text-amber-700 mt-0.5">Supplier pending (1-5 days)</div>
+          <div className="text-2xl font-black text-amber-700 mt-1">{specialOrderCount}</div>
+          <div className="text-[10px] text-amber-800 font-semibold mt-0.5">Supplier pending</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('VOR_UPGRADE'); }}
-          className="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/20 shadow-xs col-span-2 sm:col-span-1 hover:border-rose-400 transition-colors cursor-pointer"
+          className="bg-white p-3 sm:p-3.5 rounded-xl border-2 border-rose-500 bg-rose-50/20 shadow-xs col-span-2 sm:col-span-1 hover:border-rose-600 transition-colors cursor-pointer"
         >
           <div className="text-[11px] font-bold uppercase tracking-wider text-rose-800 flex items-center justify-between">
             <span>VOR Upgrade</span>
             <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
           </div>
-          <div className="text-2xl font-black text-rose-600 mt-1">{vorUpgradeCount}</div>
-          <div className="text-[10px] text-rose-700 mt-0.5">Emergency expedite</div>
+          <div className="text-2xl font-black text-rose-700 mt-1">{vorUpgradeCount}</div>
+          <div className="text-[10px] text-rose-800 font-semibold mt-0.5">Emergency expedite</div>
         </div>
       </div>
 
@@ -463,15 +620,15 @@ export const PartsDashboard: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'RO_LIST'
               ? 'bg-slate-900 text-white shadow-xs'
-              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+              : 'bg-white text-slate-700 hover:bg-slate-50 border-2 border-slate-300'
           }`}
         >
           <Car className="w-4 h-4" />
-          <span>All Active Repair Orders</span>
+          <span>Repair Orders (Direct Entry)</span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-            activeTab === 'RO_LIST' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-700'
+            activeTab === 'RO_LIST' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-800'
           }`}>
-            {activeROs.length}
+            {isAnyLookupActive || showAllBackgroundROs ? `${filteredROs.length} Pulled Up` : 'Hidden in Background'}
           </span>
         </button>
 
@@ -481,56 +638,276 @@ export const PartsDashboard: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'PARTS_LIST'
               ? 'bg-slate-900 text-white shadow-xs'
-              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+              : 'bg-white text-slate-700 hover:bg-slate-50 border-2 border-slate-300'
           }`}
         >
           <Package className="w-4 h-4" />
           <span>Tracked Parts Logistics</span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-            activeTab === 'PARTS_LIST' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-700'
+            activeTab === 'PARTS_LIST' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-800'
           }`}>
             {allParts.length}
           </span>
         </button>
       </div>
 
-      {/* Search and Filters Strip */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder={activeTab === 'RO_LIST' 
-                ? "Search RO #, Customer, VIN, Vehicle, Tech, or Concern..." 
-                : "Search Part #, Description, Supplier, RO #, or Tech..."}
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full text-xs pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-            />
+      {/* Dedicated Parts Counter Repair Order Lookup & Pull-Up Station */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border-2 border-slate-700 shadow-xs space-y-3">
+        {/* Header with status badge & action */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-black text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+              <Search className="w-4 h-4 text-blue-600" />
+              <span>Repair Order Lookup & Pull-Up Station</span>
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+              isAnyLookupActive || showAllBackgroundROs
+                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                : 'bg-slate-100 text-slate-700 border-slate-300'
+            }`}>
+              {isAnyLookupActive || showAllBackgroundROs
+                ? `${filteredROs.length} Pulled Up`
+                : `${activeROs.length} Orders In Background`}
+            </span>
           </div>
 
-          {activeTab === 'RO_LIST' ? (
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {(isAnyLookupActive || showAllBackgroundROs) && (
+              <button
+                type="button"
+                onClick={clearAllLookups}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded-lg border-2 border-slate-400 hover:border-slate-600 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3 text-slate-600" />
+                <span>Clear & Hide to Background</span>
+              </button>
+            )}
+
+            {!isAnyLookupActive && (
+              <button
+                type="button"
+                onClick={() => setShowAllBackgroundROs(prev => !prev)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg border-2 transition-all cursor-pointer ${
+                  showAllBackgroundROs
+                    ? 'bg-slate-900 text-white border-slate-950'
+                    : 'bg-white text-slate-700 border-slate-400 hover:border-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {showAllBackgroundROs ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                <span>{showAllBackgroundROs ? 'Hide All to Background' : `Show All Background ROs (${activeROs.length})`}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 5 Distinct Lookup Inputs Requested by User */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+          
+          {/* 1. Repair Order Number */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Repair Order #
+            </label>
+            <div className="relative">
+              <Hash className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="e.g. 1042"
+                value={lookupRoNumber}
+                onChange={e => {
+                  setLookupRoNumber(e.target.value);
+                  setShowAllBackgroundROs(false);
+                }}
+                className="w-full text-xs font-mono font-bold pl-8 pr-7 py-1.5 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 placeholder:text-slate-400"
+              />
+              {lookupRoNumber && (
+                <button
+                  type="button"
+                  onClick={() => setLookupRoNumber('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Clear RO #"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Customer Name */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Customer Name
+            </label>
+            <div className="relative">
+              <User className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="e.g. Smith or Sarah"
+                value={lookupCustomer}
+                onChange={e => {
+                  setLookupCustomer(e.target.value);
+                  setShowAllBackgroundROs(false);
+                }}
+                className="w-full text-xs font-bold pl-8 pr-7 py-1.5 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 placeholder:text-slate-400"
+              />
+              {lookupCustomer && (
+                <button
+                  type="button"
+                  onClick={() => setLookupCustomer('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Clear Customer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 3. VIN */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              VIN (Full or Last 8)
+            </label>
+            <div className="relative">
+              <Car className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="e.g. 1C4... or last 8"
+                value={lookupVin}
+                onChange={e => {
+                  setLookupVin(e.target.value.toUpperCase());
+                  setShowAllBackgroundROs(false);
+                }}
+                className="w-full text-xs font-mono font-bold pl-8 pr-7 py-1.5 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 placeholder:text-slate-400 uppercase"
+              />
+              {lookupVin && (
+                <button
+                  type="button"
+                  onClick={() => setLookupVin('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Clear VIN"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Technician */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Technician
+            </label>
+            <div className="relative">
+              <Wrench className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 z-10" />
+              <input
+                type="text"
+                list="parts-tech-options"
+                placeholder="Type or pick Tech..."
+                value={lookupTech}
+                onChange={e => {
+                  setLookupTech(e.target.value);
+                  setShowAllBackgroundROs(false);
+                }}
+                className="w-full text-xs font-bold pl-8 pr-7 py-1.5 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 placeholder:text-slate-400"
+              />
+              <datalist id="parts-tech-options">
+                {technicians.map(t => (
+                  <option key={t.id} value={t.name}>
+                    {t.name} {t.employeeNumber ? `(#${t.employeeNumber})` : ''}
+                  </option>
+                ))}
+              </datalist>
+              {lookupTech && (
+                <button
+                  type="button"
+                  onClick={() => setLookupTech('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 z-10 cursor-pointer"
+                  title="Clear Tech"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 5. Service Advisor */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Service Advisor
+            </label>
+            <div className="relative">
+              <UserCheck className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 z-10" />
+              <input
+                type="text"
+                list="parts-advisor-options"
+                placeholder="Type or pick Advisor..."
+                value={lookupAdvisor}
+                onChange={e => {
+                  setLookupAdvisor(e.target.value);
+                  setShowAllBackgroundROs(false);
+                }}
+                className="w-full text-xs font-bold pl-8 pr-7 py-1.5 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 placeholder:text-slate-400"
+              />
+              <datalist id="parts-advisor-options">
+                {serviceAdvisors.map(a => (
+                  <option key={a.id} value={a.name}>
+                    {a.name} {a.employeeNumber ? `(#${a.employeeNumber})` : ''}
+                  </option>
+                ))}
+              </datalist>
+              {lookupAdvisor && (
+                <button
+                  type="button"
+                  onClick={() => setLookupAdvisor('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 z-10 cursor-pointer"
+                  title="Clear Advisor"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Bottom Filter Strip & Helper Notification */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-200 text-xs">
+          <div className="flex items-center gap-2 flex-wrap text-slate-700">
+            {!isAnyLookupActive && !showAllBackgroundROs ? (
+              <span className="inline-flex items-center gap-1.5 text-slate-700 font-semibold">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                <span>Repair orders hidden in background. Enter an RO #, Customer, VIN, Tech, or Advisor above to pull up records.</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-slate-900 font-bold">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>
+                  {filteredROs.length} Repair Order{filteredROs.length !== 1 ? 's' : ''} pulled up
+                  {activeCriteriaCount > 0 ? ` (${activeCriteriaCount} search field${activeCriteriaCount > 1 ? 's' : ''} active)` : ''}
+                </span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {activeTab === 'RO_LIST' ? (
               <select
                 value={roStatusFilter}
                 onChange={e => setRoStatusFilter(e.target.value)}
-                className="text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs font-semibold text-slate-700"
+                className="text-xs px-2.5 py-1.5 border-2 border-slate-500 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold text-slate-800"
               >
-                <option value="ALL">All Active Repair Orders ({activeROs.length})</option>
+                <option value="ALL">All Shop Statuses ({activeROs.length})</option>
                 <option value="NEEDS_PARTS">Needs Parts (0 Parts on RO)</option>
                 <option value="HAS_PARTS">Has Parts Attached</option>
                 <option value="WAITING_PARTS">Status: Waiting on Parts</option>
                 <option value="IN_BAY">Status: In Bay / In Repair</option>
               </select>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
+            ) : (
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value as PartStatus | 'ALL')}
-                className="text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs font-semibold text-slate-700"
+                className="text-xs px-2.5 py-1.5 border-2 border-slate-500 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold text-slate-800"
               >
                 <option value="ALL">All Part Statuses ({allParts.length})</option>
                 <option value="IN_STOCK">IN STOCK</option>
@@ -545,37 +922,153 @@ export const PartsDashboard: React.FC = () => {
                   <option key={st} value={st}>{st.replace(/_/g, ' ')}</option>
                 ))}
               </select>
-            </div>
-          )}
-
+            )}
+          </div>
         </div>
+
       </div>
 
       {/* ========================================================================= */}
       {/* TAB 1: ALL REPAIR ORDERS DIRECT DIRECTORY (Direct Part Entry)             */}
       {/* ========================================================================= */}
       {activeTab === 'RO_LIST' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <span>Active Repair Orders for Direct Part Ordering</span>
-              <span className="text-xs font-semibold text-slate-500">
-                ({filteredROs.length} orders shown)
-              </span>
-            </h2>
-            <span className="text-xs text-slate-500">
-              Click <strong>+ Add Part to Ticket</strong> on any order to order or issue parts
-            </span>
-          </div>
+        <div className="space-y-3">
+          
+          {/* Active criteria pills strip when lookups are applied */}
+          {isAnyLookupActive && (
+            <div className="flex items-center justify-between gap-2 p-2.5 bg-blue-50/90 border-2 border-blue-400 rounded-xl text-xs flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-black text-blue-950 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Pulled Up Criteria:</span>
+                </span>
+                {lookupRoNumber && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-blue-900 shadow-2xs">
+                    RO #{lookupRoNumber}
+                    <button type="button" onClick={() => setLookupRoNumber('')} className="text-slate-400 hover:text-slate-700 cursor-pointer">×</button>
+                  </span>
+                )}
+                {lookupCustomer && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-300 rounded font-bold text-blue-900 shadow-2xs">
+                    Customer: {lookupCustomer}
+                    <button type="button" onClick={() => setLookupCustomer('')} className="text-slate-400 hover:text-slate-700 cursor-pointer">×</button>
+                  </span>
+                )}
+                {lookupVin && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-blue-900 shadow-2xs">
+                    VIN: {lookupVin}
+                    <button type="button" onClick={() => setLookupVin('')} className="text-slate-400 hover:text-slate-700 cursor-pointer">×</button>
+                  </span>
+                )}
+                {lookupTech && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-300 rounded font-bold text-blue-900 shadow-2xs">
+                    Tech: {lookupTech}
+                    <button type="button" onClick={() => setLookupTech('')} className="text-slate-400 hover:text-slate-700 cursor-pointer">×</button>
+                  </span>
+                )}
+                {lookupAdvisor && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-300 rounded font-bold text-blue-900 shadow-2xs">
+                    Advisor: {lookupAdvisor}
+                    <button type="button" onClick={() => setLookupAdvisor('')} className="text-slate-400 hover:text-slate-700 cursor-pointer">×</button>
+                  </span>
+                )}
+                {searchQuery && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-300 rounded font-bold text-blue-900 shadow-2xs">
+                    Query: "{searchQuery}"
+                    <button type="button" onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-700 cursor-pointer">×</button>
+                  </span>
+                )}
+              </div>
 
-          {filteredROs.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-xs">
-              <Car className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <h3 className="text-sm font-bold text-slate-800">No matching Repair Orders</h3>
-              <p className="text-xs text-slate-500 mt-1">Try adjusting your search criteria or filter options.</p>
+              <button
+                type="button"
+                onClick={clearAllLookups}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 font-bold rounded-lg border-2 border-slate-400 text-xs transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3 text-slate-600" />
+                <span>Clear & Hide to Background</span>
+              </button>
             </div>
-          ) : (
-            <div className="space-y-3.5">
+          )}
+
+          {/* STATE A: NO SEARCH CRITERIA ENTERED AND NOT REVEALED -> HIDDEN IN BACKGROUND */}
+          {!isAnyLookupActive && !showAllBackgroundROs && (
+            <div className="bg-white rounded-xl border-2 border-slate-600 p-8 sm:p-10 text-center shadow-xs space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 border-2 border-slate-400 text-slate-700 flex items-center justify-center mx-auto shadow-2xs">
+                <Search className="w-7 h-7 text-blue-600" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                  Repair Orders Are Hidden in the Background
+                </h3>
+                <p className="text-xs text-slate-600 max-w-lg mx-auto">
+                  Enter a <strong>Repair Order #</strong>, <strong>Customer Name</strong>, <strong>VIN</strong>, <strong>Technician</strong>, or <strong>Service Advisor</strong> in the lookup bar above to pull up the ticket.
+                </p>
+              </div>
+
+              {/* Quick Click Pull-Up Suggestions */}
+              {activeROs.length > 0 && (
+                <div className="pt-2">
+                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                    Quick Pull-Up by Active Ticket:
+                  </div>
+                  <div className="flex items-center justify-center gap-2 flex-wrap max-w-3xl mx-auto">
+                    {activeROs.slice(0, 6).map(ro => (
+                      <button
+                        key={ro.id}
+                        type="button"
+                        onClick={() => setLookupRoNumber(ro.id)}
+                        className="inline-flex items-center gap-1.5 text-xs font-mono font-bold px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-blue-800 hover:text-blue-900 rounded-lg border-2 border-slate-400 hover:border-blue-500 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Hash className="w-3 h-3 text-slate-500" />
+                        <span>RO #{ro.id}</span>
+                        <span className="text-slate-600 font-sans text-[11px] font-medium">
+                          • {ro.customerName}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAllBackgroundROs(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg border-2 border-slate-400 hover:border-slate-600 transition-colors cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5 text-slate-700" />
+                  <span>Reveal All {activeROs.length} Background Repair Orders</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STATE B: SEARCH PERFORMED BUT NO RESULTS */}
+          {(isAnyLookupActive || showAllBackgroundROs) && filteredROs.length === 0 && (
+            <div className="bg-white rounded-xl border-2 border-amber-500 p-8 text-center shadow-xs space-y-3">
+              <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-black text-slate-900">
+                  No Repair Orders Match Your Entered Lookup
+                </h3>
+                <p className="text-xs text-slate-600 max-w-md mx-auto">
+                  Double check the RO number, customer name, VIN, technician, or advisor spelling and try again.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={clearAllLookups}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              >
+                Clear Lookup & Return to Standby
+              </button>
+            </div>
+          )}
+
+          {/* STATE C: ORDERS PULLED UP */}
+          {(isAnyLookupActive || showAllBackgroundROs) && filteredROs.length > 0 && (
+            <div className="space-y-2.5">
               {filteredROs.map(ro => {
                 const assignedTech = users.find(u => u.id === ro.techId);
                 const advisor = users.find(u => u.id === ro.advisorId);
@@ -585,10 +1078,10 @@ export const PartsDashboard: React.FC = () => {
                   <div
                     key={ro.id}
                     id={`parts-ro-card-${ro.id}`}
-                    className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs hover:border-blue-300 transition-all space-y-3.5"
+                    className="bg-white rounded-xl border-2 border-slate-600 p-3.5 sm:p-4 shadow-xs hover:border-blue-500 transition-all space-y-3"
                   >
                     {/* Top Row: RO #, Vehicle, Customer, VIN, Status Badges */}
-                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-2.5 pb-2.5 border-b border-slate-200">
                       
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -599,42 +1092,42 @@ export const PartsDashboard: React.FC = () => {
                             RO #{ro.id}
                           </span>
 
-                          <span className="font-bold text-sm text-slate-800">
+                          <span className="font-bold text-sm text-slate-900">
                             {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
                           </span>
 
                           {ro.vehicle.licensePlate && (
-                            <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300">
                               Tag: {ro.vehicle.licensePlate}
                             </span>
                           )}
 
-                          <span className="text-xs text-slate-400 font-medium">
+                          <span className="text-xs text-slate-500 font-medium">
                             ({ro.vehicle.mileage.toLocaleString()} mi)
                           </span>
 
                           <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                             ro.status === 'WAITING_PARTS'
-                              ? 'bg-orange-100 text-orange-700 border-orange-200'
+                              ? 'bg-orange-100 text-orange-800 border-orange-300'
                               : ro.status === 'IN_BAY' || ro.status === 'IN_REPAIR'
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                              : 'bg-blue-100 text-blue-700 border-blue-200'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-blue-100 text-blue-800 border-blue-300'
                           }`}>
                             {ro.status.replace('_', ' ')}
                           </span>
 
                           {ro.isWaiter && (
-                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300">
                               Waiter Customer
                             </span>
                           )}
                         </div>
 
                         {/* Customer & VIN */}
-                        <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
-                          <span>Customer: <strong className="text-slate-800">{ro.customerName}</strong> ({ro.customerPhone})</span>
+                        <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
+                          <span>Customer: <strong className="text-slate-900">{ro.customerName}</strong> ({ro.customerPhone})</span>
                           <span>•</span>
-                          <span className="inline-flex items-center gap-1.5 font-mono bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-700">
+                          <span className="inline-flex items-center gap-1.5 font-mono bg-slate-50 px-2 py-0.5 rounded border border-slate-300 text-slate-800">
                             <span>VIN: <strong>{ro.vehicle.vin}</strong></span>
                             <button
                               onClick={() => copyVin(ro.vehicle.vin, ro.id)}
@@ -654,17 +1147,16 @@ export const PartsDashboard: React.FC = () => {
                       {/* Personnel Info & Fast Actions */}
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="text-left sm:text-right text-xs space-y-0.5">
-                          <div className="text-slate-500">
-                            Tech: <strong className="text-slate-800">{ro.techName || 'Unassigned'}</strong>
+                          <div className="text-slate-600">
+                            Tech: <strong className="text-slate-900">{ro.techName || 'Unassigned'}</strong>
                             {assignedTech?.employeeNumber && (
-                              <span className="ml-1 font-mono text-[10px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded border border-slate-200">
+                              <span className="ml-1 font-mono text-[10px] bg-slate-100 text-slate-700 px-1 py-0.2 rounded border border-slate-300">
                                 {assignedTech.employeeNumber}
                               </span>
                             )}
-                            {ro.bay && <span className="ml-1 text-slate-500">({ro.bay})</span>}
                           </div>
-                          <div className="text-slate-500">
-                            Advisor: <strong className="text-slate-800">{ro.advisorName}</strong>
+                          <div className="text-slate-600">
+                            Advisor: <strong className="text-slate-900">{ro.advisorName}</strong>
                           </div>
                         </div>
 
@@ -680,7 +1172,7 @@ export const PartsDashboard: React.FC = () => {
 
                           <button
                             onClick={() => setSelectedRO(ro)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-slate-200"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer border-2 border-slate-400"
                             title="Open Complete RO Details Modal"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -693,7 +1185,7 @@ export const PartsDashboard: React.FC = () => {
                     </div>
 
                     {/* Middle Row: Concerns & Findings (Context for Parts Lookup) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50/70 p-3 rounded-lg border border-slate-200/80">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50 p-2.5 sm:p-3 rounded-lg border-2 border-slate-300">
                       <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
                           <FileText className="w-3 h-3 text-slate-400" />
@@ -917,7 +1409,6 @@ export const PartsDashboard: React.FC = () => {
                               </span>
                             ) : null;
                           })()}
-                          <span>({part.bay || 'No Bay'})</span>
                         </span>
                         <span className="flex items-center gap-1">
                           <span>• Advisor: <strong className="text-slate-800">{part.advisorName}</strong></span>
@@ -967,7 +1458,7 @@ export const PartsDashboard: React.FC = () => {
                             onClick={() => handleIssueToTech(part.roId, part.id)}
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
                           >
-                            Issue to Tech in Bay
+                            Issue to Tech
                           </button>
                         )}
 

@@ -1,34 +1,3 @@
-export function formatDateTime(dateStr?: string): string {
-  if (!dateStr) return 'Not set';
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return dateStr;
-
-  const now = new Date();
-  const isToday = 
-    date.getDate() === now.getDate() &&
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear();
-
-  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-  if (isToday) {
-    return `Today at ${timeStr}`;
-  }
-
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const isYesterday = 
-    date.getDate() === yesterday.getDate() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getFullYear() === yesterday.getFullYear();
-
-  if (isYesterday) {
-    return `Yesterday at ${timeStr}`;
-  }
-
-  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${timeStr}`;
-}
-
 const MONTH_NAMES_UPPER = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 export function formatMilitaryDate(dateInput?: string | number | Date): string {
@@ -36,9 +5,9 @@ export function formatMilitaryDate(dateInput?: string | number | Date): string {
   const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
   if (isNaN(date.getTime())) return String(dateInput);
 
-  const day = date.getDate();
+  const day = String(date.getDate()).padStart(2, '0');
   const month = MONTH_NAMES_UPPER[date.getMonth()];
-  const year = String(date.getFullYear()).slice(-2);
+  const year = date.getFullYear();
   return `${day} ${month} ${year}`;
 }
 
@@ -60,11 +29,28 @@ export function formatMilitaryDateTime(dateInput?: string | number | Date): stri
   return `${formatMilitaryDate(date)} ${formatMilitaryTime(date)}`;
 }
 
-export function formatTimeOnly(dateStr?: string): string {
-  if (!dateStr) return '--:--';
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return dateStr;
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+export function formatDateTime(dateInput?: string | number | Date): string {
+  if (!dateInput) return 'Not set';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = MONTH_NAMES_UPPER[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${day} ${month} ${year} ${hours}:${minutes}`;
+}
+
+export function formatTimeOnly(dateInput?: string | number | Date): string {
+  if (!dateInput) return '--:--';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 export function formatRelativeTime(dateStr?: string): string {
@@ -102,7 +88,7 @@ export function formatEtaBadge(etaStr?: string): { text: string; urgent: boolean
 
   if (diffMinutes < 60) {
     return {
-      text: `Arriving in ${diffMinutes} min (${etaDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})`,
+      text: `Arriving in ${diffMinutes} min (${formatTimeOnly(etaDate)})`,
       urgent: true,
       pastDue: false,
     };
@@ -111,7 +97,7 @@ export function formatEtaBadge(etaStr?: string): { text: string; urgent: boolean
   const hours = Math.floor(diffMinutes / 60);
   const remainingMins = diffMinutes % 60;
   return {
-    text: `ETA ${hours}h ${remainingMins}m (${etaDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})`,
+    text: `ETA ${hours}h ${remainingMins}m (${formatTimeOnly(etaDate)})`,
     urgent: false,
     pastDue: false,
   };
@@ -123,9 +109,14 @@ export function calculateDispatchedDuration(dispatchedAt?: string): string {
   if (isNaN(dispatched.getTime())) return '';
   const now = new Date();
   const diffMinutes = Math.max(0, Math.floor((now.getTime() - dispatched.getTime()) / 60000));
-  const hours = Math.floor(diffMinutes / 60);
+  const days = Math.floor(diffMinutes / (24 * 60));
+  const hours = Math.floor((diffMinutes % (24 * 60)) / 60);
   const minutes = diffMinutes % 60;
-  return `${hours}h ${minutes}m in bay`;
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m dispatched`;
+  }
+  return `${hours}h ${minutes}m dispatched`;
 }
 
 export const calculateAssignedDuration = calculateDispatchedDuration;
@@ -139,8 +130,12 @@ export function formatDurationSince(dateStr?: string): string {
   const diffMinutes = Math.floor(diffMs / 60000);
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m`;
-  const hours = Math.floor(diffMinutes / 60);
+  const days = Math.floor(diffMinutes / (24 * 60));
+  const hours = Math.floor((diffMinutes % (24 * 60)) / 60);
   const mins = diffMinutes % 60;
+  if (days > 0) {
+    return `${days}d ${hours}h ${mins}m`;
+  }
   return `${hours}h ${mins}m`;
 }
 

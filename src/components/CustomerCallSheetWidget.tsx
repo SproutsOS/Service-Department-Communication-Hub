@@ -97,38 +97,38 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
   const advisors = users.filter(u => u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER');
 
   return (
-    <div id="customer-call-sheet-widget" className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+    <div id="customer-call-sheet-widget" className="bg-white rounded-xl border-2 border-slate-600 shadow-xs overflow-hidden">
       {/* Header Banner */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
+            <span className="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
               Customer Communications
             </span>
             <span className="text-xs text-slate-300 font-medium">
               Twice-Weekly Call Tracker
             </span>
           </div>
-          <h2 className="text-lg sm:text-xl font-black mt-1 text-white tracking-tight flex items-center gap-2">
-            <PhoneCall className="w-5 h-5 text-blue-400" />
+          <h2 className="text-base sm:text-lg font-black mt-0.5 text-white tracking-tight flex items-center gap-2">
+            <PhoneCall className="w-4 h-4 text-blue-400" />
             <span>Daily Customer Call Sheet</span>
           </h2>
-          <p className="text-xs text-slate-300 mt-0.5">
+          <p className="text-xs text-slate-300">
             Keep customers with vehicles in shop or waiting on parts informed every 3 to 4 days.
           </p>
         </div>
 
         {/* Quick Summary Pill Counters */}
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 bg-red-500/20 border border-red-400/40 rounded-xl text-center">
+          <div className="px-2.5 py-1 bg-red-500/20 border-2 border-red-400/60 rounded-lg text-center">
             <span className="block text-sm font-black text-red-300">{overdueCount}</span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-red-200">Overdue</span>
           </div>
-          <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-400/40 rounded-xl text-center">
+          <div className="px-2.5 py-1 bg-amber-500/20 border-2 border-amber-400/60 rounded-lg text-center">
             <span className="block text-sm font-black text-amber-300">{dueTodayCount}</span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-200">Due Today</span>
           </div>
-          <div className="px-3 py-1.5 bg-purple-500/20 border border-purple-400/40 rounded-xl text-center hidden sm:block">
+          <div className="px-2.5 py-1 bg-purple-500/20 border-2 border-purple-400/60 rounded-lg text-center hidden sm:block">
             <span className="block text-sm font-black text-purple-300">{waitingPartsCount}</span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Waiting on Parts</span>
           </div>
@@ -136,16 +136,16 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="p-3 sm:p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-2.5 sm:p-3 bg-slate-50 border-b-2 border-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
         {/* Filter buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           <button
             type="button"
             onClick={() => setActiveFilter('ALL_DUE')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border-2 ${
               activeFilter === 'ALL_DUE'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                ? 'bg-slate-900 text-white border-slate-950 shadow-xs'
+                : 'bg-white text-slate-800 border-slate-500 hover:border-slate-800 hover:bg-slate-100'
             }`}
           >
             Calls Due ({overdueCount + dueTodayCount})
@@ -154,10 +154,10 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
           <button
             type="button"
             onClick={() => setActiveFilter('OVERDUE')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border-2 ${
               activeFilter === 'OVERDUE'
-                ? 'bg-red-600 text-white shadow-xs'
-                : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
+                ? 'bg-red-600 text-white border-red-700 shadow-xs'
+                : 'bg-white text-red-800 border-slate-500 hover:border-red-600 hover:bg-red-50'
             }`}
           >
             Overdue ({overdueCount})
@@ -166,10 +166,10 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
           <button
             type="button"
             onClick={() => setActiveFilter('DUE_TODAY')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border-2 ${
               activeFilter === 'DUE_TODAY'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-50'
+                ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                : 'bg-white text-amber-900 border-slate-500 hover:border-amber-600 hover:bg-amber-50'
             }`}
           >
             Due Today ({dueTodayCount})
@@ -178,10 +178,10 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
           <button
             type="button"
             onClick={() => setActiveFilter('WAITING_PARTS')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border-2 ${
               activeFilter === 'WAITING_PARTS'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'bg-white text-purple-700 border border-purple-200 hover:bg-purple-50'
+                ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                : 'bg-white text-purple-900 border-slate-500 hover:border-purple-600 hover:bg-purple-50'
             }`}
           >
             Waiting on Parts ({waitingPartsCount})
@@ -190,10 +190,10 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
           <button
             type="button"
             onClick={() => setActiveFilter('UP_TO_DATE')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border-2 ${
               activeFilter === 'UP_TO_DATE'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50'
+                ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                : 'bg-white text-emerald-800 border-slate-500 hover:border-emerald-600 hover:bg-emerald-50'
             }`}
           >
             Current / Up to Date ({upToDateCount})
@@ -208,7 +208,7 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
               value={selectedAdvisorFilter}
               onChange={e => setSelectedAdvisorFilter(e.target.value)}
               aria-label="Filter by Service Advisor"
-              className="text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="text-xs font-semibold px-2.5 py-1 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               <option value="ALL">All Advisors</option>
               {advisors.map(adv => (
@@ -221,20 +221,20 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
 
           {/* Quick Search */}
           <div className="relative min-w-[180px]">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Filter customer, RO, part..."
-              className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full text-xs pl-8 pr-3 py-1 bg-white border-2 border-slate-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
         </div>
       </div>
 
       {/* Call Sheet Table / List */}
-      <div className="divide-y divide-slate-100 max-h-[460px] overflow-y-auto">
+      <div className="divide-y-2 divide-slate-200 max-h-[460px] overflow-y-auto">
         {filteredItems.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />

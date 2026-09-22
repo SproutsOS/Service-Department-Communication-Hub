@@ -39,6 +39,8 @@ export const Navbar: React.FC = () => {
     shopMessages,
     shopName,
     isCloudSynced,
+    customers,
+    setIsCustomerDirectoryOpen,
     resetAllDataToCleanSlateHandler,
     resetToDemoData,
     requestPushPermission,
@@ -305,6 +307,22 @@ export const Navbar: React.FC = () => {
           title={isSoundEnabled ? "Notification sound active (Click to mute)" : "Muted (Click to enable audio alerts)"}
         >
           {isSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
+
+        {/* Customer Cloud Directory Button */}
+        <button
+          id="navbar-customers-directory-btn"
+          onClick={() => setIsCustomerDirectoryOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-600 shadow-xs"
+          title="Customer Cloud Directory (Saved profiles, tax exemptions, vehicles & history)"
+        >
+          <Users className="w-4 h-4 text-blue-400" />
+          <span className="hidden sm:inline">Customers</span>
+          {customers.length > 0 && (
+            <span className="text-[10px] bg-blue-900 text-blue-200 px-1.5 py-0.2 rounded-full font-extrabold border border-blue-700">
+              {customers.length}
+            </span>
+          )}
         </button>
 
         {/* Create RO Button (for Advisor & Manager) */}

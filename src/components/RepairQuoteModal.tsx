@@ -143,8 +143,18 @@ export const RepairQuoteModal: React.FC = () => {
       initiatedByTechId: currentRO.quote?.initiatedByTechId || currentUser.id,
       initiatedByTechName: currentRO.quote?.initiatedByTechName || currentUser.name,
       status: currentRO.quote?.status || 'DRAFT',
-      laborItems: curLabor,
-      partsItems: curParts,
+      laborItems: curLabor.map(l => ({
+        ...l,
+        laborHours: Number(l.laborHours) || 0,
+        hourlyRate: Number(l.hourlyRate) || 0,
+        subtotal: Number(l.subtotal) || 0,
+      })),
+      partsItems: curParts.map(p => ({
+        ...p,
+        quantity: Number(p.quantity) || 1,
+        unitPrice: Number(p.unitPrice) || 0,
+        subtotal: Number(p.subtotal) || 0,
+      })),
       defaultLaborRate: curRate,
       shopSuppliesFee: curShopSupplies,
       taxRate: curIsExempt ? 0 : (curTaxPercent || 0) / 100,
@@ -235,7 +245,10 @@ export const RepairQuoteModal: React.FC = () => {
       const q = activeQuoteRO.quote;
       setDefaultRate(q.defaultLaborRate || 150);
       setLaborItems(q.laborItems || []);
-      setPartsItems(q.partsItems || []);
+      setPartsItems((q.partsItems || []).map(p => ({
+        ...p,
+        unitPrice: (p.unitPrice && Number(p.unitPrice) > 0) ? p.unitPrice : ('' as any),
+      })));
       setApplyShopSupplies((q.shopSuppliesFee || 0) > 0);
       setShopSuppliesFee(q.shopSuppliesFee || 0);
       setTaxRatePercent(isExemptCustomer ? 0 : (q.taxRate !== undefined ? q.taxRate * 100 : 7.0));
@@ -274,7 +287,7 @@ export const RepairQuoteModal: React.FC = () => {
           description: p.description || p.name,
           partNumber: p.partNumber,
           quantity: p.quantity || 1,
-          unitPrice: p.price || 0,
+          unitPrice: (p.price && Number(p.price) > 0) ? p.price : ('' as any),
           subtotal: (p.quantity || 1) * (p.price || 0),
           sourcePartId: p.id,
         }));
@@ -383,14 +396,14 @@ export const RepairQuoteModal: React.FC = () => {
 
   // Labor line operations
   const handleAddLaborItem = (preset?: { name: string; hours: number; notes?: string }) => {
-    const hours = preset ? preset.hours : 1.0;
+    const hours = preset ? preset.hours : ('' as any);
     const rate = defaultRate;
     const newItem: LaborLineItem = {
       id: `labor_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       description: preset ? preset.name : '',
       laborHours: hours,
       hourlyRate: rate,
-      subtotal: Number((hours * rate).toFixed(2)),
+      subtotal: preset ? Number((preset.hours * rate).toFixed(2)) : 0,
       techNotes: preset?.notes,
     };
     setLaborItems(prev => [...prev, newItem]);
@@ -418,7 +431,7 @@ export const RepairQuoteModal: React.FC = () => {
       description: '',
       partNumber: '',
       quantity: 1,
-      unitPrice: 0,
+      unitPrice: '' as any,
       subtotal: 0,
     };
     setPartsItems(prev => [...prev, newItem]);
@@ -485,7 +498,7 @@ export const RepairQuoteModal: React.FC = () => {
         description: p.description || p.name,
         partNumber: p.partNumber,
         quantity: p.quantity || 1,
-        unitPrice: p.price || 0,
+        unitPrice: (p.price && Number(p.price) > 0) ? p.price : ('' as any),
         subtotal: (p.quantity || 1) * (p.price || 0),
         sourcePartId: p.id,
       }));
@@ -515,8 +528,18 @@ export const RepairQuoteModal: React.FC = () => {
       initiatedByTechId: quote?.initiatedByTechId || currentUser.id,
       initiatedByTechName: quote?.initiatedByTechName || currentUser.name,
       status: submitToAdvisor ? 'SUBMITTED' : (quote?.status || 'DRAFT'),
-      laborItems,
-      partsItems,
+      laborItems: laborItems.map(l => ({
+        ...l,
+        laborHours: Number(l.laborHours) || 0,
+        hourlyRate: Number(l.hourlyRate) || 0,
+        subtotal: Number(l.subtotal) || 0,
+      })),
+      partsItems: partsItems.map(p => ({
+        ...p,
+        quantity: Number(p.quantity) || 1,
+        unitPrice: Number(p.unitPrice) || 0,
+        subtotal: Number(p.subtotal) || 0,
+      })),
       defaultLaborRate: defaultRate,
       shopSuppliesFee: calculatedShopSupplies,
       isTaxExempt,
@@ -662,9 +685,11 @@ export const RepairQuoteModal: React.FC = () => {
                 {vehicle.vin && (
                   <>
                     <span>•</span>
-                    <span className="font-mono text-slate-300">VIN: {vehicle.vin}</span>
+                    <span>VIN: <strong className="text-slate-200 select-all">{vehicle.vin}</strong></span>
                   </>
                 )}
+                <span>•</span>
+                <span>Miles: <strong className="text-slate-200">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} mi` : `${vehicle.mileage ?? 0} mi`}</strong></span>
               </p>
             </div>
           </div>
@@ -673,20 +698,18 @@ export const RepairQuoteModal: React.FC = () => {
             {/* Auto-Save Status Badge */}
             <div 
               id="quote-autosave-badge"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 select-none"
-              title="All changes to labor operations, parts, and notes are automatically saved to the system"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 select-none text-slate-300"
+              title="All changes are automatically saved"
             >
               {quoteAutoSaveStatus === 'saving' ? (
                 <span className="flex items-center gap-1.5 text-blue-400">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span className="hidden sm:inline">Auto-Saving...</span>
+                  <span className="hidden sm:inline">Saving...</span>
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-emerald-400">
+                <span className="flex items-center gap-1.5 text-slate-300">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="hidden sm:inline">
-                    {quoteLastSavedTime ? `Auto-Saved (${quoteLastSavedTime})` : 'Auto-Save Active'}
-                  </span>
+                  <span className="hidden sm:inline">Saved</span>
                 </span>
               )}
             </div>
@@ -851,9 +874,11 @@ export const RepairQuoteModal: React.FC = () => {
                   type="number"
                   min="0"
                   step="5"
-                  value={defaultRate}
+                  placeholder=""
+                  value={defaultRate === 0 || !defaultRate ? '' : defaultRate}
                   onChange={(e) => {
-                    const newRate = Number(e.target.value) || 0;
+                    const val = e.target.value;
+                    const newRate = val === '' ? 0 : Number(val);
                     setDefaultRate(newRate);
                     // optionally update rate across existing items
                     setLaborItems(prev => prev.map(item => ({
@@ -862,6 +887,7 @@ export const RepairQuoteModal: React.FC = () => {
                       subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
                     })));
                   }}
+                  onFocus={(e) => e.target.select()}
                   className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
@@ -965,8 +991,15 @@ export const RepairQuoteModal: React.FC = () => {
                           type="number"
                           step="0.1"
                           min="0"
-                          value={item.laborHours}
-                          onChange={(e) => handleUpdateLaborItem(item.id, { laborHours: Number(e.target.value) || 0 })}
+                          placeholder=""
+                          value={item.laborHours === 0 || item.laborHours === undefined || (item.laborHours as any) === '' ? '' : item.laborHours}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            handleUpdateLaborItem(item.id, { 
+                              laborHours: val === '' ? ('' as any) : Number(val) 
+                            });
+                          }}
+                          onFocus={(e) => e.target.select()}
                           className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                       </div>
@@ -980,8 +1013,15 @@ export const RepairQuoteModal: React.FC = () => {
                             type="number"
                             step="5"
                             min="0"
-                            value={item.hourlyRate}
-                            onChange={(e) => handleUpdateLaborItem(item.id, { hourlyRate: Number(e.target.value) || 0 })}
+                            placeholder=""
+                            value={item.hourlyRate === 0 || item.hourlyRate === undefined || (item.hourlyRate as any) === '' ? '' : item.hourlyRate}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleUpdateLaborItem(item.id, { 
+                                hourlyRate: val === '' ? ('' as any) : Number(val) 
+                              });
+                            }}
+                            onFocus={(e) => e.target.select()}
                             className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
@@ -1106,8 +1146,15 @@ export const RepairQuoteModal: React.FC = () => {
                         <input
                           type="number"
                           min="1"
-                          value={part.quantity}
-                          onChange={(e) => handleUpdatePartItem(part.id, { quantity: Number(e.target.value) || 1 })}
+                          placeholder=""
+                          value={part.quantity === 0 || part.quantity === undefined || (part.quantity as any) === '' ? '' : part.quantity}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            handleUpdatePartItem(part.id, { 
+                              quantity: val === '' ? ('' as any) : Number(val) 
+                            });
+                          }}
+                          onFocus={(e) => e.target.select()}
                           className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                       </div>
@@ -1119,10 +1166,17 @@ export const RepairQuoteModal: React.FC = () => {
                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
                           <input
                             type="number"
-                            step="0.5"
+                            step="0.01"
                             min="0"
-                            value={part.unitPrice}
-                            onChange={(e) => handleUpdatePartItem(part.id, { unitPrice: Number(e.target.value) || 0 })}
+                            placeholder=""
+                            value={part.unitPrice === 0 || part.unitPrice === undefined || (part.unitPrice as any) === '' ? '' : part.unitPrice}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleUpdatePartItem(part.id, { 
+                                unitPrice: val === '' ? ('' as any) : Number(val) 
+                              });
+                            }}
+                            onFocus={(e) => e.target.select()}
                             className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
@@ -1376,23 +1430,6 @@ export const RepairQuoteModal: React.FC = () => {
               <Printer className="w-4 h-4 text-slate-500" />
               <span>Print Quote</span>
             </button>
-
-            {/* Auto-Save Footer Feedback */}
-            <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 font-medium pl-2">
-              {quoteAutoSaveStatus === 'saving' ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin" />
-                  <span className="text-blue-600 font-semibold">Auto-saving quote changes...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>
-                    Auto-saved {quoteLastSavedTime ? `at ${quoteLastSavedTime}` : 'live'}
-                  </span>
-                </>
-              )}
-            </div>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto justify-end">
@@ -1535,9 +1572,6 @@ export const RepairQuoteModal: React.FC = () => {
             </span>
             <span className="text-slate-800 block">
               Technician: <strong className="font-bold text-slate-950">{activeQuoteRO.techName || quote?.initiatedByTechName || 'Assigned Tech'}</strong>
-            </span>
-            <span className="text-slate-600 block text-[11px]">
-              Bay: {activeQuoteRO.bay || 'General Service'}
             </span>
           </div>
         </div>
@@ -1738,39 +1772,6 @@ export const RepairQuoteModal: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Customer Authorization & Signature Block */}
-        <div className="border-2 border-slate-400 rounded-lg p-3 space-y-2 break-inside-avoid">
-          <p className="text-[10px] text-slate-600 leading-tight">
-            I hereby authorize the repair work listed above to be performed along with necessary materials. Precision Auto Care and its employees are granted permission to operate the vehicle described on streets and highways for testing and inspection purposes.
-          </p>
-
-          <div className="grid grid-cols-2 gap-6 pt-1">
-            <div>
-              <div className="border-b-2 border-slate-900 pb-1 h-6"></div>
-              <div className="flex justify-between text-[10px] font-bold text-slate-700 mt-1 uppercase">
-                <span>Customer Signature</span>
-                <span>Date</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="border-b-2 border-slate-900 pb-1 h-6 flex items-end">
-                <span className="text-xs font-semibold text-slate-800">{activeQuoteRO.advisorName}</span>
-              </div>
-              <div className="flex justify-between text-[10px] font-bold text-slate-700 mt-1 uppercase">
-                <span>Service Advisor Signature</span>
-                <span>Date: {new Date().toLocaleDateString()}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Document Bottom Bar */}
-        <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-200">
-          <span>RO #{activeQuoteRO.id} • {shopName || 'Precision Auto & Truck Service'}</span>
-          <span>Official Customer Copy</span>
         </div>
       </div>,
       document.body

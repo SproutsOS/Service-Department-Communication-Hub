@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RepairOrder, WarrantyLaborTimePunch, WarrantyOperationType } from '../types';
+import { formatMilitaryTime, formatDateTime } from '../utils/formatters';
 
 interface WarrantyTimeClockSectionProps {
   ro: RepairOrder;
@@ -152,12 +153,7 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
 
   const formatPunchTime = (isoString?: string) => {
     if (!isoString) return 'In-Progress';
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' (' + (d.getMonth() + 1) + '/' + d.getDate() + ')';
-    } catch {
-      return isoString;
-    }
+    return formatDateTime(isoString);
   };
 
   return (
@@ -263,7 +259,7 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
                   {formatTimer(activeElapsedSecs)}
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
-                  Started at {new Date(myActivePunch.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  Started at {formatMilitaryTime(myActivePunch.clockIn)}
                 </div>
               </div>
             </div>

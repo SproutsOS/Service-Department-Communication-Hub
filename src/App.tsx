@@ -14,6 +14,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { RepairQuoteModal } from './components/RepairQuoteModal';
 import { WarrantyPrintModal } from './components/WarrantyPrintModal';
+import { CustomerDirectoryModal } from './components/CustomerDirectoryModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -49,15 +50,13 @@ const MainContent: React.FC = () => {
     latestUnreadShopMessage,
     shopMessages,
     isAuthenticated,
-    lockWorkstation
+    lockWorkstation,
+    activeRoleView,
+    setActiveRoleView
   } = useApp();
   
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
   const isManager = currentUser.role === 'SERVICE_MANAGER';
-  const [viewOverride, setViewOverride] = useState<UserRole | null>(null);
-
-  // Active space: non-managers are locked strictly to their assigned role
-  const activeRoleView: UserRole = isManager ? (viewOverride || 'SERVICE_MANAGER') : currentUser.role;
 
   // Auto-close staff management if a non-manager is active
   React.useEffect(() => {
@@ -73,9 +72,9 @@ const MainContent: React.FC = () => {
         <LoginScreen 
           onLoginSuccess={(loggedUser) => {
             if (loggedUser.role === 'SERVICE_MANAGER') {
-              setViewOverride('SERVICE_MANAGER');
+              setActiveRoleView('SERVICE_MANAGER');
             } else {
-              setViewOverride(loggedUser.role);
+              setActiveRoleView(loggedUser.role);
             }
           }}
         />
@@ -97,7 +96,7 @@ const MainContent: React.FC = () => {
       return;
     }
     setIsStaffManagementOpen(false);
-    setViewOverride(role);
+    setActiveRoleView(role);
   };
 
   return (
@@ -370,7 +369,7 @@ const MainContent: React.FC = () => {
                     !isStaffManagementOpen && activeRoleView === 'PARTS_SPECIALIST' ? 'bg-blue-600 text-white' : 'text-slate-400'
                   }`}
                 >
-                  Parts & ETA
+                  Parts ETA
                 </button>
                 <button
                   onClick={() => handleSelectRole('SALES')}
@@ -503,6 +502,7 @@ const MainContent: React.FC = () => {
         <RepairQuoteModal />
       </ErrorBoundary>
       <WarrantyPrintModal />
+      <CustomerDirectoryModal />
       <UrgentToastStack />
 
       {/* Floating Quick Chat Launcher (visible when chat box is closed) */}

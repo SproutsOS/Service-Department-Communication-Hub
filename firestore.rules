@@ -5,6 +5,9 @@ service cloud.firestore {
     match /repairOrders/{roId} {
       allow read, write: if true;
     }
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
     match /users/{userId} {
       allow read, write: if true;
     }

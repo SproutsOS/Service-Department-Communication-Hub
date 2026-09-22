@@ -512,16 +512,10 @@ export const StaffManagement: React.FC = () => {
       </div>
 
       {/* Quick Edit Guidance Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50/80 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
-        <div className="flex items-center gap-2">
-          <Edit3 className="w-4 h-4 text-blue-600 shrink-0" />
-          <span>
-            <strong>Interactive Staff Directory:</strong> Click directly on any employee card below to edit their profile details. <strong>All edits auto-save automatically.</strong>
-          </span>
-        </div>
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shrink-0 self-start sm:self-auto">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          Auto-Save Active
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
+        <Edit3 className="w-4 h-4 text-blue-600 shrink-0" />
+        <span>
+          <strong>Interactive Staff Directory:</strong> Click directly on any employee card below to edit their profile details and role assignments.
         </span>
       </div>
 

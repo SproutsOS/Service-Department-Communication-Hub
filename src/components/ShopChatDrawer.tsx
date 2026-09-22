@@ -17,7 +17,7 @@ import {
   Bell
 } from 'lucide-react';
 import { UserRole, User as UserType } from '../types';
-import { formatRelativeTime } from '../utils/formatters';
+import { formatRelativeTime, formatMilitaryTime } from '../utils/formatters';
 
 interface ShopChatDrawerProps {
   isOpen: boolean;
@@ -581,7 +581,7 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
                   label: msg.senderRole || 'STAFF',
                   badgeClass: 'bg-slate-100 text-slate-800 border-slate-300',
                 };
-                const msgTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const msgTime = formatMilitaryTime(msg.timestamp);
 
                 return (
                   <div

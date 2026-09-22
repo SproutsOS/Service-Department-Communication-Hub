@@ -251,17 +251,18 @@ export const WarrantyPrintModal: React.FC = () => {
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase block">Service Team & Bay</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Service Team</span>
                 <span className="font-medium text-slate-800 block">
                   Advisor: <strong className="font-bold">{ro.advisorName}</strong>
                 </span>
                 <span className="font-medium text-slate-800 block">
                   Tech: <strong className="font-bold">{ro.techName || 'Unassigned'}</strong>
                 </span>
-                <span className="text-slate-500 block text-[11px]">
-                  Bay: {ro.bay || 'General'}
-                  {ro.createdAt && ` | Date: ${formatMilitaryDate(ro.createdAt)}`}
-                </span>
+                {ro.createdAt && (
+                  <span className="text-slate-500 block text-[11px]">
+                    Date: {formatMilitaryDate(ro.createdAt)}
+                  </span>
+                )}
               </div>
             </div>
 

@@ -101,6 +101,159 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
   const isTech = currentUser.role === 'TECHNICIAN';
   const isAdvisorOrMgr = currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER';
 
+  // For Service Advisors, Managers, and non-technician views:
+  // Show ONLY the clean "Requested Items on this RO" section.
+  if (!isTech) {
+    return (
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        onMouseDown={(e) => e.stopPropagation()}
+        className="bg-white rounded-xl border border-slate-200 p-3.5 space-y-3 shadow-2xs"
+      >
+        {/* Header & Badges */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wide">
+              <Tag className="w-4 h-4 text-blue-600" />
+              <span>Step 3: Requested Items on this RO</span>
+            </div>
+
+            {recommendations.length > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                {recommendations.length} {recommendations.length === 1 ? 'Item' : 'Items'}
+              </span>
+            )}
+
+            {pendingCount > 0 && (
+              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-red-600" />
+                {pendingCount} Awaiting Customer Approval
+              </span>
+            )}
+
+            {approvedCount > 0 && (
+              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                {approvedCount} Authorized
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* List of Requested Items */}
+        {recommendations.length === 0 ? (
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+            <span className="italic">No additional items requested by technician on this repair order.</span>
+            <span className="text-[10px] font-semibold text-slate-400">All Clear</span>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {recommendations.map(rec => {
+              const isApproved = rec.status === 'APPROVED';
+              const isDeclined = rec.status === 'DECLINED';
+              const isPending = rec.status === 'PENDING';
+
+              return (
+                <div
+                  key={rec.id}
+                  className={`p-2.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-all ${
+                    isApproved
+                      ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
+                      : isDeclined
+                      ? 'bg-slate-100 border-slate-300 text-slate-600 opacity-75'
+                      : 'bg-red-50/30 border-red-300 shadow-2xs text-slate-900'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-900">
+                        {rec.serviceName}
+                      </span>
+
+                      {rec.urgency === 'SAFETY' ? (
+                        <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-red-100 text-red-700 border border-red-300 flex items-center gap-0.5">
+                          <AlertTriangle className="w-2.5 h-2.5" /> Safety Concern
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          Recommended Maint
+                        </span>
+                      )}
+
+                      {/* Status Tag */}
+                      {isPending && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-red-600" />
+                          Awaiting Customer Approval
+                        </span>
+                      )}
+                      {isApproved && (
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1 shadow-2xs">
+                          <CheckCircle className="w-3 h-3" />
+                          Authorized by Customer
+                        </span>
+                      )}
+                      {isDeclined && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 flex items-center gap-1">
+                          <XCircle className="w-3 h-3 text-slate-500" />
+                          Declined
+                        </span>
+                      )}
+                    </div>
+
+                    {rec.notes && (
+                      <div className="text-[11px] text-slate-600 italic">
+                        "{rec.notes}"
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap pt-0.5">
+                      <span>Requested by {rec.requestedByTechName}</span>
+                      {rec.reviewedByAdvisorName && (
+                        <>
+                          <span>•</span>
+                          <span>Reviewed by {rec.reviewedByAdvisorName}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Advisor/Manager Approval Controls */}
+                  {isAdvisorOrMgr && isPending && (
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 shrink-0"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleReviewStatus(rec.id, 'APPROVED')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-2.5 py-1 rounded-md transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
+                        title="Customer authorized this service"
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        <span>Approve</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleReviewStatus(rec.id, 'DECLINED', 'Customer declined at this time')}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-semibold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        title="Customer declined this service"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Technician View: Includes quick 1-tap presets and request form
   return (
     <div 
       onClick={(e) => e.stopPropagation()} 
@@ -112,7 +265,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wide">
             <Sparkles className="w-4 h-4 text-amber-600" />
-            <span>Additional Recommended Services</span>
+            <span>Step 3: Requested Items on this RO</span>
           </div>
 
           {pendingCount > 0 && (
@@ -244,39 +397,39 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
               Priority Level
             </label>
             <div className="flex gap-2">
-              <label className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
-                urgency === 'RECOMMENDED'
-                  ? 'bg-blue-50 border-blue-500 text-blue-800 ring-1 ring-blue-500'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="radio"
-                  name={`urgency-${ro.id}`}
-                  value="RECOMMENDED"
-                  checked={urgency === 'RECOMMENDED'}
-                  onChange={() => setUrgency('RECOMMENDED')}
-                  className="sr-only"
-                />
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setUrgency('RECOMMENDED');
+                }}
+                className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
+                  urgency === 'RECOMMENDED'
+                    ? 'bg-blue-50 border-blue-500 text-blue-800 ring-1 ring-blue-500'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span>Recommended Maintenance</span>
-              </label>
+              </button>
 
-              <label className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
-                urgency === 'SAFETY'
-                  ? 'bg-red-50 border-red-500 text-red-800 ring-1 ring-red-500'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="radio"
-                  name={`urgency-${ro.id}`}
-                  value="SAFETY"
-                  checked={urgency === 'SAFETY'}
-                  onChange={() => setUrgency('SAFETY')}
-                  className="sr-only"
-                />
-                <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setUrgency('SAFETY');
+                }}
+                className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
+                  urgency === 'SAFETY'
+                    ? 'bg-red-50 border-red-500 text-red-800 ring-1 ring-red-500'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
                 <span>Immediate Safety Concern</span>
-              </label>
+              </button>
             </div>
           </div>
 
@@ -336,7 +489,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                       ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
                       : isDeclined
                       ? 'bg-slate-100 border-slate-300 text-slate-600 opacity-75'
-                      : 'bg-white border-amber-300 shadow-2xs text-slate-900'
+                      : 'bg-red-50/30 border-red-300 shadow-2xs text-slate-900'
                   }`}
                 >
                   <div className="space-y-0.5">
@@ -357,8 +510,8 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
 
                       {/* Status Tag */}
                       {isPending && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-amber-600" />
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-red-600" />
                           Awaiting Customer Approval
                         </span>
                       )}
