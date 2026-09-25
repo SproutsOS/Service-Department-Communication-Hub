@@ -51,6 +51,7 @@ export type ROStatus =
 
 export type PredefinedPartStatus = 
   | 'IN_STOCK'
+  | 'LOCAL_PURCHASE'
   | 'DAILY_ORDER'
   | 'SPECIAL_ORDER_1_5_DAYS'
   | 'SPECIAL_ORDER'
@@ -127,7 +128,10 @@ export type CustomerContactOutcome =
   | 'NO_ANSWER' 
   | 'SENT_SMS_UPDATE' 
   | 'CUSTOMER_APPROVED_DELAY' 
-  | 'CUSTOMER_REQUESTED_CALLBACK';
+  | 'CUSTOMER_REQUESTED_CALLBACK'
+  | 'POST_REPAIR_SATISFIED'
+  | 'POST_REPAIR_HAS_CONCERNS'
+  | 'POST_REPAIR_VOICEMAIL';
 
 export interface CustomerContactRecord {
   id: string;
@@ -181,6 +185,13 @@ export interface RepairOrder {
   lastContactOutcome?: string;
   nextContactDueDate?: string; // ISO date string when next call is due
   contactHistory?: CustomerContactRecord[];
+  // 3-Day Post-Repair Customer Follow-Up & Quality Verification
+  completedAt?: string; // Timestamp when repair order was completed/closed
+  postRepairFollowUpDate?: string; // Scheduled date for 3-day post-repair quality check call (YYYY-MM-DD)
+  postRepairFollowUpCompleted?: boolean; // Whether 3-day follow-up call was conducted
+  postRepairFollowUpCompletedAt?: string; // Timestamp when 3-day follow-up was completed
+  postRepairFollowUpOutcome?: 'SATISFIED_NO_CONCERNS' | 'HAS_NEW_CONCERNS' | 'LEFT_VOICEMAIL' | 'NO_ANSWER' | 'CUSTOMER_CALLBACK_REQUESTED';
+  postRepairFollowUpNotes?: string; // Notes taken during the 3-day post-repair check
   quote?: RepairQuote;
   timePunches?: WarrantyLaborTimePunch[];
   isTaxExempt?: boolean; // Customer tax exemption status (0% sales tax vs default 7%)

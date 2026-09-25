@@ -36,12 +36,15 @@ import {
   Calculator,
   Printer,
   Camera,
-  ListFilter
+  ListFilter,
+  Copy
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
+import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails, formatCurrency } from '../utils/formatters';
+import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
+import { computeEtaAndStatus } from '../utils/partArrivalOptions';
 import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
@@ -78,6 +81,7 @@ export const RODetailModal: React.FC = () => {
     toggleCustomerTaxExempt,
     addVehiclePhoto,
     deleteVehiclePhoto,
+    addRepairOrderConcern,
     activeRoleView
   } = useApp();
 
@@ -90,7 +94,7 @@ export const RODetailModal: React.FC = () => {
   const canChangePartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && !isAdvisorScreen && !isTechScreen;
   const canSelectPayType = isManager || isAdvisor;
   const canAssignTech = isManager || isAdvisor;
-  const canReassignServiceWriter = !isTechScreen && (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR');
+  const canReassignServiceWriter = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
@@ -463,6 +467,7 @@ export const RODetailModal: React.FC = () => {
   const [modalVendors, setModalVendors] = useState<string[]>(DEFAULT_MODAL_VENDORS);
   const DEFAULT_MODAL_STATUSES = [
     { id: 'IN_STOCK', label: 'IN STOCK' },
+    { id: 'LOCAL_PURCHASE', label: 'LOCAL PURCHASE' },
     { id: 'DAILY_ORDER', label: 'DAILY ORDER' },
     { id: 'SPECIAL_ORDER_1_5_DAYS', label: 'SPECIAL ORDER 1-5 DAYS' },
     { id: 'VOR_UPGRADE', label: 'VOR UPGRADE' },
@@ -481,6 +486,8 @@ export const RODetailModal: React.FC = () => {
   const [isModalAddingCustomVendor, setIsModalAddingCustomVendor] = useState(false);
   const [modalCustomVendorInput, setModalCustomVendorInput] = useState('');
   const [partInitialStatus, setPartInitialStatus] = useState<PartStatus>('IN_STOCK');
+  const [partTimeFrameId, setPartTimeFrameId] = useState<string>('TODAY_5PM');
+  const [partEstimatedArrival, setPartEstimatedArrival] = useState<string>('');
   const [partPrice, setPartPrice] = useState('');
   const [partEtaTime, setPartEtaTime] = useState('17:00');
   const [partTracking, setPartTracking] = useState('');
@@ -534,10 +541,8 @@ export const RODetailModal: React.FC = () => {
     e.preventDefault();
     if (!partNumber.trim() || !partDescription.trim()) return;
 
-    // Build today's date with chosen ETA time
-    const today = new Date();
-    const [hours, minutes] = partEtaTime ? partEtaTime.split(':') : ['17', '00'];
-    const etaDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hours || '17'), parseInt(minutes || '00'));
+    // Resolve expectation of part arrival & status
+    const tfCalc = partTimeFrameId ? computeEtaAndStatus(partTimeFrameId) : null;
 
     const effectiveVendor = isModalAddingCustomVendor && modalCustomVendorInput.trim()
       ? modalCustomVendorInput.trim().toUpperCase()
@@ -550,7 +555,7 @@ export const RODetailModal: React.FC = () => {
     const effectiveStatus = canChangePartStatus
       ? (isModalAddingCustomStatus && modalCustomStatusInput.trim()
           ? modalCustomStatusInput.trim().toUpperCase().replace(/\s+/g, '_')
-          : partInitialStatus)
+          : (tfCalc?.status || partInitialStatus))
       : 'REQUESTED';
 
     if (canChangePartStatus && isModalAddingCustomStatus && modalCustomStatusInput.trim()) {
@@ -560,15 +565,27 @@ export const RODetailModal: React.FC = () => {
       }
     }
 
+    let etaArrival = partEstimatedArrival || tfCalc?.estimatedArrival;
+    if (!etaArrival) {
+      if (effectiveStatus === 'IN_STOCK') {
+        etaArrival = new Date().toISOString();
+      } else {
+        const today = new Date();
+        const [hours, minutes] = partEtaTime ? partEtaTime.split(':') : ['17', '00'];
+        const etaDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), parseInt(hours || '17'), parseInt(minutes || '00'));
+        etaArrival = etaDate.toISOString();
+      }
+    }
+
     addPartOrder(selectedRO.id, {
       partNumber: partNumber.trim().toUpperCase(),
       description: partDescription.trim(),
       quantity: partQuantity || 1,
       status: effectiveStatus,
       vendor: effectiveVendor || 'STELLANTIS',
-      estimatedArrival: effectiveStatus === 'IN_STOCK' ? new Date().toISOString() : etaDate.toISOString(),
+      estimatedArrival: etaArrival,
       trackingNumber: partTracking.trim() || undefined,
-      price: partPrice ? parseFloat(partPrice) : undefined,
+      price: partPrice && !isNaN(parseFloat(partPrice)) ? Number(parseFloat(partPrice).toFixed(2)) : undefined,
     });
 
     setPartNumber('');
@@ -720,29 +737,52 @@ export const RODetailModal: React.FC = () => {
               </button>
 
               {/* Repair Quote Initiation / Status */}
-              <button
-                type="button"
-                onClick={() => openQuoteModal(selectedRO.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs shrink-0 ${
-                  selectedRO.quote
-                    ? selectedRO.quote.status === 'APPROVED'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                      : selectedRO.quote.status === 'SUBMITTED'
-                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                      : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
-                    : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
-                }`}
-                title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                {selectedRO.quote ? (
-                  <span>
-                    Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
-                  </span>
-                ) : (
-                  <span>+ Repair Quote</span>
-                )}
-              </button>
+              {isTechScreen ? (
+                (() => {
+                  const loggedHours = selectedRO.quote?.laborItems 
+                    ? selectedRO.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
+                    : 0;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => openQuoteModal(selectedRO.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs shrink-0 ${
+                        loggedHours > 0
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+                          : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
+                      }`}
+                      title={loggedHours > 0 ? `View / Log Labor Time (${loggedHours.toFixed(1)} hrs)` : 'Enter Job Labor Time'}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{loggedHours > 0 ? `Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Labor Time'}</span>
+                    </button>
+                  );
+                })()
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openQuoteModal(selectedRO.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs shrink-0 ${
+                    selectedRO.quote
+                      ? selectedRO.quote.status === 'APPROVED'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                        : selectedRO.quote.status === 'SUBMITTED'
+                        ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                        : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
+                      : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
+                  }`}
+                  title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
+                >
+                  <Calculator className="w-3.5 h-3.5" />
+                  {selectedRO.quote ? (
+                    <span>
+                      Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
+                    </span>
+                  ) : (
+                    <span>+ Repair Quote</span>
+                  )}
+                </button>
+              )}
 
               {isManager ? (
                 <button
@@ -805,7 +845,7 @@ export const RODetailModal: React.FC = () => {
           <div className="mt-3 pt-2.5 border-t border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shrink-0">
             {/* Customer & Advisor */}
             <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap shrink-0 min-h-[34px]">
-              {selectedRO.customerName && selectedRO.customerName.trim().toLowerCase() !== 'woolwine cdjr' && (
+              {selectedRO.customerName && (
                 <>
                   <div className="flex items-center gap-1.5 font-bold text-slate-900 text-sm">
                     <User className="w-4 h-4 text-slate-500" />
@@ -865,11 +905,23 @@ export const RODetailModal: React.FC = () => {
               </span>
               <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
               <span 
-                className="font-bold text-slate-900 text-sm whitespace-nowrap select-all shrink-0" 
+                className="font-bold text-slate-900 text-sm whitespace-nowrap select-all shrink-0 font-mono" 
                 title={`VIN: ${selectedRO.vehicle.vin}`}
               >
                 {selectedRO.vehicle.vin}
               </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(selectedRO.vehicle.vin);
+                  alert(`Copied VIN: ${selectedRO.vehicle.vin}`);
+                }}
+                className="px-2 py-0.5 bg-slate-950 hover:bg-black text-white rounded text-xs font-mono font-bold border border-slate-700 flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0"
+                title="Copy VIN to clipboard"
+              >
+                <Copy className="w-3 h-3 text-blue-400" />
+                <span>Copy VIN</span>
+              </button>
               <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
               <span className="font-bold text-slate-900 text-sm whitespace-nowrap shrink-0">
                 {selectedRO.vehicle.mileage !== undefined && selectedRO.vehicle.mileage !== null && Number(selectedRO.vehicle.mileage) > 0
@@ -1600,6 +1652,7 @@ export const RODetailModal: React.FC = () => {
                 updateTechCauseAndCorrection={updateTechCauseAndCorrection}
                 updateConcernPayType={updateConcernPayType}
                 updateConcernTech={updateConcernTech}
+                addRepairOrderConcern={addRepairOrderConcern}
                 isTechScreen={isTechScreen}
               />
             </div>
@@ -1617,6 +1670,9 @@ export const RODetailModal: React.FC = () => {
                 }}
                 onUpdatePayType={(idx, payType) => {
                   updateConcernPayType(selectedRO.id, idx, payType);
+                }}
+                onAddConcern={(text, payType, techId, techName) => {
+                  addRepairOrderConcern(selectedRO.id, text, payType, techId, techName);
                 }}
               />
             </div>
@@ -1902,7 +1958,7 @@ export const RODetailModal: React.FC = () => {
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Initial Part Status *</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Expectation of Part Arrival / Time Frame *</label>
                         {canChangePartStatus && !isModalAddingCustomStatus && (
                           <button
                             type="button"
@@ -1912,32 +1968,29 @@ export const RODetailModal: React.FC = () => {
                             }}
                             className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
                           >
-                            + Add Custom
+                            + Custom Status Name
                           </button>
                         )}
                       </div>
 
                       {canChangePartStatus ? (
                         !isModalAddingCustomStatus ? (
-                          <select
-                            value={partInitialStatus}
-                            onChange={e => {
-                              if (e.target.value === '__ADD_NEW_STATUS__') {
-                                setIsModalAddingCustomStatus(true);
-                                setModalCustomStatusInput('');
-                              } else {
-                                setPartInitialStatus(e.target.value as PartStatus);
-                              }
-                            }}
-                            className="w-full text-xs font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800"
-                          >
-                            {modalStatuses.map(st => (
-                              <option key={st.id} value={st.id}>
-                                {st.label}
-                              </option>
-                            ))}
-                            <option value="__ADD_NEW_STATUS__">+ Add Custom Status...</option>
-                          </select>
+                          <div className="space-y-1">
+                            <ArrivalTimeFrameDropdown
+                              value={partTimeFrameId || partInitialStatus}
+                              onChange={({ timeFrameId, status, estimatedArrival }) => {
+                                setPartTimeFrameId(timeFrameId);
+                                setPartInitialStatus(status);
+                                setPartEstimatedArrival(estimatedArrival);
+                              }}
+                            />
+                            {partEstimatedArrival && (
+                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-200">
+                                <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+                                <span>Calculated Arrival: {formatEtaBadge(partEstimatedArrival).text}</span>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <div className="flex items-center gap-1">
                             <input
@@ -1956,7 +2009,7 @@ export const RODetailModal: React.FC = () => {
                                     if (!modalStatuses.some(s => s.id === cleanId)) {
                                       setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
                                     }
-                                    setPartInitialStatus(cleanId);
+                                    setPartInitialStatus(cleanId as PartStatus);
                                     setIsModalAddingCustomStatus(false);
                                   }
                                 }
@@ -1971,7 +2024,7 @@ export const RODetailModal: React.FC = () => {
                                   if (!modalStatuses.some(s => s.id === cleanId)) {
                                     setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
                                   }
-                                  setPartInitialStatus(cleanId);
+                                  setPartInitialStatus(cleanId as PartStatus);
                                   setIsModalAddingCustomStatus(false);
                                 }
                               }}
@@ -2006,9 +2059,16 @@ export const RODetailModal: React.FC = () => {
                         <input
                           type="number"
                           step="0.01"
-                          placeholder=""
+                          min="0"
+                          placeholder="0.00"
                           value={partPrice}
                           onChange={e => setPartPrice(e.target.value)}
+                          onBlur={e => {
+                            const val = e.target.value.trim();
+                            if (val && !isNaN(Number(val))) {
+                              setPartPrice(Number(val).toFixed(2));
+                            }
+                          }}
                           className="w-full text-xs pl-6 pr-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                         />
                       </div>
@@ -2016,11 +2076,19 @@ export const RODetailModal: React.FC = () => {
 
                     {partInitialStatus !== 'IN_STOCK' && (
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Estimated Arrival Time Today (ETA)</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Specific Arrival Time (Optional)</label>
                         <input
                           type="time"
                           value={partEtaTime}
-                          onChange={e => setPartEtaTime(e.target.value)}
+                          onChange={e => {
+                            setPartEtaTime(e.target.value);
+                            if (partEstimatedArrival && !isNaN(new Date(partEstimatedArrival).getTime())) {
+                              const [h, m] = e.target.value.split(':').map(Number);
+                              const d = new Date(partEstimatedArrival);
+                              d.setHours(h, m, 0, 0);
+                              setPartEstimatedArrival(d.toISOString());
+                            }
+                          }}
                           className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
                         />
                       </div>
@@ -2071,7 +2139,7 @@ export const RODetailModal: React.FC = () => {
                               </span>
                               {part.price !== undefined && (
                                 <span className="text-xs font-semibold text-slate-600">
-                                  • Price: ${part.price.toFixed(2)}
+                                  • Price: {formatCurrency(part.price)}
                                 </span>
                               )}
                             </div>
@@ -2116,10 +2184,10 @@ export const RODetailModal: React.FC = () => {
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <span className="text-[11px] text-slate-400 font-medium">Quick Update Status:</span>
                               <div className="flex gap-1.5 flex-wrap">
-                                {(['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[])
+                                {(['IN_STOCK', 'LOCAL_PURCHASE', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[])
                                   .concat(
                                     modalStatuses
-                                      .filter(s => !['IN_STOCK', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'].includes(s.id))
+                                      .filter(s => !['IN_STOCK', 'LOCAL_PURCHASE', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'].includes(s.id))
                                       .map(s => s.id)
                                   )
                                   .map(st => (

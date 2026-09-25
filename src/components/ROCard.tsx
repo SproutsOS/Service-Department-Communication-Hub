@@ -20,19 +20,22 @@ import { RepairOrder, ROStatus } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { formatDateTime, formatTimeOnly, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
-import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
 
 interface ROCardProps {
   ro: RepairOrder;
   onClick: () => void;
   compact?: boolean;
+  onOpenFollowUp?: (ro: RepairOrder) => void;
 }
 
-export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) => {
+export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, onOpenFollowUp }) => {
   const { users } = useApp();
+  const isCompleted = isROCompleted(ro);
+  const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
   const cadence = getContactCadenceStatus(ro);
-  const showCadence = isEligibleForCadence(ro);
+  const showCadence = !isCompleted && isEligibleForCadence(ro);
 
   const techUser = users.find(u => u.id === ro.techId || u.name === ro.techName);
   const advisorUser = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
@@ -43,18 +46,54 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
 
   const isWaitingApproval = ro.status === 'WAITING_FOR_APPROVAL';
   const hasPendingTechRec = ro.recommendations && ro.recommendations.some(r => r.status === 'PENDING');
-  const isCommunicationAlert = isWaitingApproval || (showCadence && (cadence.isOverdue || cadence.isDueToday));
+  const isCommunicationAlert = isWaitingApproval || (showCadence && (cadence.isOverdue || cadence.isDueToday)) || (isCompleted && postRepair?.needsCall);
 
   return (
     <div
       id={`ro-card-${ro.id}`}
       onClick={onClick}
       className={`group relative bg-white rounded-xl border-2 transition-all duration-150 cursor-pointer hover:shadow-md hover:border-blue-600 ${
-        ro.isUrgent || ro.isWaiter || isWaitingApproval || hasPendingTechRec
+        ro.isUrgent || ro.isWaiter || isWaitingApproval || hasPendingTechRec || (isCompleted && postRepair?.isOverdue)
           ? 'border-red-600 ring-2 ring-red-400/40 shadow-xs' 
+          : isCompleted && postRepair?.isDueToday
+          ? 'border-amber-500 ring-2 ring-amber-400/40 shadow-xs'
           : 'border-slate-800 hover:border-black shadow-xs'
       } ${compact ? 'p-2' : 'p-2.5 sm:p-3'}`}
     >
+      {/* 3-Day Post-Repair Customer Follow-Up Banner */}
+      {isCompleted && postRepair?.needsCall && (
+        <div className={`mb-2 px-2.5 py-1.5 rounded-lg text-white flex items-center justify-between text-xs font-black tracking-wide shadow-xs border ${
+          postRepair.isOverdue 
+            ? 'bg-red-600 border-red-700 animate-pulse' 
+            : 'bg-amber-500 border-amber-600'
+        }`}>
+          <div className="flex items-center gap-1.5 truncate">
+            <PhoneCall className="w-3.5 h-3.5 text-white shrink-0" />
+            <span className="truncate">
+              {postRepair.isOverdue 
+                ? `ACTION REQUIRED: 3-DAY CUSTOMER FOLLOW-UP OVERDUE (${postRepair.targetDate})` 
+                : 'ACTION REQUIRED: 3-DAY FOLLOW UP DUE TODAY'}
+            </span>
+          </div>
+          {onOpenFollowUp ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenFollowUp(ro);
+              }}
+              className="text-[10px] font-black uppercase bg-white text-slate-900 px-2 py-0.5 rounded shadow-xs hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            >
+              📞 Log Call
+            </button>
+          ) : (
+            <span className="text-[10px] font-black uppercase bg-white/20 px-1.5 py-0.2 rounded text-white shrink-0">
+              CHECK SATISFACTION
+            </span>
+          )}
+        </div>
+      )}
+
       {/* High-Visibility Red Communication Alert Banner at Top of Card */}
       {isWaitingApproval && (
         <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-red-600 text-white flex items-center justify-between text-xs font-black tracking-wide shadow-xs border border-red-700 animate-pulse">
@@ -99,6 +138,15 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false }) 
 
         {/* Status & Cadence Badges */}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          {isCompleted && postRepair && (
+            <span 
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border-2 ${postRepair.badgeClass}`}
+              title={`3-Day Follow Up: ${postRepair.label}`}
+            >
+              <PhoneCall className="w-2.5 h-2.5" />
+              <span>{postRepair.label}</span>
+            </span>
+          )}
           {showCadence && (
             <span 
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border-2 ${

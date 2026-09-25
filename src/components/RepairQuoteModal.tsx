@@ -46,8 +46,17 @@ export const RepairQuoteModal: React.FC = () => {
     saveRepairQuote, 
     updateQuoteStatus, 
     currentUser,
+    activeRoleView,
     shopName
   } = useApp();
+
+  const isTech = currentUser.role === 'TECHNICIAN' || activeRoleView === 'TECHNICIAN';
+  const isAdvisorOrManager = !isTech && (
+    currentUser.role === 'SERVICE_ADVISOR' || 
+    currentUser.role === 'SERVICE_MANAGER' || 
+    activeRoleView === 'SERVICE_ADVISOR' || 
+    activeRoleView === 'SERVICE_MANAGER'
+  );
 
   const [copiedVin, setCopiedVin] = useState(false);
   const [copiedVehicleInfo, setCopiedVehicleInfo] = useState(false);
@@ -220,7 +229,7 @@ export const RepairQuoteModal: React.FC = () => {
     };
     const handleAfterPrint = () => {
       document.body.classList.remove('printing-quote');
-      document.title = 'Service Department & Repair Order Hub';
+      document.title = 'The HUB - Everything Moving. Everyone Connected';
     };
 
     window.addEventListener('beforeprint', handleBeforePrint);
@@ -245,10 +254,46 @@ export const RepairQuoteModal: React.FC = () => {
       const q = activeQuoteRO.quote;
       setDefaultRate(q.defaultLaborRate || 150);
       setLaborItems(q.laborItems || []);
-      setPartsItems((q.partsItems || []).map(p => ({
+
+      // Bring parts information from Parts Department together on the quote
+      const existingQuoteParts: QuotePartItem[] = (q.partsItems || []).map(p => ({
         ...p,
         unitPrice: (p.unitPrice && Number(p.unitPrice) > 0) ? p.unitPrice : ('' as any),
-      })));
+      }));
+
+      if (activeQuoteRO.parts && activeQuoteRO.parts.length > 0) {
+        activeQuoteRO.parts.forEach(roPart => {
+          const matchIndex = existingQuoteParts.findIndex(qp => 
+            qp.sourcePartId === roPart.id || 
+            (roPart.partNumber && qp.partNumber && qp.partNumber.trim().toUpperCase() === roPart.partNumber.trim().toUpperCase())
+          );
+          if (matchIndex >= 0) {
+            const current = existingQuoteParts[matchIndex];
+            const updatedPrice = (roPart.price !== undefined && Number(roPart.price) > 0) ? roPart.price : current.unitPrice;
+            existingQuoteParts[matchIndex] = {
+              ...current,
+              description: roPart.description || roPart.name || current.description,
+              partNumber: roPart.partNumber || current.partNumber,
+              quantity: roPart.quantity || current.quantity || 1,
+              unitPrice: updatedPrice,
+              subtotal: (roPart.quantity || current.quantity || 1) * (Number(updatedPrice) || 0),
+              sourcePartId: roPart.id,
+            };
+          } else {
+            existingQuoteParts.push({
+              id: `qpart_${Date.now()}_${roPart.id}`,
+              description: roPart.description || roPart.name,
+              partNumber: roPart.partNumber,
+              quantity: roPart.quantity || 1,
+              unitPrice: (roPart.price && Number(roPart.price) > 0) ? roPart.price : ('' as any),
+              subtotal: (roPart.quantity || 1) * (roPart.price || 0),
+              sourcePartId: roPart.id,
+            });
+          }
+        });
+      }
+
+      setPartsItems(existingQuoteParts);
       setApplyShopSupplies((q.shopSuppliesFee || 0) > 0);
       setShopSuppliesFee(q.shopSuppliesFee || 0);
       setTaxRatePercent(isExemptCustomer ? 0 : (q.taxRate !== undefined ? q.taxRate * 100 : 7.0));
@@ -563,8 +608,8 @@ export const RepairQuoteModal: React.FC = () => {
     if (success) {
       setSaveSuccessMsg(
         submitToAdvisor 
-          ? 'Quote successfully submitted to Service Advisor for customer authorization!' 
-          : 'Repair quote draft saved successfully.'
+          ? (isTech ? 'Labor time successfully submitted to Service Advisor!' : 'Quote successfully submitted to Service Advisor for customer authorization!')
+          : (isTech ? 'Labor time draft saved.' : 'Repair quote draft saved successfully.')
       );
       setTimeout(() => {
         setSaveSuccessMsg(null);
@@ -614,8 +659,6 @@ export const RepairQuoteModal: React.FC = () => {
     }, 1000);
   };
 
-  const isAdvisorOrManager = currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER';
-
   return (
     <>
       <div 
@@ -635,7 +678,7 @@ export const RepairQuoteModal: React.FC = () => {
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-bold tracking-tight text-white print:text-black">
-                  Repair Quote & Labor Estimate
+                  {isTech ? 'Job Labor Time Entry' : 'Repair Quote & Labor Estimate'}
                 </h2>
                 <span className="bg-slate-800 text-blue-400 text-xs font-mono font-bold px-2.5 py-1 rounded-lg border border-slate-700">
                   RO #{activeQuoteRO.id}
@@ -644,7 +687,7 @@ export const RepairQuoteModal: React.FC = () => {
                 {/* Status Badge */}
                 {quoteStatus === 'APPROVED' && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Customer Authorized ($ {grandTotal.toFixed(2)})
+                    <CheckCircle2 className="w-3.5 h-3.5" /> {isTech ? 'Customer Authorized' : `Customer Authorized ($ ${grandTotal.toFixed(2)})`}
                   </span>
                 )}
                 {quoteStatus === 'DECLINED' && (
@@ -654,12 +697,12 @@ export const RepairQuoteModal: React.FC = () => {
                 )}
                 {quoteStatus === 'SUBMITTED' && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
-                    <Clock className="w-3.5 h-3.5" /> Submitted to Advisor (Awaiting Auth)
+                    <Clock className="w-3.5 h-3.5" /> {isTech ? 'Submitted to Advisor' : 'Submitted to Advisor (Awaiting Auth)'}
                   </span>
                 )}
                 {quoteStatus === 'DRAFT' && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                    <Wrench className="w-3.5 h-3.5" /> Tech Quote Draft
+                    <Wrench className="w-3.5 h-3.5" /> {isTech ? 'Labor Time Draft' : 'Tech Quote Draft'}
                   </span>
                 )}
               </div>
@@ -667,20 +710,24 @@ export const RepairQuoteModal: React.FC = () => {
               <p className="text-xs text-slate-400 mt-1 flex items-center gap-2.5 flex-wrap">
                 <span>Customer: <strong className="text-slate-200">{activeQuoteRO.customerName}</strong></span>
                 <span>•</span>
-                <button
-                  type="button"
-                  onClick={handleToggleTaxExempt}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
-                    isTaxExempt 
-                      ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/60 hover:bg-emerald-600/40' 
-                      : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700 hover:border-slate-500 hover:bg-slate-700'
-                  }`}
-                  title={isTaxExempt ? "Customer is Tax Exempt (0% sales tax). Click to change to taxable." : "Click if customer is Tax Exempt (0% sales tax)"}
-                >
-                  <ShieldCheck className={`w-3.5 h-3.5 ${isTaxExempt ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  <span>{isTaxExempt ? 'Tax Exempt Customer (0% Tax)' : 'Tax Exempt? Click if exempt'}</span>
-                </button>
-                <span>•</span>
+                {!isTech && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleToggleTaxExempt}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                        isTaxExempt 
+                          ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/60 hover:bg-emerald-600/40' 
+                          : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700 hover:border-slate-500 hover:bg-slate-700'
+                      }`}
+                      title={isTaxExempt ? "Customer is Tax Exempt (0% sales tax). Click to change to taxable." : "Click if customer is Tax Exempt (0% sales tax)"}
+                    >
+                      <ShieldCheck className={`w-3.5 h-3.5 ${isTaxExempt ? 'text-emerald-400' : 'text-slate-400'}`} />
+                      <span>{isTaxExempt ? 'Tax Exempt Customer (0% Tax)' : 'Tax Exempt? Click if exempt'}</span>
+                    </button>
+                    <span>•</span>
+                  </>
+                )}
                 <span>Vehicle: <strong className="text-slate-200">{vehicle.year} {vehicle.make} {vehicle.model}</strong></span>
                 {vehicle.vin && (
                   <>
@@ -714,15 +761,17 @@ export const RepairQuoteModal: React.FC = () => {
               )}
             </div>
 
-            <button
-              id="print-quote-btn"
-              onClick={handlePrint}
-              title="Print official repair quote"
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span className="hidden sm:inline">Print Quote</span>
-            </button>
+            {!isTech && (
+              <button
+                id="print-quote-btn"
+                onClick={handlePrint}
+                title="Print official repair quote"
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span className="hidden sm:inline">Print Quote</span>
+              </button>
+            )}
             <button
               id="close-quote-modal-btn"
               onClick={handleCloseModal}
@@ -778,18 +827,18 @@ export const RepairQuoteModal: React.FC = () => {
                   <button
                     id="copy-vin-for-prodemand-btn"
                     onClick={handleCopyVin}
-                    className="px-3.5 py-2.5 bg-slate-800/90 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all active:scale-95 shadow-sm cursor-pointer"
+                    className="px-4 py-2.5 bg-slate-950 hover:bg-black text-white rounded-xl text-xs font-bold flex items-center gap-2 border-2 border-slate-700 transition-all active:scale-95 shadow-md cursor-pointer"
                     title="Copy VIN to paste into ProDemand vehicle selector"
                   >
                     {copiedVin ? (
                       <>
                         <Check className="w-4 h-4 text-emerald-400" />
-                        <span className="text-emerald-300">VIN Copied!</span>
+                        <span className="text-emerald-300 font-bold">VIN Copied!</span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-4 h-4 text-blue-400" />
-                        <span>Copy VIN</span>
+                        <span className="font-bold text-white">Copy VIN</span>
                       </>
                     )}
                   </button>
@@ -844,7 +893,7 @@ export const RepairQuoteModal: React.FC = () => {
               + Import Customer Concerns
             </button>
 
-            {activeQuoteRO.parts && activeQuoteRO.parts.length > 0 && (
+            {!isTech && activeQuoteRO.parts && activeQuoteRO.parts.length > 0 && (
               <button
                 id="import-ro-parts-btn"
                 onClick={handleImportROParts}
@@ -866,32 +915,46 @@ export const RepairQuoteModal: React.FC = () => {
               </button>
             )}
 
-            <div className="ml-auto flex items-center gap-2">
-              <label className="text-slate-600 font-medium">Shop Hourly Rate:</label>
-              <div className="relative w-24">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="5"
-                  placeholder=""
-                  value={defaultRate === 0 || !defaultRate ? '' : defaultRate}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const newRate = val === '' ? 0 : Number(val);
-                    setDefaultRate(newRate);
-                    // optionally update rate across existing items
-                    setLaborItems(prev => prev.map(item => ({
-                      ...item,
-                      hourlyRate: newRate,
-                      subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
-                    })));
-                  }}
-                  onFocus={(e) => e.target.select()}
-                  className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
+            {!isTech && (
+              <div className="ml-auto flex items-center gap-2">
+                <label className="text-slate-600 font-medium">Shop Hourly Rate:</label>
+                <div className="relative w-24">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    placeholder=""
+                    value={defaultRate === 0 || !defaultRate ? '' : defaultRate}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const newRate = val === '' ? 0 : Number(val);
+                      setDefaultRate(newRate);
+                      // optionally update rate across existing items
+                      setLaborItems(prev => prev.map(item => ({
+                        ...item,
+                        hourlyRate: newRate,
+                        subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
+                      })));
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val !== '' && !isNaN(Number(val))) {
+                        const newRate = Number(Number(val).toFixed(2));
+                        setDefaultRate(newRate);
+                        setLaborItems(prev => prev.map(item => ({
+                          ...item,
+                          hourlyRate: newRate,
+                          subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
+                        })));
+                      }
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Section 1: Labor Operations */}
@@ -902,9 +965,13 @@ export const RepairQuoteModal: React.FC = () => {
                   <Wrench className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-base">Labor Operations</h3>
+                  <h3 className="font-bold text-slate-800 text-base">
+                    {isTech ? 'Job Labor Operations' : 'Labor Operations'}
+                  </h3>
                   <p className="text-xs text-slate-500">
-                    OEM flat-rate hours from ProDemand or shop manual times
+                    {isTech 
+                      ? 'Enter the amount of time (flat-rate hours) it will take to do the job' 
+                      : 'OEM flat-rate hours from ProDemand or shop manual times'}
                   </p>
                 </div>
               </div>
@@ -1004,36 +1071,48 @@ export const RepairQuoteModal: React.FC = () => {
                         />
                       </div>
 
-                      {/* Hourly Rate */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase">Rate:</label>
-                        <div className="relative w-22">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
-                          <input
-                            type="number"
-                            step="5"
-                            min="0"
-                            placeholder=""
-                            value={item.hourlyRate === 0 || item.hourlyRate === undefined || (item.hourlyRate as any) === '' ? '' : item.hourlyRate}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              handleUpdateLaborItem(item.id, { 
-                                hourlyRate: val === '' ? ('' as any) : Number(val) 
-                              });
-                            }}
-                            onFocus={(e) => e.target.select()}
-                            className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
+                      {/* Hourly Rate (Hidden from Tech) */}
+                      {!isTech && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase">Rate:</label>
+                          <div className="relative w-22">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.00"
+                              value={item.hourlyRate === 0 || item.hourlyRate === undefined || (item.hourlyRate as any) === '' ? '' : item.hourlyRate}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                handleUpdateLaborItem(item.id, { 
+                                  hourlyRate: val === '' ? ('' as any) : Number(val) 
+                                });
+                              }}
+                              onBlur={(e) => {
+                                const val = e.target.value.trim();
+                                if (val !== '' && !isNaN(Number(val))) {
+                                  handleUpdateLaborItem(item.id, { 
+                                    hourlyRate: Number(Number(val).toFixed(2)) 
+                                  });
+                                }
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Line Subtotal */}
-                      <div className="text-right w-24 shrink-0">
-                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
-                        <span className="text-sm font-extrabold text-slate-900 font-mono">
-                          ${(item.subtotal || 0).toFixed(2)}
-                        </span>
-                      </div>
+                      {/* Line Subtotal (Hidden from Tech) */}
+                      {!isTech && (
+                        <div className="text-right w-24 shrink-0">
+                          <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
+                          <span className="text-sm font-extrabold text-slate-900 font-mono">
+                            ${(item.subtotal || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Remove Button */}
                       <button
@@ -1063,314 +1142,442 @@ export const RepairQuoteModal: React.FC = () => {
                 <div className="flex items-center justify-between px-4 py-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs font-bold text-blue-900">
                   <div className="flex items-center gap-4">
                     <span>Total Operations: {laborItems.length}</span>
-                    <span>Total Labor Hours: {totalLaborHours.toFixed(1)} hrs</span>
+                    <span>Total Estimated Labor Time: {totalLaborHours.toFixed(1)} hrs</span>
                   </div>
-                  <div className="text-sm font-black font-mono">
-                    Labor Total: ${totalLaborCost.toFixed(2)}
-                  </div>
+                  {!isTech && (
+                    <div className="text-sm font-black font-mono">
+                      Labor Total: ${totalLaborCost.toFixed(2)}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Section 2: Required Parts */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
-                  <Package className="w-4 h-4" />
+          {/* Section 2: Required Parts & Materials */}
+          {isTech ? (
+            <div className="bg-slate-50/80 rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base">Required Parts & Materials</h3>
+                    <p className="text-xs text-slate-500">
+                      Parts pricing and inventory sourcing are managed exclusively by the Parts Department
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-base">Required Parts & Materials</h3>
-                  <p className="text-xs text-slate-500">
-                    OEM or aftermarket parts required to complete the repair
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-lg text-xs font-bold border border-amber-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Managed by Parts Specialist</span>
+                </div>
+              </div>
+
+              {activeQuoteRO.parts && activeQuoteRO.parts.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Parts Logged for this Repair Order ({activeQuoteRO.parts.length})
+                  </div>
+                  <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                    {activeQuoteRO.parts.map((p, idx) => (
+                      <div key={p.id || idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-900 text-sm block">{p.description || p.name}</span>
+                          {p.partNumber && (
+                            <span className="text-xs font-mono text-slate-500">Part #: <strong>{p.partNumber}</strong></span>
+                          )}
+                          {p.notes && (
+                            <p className="text-[11px] text-slate-500 italic mt-0.5">{p.notes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-800 font-bold rounded-lg border border-slate-200 text-xs">
+                            Qty: {p.quantity || 1}
+                          </span>
+                          <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 text-[11px] uppercase">
+                            {p.status?.replace(/_/g, ' ') || 'LOGGED'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-600 flex items-start sm:items-center gap-3 shadow-2xs">
+                  <Package className="w-5 h-5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
+                  <div className="leading-relaxed">
+                    <span className="font-bold text-slate-800 block">No parts currently logged on this RO.</span>
+                    <span>If this job requires replacement parts, use the <strong>"Request Parts"</strong> button on your dashboard to submit a parts requisition to the Parts Counter.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base">Required Parts & Materials</h3>
+                    <p className="text-xs text-slate-500">
+                      OEM or aftermarket parts required to complete the repair
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    id="add-part-line-btn"
+                    onClick={handleAddPartItem}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Part</span>
+                  </button>
+                </div>
+              </div>
+
+              {partsItems.length === 0 ? (
+                <div className="text-center py-6 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                  <Package className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
+                  <p className="text-xs font-semibold text-slate-600">No parts on quote yet (Labor only)</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Click "Add Part" or use "Import RO Parts" if parts have already been requested.
                   </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  {partsItems.map((part, index) => (
+                    <div
+                      key={part.id}
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <span className="text-xs font-bold text-slate-400 w-5 shrink-0">#{index + 1}</span>
 
-              <div className="flex items-center gap-2">
-                <button
-                  id="add-part-line-btn"
-                  onClick={handleAddPartItem}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Part</span>
-                </button>
-              </div>
-            </div>
+                        {/* Part Description */}
+                        <div className="flex-1 w-full">
+                          <input
+                            type="text"
+                            placeholder="e.g. Front Ceramic Brake Pad Set"
+                            value={part.description}
+                            onChange={(e) => handleUpdatePartItem(part.id, { description: e.target.value })}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
 
-            {partsItems.length === 0 ? (
-              <div className="text-center py-6 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-                <Package className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
-                <p className="text-xs font-semibold text-slate-600">No parts on quote yet (Labor only)</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Click "Add Part" or use "Import RO Parts" if parts have already been requested.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {partsItems.map((part, index) => (
-                  <div
-                    key={part.id}
-                    className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors"
-                  >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      <span className="text-xs font-bold text-slate-400 w-5 shrink-0">#{index + 1}</span>
+                        {/* Part Number */}
+                        <div className="w-36 shrink-0">
+                          <input
+                            type="text"
+                            placeholder="Part # (optional)"
+                            value={part.partNumber || ''}
+                            onChange={(e) => handleUpdatePartItem(part.id, { partNumber: e.target.value })}
+                            className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
 
-                      {/* Part Description */}
-                      <div className="flex-1 w-full">
-                        <input
-                          type="text"
-                          placeholder="e.g. Front Ceramic Brake Pad Set"
-                          value={part.description}
-                          onChange={(e) => handleUpdatePartItem(part.id, { description: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Part Number */}
-                      <div className="w-36 shrink-0">
-                        <input
-                          type="text"
-                          placeholder="Part # (optional)"
-                          value={part.partNumber || ''}
-                          onChange={(e) => handleUpdatePartItem(part.id, { partNumber: e.target.value })}
-                          className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Quantity */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase">Qty:</label>
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder=""
-                          value={part.quantity === 0 || part.quantity === undefined || (part.quantity as any) === '' ? '' : part.quantity}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            handleUpdatePartItem(part.id, { 
-                              quantity: val === '' ? ('' as any) : Number(val) 
-                            });
-                          }}
-                          onFocus={(e) => e.target.select()}
-                          className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Unit Price */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase">Price:</label>
-                        <div className="relative w-24">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                        {/* Quantity */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase">Qty:</label>
                           <input
                             type="number"
-                            step="0.01"
-                            min="0"
+                            min="1"
                             placeholder=""
-                            value={part.unitPrice === 0 || part.unitPrice === undefined || (part.unitPrice as any) === '' ? '' : part.unitPrice}
+                            value={part.quantity === 0 || part.quantity === undefined || (part.quantity as any) === '' ? '' : part.quantity}
                             onChange={(e) => {
                               const val = e.target.value;
                               handleUpdatePartItem(part.id, { 
-                                unitPrice: val === '' ? ('' as any) : Number(val) 
+                                quantity: val === '' ? ('' as any) : Number(val) 
                               });
                             }}
                             onFocus={(e) => e.target.select()}
-                            className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
-                      </div>
 
-                      {/* Line Subtotal */}
-                      <div className="text-right w-24 shrink-0">
-                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
-                        <span className="text-sm font-extrabold text-slate-900 font-mono">
-                          ${(part.subtotal || 0).toFixed(2)}
-                        </span>
-                      </div>
+                        {/* Unit Price */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase">Price:</label>
+                          <div className="relative w-24">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0.00"
+                              value={part.unitPrice === 0 || part.unitPrice === undefined || (part.unitPrice as any) === '' ? '' : part.unitPrice}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                handleUpdatePartItem(part.id, { 
+                                  unitPrice: val === '' ? ('' as any) : Number(val) 
+                                });
+                              }}
+                              onBlur={(e) => {
+                                const val = e.target.value.trim();
+                                if (val !== '' && !isNaN(Number(val))) {
+                                  handleUpdatePartItem(part.id, { 
+                                    unitPrice: Number(Number(val).toFixed(2)) 
+                                  });
+                                }
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
 
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePartItem(part.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
-                        title="Delete part item"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        {/* Line Subtotal */}
+                        <div className="text-right w-24 shrink-0">
+                          <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
+                          <span className="text-sm font-extrabold text-slate-900 font-mono">
+                            ${(part.subtotal || 0).toFixed(2)}
+                          </span>
+                        </div>
+
+                        {/* Remove Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePartItem(part.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
+                          title="Delete part item"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
+                  ))}
+
+                  {/* Parts Subtotal Bar */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/70 border border-amber-100 rounded-xl text-xs font-bold text-amber-900">
+                    <span>Total Parts Items: {partsItems.length}</span>
+                    <span className="text-sm font-black font-mono">
+                      Parts Total: ${totalPartsCost.toFixed(2)}
+                    </span>
                   </div>
-                ))}
-
-                {/* Parts Subtotal Bar */}
-                <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/70 border border-amber-100 rounded-xl text-xs font-bold text-amber-900">
-                  <span>Total Parts Items: {partsItems.length}</span>
-                  <span className="text-sm font-black font-mono">
-                    Parts Total: ${totalPartsCost.toFixed(2)}
-                  </span>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Section 3: Shop Supplies, Taxes & Grand Total Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            
-            {/* Left: Settings & Notes */}
-            <div className="space-y-4">
+          {/* Section 3: Diagnosis Notes & Financial Breakdown */}
+          {isTech ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Technician Diagnostic Notes & Findings */}
               <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Supplies & Taxes
-                </h4>
-
-                {/* Shop Supplies Fee */}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={applyShopSupplies}
-                      onChange={(e) => setApplyShopSupplies(e.target.checked)}
-                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                    />
-                    <span>Shop Supplies & Hazmat Fee (5% of labor)</span>
-                  </label>
-                  <span className="text-xs font-mono font-bold text-slate-800">
-                    ${calculatedShopSupplies.toFixed(2)}
-                  </span>
-                </div>
-
-                {/* Sales Tax */}
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-semibold text-slate-700">Sales Tax on Parts:</span>
-                    {!isTaxExempt ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          step="0.25"
-                          min="0"
-                          max="20"
-                          value={taxRatePercent}
-                          onChange={(e) => setTaxRatePercent(Number(e.target.value) || 0)}
-                          className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-bold"
-                          title="Standard 7% sales tax rate"
-                        />
-                        <span className="text-xs text-slate-500 font-bold">%</span>
-                      </div>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded border border-emerald-300 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        0% Tax Exempt
-                      </span>
-                    )}
-
-                    {/* Tax Exempt Toggle Button */}
-                    <button
-                      type="button"
-                      onClick={handleToggleTaxExempt}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
-                        isTaxExempt 
-                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs hover:bg-emerald-700' 
-                          : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-300'
-                      }`}
-                      title={isTaxExempt ? "Customer is marked Tax Exempt. Click to remove exemption." : "Click if customer is Tax Exempt (0% sales tax)"}
-                    >
-                      <ShieldCheck className="w-3 h-3" />
-                      <span>{isTaxExempt ? 'Tax Exempt Active ✓' : 'Click if Tax Exempt'}</span>
-                    </button>
-                  </div>
-                  <span className={`text-xs font-mono font-bold ${isTaxExempt ? 'text-emerald-600' : 'text-slate-800'}`}>
-                    ${estimatedTaxAmount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Technician Quote Remarks / Customer Explanation */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-blue-600" />
-                    Technician Notes & Scope Details
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    Technician Diagnostic Notes & Repair Scope
                   </h4>
-                  <span className="text-[10px] text-slate-400">Visible to Advisor & Customer</span>
+                  <span className="text-[10px] text-slate-400">Sent to Service Advisor</span>
                 </div>
+                <p className="text-xs text-slate-500">
+                  Document diagnostic findings, test results, cause of component failure, and scope of recommended service.
+                </p>
                 <textarea
-                  rows={3}
-                  placeholder="Explain findings, why parts are needed, warranty details (e.g. 12mo/12k mile warranty), or any secondary safety concerns observed during inspection..."
+                  rows={4}
+                  placeholder="e.g. Inspected front brake assembly. Brake pads measured at 2mm (safety discard spec). Rotors have deep scoring beyond minimum refinish thickness. Caliper slide pins clean and free."
                   value={techNotes}
                   onChange={(e) => setTechNotes(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
                 />
               </div>
-            </div>
 
-            {/* Right: Financial Summary Card */}
-            <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-800 flex flex-col justify-between space-y-5 print:bg-white print:text-black print:border-2 print:border-black">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800 print:border-black">
-                  <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider print:text-black">
-                    Official Quote Summary
+              {/* Job Labor Time Summary Card */}
+              <div className="bg-gradient-to-br from-blue-50 via-indigo-50/60 to-slate-50 rounded-2xl border border-blue-200 p-5 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-3 pb-3 border-b border-blue-200/80">
+                    <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-base">Job Labor Time Summary</h4>
+                      <p className="text-xs text-blue-700">Estimated repair duration entered by technician</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-100 shadow-2xs">
+                      <span className="text-xs font-semibold text-slate-600">Total Labor Operations:</span>
+                      <span className="text-sm font-bold text-slate-900">{laborItems.length} lines</span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3.5 bg-blue-600 text-white rounded-xl shadow-sm">
+                      <span className="text-xs font-bold uppercase tracking-wide">Total Estimated Job Time:</span>
+                      <span className="text-2xl font-black font-mono">{totalLaborHours.toFixed(1)} hrs</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 text-[11px] text-slate-500 border-t border-blue-100 mt-4 leading-relaxed">
+                  Hourly labor rates, parts pricing, shop supplies, and taxes are applied automatically by the Service Advisor to generate the customer quote.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              
+              {/* Left: Settings & Notes */}
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Supplies & Taxes
                   </h4>
-                  <span className="text-xs font-mono text-blue-400 print:text-black">
-                    RO #{activeQuoteRO.id}
-                  </span>
-                </div>
 
-                <div className="space-y-3 pt-4 text-xs">
-                  <div className="flex items-center justify-between text-slate-300 print:text-black">
-                    <span>Labor ({totalLaborHours.toFixed(1)} hrs @ ${defaultRate}/hr):</span>
-                    <span className="font-mono font-bold text-white print:text-black">${totalLaborCost.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-300 print:text-black">
-                    <span>Parts & Materials ({partsItems.length} item{partsItems.length === 1 ? '' : 's'}):</span>
-                    <span className="font-mono font-bold text-white print:text-black">${totalPartsCost.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-300 print:text-black">
-                    <span>Shop Supplies & Environmental:</span>
-                    <span className="font-mono font-bold text-white print:text-black">${calculatedShopSupplies.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-300 print:text-black">
-                    <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
-                    <span className={`font-mono font-bold print:text-black ${isTaxExempt ? 'text-emerald-400' : 'text-white'}`}>${estimatedTaxAmount.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Grand Total Callout */}
-              <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 print:bg-slate-100 print:border-black">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block print:text-black">
-                      Grand Total Estimate
+                  {/* Shop Supplies Fee */}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={applyShopSupplies}
+                        onChange={(e) => setApplyShopSupplies(e.target.checked)}
+                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      />
+                      <span>Shop Supplies & Hazmat Fee (5% of labor)</span>
+                    </label>
+                    <span className="text-xs font-mono font-bold text-slate-800">
+                      ${calculatedShopSupplies.toFixed(2)}
                     </span>
-                    <span className="text-[11px] text-slate-400 print:text-black">Parts, Labor, Supplies & Tax included</span>
                   </div>
-                  <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight print:text-black">
-                    ${grandTotal.toFixed(2)}
+
+                  {/* Sales Tax */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-slate-700">Sales Tax on Parts:</span>
+                      {!isTaxExempt ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.25"
+                            min="0"
+                            max="20"
+                            value={taxRatePercent}
+                            onChange={(e) => setTaxRatePercent(Number(e.target.value) || 0)}
+                            className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-bold"
+                            title="Standard 7% sales tax rate"
+                          />
+                          <span className="text-xs text-slate-500 font-bold">%</span>
+                        </div>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded border border-emerald-300 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                          0% Tax Exempt
+                        </span>
+                      )}
+
+                      {/* Tax Exempt Toggle Button */}
+                      <button
+                        type="button"
+                        onClick={handleToggleTaxExempt}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
+                          isTaxExempt 
+                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs hover:bg-emerald-700' 
+                            : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-300'
+                        }`}
+                        title={isTaxExempt ? "Customer is marked Tax Exempt. Click to remove exemption." : "Click if customer is Tax Exempt (0% sales tax)"}
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        <span>{isTaxExempt ? 'Tax Exempt Active ✓' : 'Click if Tax Exempt'}</span>
+                      </button>
+                    </div>
+                    <span className={`text-xs font-mono font-bold ${isTaxExempt ? 'text-emerald-600' : 'text-slate-800'}`}>
+                      ${estimatedTaxAmount.toFixed(2)}
+                    </span>
                   </div>
+                </div>
+
+                {/* Technician Quote Remarks / Customer Explanation */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      Technician Notes & Scope Details
+                    </h4>
+                    <span className="text-[10px] text-slate-400">Visible to Advisor & Customer</span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    placeholder="Explain findings, why parts are needed, warranty details (e.g. 12mo/12k mile warranty), or any secondary safety concerns observed during inspection..."
+                    value={techNotes}
+                    onChange={(e) => setTechNotes(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* Quote Status / Metadata */}
-              <div className="text-[11px] text-slate-400 space-y-1 pt-2 border-t border-slate-800 print:border-black print:text-black">
-                <div>Initiated by: <strong className="text-slate-200 print:text-black">{quote?.initiatedByTechName || currentUser.name}</strong></div>
-                {quote?.submittedAt && (
-                  <div>Submitted at: {new Date(quote.submittedAt).toLocaleDateString()} {new Date(quote.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                )}
-                {quote?.approvedBy && (
-                  <div className="text-emerald-400 print:text-black font-semibold">Authorized by: {quote.approvedBy}</div>
-                )}
-                {quote?.declinedReason && (
-                  <div className="text-rose-400 print:text-black">Declined reason: {quote.declinedReason}</div>
-                )}
-              </div>
-            </div>
+              {/* Right: Financial Summary Card */}
+              <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-800 flex flex-col justify-between space-y-5 print:bg-white print:text-black print:border-2 print:border-black">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800 print:border-black">
+                    <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider print:text-black">
+                      Official Quote Summary
+                    </h4>
+                    <span className="text-xs font-mono text-blue-400 print:text-black">
+                      RO #{activeQuoteRO.id}
+                    </span>
+                  </div>
 
-          </div>
+                  <div className="space-y-3 pt-4 text-xs">
+                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                      <span>Labor ({totalLaborHours.toFixed(1)} hrs @ ${Number(defaultRate).toFixed(2)}/hr):</span>
+                      <span className="font-mono font-bold text-white print:text-black">${totalLaborCost.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                      <span>Parts & Materials ({partsItems.length} item{partsItems.length === 1 ? '' : 's'}):</span>
+                      <span className="font-mono font-bold text-white print:text-black">${totalPartsCost.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                      <span>Shop Supplies & Environmental:</span>
+                      <span className="font-mono font-bold text-white print:text-black">${calculatedShopSupplies.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                      <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
+                      <span className={`font-mono font-bold print:text-black ${isTaxExempt ? 'text-emerald-400' : 'text-white'}`}>${estimatedTaxAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grand Total Callout */}
+                <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 print:bg-slate-100 print:border-black">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block print:text-black">
+                        Grand Total Estimate
+                      </span>
+                      <span className="text-[11px] text-slate-400 print:text-black">Parts, Labor, Supplies & Tax included</span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight print:text-black">
+                      ${grandTotal.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quote Status / Metadata */}
+                <div className="text-[11px] text-slate-400 space-y-1 pt-2 border-t border-slate-800 print:border-black print:text-black">
+                  <div>Initiated by: <strong className="text-slate-200 print:text-black">{quote?.initiatedByTechName || currentUser.name}</strong></div>
+                  {quote?.submittedAt && (
+                    <div>Submitted at: {new Date(quote.submittedAt).toLocaleDateString()} {new Date(quote.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                  )}
+                  {quote?.approvedBy && (
+                    <div className="text-emerald-400 print:text-black font-semibold">Authorized by: {quote.approvedBy}</div>
+                  )}
+                  {quote?.declinedReason && (
+                    <div className="text-rose-400 print:text-black">Declined reason: {quote.declinedReason}</div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
 
           {/* Decline Prompt Modal for Advisor/Manager */}
           {showDeclinePrompt && (
@@ -1420,16 +1627,18 @@ export const RepairQuoteModal: React.FC = () => {
               <span>Exit Quote</span>
             </button>
 
-            {/* Print button */}
-            <button
-              id="print-quote-footer-btn"
-              type="button"
-              onClick={handlePrint}
-              className="px-3.5 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <Printer className="w-4 h-4 text-slate-500" />
-              <span>Print Quote</span>
-            </button>
+            {/* Print button (Hidden from Tech) */}
+            {!isTech && (
+              <button
+                id="print-quote-footer-btn"
+                type="button"
+                onClick={handlePrint}
+                className="px-3.5 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Printer className="w-4 h-4 text-slate-500" />
+                <span>Print Quote</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto justify-end">
@@ -1466,7 +1675,7 @@ export const RepairQuoteModal: React.FC = () => {
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Save className="w-4 h-4 text-slate-300" />
-              <span>Save Draft</span>
+              <span>{isTech ? 'Save Labor Time' : 'Save Draft'}</span>
             </button>
 
             {/* Primary Action: Tech Submits to Advisor */}
@@ -1477,7 +1686,11 @@ export const RepairQuoteModal: React.FC = () => {
               className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:scale-102 active:scale-98 cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>Submit Quote to Advisor ($ {(Number(grandTotal) || 0).toFixed(2)})</span>
+              <span>
+                {isTech 
+                  ? `Submit Labor Time to Advisor (${totalLaborHours.toFixed(1)} hrs)` 
+                  : `Submit Quote to Advisor ($ ${(Number(grandTotal) || 0).toFixed(2)})`}
+              </span>
             </button>
           </div>
         </div>

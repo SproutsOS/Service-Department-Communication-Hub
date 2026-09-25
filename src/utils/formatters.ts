@@ -72,15 +72,26 @@ export function formatRelativeTime(dateStr?: string): string {
 export function formatEtaBadge(etaStr?: string): { text: string; urgent: boolean; pastDue: boolean } {
   if (!etaStr) return { text: 'No ETA', urgent: false, pastDue: false };
   const etaDate = new Date(etaStr);
-  if (isNaN(etaDate.getTime())) return { text: etaStr, urgent: false, pastDue: false };
+  if (isNaN(etaDate.getTime())) {
+    const clean = etaStr.trim();
+    const hasPrefix = clean.toLowerCase().startsWith('eta') || clean.toLowerCase().startsWith('in stock') || clean.toLowerCase().startsWith('backorder');
+    return { 
+      text: hasPrefix ? clean : `ETA: ${clean}`, 
+      urgent: clean.toLowerCase().includes('vor') || clean.toLowerCase().includes('urgent'), 
+      pastDue: false 
+    };
+  }
 
   const now = new Date();
   const diffMs = etaDate.getTime() - now.getTime();
   const diffMinutes = Math.floor(diffMs / 60000);
 
   if (diffMinutes < 0) {
+    const absMins = Math.abs(diffMinutes);
+    const absHours = Math.floor(absMins / 60);
+    const remMins = absMins % 60;
     return {
-      text: `Past due (${Math.abs(Math.floor(diffMinutes / 60))}h ${Math.abs(diffMinutes % 60)}m ago)`,
+      text: `Past due (${absHours > 0 ? `${absHours}h ` : ''}${remMins}m ago)`,
       urgent: true,
       pastDue: true,
     };
@@ -94,10 +105,36 @@ export function formatEtaBadge(etaStr?: string): { text: string; urgent: boolean
     };
   }
 
-  const hours = Math.floor(diffMinutes / 60);
-  const remainingMins = diffMinutes % 60;
+  // Check if today, tomorrow, or later
+  const isSameDay = now.getFullYear() === etaDate.getFullYear() && 
+                    now.getMonth() === etaDate.getMonth() && 
+                    now.getDate() === etaDate.getDate();
+
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const isTomorrow = tomorrow.getFullYear() === etaDate.getFullYear() && 
+                     tomorrow.getMonth() === etaDate.getMonth() && 
+                     tomorrow.getDate() === etaDate.getDate();
+
+  if (isSameDay) {
+    const hours = Math.floor(diffMinutes / 60);
+    const remainingMins = diffMinutes % 60;
+    return {
+      text: `ETA Today ${formatTimeOnly(etaDate)} (${hours}h ${remainingMins}m)`,
+      urgent: false,
+      pastDue: false,
+    };
+  }
+
+  if (isTomorrow) {
+    return {
+      text: `ETA Tomorrow at ${formatTimeOnly(etaDate)}`,
+      urgent: false,
+      pastDue: false,
+    };
+  }
+
   return {
-    text: `ETA ${hours}h ${remainingMins}m (${formatTimeOnly(etaDate)})`,
+    text: `ETA ${etaDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${formatTimeOnly(etaDate)}`,
     urgent: false,
     pastDue: false,
   };
@@ -180,4 +217,26 @@ export function getDiagnosticStatusDetails(ro: {
   }
 
   return null;
+}
+
+/**
+ * Format a numeric or string price to exactly 2 decimal places (e.g., 52.5 -> "52.50", 12 -> "12.00").
+ * Returns an empty string if value is undefined, null, or empty string.
+ */
+export function formatPrice(val?: number | string | null): string {
+  if (val === undefined || val === null || val === '') return '';
+  const num = typeof val === 'number' ? val : Number(val);
+  if (isNaN(num)) return String(val);
+  return num.toFixed(2);
+}
+
+/**
+ * Format a numeric or string price with dollar sign and 2 decimal places (e.g., 52.5 -> "$52.50").
+ * Returns fallback if value is undefined, null, or invalid.
+ */
+export function formatCurrency(val?: number | string | null, fallback = '$0.00'): string {
+  if (val === undefined || val === null || val === '') return fallback;
+  const num = typeof val === 'number' ? val : Number(val);
+  if (isNaN(num)) return fallback;
+  return `$${num.toFixed(2)}`;
 }

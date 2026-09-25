@@ -108,6 +108,15 @@ export const NewROModal: React.FC = () => {
       setIsWaiter(false);
       setVinError(null);
       setConcernPayTypes(['CUSTOMER_PAY']);
+
+      // Auto-focus the first input field on modal open
+      setTimeout(() => {
+        const first = document.getElementById('new-ro-number-input') as HTMLInputElement | null;
+        if (first) {
+          first.focus();
+          first.select();
+        }
+      }, 100);
     }
   }, [isNewROModalOpen, currentUser.id, currentUser.role, users, prefilledCustomerForNewRO]);
 
@@ -286,9 +295,96 @@ export const NewROModal: React.FC = () => {
   const validConcerns = concerns.map(c => c.trim()).filter(Boolean);
   const hasValidConcern = validConcerns.length > 0;
 
+  // Allows pressing Enter to advance from one field to the next (Shift+Enter to go backwards)
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== 'Enter') return;
+
+    const target = e.target as HTMLElement;
+    if (!target) return;
+
+    // If Enter was pressed on a button, allow native button action (e.g. submit or toggle)
+    if (target.tagName === 'BUTTON') {
+      return;
+    }
+
+    // In a textarea: allow Shift+Enter for a normal new line
+    if (target.tagName === 'TEXTAREA' && e.shiftKey) {
+      return;
+    }
+
+    // Prevent default form submit on Enter in text inputs
+    e.preventDefault();
+
+    // Close customer suggestions dropdown if advancing from customer name/phone
+    if (target.id === 'new-ro-customer-name-input' || target.id === 'new-ro-customer-phone-input') {
+      setShowCustomerDropdown(false);
+    }
+
+    // Trigger VIN lookup immediately on Enter if at least 10 chars entered
+    if (target.id === 'new-ro-vin-input' && vin.trim().length >= 10) {
+      runVinDecode(vin, false);
+    }
+
+    const form = e.currentTarget;
+    // SPECIAL VIN / VEHICLE ENTER SKIP REQUIREMENT:
+    // "if the year make an model is automatically loaded we can make it to skip and go directly to the mileage - 
+    // if vin number is not loaded then we need to be able to hit enter and go to the next box"
+    if (!e.shiftKey && target.id === 'new-ro-vin-input') {
+      const isVehicleLoaded = Boolean(year && make && model);
+      if (isVehicleLoaded) {
+        const mileageInput = form.querySelector<HTMLElement>('#new-ro-mileage-input');
+        if (mileageInput) {
+          mileageInput.focus();
+          if (mileageInput instanceof HTMLInputElement) mileageInput.select?.();
+          return;
+        }
+      } else {
+        const yearInput = form.querySelector<HTMLElement>('#new-ro-year-input');
+        if (yearInput) {
+          yearInput.focus();
+          if (yearInput instanceof HTMLInputElement) yearInput.select?.();
+          return;
+        }
+      }
+    }
+
+    const elements = Array.from(
+      form.querySelectorAll<HTMLElement>('[data-ro-enter-flow="true"]')
+    ).filter(el => {
+      // Must be visible in DOM and not disabled
+      return el.offsetParent !== null && !el.hasAttribute('disabled');
+    });
+
+    const currentIndex = elements.indexOf(target);
+    if (currentIndex === -1) return;
+
+    const isShift = e.shiftKey;
+    const nextIndex = isShift ? currentIndex - 1 : currentIndex + 1;
+
+    if (nextIndex >= 0 && nextIndex < elements.length) {
+      const nextElement = elements[nextIndex];
+      nextElement.focus();
+      if (nextElement instanceof HTMLInputElement || nextElement instanceof HTMLTextAreaElement) {
+        nextElement.select?.();
+      }
+    } else if (!isShift && nextIndex >= elements.length) {
+      // Reached the end: focus submit button
+      const submitBtn = document.getElementById('submit-new-ro-btn');
+      if (submitBtn && !submitBtn.hasAttribute('disabled')) {
+        submitBtn.focus();
+      }
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !hasValidConcern || isDuplicateRo) return;
+
+    const resolvedAdvisorId = (currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER')
+      ? currentUser.id
+      : (users.find(u => u.role === 'SERVICE_ADVISOR')?.id || currentUser.id);
+
+    const resolvedTechId = concernTechIds.find(Boolean) || undefined;
 
     const newROId = createRepairOrder({
       roNumber: cleanedRoNumber || undefined,
@@ -304,14 +400,14 @@ export const NewROModal: React.FC = () => {
       primaryConcern: validConcerns[0],
       concerns: validConcerns,
       concernPayTypes: validConcerns.map((_, i) => concernPayTypes[i] || 'CUSTOMER_PAY'),
-      concernTechIds: validConcerns.map((_, i) => concernTechIds[i] || techId || undefined),
+      concernTechIds: validConcerns.map((_, i) => concernTechIds[i] || resolvedTechId || undefined),
       concernTechNames: validConcerns.map((_, i) => {
-        const tId = concernTechIds[i] || techId;
+        const tId = concernTechIds[i] || resolvedTechId;
         return tId ? users.find(u => u.id === tId)?.name : undefined;
       }),
       promisedTime: promisedTime || undefined,
-      advisorId: advisorId || undefined,
-      techId: techId || undefined,
+      advisorId: resolvedAdvisorId,
+      techId: resolvedTechId,
       isUrgent,
       isWaiter,
       isTaxExempt,
@@ -342,7 +438,12 @@ export const NewROModal: React.FC = () => {
               <Plus className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">Create New Repair Order</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Create New Repair Order</h2>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                  Enter ↵ jumps between boxes
+                </span>
+              </div>
               <p className="text-xs text-slate-600 font-medium">
                 Log customer intake, primary diagnostic concern, and assign to technician
               </p>
@@ -358,7 +459,7 @@ export const NewROModal: React.FC = () => {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-5">
+        <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="p-5 sm:p-6 overflow-y-auto space-y-5">
           
           {/* Repair Order Reference & Promised Time */}
           <div className="bg-slate-50 p-4 rounded-xl border-2 border-slate-400">
@@ -381,6 +482,7 @@ export const NewROModal: React.FC = () => {
                 <div className="relative">
                   <input
                     id="new-ro-number-input"
+                    data-ro-enter-flow="true"
                     type="text"
                     placeholder="Enter Repair Order # (e.g. 10489)"
                     value={roNumber}
@@ -410,6 +512,8 @@ export const NewROModal: React.FC = () => {
                 </label>
                 <div className="relative">
                   <input
+                    id="new-ro-promised-time-input"
+                    data-ro-enter-flow="true"
                     type="datetime-local"
                     value={promisedTime}
                     onChange={e => setPromisedTime(e.target.value)}
@@ -461,6 +565,8 @@ export const NewROModal: React.FC = () => {
               <div className="relative">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Customer Full Name *</label>
                 <input
+                  id="new-ro-customer-name-input"
+                  data-ro-enter-flow="true"
                   type="text"
                   required
                   placeholder="Enter customer name"
@@ -477,6 +583,8 @@ export const NewROModal: React.FC = () => {
               <div>
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Contact Phone Number</label>
                 <input
+                  id="new-ro-customer-phone-input"
+                  data-ro-enter-flow="true"
                   type="tel"
                   placeholder="Enter phone number"
                   value={customerPhone}
@@ -550,6 +658,8 @@ export const NewROModal: React.FC = () => {
                     Tax Exemption Permit / Certificate # (Optional)
                   </label>
                   <input
+                    id="new-ro-tax-exempt-input"
+                    data-ro-enter-flow="true"
                     type="text"
                     placeholder="Enter sales tax permit or exemption certificate #"
                     value={taxExemptNumber}
@@ -655,6 +765,8 @@ export const NewROModal: React.FC = () => {
 
               <div className="relative">
                 <input
+                  id="new-ro-vin-input"
+                  data-ro-enter-flow="true"
                   type="text"
                   placeholder="Enter or paste 17-character VIN"
                   value={vin}
@@ -673,6 +785,8 @@ export const NewROModal: React.FC = () => {
               <div>
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Year</label>
                 <input
+                  id="new-ro-year-input"
+                  data-ro-enter-flow="true"
                   type="number"
                   placeholder="Year"
                   value={year}
@@ -683,6 +797,8 @@ export const NewROModal: React.FC = () => {
               <div>
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Make</label>
                 <input
+                  id="new-ro-make-input"
+                  data-ro-enter-flow="true"
                   type="text"
                   placeholder="Make"
                   value={make}
@@ -693,6 +809,8 @@ export const NewROModal: React.FC = () => {
               <div className="col-span-2">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Model & Trim</label>
                 <input
+                  id="new-ro-model-input"
+                  data-ro-enter-flow="true"
                   type="text"
                   placeholder="Model & Trim"
                   value={model}
@@ -705,6 +823,8 @@ export const NewROModal: React.FC = () => {
             <div className="mt-2.5">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Odometer Mileage</label>
               <input
+                id="new-ro-mileage-input"
+                data-ro-enter-flow="true"
                 type="number"
                 placeholder="Mileage"
                 value={mileage}
@@ -733,10 +853,6 @@ export const NewROModal: React.FC = () => {
                 <Plus className="w-3.5 h-3.5" /> Add Another Concern Line
               </button>
             </div>
-
-            <p className="text-[11px] text-slate-500">
-              Add all customer complaints, symptoms, or requested service lines. Line 1 is logged as the primary complaint.
-            </p>
 
             {/* List of Concerns */}
             <div className="space-y-2.5">
@@ -823,73 +939,24 @@ export const NewROModal: React.FC = () => {
                       )}
                     </div>
                     <textarea
-                    rows={2}
-                    required={idx === 0}
-                    placeholder={
-                      idx === 0
-                        ? "Enter primary customer complaint or requested service..."
-                        : `Enter additional concern line ${idx + 1}...`
-                    }
-                    value={concern}
-                    onChange={e => handleConcernChange(idx, e.target.value)}
-                    className="w-full text-xs p-2.5 border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed bg-white text-slate-900 font-medium"
-                  />
+                      id={`new-ro-concern-input-${idx}`}
+                      data-ro-enter-flow="true"
+                      rows={2}
+                      required={idx === 0}
+                      placeholder={
+                        idx === 0
+                          ? "Enter primary customer complaint or requested service... (Enter ↵ to advance, Shift+Enter for newline)"
+                          : `Enter additional concern line ${idx + 1}... (Enter ↵ to advance)`
+                      }
+                      value={concern}
+                      onChange={e => handleConcernChange(idx, e.target.value)}
+                      className="w-full text-xs p-2.5 border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed bg-white text-slate-900 font-medium"
+                    />
                 </div>
               );
             })}
           </div>
 
-          </div>
-
-          {/* Work Assignment: Service Writer & Technician */}
-          <div className="p-4 bg-slate-50 rounded-xl border-2 border-slate-400 shadow-sm space-y-3">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <Send className="w-3.5 h-3.5 text-blue-600" /> Order Assignment
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Service Writer (Advisor) */}
-              <div>
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1 flex items-center gap-1">
-                  <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Service Writer (Advisor) *</span>
-                </label>
-                <select
-                  id="new-ro-advisor-select"
-                  value={advisorId}
-                  onChange={e => setAdvisorId(e.target.value)}
-                  className="w-full text-xs px-3 py-2.5 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs font-semibold text-slate-800"
-                  required
-                >
-                  {serviceWriters.map(w => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}{w.employeeNumber ? ` (#${w.employeeNumber})` : ''} — {w.title || w.role}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Technician */}
-              <div>
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block mb-1 flex items-center gap-1">
-                  <Wrench className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Assign Technician (Optional)</span>
-                </label>
-                <select
-                  id="new-ro-tech-select"
-                  value={techId}
-                  onChange={e => setTechId(e.target.value)}
-                  className="w-full text-xs px-3 py-2.5 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs font-semibold text-slate-800"
-                >
-                  <option value="">Leave in Queue (Unassigned)</option>
-                  {technicians.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}{t.employeeNumber ? ` ${t.employeeNumber}` : ''} — {t.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
           </div>
 
           {/* High Priority & Waiter Buttons */}
@@ -946,6 +1013,7 @@ export const NewROModal: React.FC = () => {
             </button>
             <button
               id="submit-new-ro-btn"
+              data-ro-enter-flow="true"
               type="submit"
               disabled={isDuplicateRo || !customerName.trim() || !hasValidConcern}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"

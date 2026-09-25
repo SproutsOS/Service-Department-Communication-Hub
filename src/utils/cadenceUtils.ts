@@ -178,6 +178,143 @@ export function getContactCadenceStatus(ro: RepairOrder): CadenceStatusInfo {
   }
 }
 
+export function isROCompleted(roOrStatus: RepairOrder | string): boolean {
+  const status = typeof roOrStatus === 'string' ? roOrStatus : roOrStatus.status;
+  const norm = normalizeROStatus(status);
+  return norm === 'CLOSED' || status === 'COMPLETED';
+}
+
+export interface PostRepairFollowUpInfo {
+  isEligible: boolean;
+  targetDate: string; // YYYY-MM-DD
+  daysSinceCompleted: number;
+  status: 'OVERDUE' | 'DUE_TODAY' | 'UPCOMING' | 'COMPLETED_SATISFIED' | 'COMPLETED_CONCERNS';
+  isDueToday: boolean;
+  isOverdue: boolean;
+  needsCall: boolean;
+  isCompleted: boolean;
+  label: string;
+  badgeClass: string;
+  completedDateFormatted: string;
+}
+
+/**
+ * Computes 3-day post-repair customer satisfaction & concern check status.
+ * Required dealership standard: Follow up with customer 3 days post-repair to verify
+ * satisfaction and ensure customer has no additional concerns.
+ */
+export function getPostRepairFollowUpStatus(ro: RepairOrder): PostRepairFollowUpInfo {
+  if (!isROCompleted(ro)) {
+    return {
+      isEligible: false,
+      targetDate: '',
+      daysSinceCompleted: 0,
+      status: 'UPCOMING',
+      isDueToday: false,
+      isOverdue: false,
+      needsCall: false,
+      isCompleted: false,
+      label: 'Vehicle In Service',
+      badgeClass: 'bg-slate-100 text-slate-500 border-slate-200',
+      completedDateFormatted: '',
+    };
+  }
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  // Resolve completion date
+  const completedTimestamp = ro.completedAt || 
+    ro.history.slice().reverse().find(h => normalizeROStatus(h.status) === 'CLOSED' || h.status === 'COMPLETED')?.timestamp || 
+    ro.createdAt;
+  
+  const completedDateObj = new Date(completedTimestamp);
+  const completedDateFormatted = completedDateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  const msSinceCompleted = Math.max(0, now.getTime() - completedDateObj.getTime());
+  const daysSinceCompleted = Math.floor(msSinceCompleted / (24 * 60 * 60 * 1000));
+
+  // 3-day target date (skip Sunday if landing on weekend)
+  let targetDate = ro.postRepairFollowUpDate;
+  if (!targetDate) {
+    const d = new Date(completedDateObj);
+    d.setDate(d.getDate() + 3);
+    if (d.getDay() === 0) {
+      d.setDate(d.getDate() + 1); // roll to Monday
+    }
+    targetDate = d.toISOString().split('T')[0];
+  }
+
+  if (ro.postRepairFollowUpCompleted) {
+    const hasConcerns = ro.postRepairFollowUpOutcome === 'HAS_NEW_CONCERNS' || ro.lastContactOutcome === 'POST_REPAIR_HAS_CONCERNS';
+    return {
+      isEligible: true,
+      targetDate,
+      daysSinceCompleted,
+      status: hasConcerns ? 'COMPLETED_CONCERNS' : 'COMPLETED_SATISFIED',
+      isDueToday: false,
+      isOverdue: false,
+      needsCall: false,
+      isCompleted: true,
+      label: hasConcerns ? '⚠️ Follow-Up Done: Customer Has Concerns' : '✅ 3-Day Follow-Up Done: Satisfied',
+      badgeClass: hasConcerns 
+        ? 'bg-amber-100 text-amber-900 border-amber-400 font-bold' 
+        : 'bg-emerald-100 text-emerald-900 border-emerald-400 font-bold',
+      completedDateFormatted,
+    };
+  }
+
+  const dueTime = new Date(`${targetDate}T23:59:59`).getTime();
+  const nowTime = now.getTime();
+
+  if (nowTime > dueTime && targetDate !== todayStr) {
+    const overdueDays = Math.max(1, Math.floor((nowTime - dueTime) / (24 * 60 * 60 * 1000)));
+    return {
+      isEligible: true,
+      targetDate,
+      daysSinceCompleted,
+      status: 'OVERDUE',
+      isDueToday: false,
+      isOverdue: true,
+      needsCall: true,
+      isCompleted: false,
+      label: `3-Day Call Overdue (${overdueDays}d late)`,
+      badgeClass: 'bg-red-100 text-red-900 border-2 border-red-500 ring-2 ring-red-400/40 font-black',
+      completedDateFormatted,
+    };
+  }
+
+  if (targetDate === todayStr) {
+    return {
+      isEligible: true,
+      targetDate,
+      daysSinceCompleted,
+      status: 'DUE_TODAY',
+      isDueToday: true,
+      isOverdue: false,
+      needsCall: true,
+      isCompleted: false,
+      label: '3-Day Follow-Up Due Today',
+      badgeClass: 'bg-amber-100 text-amber-950 border-2 border-amber-500 ring-2 ring-amber-400/40 font-black',
+      completedDateFormatted,
+    };
+  }
+
+  const daysUntilDue = Math.max(1, Math.ceil((dueTime - nowTime) / (24 * 60 * 60 * 1000)));
+  return {
+    isEligible: true,
+    targetDate,
+    daysSinceCompleted,
+    status: 'UPCOMING',
+    isDueToday: false,
+    isOverdue: false,
+    needsCall: false,
+    isCompleted: false,
+    label: `3-Day Follow-Up in ${daysUntilDue}d (${targetDate})`,
+    badgeClass: 'bg-blue-50 text-blue-900 border border-blue-300 font-semibold',
+    completedDateFormatted,
+  };
+}
+
 export function formatContactType(type: CustomerContactType): { label: string; icon: string } {
   switch (type) {
     case 'PHONE_CALL':
@@ -209,6 +346,12 @@ export function formatContactOutcome(outcome: CustomerContactOutcome): { label: 
       return { label: 'Customer Approved Delay', color: 'text-teal-700 bg-teal-50 border-teal-200' };
     case 'CUSTOMER_REQUESTED_CALLBACK':
       return { label: 'Customer Requested Callback', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+    case 'POST_REPAIR_SATISFIED':
+      return { label: 'Spoke - 100% Satisfied / No Concerns', color: 'text-emerald-800 bg-emerald-100 border-emerald-300' };
+    case 'POST_REPAIR_HAS_CONCERNS':
+      return { label: 'Customer Has New Concerns / Needs Attention', color: 'text-rose-800 bg-rose-100 border-rose-300' };
+    case 'POST_REPAIR_VOICEMAIL':
+      return { label: 'Left 3-Day Follow-Up Voicemail', color: 'text-blue-800 bg-blue-100 border-blue-300' };
     default:
       return { label: 'Updated', color: 'text-slate-700 bg-slate-50 border-slate-200' };
   }

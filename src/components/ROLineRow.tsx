@@ -15,22 +15,26 @@ import {
 import { RepairOrder, User as AppUser } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
 import { formatDurationSince, formatDateTime, formatEtaBadge, getDiagnosticStatusDetails } from '../utils/formatters';
-import { getContactCadenceStatus } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
 
 interface ROLineRowProps {
   ro: RepairOrder;
   onClick: () => void;
   users: AppUser[];
   showCadence?: boolean;
+  onOpenFollowUp?: (ro: RepairOrder) => void;
 }
 
 export const ROLineRow: React.FC<ROLineRowProps> = ({
   ro,
   onClick,
   users,
-  showCadence = true
+  showCadence = true,
+  onOpenFollowUp
 }) => {
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
+  const isCompleted = isROCompleted(ro);
+  const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
   const cadence = getContactCadenceStatus(ro);
   const diagInfo = getDiagnosticStatusDetails(ro);
 
@@ -179,22 +183,72 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
         </div>
       </td>
 
-      {/* 8. Customer Follow-Up (Cadence) */}
+      {/* 8. Customer Follow-Up (Cadence or Post-Repair) */}
       {showCadence && (
         <td className="px-3 py-3 whitespace-nowrap align-top">
-          <div>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-              cadence.isOverdue || cadence.isDueToday 
-                ? 'bg-red-100 text-red-900 border-red-500 font-black' 
-                : cadence.badgeClass
-            }`}>
-              <PhoneCall className="w-2.5 h-2.5" />
-              <span>{cadence.label}</span>
-            </span>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
-              {cadence.lastContactText}
+          {isCompleted && postRepair ? (
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  postRepair.isOverdue 
+                    ? 'bg-red-100 text-red-950 border-red-500 font-black' 
+                    : postRepair.isDueToday
+                    ? 'bg-amber-100 text-amber-950 border-amber-500 font-black'
+                    : postRepair.badgeClass
+                }`}>
+                  <PhoneCall className="w-2.5 h-2.5" />
+                  <span>{postRepair.label}</span>
+                </span>
+                {postRepair.needsCall && onOpenFollowUp && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenFollowUp(ro);
+                    }}
+                    className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white hover:bg-blue-700 shadow-2xs transition-colors cursor-pointer"
+                    title="Log 3-day follow up"
+                  >
+                    📞 Call
+                  </button>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                {postRepair.isCompleted 
+                  ? 'Follow-up completed' 
+                  : `Target: ${postRepair.targetDate} (${postRepair.daysSinceCompleted}d follow up)`}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  cadence.isOverdue || cadence.isDueToday 
+                    ? 'bg-red-100 text-red-900 border-red-500 font-black' 
+                    : cadence.badgeClass
+                }`}>
+                  <PhoneCall className="w-2.5 h-2.5" />
+                  <span>{cadence.label}</span>
+                </span>
+                {cadence.needsCall && onOpenFollowUp && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenFollowUp(ro);
+                    }}
+                    className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white hover:bg-blue-700 shadow-2xs transition-colors cursor-pointer"
+                    title="Log in-shop cadence call"
+                  >
+                    📞 Call
+                  </button>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                {cadence.lastContactText}
+              </div>
+            </div>
+          )}
         </td>
       )}
 

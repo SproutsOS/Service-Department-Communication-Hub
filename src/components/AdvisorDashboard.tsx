@@ -23,44 +23,82 @@ import { ROStatus, RepairOrder } from '../types';
 import { normalizeROStatus } from '../data/mockData';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
-import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
 
 export const AdvisorDashboard: React.FC = () => {
   const { currentUser, repairOrders, setSelectedRO, setIsNewROModalOpen, users } = useApp();
   
   const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET'>('BOARD');
   const [displayMode, setDisplayMode] = useState<'CARD' | 'LINE'>('CARD');
-  const [activeTab, setActiveTab] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
+  const [activeTab, setActiveTab] = useState<ROStatus | 'ALL' | 'CALLS_DUE' | 'COMPLETED'>('ALL');
+  const [completedSubFilter, setCompletedSubFilter] = useState<'ALL' | 'DUE' | 'DONE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
 
   // Strictly filter by this advisor's ROs to prevent clutter
   const myROs = repairOrders.filter(ro => ro.advisorId === currentUser.id);
 
-  // Calculate customer cadence counts for this advisor
-  const myEligibleROs = myROs.filter(ro => isEligibleForCadence(ro));
+  // Separate Active repair orders vs Completed repair orders (keeps active screen completely uncluttered)
+  const myActiveROs = myROs.filter(ro => !isROCompleted(ro));
+  const myCompletedROs = myROs.filter(ro => isROCompleted(ro));
+
+  // 3-Day Post-repair customer follow-up metrics
+  const myPostRepairList = myCompletedROs.map(ro => ({
+    ro,
+    status: getPostRepairFollowUpStatus(ro),
+  }));
+  const myPostRepairDue = myPostRepairList.filter(p => p.status.needsCall);
+  const postRepairDueCount = myPostRepairDue.length;
+  const postRepairOverdueCount = myPostRepairDue.filter(p => p.status.isOverdue).length;
+  const postRepairDueTodayCount = myPostRepairDue.filter(p => p.status.isDueToday).length;
+
+  // Active in-progress customer cadence counts
+  const myEligibleROs = myActiveROs.filter(ro => isEligibleForCadence(ro));
   const myOverdueCalls = myEligibleROs.filter(ro => getContactCadenceStatus(ro).isOverdue).length;
   const myDueTodayCalls = myEligibleROs.filter(ro => getContactCadenceStatus(ro).isDueToday).length;
-  const totalCallsDue = myOverdueCalls + myDueTodayCalls;
+  const totalCadenceCallsDue = myOverdueCalls + myDueTodayCalls;
 
-  // Status counts for this advisor
-  const waitingDiagnosisCount = myROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
-  const inDiagCount = myROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
-  const estimateDoneCount = myROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
-  const waitingApprovalCount = myROs.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
-  const approvedCount = myROs.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
-  const partsOrderedCount = myROs.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
-  const inRepairCount = myROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
-  const readyPickupCount = myROs.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
-  const completedCount = myROs.filter(r => normalizeROStatus(r.status) === 'CLOSED' || r.status === 'COMPLETED').length;
+  // Total calls due across active cadence AND 3-day post-repair follow-up
+  const totalCallsDue = totalCadenceCallsDue + postRepairDueCount;
+
+  // Status counts for this advisor (using active ROs only)
+  const waitingDiagnosisCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
+  const inDiagCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
+  const estimateDoneCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
+  const waitingApprovalCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
+  const approvedCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
+  const partsOrderedCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
+  const inRepairCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
+  const readyPickupCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
+  const completedCount = myCompletedROs.length;
 
   // Filtered list
   const displayROs = myROs.filter(ro => {
-    if (activeTab === 'CALLS_DUE') {
-      const cadence = getContactCadenceStatus(ro);
-      if (!cadence.needsCall) return false;
-    } else if (activeTab !== 'ALL' && normalizeROStatus(ro.status) !== normalizeROStatus(activeTab)) {
-      return false;
+    const isCompleted = isROCompleted(ro);
+
+    if (activeTab === 'ALL') {
+      // Completed ROs are NOT on active screen!
+      if (isCompleted) return false;
+    } else if (activeTab === 'COMPLETED') {
+      // Only completed ROs
+      if (!isCompleted) return false;
+      const postRepair = getPostRepairFollowUpStatus(ro);
+      if (completedSubFilter === 'DUE' && !postRepair.needsCall) return false;
+      if (completedSubFilter === 'DONE' && postRepair.needsCall) return false;
+    } else if (activeTab === 'CALLS_DUE') {
+      if (isCompleted) {
+        const postRepair = getPostRepairFollowUpStatus(ro);
+        if (!postRepair.needsCall) return false;
+      } else {
+        const cadence = getContactCadenceStatus(ro);
+        if (!cadence.needsCall) return false;
+      }
+    } else {
+      // Specific status tabs: only active ROs matching that status
+      if (isCompleted) return false;
+      if (normalizeROStatus(ro.status) !== normalizeROStatus(activeTab as ROStatus)) {
+        return false;
+      }
     }
 
     if (searchQuery.trim()) {
@@ -119,7 +157,7 @@ export const AdvisorDashboard: React.FC = () => {
               }`}
             >
               <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
-              <span>Daily Call Sheet</span>
+              <span>Daily Call Log</span>
               {totalCallsDue > 0 && (
                 <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
                   {totalCallsDue}
@@ -127,20 +165,58 @@ export const AdvisorDashboard: React.FC = () => {
               )}
             </button>
           </div>
-
-          <button
-            id="advisor-new-ro-btn"
-            onClick={() => setIsNewROModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer border-2 border-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Customer RO</span>
-          </button>
         </div>
       </div>
 
-      {/* Cadence Notification Alert when calls are due */}
-      {totalCallsDue > 0 && viewMode === 'BOARD' && (
+      {/* 3-Day Post-Repair Customer Follow-Up Alert Banner */}
+      {postRepairDueCount > 0 && viewMode === 'BOARD' && (
+        <div className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-500 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs border border-emerald-700">
+              <PhoneCall className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                <span>3-Day Follow Up: {postRepairDueCount} Customer Call(s) Due</span>
+                {postRepairOverdueCount > 0 && (
+                  <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full animate-pulse">
+                    {postRepairOverdueCount} Overdue
+                  </span>
+                )}
+                {postRepairDueTodayCount > 0 && (
+                  <span className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                    {postRepairDueTodayCount} Due Today
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Check on customers 3 days after repair completion to verify their vehicle is performing well and ensure they have no remaining concerns.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('COMPLETED'); setCompletedSubFilter('DUE'); }}
+              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 border border-emerald-800"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>View 3-Day Follow-Ups</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('CALL_SHEET')}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 border border-blue-700"
+            >
+              <PhoneCall className="w-3.5 h-3.5" />
+              <span>Call Log</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cadence Notification Alert when in-shop calls are due */}
+      {totalCadenceCallsDue > 0 && viewMode === 'BOARD' && (
         <div className="p-3 bg-gradient-to-r from-red-50 to-amber-50 border-2 border-amber-500 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs border border-amber-600">
@@ -148,7 +224,7 @@ export const AdvisorDashboard: React.FC = () => {
             </div>
             <div>
               <div className="text-xs font-black text-slate-900 flex items-center gap-2">
-                <span>Customer Service Standard: {totalCallsDue} Calls Pending</span>
+                <span>In-Shop Cadence: {totalCadenceCallsDue} Calls Pending</span>
                 {myOverdueCalls > 0 && (
                   <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
                     {myOverdueCalls} Overdue
@@ -171,7 +247,7 @@ export const AdvisorDashboard: React.FC = () => {
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5 border border-blue-700"
           >
             <PhoneCall className="w-3.5 h-3.5" />
-            <span>Open Call Sheet</span>
+            <span>Open Call Log</span>
           </button>
         </div>
       )}
@@ -180,16 +256,34 @@ export const AdvisorDashboard: React.FC = () => {
       {viewMode === 'CALL_SHEET' ? (
         <div className="space-y-3">
           <CustomerCallSheetWidget 
-            filterAdvisorId={currentUser.id}
             onSelectRO={setSelectedRO}
             onOpenFollowUpModal={setSelectedFollowUpRO}
           />
         </div>
       ) : (
         <>
-          {/* Quick Status Pill Filters */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-1">
+          {/* Quick Status Pill Filters & Actions */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-12 gap-1">
             
+            {/* Create RO Action Button */}
+            <button
+              id="advisor-new-ro-btn"
+              type="button"
+              onClick={() => setIsNewROModalOpen(true)}
+              className="p-2 rounded-lg border-2 border-blue-700 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-left transition-all shadow-xs cursor-pointer flex flex-col justify-between group"
+              title="Create RO"
+            >
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[10px] font-bold uppercase truncate text-blue-100">
+                  New RO
+                </span>
+                <Plus className="w-3.5 h-3.5 text-white stroke-[2.5]" />
+              </div>
+              <div className="text-xs sm:text-sm font-black text-white leading-tight">
+                Create RO
+              </div>
+            </button>
+
             <button
               onClick={() => setActiveTab('ALL')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
@@ -199,10 +293,10 @@ export const AdvisorDashboard: React.FC = () => {
               }`}
             >
               <div className={`text-[10px] font-bold uppercase mb-0.5 truncate ${activeTab === 'ALL' ? 'text-slate-300' : 'text-slate-700'}`}>
-                All My ROs
+                Active ROs
               </div>
               <div className={`text-base sm:text-lg font-black ${activeTab === 'ALL' ? 'text-white' : 'text-black'}`}>
-                {myROs.length}
+                {myActiveROs.length}
               </div>
             </button>
 
@@ -284,8 +378,11 @@ export const AdvisorDashboard: React.FC = () => {
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'WAITING_FOR_APPROVAL' ? 'text-orange-950' : 'text-slate-700'}`}>
-                  Approval
+                <span 
+                  className={`text-[10px] font-bold uppercase truncate ${activeTab === 'WAITING_FOR_APPROVAL' ? 'text-orange-950' : 'text-slate-700'}`}
+                  title="Pending Approval"
+                >
+                  Pending Approval
                 </span>
                 <AlertTriangle className="w-3 h-3 text-orange-600" />
               </div>
@@ -357,10 +454,101 @@ export const AdvisorDashboard: React.FC = () => {
                 </span>
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
               </div>
-              <div className="text-base sm:text-lg font-black text-black">{readyPickupCount + completedCount}</div>
+              <div className="text-base sm:text-lg font-black text-black">{readyPickupCount}</div>
+            </button>
+
+            {/* Dedicated Completed Repair Orders Tab */}
+            <button
+              onClick={() => setActiveTab('COMPLETED')}
+              className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                activeTab === 'COMPLETED'
+                  ? 'bg-slate-900 text-white border-slate-950 ring-2 ring-slate-700 shadow-xs'
+                  : postRepairDueCount > 0
+                  ? 'bg-emerald-50 border-emerald-600 hover:border-emerald-700 shadow-2xs'
+                  : 'bg-white border-slate-800 hover:border-slate-900 hover:bg-slate-50 shadow-2xs'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-0.5">
+                <span className={`text-[10px] font-bold uppercase truncate ${
+                  activeTab === 'COMPLETED' ? 'text-emerald-300' : postRepairDueCount > 0 ? 'text-emerald-900 font-black' : 'text-slate-700'
+                }`}>
+                  Completed
+                </span>
+                <ShieldCheck className={`w-3 h-3 ${activeTab === 'COMPLETED' ? 'text-emerald-300' : 'text-emerald-600'}`} />
+              </div>
+              <div className="flex items-baseline justify-between gap-1">
+                <div className={`text-base sm:text-lg font-black ${activeTab === 'COMPLETED' ? 'text-white' : 'text-black'}`}>
+                  {completedCount}
+                </div>
+                {postRepairDueCount > 0 && (
+                  <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full bg-emerald-600 text-white animate-pulse">
+                    {postRepairDueCount} Due
+                  </span>
+                )}
+              </div>
             </button>
 
           </div>
+
+          {/* Completed Sub-Filter Navigation Bar (shown when viewing Completed tab) */}
+          {activeTab === 'COMPLETED' && (
+            <div className="bg-slate-900 text-white p-3.5 sm:p-4 rounded-xl border-2 border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 text-white">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Completed Repair Orders Archive & 3-Day Quality Checks</span>
+                  </h3>
+                  <span className="text-[10px] font-bold uppercase bg-white/20 text-slate-200 px-2 py-0.5 rounded-full">
+                    Historical Record
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                  Completed orders are safely stored here so your active repair screen stays clean. Quality standard: 3-day follow up to verify customer satisfaction and ensure no concerns.
+                </p>
+              </div>
+
+              {/* Sub-filter tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCompletedSubFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    completedSubFilter === 'ALL'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  All Completed ({completedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompletedSubFilter('DUE')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    completedSubFilter === 'DUE'
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                      : postRepairDueCount > 0
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30'
+                      : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  <PhoneCall className="w-3 h-3" />
+                  <span>3-Day Follow-Up Due ({postRepairDueCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompletedSubFilter('DONE')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    completedSubFilter === 'DONE'
+                      ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  Follow-Up Done ({completedCount - postRepairDueCount})
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Search Filter & View Mode Toggle */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -413,10 +601,16 @@ export const AdvisorDashboard: React.FC = () => {
             {displayROs.length === 0 ? (
               <div className="bg-white rounded-lg border-2 border-slate-800 p-8 text-center">
                 <UserCheck className="w-9 h-9 text-slate-400 mx-auto mb-2" />
-                <h3 className="text-sm font-bold text-slate-800">No repair orders in this view</h3>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {activeTab === 'COMPLETED' ? 'No completed repair orders found' : 'No repair orders in this view'}
+                </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  {myROs.length === 0 
-                    ? "You currently have no repair orders assigned. Click 'New Customer RO' to open one." 
+                  {activeTab === 'COMPLETED'
+                    ? completedCount === 0
+                      ? 'No repair orders have been completed and closed yet.'
+                      : 'No completed orders match the current filter or search.'
+                    : myActiveROs.length === 0 
+                    ? "You currently have no active repair orders assigned. Click 'Create RO' to open one." 
                     : "No orders match the selected filter."}
                 </p>
               </div>
@@ -427,6 +621,7 @@ export const AdvisorDashboard: React.FC = () => {
                     key={ro.id} 
                     ro={ro} 
                     onClick={() => setSelectedRO(ro)} 
+                    onOpenFollowUp={setSelectedFollowUpRO}
                   />
                 ))}
               </div>
@@ -444,7 +639,9 @@ export const AdvisorDashboard: React.FC = () => {
                         <th className="px-3 py-2.5">Ticket Status</th>
                         <th className="px-3 py-2.5">Promised Time</th>
                         <th className="px-3 py-2.5">Assigned Tech</th>
-                        <th className="px-3 py-2.5">Follow-Up (2x/Wk)</th>
+                        <th className="px-3 py-2.5">
+                          {activeTab === 'COMPLETED' ? '3-Day Follow-Up' : 'Follow-Up (2x/Wk)'}
+                        </th>
                         <th className="px-3 py-2.5 text-right">Items / Action</th>
                       </tr>
                     </thead>
@@ -456,6 +653,7 @@ export const AdvisorDashboard: React.FC = () => {
                           users={users}
                           onClick={() => setSelectedRO(ro)}
                           showCadence={true}
+                          onOpenFollowUp={setSelectedFollowUpRO}
                         />
                       ))}
                     </tbody>

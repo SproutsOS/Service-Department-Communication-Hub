@@ -22,7 +22,11 @@ import {
   Printer,
   ShieldCheck,
   Loader2,
-  ArrowRight
+  ArrowRight,
+  UserCheck,
+  Plus,
+  Trash2,
+  X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
@@ -33,10 +37,11 @@ import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
+  onRequestParts?: () => void;
 }
 
-const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({ ro }) => {
-  const { updateTechCauseAndCorrection, openQuoteModal, openWarrantyPrintModal } = useApp();
+const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({ ro, onRequestParts }) => {
+  const { updateTechCauseAndCorrection, openQuoteModal } = useApp();
   const [cause, setCause] = useState(ro.cause || ro.diagnosticNotes || '');
   const [correction, setCorrection] = useState(ro.correction || '');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
@@ -44,18 +49,24 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
+  // Focus tracking to prevent cursor jumping when spacebar is pressed during background autosave
+  const isCauseFocusedRef = useRef(false);
+  const isCorrectionFocusedRef = useRef(false);
+
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const latestValuesRef = useRef({ cause, correction });
 
-  // Sync state whenever ro prop changes
+  // Sync state whenever ro prop changes, but NOT while the technician is actively focused and typing
   useEffect(() => {
     const currentROCause = ro.cause || ro.diagnosticNotes || '';
     const currentROCorrection = ro.correction || '';
-    // Only update from prop if not actively editing
-    if (autoSaveStatus !== 'saving') {
+    if (!isCauseFocusedRef.current && currentROCause !== cause) {
       setCause(currentROCause);
+      latestValuesRef.current.cause = currentROCause;
+    }
+    if (!isCorrectionFocusedRef.current && currentROCorrection !== correction) {
       setCorrection(currentROCorrection);
-      latestValuesRef.current = { cause: currentROCause, correction: currentROCorrection };
+      latestValuesRef.current.correction = currentROCorrection;
     }
   }, [ro.cause, ro.correction, ro.diagnosticNotes]);
 
@@ -197,12 +208,18 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
             <textarea
               rows={2}
               value={cause}
+              onFocus={() => {
+                isCauseFocusedRef.current = true;
+              }}
               onChange={(e) => {
                 const val = e.target.value;
                 setCause(val);
                 triggerAutoSave(val, correction);
               }}
-              onBlur={handleBlurSave}
+              onBlur={() => {
+                isCauseFocusedRef.current = false;
+                handleBlurSave();
+              }}
               placeholder="Type cause findings (e.g., Code P0300 - cylinder 3 spark plug fouled with oil due to leaking valve cover spark plug tube seal)..."
               className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
             />
@@ -219,18 +236,24 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
             <textarea
               rows={2}
               value={correction}
+              onFocus={() => {
+                isCorrectionFocusedRef.current = true;
+              }}
               onChange={(e) => {
                 const val = e.target.value;
                 setCorrection(val);
                 triggerAutoSave(cause, val);
               }}
-              onBlur={handleBlurSave}
+              onBlur={() => {
+                isCorrectionFocusedRef.current = false;
+                handleBlurSave();
+              }}
               placeholder="Type correction performed (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, road tested 5 miles)..."
               className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
 
-          {/* Tech Quick Actions: ProDemand Labor Lookup & Quote Builder */}
+          {/* Tech Quick Actions: ProDemand Labor Lookup & Quote Builder & Request Parts */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
             <div className="flex items-center gap-2 flex-wrap">
               <a
@@ -251,27 +274,49 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                     navigator.clipboard.writeText(ro.vehicle.vin);
                     alert(`Copied VIN to clipboard: ${ro.vehicle.vin}`);
                   }}
-                  className="px-2 py-1.5 bg-white hover:bg-slate-100 text-slate-600 rounded-md text-[11px] font-mono border border-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-mono font-bold border-2 border-slate-700 flex items-center gap-1.5 transition-all active:scale-95 shadow-md cursor-pointer"
                   title="Copy VIN for ProDemand"
                 >
-                  <Copy className="w-3 h-3 text-slate-400" />
+                  <Copy className="w-3.5 h-3.5 text-blue-400" />
                   <span>Copy VIN</span>
                 </button>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => openQuoteModal(ro.id)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer ${
-                ro.quote
-                  ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
-              }`}
-            >
-              <Calculator className="w-3.5 h-3.5" />
-              <span>{ro.quote ? `View/Edit Quote ($${(Number(ro.quote.grandTotal) || 0).toFixed(2)})` : '+ Initiate Repair Quote'}</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {onRequestParts && (
+                <button
+                  type="button"
+                  onClick={onRequestParts}
+                  className="px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition-colors cursor-pointer shadow-2xs"
+                  title="Request required parts from the Parts Department counter"
+                >
+                  <Package className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Request Parts</span>
+                </button>
+              )}
+
+              {(() => {
+                const loggedHours = ro.quote?.laborItems 
+                  ? ro.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
+                  : 0;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => openQuoteModal(ro.id)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer ${
+                      loggedHours > 0
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700 shadow-xs'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+                    }`}
+                    title="Enter the amount of time it will take to do the job"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{loggedHours > 0 ? `Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Labor Time'}</span>
+                  </button>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Action Bar */}
@@ -282,16 +327,6 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
               <span>All typed information is saved automatically in real-time.</span>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openWarrantyPrintModal(ro.id)}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border-2 border-slate-400 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                title="Print Cause & Correction with Work Start/End Times"
-              >
-                <Printer className="w-3.5 h-3.5 text-blue-600" />
-                <span>Print Warranty Sheet 🖨️</span>
-              </button>
-
               <button
                 type="button"
                 onClick={handleManualSave}
@@ -322,6 +357,322 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
   );
 };
 
+interface TechPartsRequestModalProps {
+  ro: RepairOrder | null;
+  onClose: () => void;
+}
+
+interface RequestedPartLine {
+  id: string;
+  description: string;
+  partNumber: string;
+  quantity: number;
+}
+
+const TechPartsRequestModal: React.FC<TechPartsRequestModalProps> = ({ ro, onClose }) => {
+  const { addPartOrder, updateROStatus } = useApp();
+  const [partsList, setPartsList] = useState<RequestedPartLine[]>([
+    { id: `part_${Date.now()}_1`, description: '', partNumber: '', quantity: 1 }
+  ]);
+  const [notes, setNotes] = useState('');
+  const [finishDiag, setFinishDiag] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (!ro) return null;
+
+  const handleAddPartLine = () => {
+    setPartsList(prev => [
+      ...prev,
+      { 
+        id: `part_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 
+        description: '', 
+        partNumber: '', 
+        quantity: 1 
+      }
+    ]);
+  };
+
+  const handleRemovePartLine = (id: string) => {
+    if (partsList.length <= 1) {
+      setPartsList([{ id: `part_${Date.now()}_1`, description: '', partNumber: '', quantity: 1 }]);
+      return;
+    }
+    setPartsList(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleUpdatePartLine = (id: string, field: keyof RequestedPartLine, value: any) => {
+    setPartsList(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      return { ...item, [field]: value };
+    }));
+  };
+
+  const handleStepQuantity = (id: string, delta: number) => {
+    setPartsList(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const current = Number(item.quantity) || 1;
+      return { ...item, quantity: Math.max(1, Math.min(99, current + delta)) };
+    }));
+  };
+
+  const validPartsCount = partsList.filter(p => p.description.trim().length > 0).length;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validParts = partsList.filter(p => p.description.trim().length > 0);
+    if (validParts.length === 0) {
+      alert('Please enter at least one part description to submit a parts request.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    validParts.forEach(p => {
+      addPartOrder(ro.id, {
+        description: p.description.trim(),
+        partNumber: p.partNumber.trim() || 'TBD',
+        quantity: Math.max(1, Number(p.quantity) || 1),
+        status: 'REQUESTED',
+        vendor: 'Shop Inventory / Supplier',
+        estimatedArrival: 'Pending Parts Counter',
+        notes: notes.trim() || undefined,
+      });
+    });
+
+    if (finishDiag && (ro.status === 'BEING_DIAGNOSED' || ro.status === 'WAITING_DIAGNOSIS')) {
+      updateROStatus(ro.id, 'WAITING_PARTS');
+    }
+
+    setIsSubmitting(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
+      <div 
+        className="bg-white rounded-2xl max-w-2xl w-full border-2 border-slate-300 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-4 bg-gradient-to-r from-slate-900 to-blue-950 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-amber-400/20 text-amber-400 rounded-xl border border-amber-400/30">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-white">Technician Parts Request</h3>
+                <span className="px-2 py-0.5 bg-blue-500/30 border border-blue-400/40 text-blue-200 text-[10px] font-extrabold rounded-full">
+                  {partsList.length} {partsList.length === 1 ? 'Part' : 'Parts'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                RO #{ro.id} • {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
+                {ro.vehicle.vin && <span className="font-mono text-slate-400 ml-1.5 hidden sm:inline">({ro.vehicle.vin})</span>}
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            title="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          
+          {/* Section: Parts List */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Required Parts & Quantities <span className="text-red-500">*</span>
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Specify each required part with its own distinct quantity
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddPartLine}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs border border-blue-200 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Another Part</span>
+              </button>
+            </div>
+
+            {/* List of dynamic part rows */}
+            <div className="space-y-2.5">
+              {partsList.map((part, index) => (
+                <div 
+                  key={part.id} 
+                  className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-black shrink-0">
+                      {index + 1}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-600 flex-1">
+                      Part #{index + 1}
+                    </span>
+                    {partsList.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePartLine(part.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Remove this part"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-start">
+                    {/* Description */}
+                    <div className="sm:col-span-6">
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Part Description <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        autoFocus={index === 0}
+                        value={part.description}
+                        onChange={(e) => handleUpdatePartLine(part.id, 'description', e.target.value)}
+                        placeholder={index === 0 ? "e.g. Front ceramic brake pad set" : index === 1 ? "e.g. Front brake rotors (pair)" : "e.g. Caliper slide pin kit"}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Part # */}
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Part # (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={part.partNumber}
+                        onChange={(e) => handleUpdatePartLine(part.id, 'partNumber', e.target.value)}
+                        placeholder="e.g. 58101-3QA10"
+                        className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
+                      />
+                    </div>
+
+                    {/* Quantity with +/- stepper */}
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Quantity
+                      </label>
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => handleStepQuantity(part.id, -1)}
+                          disabled={part.quantity <= 1}
+                          className="px-2 py-2 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-700 font-bold border border-slate-300 rounded-l-lg text-xs cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={part.quantity === 0 || (part.quantity as any) === '' ? '' : part.quantity}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            handleUpdatePartLine(part.id, 'quantity', val === '' ? 1 : Math.max(1, parseInt(val) || 1));
+                          }}
+                          className="w-full text-center py-2 bg-white border-y border-slate-300 text-xs font-extrabold text-slate-900 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleStepQuantity(part.id, 1)}
+                          className="px-2 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-300 rounded-r-lg text-xs cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Add Another Button */}
+            <button
+              type="button"
+              onClick={handleAddPartLine}
+              className="w-full py-2.5 border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 rounded-xl text-xs font-bold text-slate-600 hover:text-blue-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Add Another Part</span>
+            </button>
+          </div>
+
+          {/* Technician Notes */}
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1">
+              Technician Notes
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Customer is waiting in lounge, please source ASAP or check local warehouse delivery."
+              className="w-full px-3 py-2 bg-white border-2 border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+
+          {/* Diagnosis Finished Toggle */}
+          {(ro.status === 'BEING_DIAGNOSED' || ro.status === 'WAITING_DIAGNOSIS') && (
+            <label className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-lg border border-blue-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={finishDiag}
+                onChange={(e) => setFinishDiag(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+              />
+              <span className="text-xs font-bold text-blue-900">
+                Mark Diagnosis Finished & Move RO to "Waiting on Parts"
+              </span>
+            </label>
+          )}
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+            <span className="text-xs font-bold text-slate-500">
+              {validPartsCount} of {partsList.length} part{partsList.length === 1 ? '' : 's'} filled
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>
+                  Submit {validPartsCount > 0 ? `${validPartsCount} ` : ''}
+                  Part{validPartsCount === 1 ? '' : 's'} to Parts Counter
+                </span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 export const TechDashboard: React.FC = () => {
   const { 
     currentUser, 
@@ -331,10 +682,11 @@ export const TechDashboard: React.FC = () => {
     startDiagnosis,
     openDirectChat,
     openQuoteModal,
-    openWarrantyPrintModal,
     updateConcernPayType,
     updateConcernTech
   } = useApp();
+
+  const [partsModalRO, setPartsModalRO] = useState<RepairOrder | null>(null);
 
   const canSelectPayType = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
   const canAssignTech = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
@@ -614,16 +966,18 @@ export const TechDashboard: React.FC = () => {
                       <Clock className="w-3.5 h-3.5 text-blue-600" />
                       {calculateDispatchedDuration(ro.dispatchedAt)}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 flex items-center sm:justify-end gap-1.5 flex-wrap">
-                      <span>Advisor: {ro.advisorName}</span>
-                      {(() => {
-                        const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
-                        return adv?.employeeNumber ? (
-                          <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                            {adv.employeeNumber}
-                          </span>
-                        ) : null;
-                      })()}
+                    <div className="mt-1 flex items-center sm:justify-end gap-2.5 flex-wrap">
+                      <span className="text-base sm:text-lg font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs">
+                        Advisor: <span className="text-blue-700 font-black">{ro.advisorName}</span>
+                        {(() => {
+                          const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
+                          return adv?.employeeNumber ? (
+                            <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-300">
+                              #{adv.employeeNumber}
+                            </span>
+                          ) : null;
+                        })()}
+                      </span>
                       {ro.advisorId && ro.advisorId !== currentUser.id && (
                         <button
                           type="button"
@@ -631,18 +985,18 @@ export const TechDashboard: React.FC = () => {
                             e.stopPropagation();
                             openDirectChat(ro.advisorId);
                           }}
-                          className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 inline-flex items-center gap-0.5 transition-colors cursor-pointer"
-                          title={`Direct message ${ro.advisorName}`}
+                          className="text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl border-2 border-blue-700 inline-flex items-center gap-2 transition-all shadow-md cursor-pointer hover:shadow-lg active:scale-95"
+                          title={`Direct message advisor ${ro.advisorName}`}
                         >
-                          <MessageSquare className="w-2.5 h-2.5" />
-                          <span>Chat</span>
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Chat with {ro.advisorName.split(' ')[0]}</span>
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Tech Tools: ProDemand Labor Lookup & Repair Quote */}
+                {/* Tech Tools: ProDemand Labor Lookup, Repair Quote & Parts Request */}
                 <div 
                   onClick={(e) => e.stopPropagation()}
                   className="p-2.5 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border-2 border-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-2xs"
@@ -666,11 +1020,11 @@ export const TechDashboard: React.FC = () => {
                           navigator.clipboard.writeText(ro.vehicle.vin);
                           alert(`Copied VIN: ${ro.vehicle.vin}`);
                         }}
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-mono font-medium border border-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-mono font-bold border-2 border-slate-700 flex items-center gap-1.5 transition-all active:scale-95 shadow-md cursor-pointer"
                         title="Copy VIN for ProDemand"
                       >
-                        <Copy className="w-3 h-3 text-slate-400" />
-                        <span>VIN: {ro.vehicle.vin.substring(0, 10)}...</span>
+                        <Copy className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Copy VIN</span>
                       </button>
                     )}
                   </div>
@@ -678,36 +1032,34 @@ export const TechDashboard: React.FC = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => openWarrantyPrintModal(ro.id)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                      title="Print Cause & Correction with Work Start/End Times"
+                      onClick={() => setPartsModalRO(ro)}
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-600 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                      title="Request parts needed from the Parts Department"
                     >
-                      <Printer className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Print Warranty Sheet 🖨️</span>
+                      <Package className="w-3.5 h-3.5" />
+                      <span>Request Parts</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => openQuoteModal(ro.id)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border-2 transition-all cursor-pointer shadow-xs ${
-                        ro.quote
-                          ? ro.quote.status === 'APPROVED'
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
-                            : ro.quote.status === 'SUBMITTED'
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
-                      }`}
-                    >
-                      <Calculator className="w-3.5 h-3.5" />
-                      {ro.quote ? (
-                        <span>
-                          Quote: <strong>${(Number(ro.quote.grandTotal) || 0).toFixed(2)}</strong> ({ro.quote.status})
-                        </span>
-                      ) : (
-                        <span>+ Initiate Repair Quote</span>
-                      )}
-                    </button>
+                    {(() => {
+                      const loggedHours = ro.quote?.laborItems 
+                        ? ro.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
+                        : 0;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openQuoteModal(ro.id)}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border-2 transition-all cursor-pointer shadow-xs ${
+                            loggedHours > 0
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
+                              : 'bg-slate-900 hover:bg-black text-white border-slate-900'
+                          }`}
+                          title="Enter labor time required to do the job"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{loggedHours > 0 ? `Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Labor Time'}</span>
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -747,9 +1099,23 @@ export const TechDashboard: React.FC = () => {
                         Diagnostic testing & scan underway • Started at {formatTimeOnly(ro.diagnosisStartedAt)} ({formatDurationSince(ro.diagnosisStartedAt)} active)
                       </div>
                     </div>
-                    <span className="text-[11px] font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full border-2 border-blue-300 uppercase tracking-wider">
-                      Active Inspection
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPartsModalRO(ro);
+                        }}
+                        className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2 rounded-lg border-2 border-amber-600 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                        title="Diagnostic finished — request required parts from the Parts Department"
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                        <span>Finish Diag & Request Parts</span>
+                      </button>
+                      <span className="text-[11px] font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full border-2 border-blue-300 uppercase tracking-wider">
+                        Active Inspection
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -899,7 +1265,7 @@ export const TechDashboard: React.FC = () => {
                 </div>
 
                 {/* Technician Diagnosis & Repair Documentation: Cause & Correction */}
-                <TechCauseCorrectionSection ro={ro} />
+                <TechCauseCorrectionSection ro={ro} onRequestParts={() => setPartsModalRO(ro)} />
 
                 {/* Official Warranty Labor Time Clock & Multi-Punch Tracking */}
                 <WarrantyTimeClockSection ro={ro} />
@@ -908,7 +1274,7 @@ export const TechDashboard: React.FC = () => {
                 <TechRecommendationsSection ro={ro} />
 
                 {/* Prominent Parts Arrival Tracker */}
-                {ro.parts.length > 0 && (
+                {ro.parts.length > 0 ? (
                   <div 
                     onClick={(e) => e.stopPropagation()}
                     className="bg-slate-50 p-3 rounded-lg border-2 border-slate-300 space-y-2 select-text"
@@ -918,11 +1284,21 @@ export const TechDashboard: React.FC = () => {
                         <Package className="w-4 h-4 text-orange-600" />
                         Parts Ordered & Estimated Arrival Time
                       </span>
-                      {hasPartsETA && (
-                        <span className="text-[10px] font-bold uppercase text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-300">
-                          Live Delivery
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {hasPartsETA && (
+                          <span className="text-[10px] font-bold uppercase text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-300">
+                            Live Delivery
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPartsModalRO(ro)}
+                          className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Request More Parts</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-1.5">
@@ -959,17 +1335,36 @@ export const TechDashboard: React.FC = () => {
                       })}
                     </div>
                   </div>
+                ) : (
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex items-center justify-between text-xs"
+                  >
+                    <span className="text-slate-600 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Need parts or shop supplies for this repair order?</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPartsModalRO(ro)}
+                      className="px-2.5 py-1 rounded text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3 h-3 text-blue-600" />
+                      <span>Request Parts</span>
+                    </button>
+                  </div>
                 )}
 
                 {/* Card Footer: Technician Station Details & Advisor Direct Communication */}
                 <div 
                   id={`tech-ro-card-footer-${ro.id}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="pt-2.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 -mx-5 -mb-5 px-5 py-3 rounded-b-xl bg-slate-50/80"
+                  className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 -mx-5 -mb-5 px-5 py-3.5 rounded-b-xl bg-slate-50/90"
                 >
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="text-slate-600">
-                      Advisor: <strong className="text-slate-900 font-semibold">{ro.advisorName}</strong>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-blue-600" />
+                      Advisor: <span className="text-blue-900 font-black">{ro.advisorName}</span>
                     </span>
                     {ro.advisorId && ro.advisorId !== currentUser.id && (
                       <button
@@ -978,16 +1373,16 @@ export const TechDashboard: React.FC = () => {
                           e.stopPropagation();
                           openDirectChat(ro.advisorId);
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200 transition-colors cursor-pointer text-xs shadow-2xs"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold border border-blue-700 transition-all cursor-pointer text-xs shadow-xs hover:shadow-sm"
                         title={`Direct message advisor ${ro.advisorName}`}
                       >
-                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <MessageSquare className="w-4 h-4 text-white" />
                         <span>Chat with {ro.advisorName.split(' ')[0]}</span>
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-slate-500 font-medium text-xs">
-                    <span>Assigned Bay: <strong className="text-slate-800 font-bold">{ro.bay ? `Bay ${ro.bay}` : 'Standard Bay'}</strong></span>
+                  <div className="flex items-center gap-2 text-slate-600 font-semibold text-xs">
+                    <span>Assigned Bay: <strong className="text-slate-900 font-bold">{ro.bay ? `Bay ${ro.bay}` : 'Standard Bay'}</strong></span>
                   </div>
                 </div>
 
@@ -997,6 +1392,11 @@ export const TechDashboard: React.FC = () => {
         )}
       </div>
 
+      {/* Technician Parts Request Modal */}
+      <TechPartsRequestModal 
+        ro={partsModalRO} 
+        onClose={() => setPartsModalRO(null)} 
+      />
     </div>
   );
 };

@@ -128,18 +128,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       {/* Top Header Bar */}
       <header className="relative z-10 w-full border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 font-black text-xl">
             <Wrench className="w-5 h-5 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-black tracking-tight text-white">{shopName || 'Woolwine CDJR'}</span>
+              <span className="text-xl font-black tracking-tight text-white">The HUB</span>
               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-400/30">
                 PRO SYSTEM
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              Service Department & Repair Order Hub
+            <p className="text-xs text-slate-400 font-medium">
+              Everything Moving. Everyone Connected
             </p>
           </div>
         </div>
@@ -405,7 +405,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">
             <div className="flex items-center gap-2">
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              <span>{shopName || 'Woolwine CDJR'} Dealership Network</span>
+              <span>{shopName ? `${shopName} Dealership Network` : 'Dealership Network'}</span>
               <span>•</span>
               <span className="text-emerald-400 font-semibold">
                 {isCloudSynced ? 'Cloud Database Connected' : 'Local Offline Mode Ready'}

@@ -7,6 +7,7 @@ import { TechDashboard } from './components/TechDashboard';
 import { PartsDashboard } from './components/PartsDashboard';
 import { SalesDashboard } from './components/SalesDashboard';
 import { StaffManagement } from './components/StaffManagement';
+import { TimeCardCalculator } from './components/TimeCardCalculator';
 import { RODetailModal } from './components/RODetailModal';
 import { NewROModal } from './components/NewROModal';
 import { LoginModal } from './components/LoginModal';
@@ -17,6 +18,7 @@ import { WarrantyPrintModal } from './components/WarrantyPrintModal';
 import { CustomerDirectoryModal } from './components/CustomerDirectoryModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
+import { DraggableShopChatButton } from './components/DraggableShopChatButton';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -25,13 +27,14 @@ import {
   Package, 
   CheckCircle2, 
   ShieldCheck, 
-  ShieldAlert,
+  ShieldAlert, 
   AlertTriangle, 
   Users, 
   ArrowLeft, 
-  Eye,
-  Lock,
-  MessageSquare
+  Eye, 
+  Lock, 
+  MessageSquare,
+  Calculator
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -43,6 +46,8 @@ const MainContent: React.FC = () => {
     repairOrders, 
     isStaffManagementOpen, 
     setIsStaffManagementOpen,
+    isTimeCardCalculatorOpen,
+    setIsTimeCardCalculatorOpen,
     isChatBoxOpen,
     setIsChatBoxOpen,
     openShopChat,
@@ -58,12 +63,13 @@ const MainContent: React.FC = () => {
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
   const isManager = currentUser.role === 'SERVICE_MANAGER';
 
-  // Auto-close staff management if a non-manager is active
+  // Auto-close staff management & time card calculator if a non-manager is active
   React.useEffect(() => {
-    if (!isManager && isStaffManagementOpen) {
-      setIsStaffManagementOpen(false);
+    if (!isManager) {
+      if (isStaffManagementOpen) setIsStaffManagementOpen(false);
+      if (isTimeCardCalculatorOpen) setIsTimeCardCalculatorOpen(false);
     }
-  }, [isManager, isStaffManagementOpen, setIsStaffManagementOpen]);
+  }, [isManager, isStaffManagementOpen, isTimeCardCalculatorOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen]);
 
   // Authentication Gate: Render ONLY the Login Screen until authorized staff credentials/PIN are entered
   if (!isAuthenticated) {
@@ -83,12 +89,13 @@ const MainContent: React.FC = () => {
     );
   }
 
-  // Real-time capacity calculation
+  // Real-time capacity calculation (configured for 12-bay shop)
+  const TOTAL_SHOP_BAYS = 12;
   const totalActive = repairOrders.filter(r => r.status !== 'COMPLETED').length;
   const inRepair = repairOrders.filter(r => r.status === 'IN_BAY' || r.status === 'IN_REPAIR').length;
   const partsTrackingCount = repairOrders.flatMap(r => r.parts.filter(p => p.status === 'IN_TRANSIT' || p.status === 'ORDERED')).length;
   const assignedCount = repairOrders.filter(r => r.status === 'DISPATCHED' || (r.techId && r.status !== 'COMPLETED')).length;
-  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / 8) * 100), 100);
+  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / TOTAL_SHOP_BAYS) * 100), 100);
 
   const handleSelectRole = (role: UserRole) => {
     // Non-managers are strictly blocked from accessing any other role's space
@@ -96,6 +103,7 @@ const MainContent: React.FC = () => {
       return;
     }
     setIsStaffManagementOpen(false);
+    setIsTimeCardCalculatorOpen(false);
     setActiveRoleView(role);
   };
 
@@ -191,13 +199,16 @@ const MainContent: React.FC = () => {
                 {/* Administration / Staff Section */}
                 <div className="pt-4 mt-4 border-t border-slate-800">
                   <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
-                    Dealership Staff
+                    Dealership Staff & Tools
                   </div>
                   <button
                     id="sidebar-staff-management-btn"
-                    onClick={() => setIsStaffManagementOpen(true)}
+                    onClick={() => {
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsStaffManagementOpen(true);
+                    }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
-                      isStaffManagementOpen
+                      isStaffManagementOpen && !isTimeCardCalculatorOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -208,6 +219,29 @@ const MainContent: React.FC = () => {
                     </div>
                     <span className="text-[10px] font-bold bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">
                       {users.length}
+                    </span>
+                  </button>
+
+                  {/* Time Card Punch Calculator - Exclusive to Service Manager */}
+                  <button
+                    id="sidebar-time-card-calculator-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(true);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      isTimeCardCalculatorOpen
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="7-Day Military Time Card Calculator (24-Hour Clock)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calculator className="w-4 h-4 shrink-0 text-emerald-400" />
+                      <span className="text-sm font-medium">Time Card Calc</span>
+                    </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700/50 uppercase tracking-wider">
+                      Military
                     </span>
                   </button>
                 </div>
@@ -251,7 +285,7 @@ const MainContent: React.FC = () => {
                 {currentUser.role === 'SERVICE_ADVISOR' && (
                   <button
                     id="sidebar-advisor-console-btn"
-                    className="w-full flex items-center justify-between p-3 rounded-lg text-left bg-blue-600 text-white shadow-xs"
+                    className="w-full flex items-center p-3 rounded-lg text-left bg-blue-600 text-white shadow-xs"
                   >
                     <div className="flex items-center gap-2.5">
                       <UserCheck className="w-4 h-4 text-blue-300" />
@@ -260,9 +294,6 @@ const MainContent: React.FC = () => {
                         <div className="text-[11px] text-blue-200">Customer Follow-Up & ROs</div>
                       </div>
                     </div>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-400/40 uppercase">
-                      Advisor
-                    </span>
                   </button>
                 )}
 
@@ -318,7 +349,10 @@ const MainContent: React.FC = () => {
 
           {/* Shop Load Status Widget (Professional Polish) */}
           <div className="mt-auto p-4 bg-slate-800 rounded-xl border border-slate-700">
-            <div className="text-xs text-slate-400 mb-1.5 font-medium">Shop Load Status</div>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5 font-medium">
+              <span>Shop Load Status</span>
+              <span className="text-[10px] text-slate-400 font-medium">12 Bays</span>
+            </div>
             <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
               <div 
                 className="bg-green-500 h-full transition-all duration-300"
@@ -381,13 +415,29 @@ const MainContent: React.FC = () => {
                   <span>Sales (Read-Only)</span>
                 </button>
                 <button
-                  onClick={() => setIsStaffManagementOpen(true)}
+                  onClick={() => {
+                    setIsTimeCardCalculatorOpen(false);
+                    setIsStaffManagementOpen(true);
+                  }}
                   className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                    isStaffManagementOpen ? 'bg-blue-600 text-white' : 'text-slate-400'
+                    isStaffManagementOpen && !isTimeCardCalculatorOpen ? 'bg-blue-600 text-white' : 'text-slate-400'
                   }`}
                 >
                   <Users className="w-3.5 h-3.5" />
                   <span>Staff ({users.length})</span>
+                </button>
+                <button
+                  id="mobile-time-card-calculator-btn"
+                  onClick={() => {
+                    setIsStaffManagementOpen(false);
+                    setIsTimeCardCalculatorOpen(true);
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                    isTimeCardCalculatorOpen ? 'bg-blue-600 text-white' : 'text-slate-400'
+                  }`}
+                >
+                  <Calculator className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Military Time Card</span>
                 </button>
               </>
             ) : (
@@ -416,7 +466,27 @@ const MainContent: React.FC = () => {
 
           {/* Primary Viewport */}
           <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col gap-6">
-            {isStaffManagementOpen ? (
+            {isTimeCardCalculatorOpen ? (
+              isManager ? (
+                <div>
+                  <TimeCardCalculator onBackToDashboard={() => setIsTimeCardCalculatorOpen(false)} />
+                </div>
+              ) : (
+                <div className="p-8 bg-white rounded-2xl border border-red-200 text-center max-w-lg mx-auto shadow-sm my-auto">
+                  <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-slate-900">Restricted Space</h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    The Time Card Calculator is restricted to the Service Manager. Your account ({currentUser.name}) is authorized for the {currentUser.title || currentUser.role} space only.
+                  </p>
+                  <button
+                    onClick={() => setIsTimeCardCalculatorOpen(false)}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
+                  >
+                    Return to My Workspace
+                  </button>
+                </div>
+              )
+            ) : isStaffManagementOpen ? (
               isManager ? (
                 <div>
                   <div className="mb-4">
@@ -505,42 +575,13 @@ const MainContent: React.FC = () => {
       <CustomerDirectoryModal />
       <UrgentToastStack />
 
-      {/* Floating Quick Chat Launcher (visible when chat box is closed) */}
-      {!isChatBoxOpen && (
-        <button
-          id="floating-chat-launcher-btn"
-          onClick={() => openShopChat()}
-          className={`fixed bottom-14 sm:bottom-16 right-5 z-40 text-white p-3 sm:px-4 sm:py-3 rounded-full shadow-xl border-2 border-white flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95 ${
-            unreadShopCount > 0 
-              ? 'bg-blue-700 ring-4 ring-amber-400/50 shadow-amber-500/20' 
-              : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-          title={
-            latestUnreadShopMessage
-              ? `New message from ${latestUnreadShopMessage.senderName}: "${latestUnreadShopMessage.content}" - Click to open chat`
-              : 'Open Shop Team Chat'
-          }
-        >
-          <div className="relative">
-            <MessageSquare className={`w-5 h-5 text-white ${unreadShopCount > 0 ? 'animate-bounce' : ''}`} />
-            {unreadShopCount > 0 && (
-              <span className="absolute -top-2.5 -right-2.5 bg-red-600 text-white text-[10px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
-                {unreadShopCount > 9 ? '9+' : unreadShopCount}
-              </span>
-            )}
-          </div>
-          <span className="hidden sm:inline text-xs font-bold truncate max-w-[200px]">
-            {latestUnreadShopMessage 
-              ? `Chat from ${latestUnreadShopMessage.senderName}` 
-              : 'Shop Chat'}
-          </span>
-          {unreadShopCount > 0 && (
-            <span className="hidden sm:inline-flex text-[10px] font-extrabold bg-red-600 text-white px-1.5 py-0.5 rounded-full shadow-xs">
-              {unreadShopCount}
-            </span>
-          )}
-        </button>
-      )}
+      {/* Draggable Floating Quick Chat Launcher (hold left mouse button and drag to reposition anywhere) */}
+      <DraggableShopChatButton
+        unreadShopCount={unreadShopCount}
+        latestUnreadShopMessage={latestUnreadShopMessage}
+        onOpenChat={() => openShopChat()}
+        isChatBoxOpen={isChatBoxOpen}
+      />
 
       {/* Real-time Shop Team Chat Box */}
       <ShopChatDrawer 

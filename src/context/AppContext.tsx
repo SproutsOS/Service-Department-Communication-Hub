@@ -65,6 +65,7 @@ interface AppContextType {
   isNewROModalOpen: boolean;
   isLoginModalOpen: boolean;
   isStaffManagementOpen: boolean;
+  isTimeCardCalculatorOpen: boolean;
   isCustomerDirectoryOpen: boolean;
   prefilledCustomerForNewRO: Customer | null;
   isSoundEnabled: boolean;
@@ -81,6 +82,7 @@ interface AppContextType {
   setIsNewROModalOpen: (isOpen: boolean) => void;
   setIsLoginModalOpen: (isOpen: boolean) => void;
   setIsStaffManagementOpen: (isOpen: boolean) => void;
+  setIsTimeCardCalculatorOpen: (isOpen: boolean) => void;
   setIsCustomerDirectoryOpen: (isOpen: boolean) => void;
   setPrefilledCustomerForNewRO: (cust: Customer | null) => void;
   saveCustomer: (customer: Customer) => Promise<boolean>;
@@ -119,6 +121,8 @@ interface AppContextType {
   sendMessage: (roId: string, content: string, isUrgent?: boolean) => void;
   addPartOrder: (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => void;
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
+  updatePartItem: (roId: string, partId: string, updates: Partial<PartItem>) => void;
+  deletePartItem: (roId: string, partId: string) => void;
   createRepairOrder: (data: {
     roNumber?: string;
     customerName: string;
@@ -147,6 +151,7 @@ interface AppContextType {
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
+  addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string) => boolean;
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
   updateConcernTech: (roId: string, concernIndex: number, techId: string, techName?: string) => boolean;
@@ -160,6 +165,8 @@ interface AppContextType {
       partsEtaDiscussed?: string;
       promisedDateDiscussed?: string;
       nextScheduledContactDate?: string;
+      isPostRepairFollowUp?: boolean;
+      postRepairOutcome?: 'SATISFIED_NO_CONCERNS' | 'HAS_NEW_CONCERNS' | 'LEFT_VOICEMAIL' | 'NO_ANSWER' | 'CUSTOMER_CALLBACK_REQUESTED';
     }
   ) => boolean;
   clearAllRepairOrders: () => void;
@@ -243,7 +250,7 @@ const STORAGE_KEY_SHOP_NAME = 'precision_auto_shop_name_v6_clean';
 const STORAGE_KEY_SETUP_DONE = 'precision_auto_setup_completed_v6_clean';
 const STORAGE_KEY_WIPE_PERFORMED = 'precision_auto_wipe_performed_v6_clean';
 const STORAGE_KEY_SESSION_AUTH = 'dealership_session_authenticated_v1';
-const STORAGE_KEY_CUSTOMERS = 'woolwine_customers_cloud_cache_v1';
+const STORAGE_KEY_CUSTOMERS = 'the_hub_customers_cloud_cache_v1';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -263,9 +270,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Dealership/Shop Name
   const [shopName, setShopNameState] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_SHOP_NAME) || 'Woolwine CDJR';
+      const stored = localStorage.getItem(STORAGE_KEY_SHOP_NAME);
+      if (stored && stored !== 'Woolwine CDJR') {
+        return stored;
+      }
+      try {
+        localStorage.removeItem(STORAGE_KEY_SHOP_NAME);
+      } catch {
+        // ignore
+      }
+      return '';
     } catch {
-      return 'Woolwine CDJR';
+      return '';
     }
   });
 
@@ -420,6 +436,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
+  const [isTimeCardCalculatorOpen, setIsTimeCardCalculatorOpen] = useState(false);
   const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
   const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
@@ -637,9 +654,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Subscribe to real-time Shop Settings
     const unsubscribeSettings = subscribeToShopSettings((cloudSettings) => {
       if (cloudSettings) {
-        if (cloudSettings.shopName) {
+        if (cloudSettings.shopName && cloudSettings.shopName !== 'Woolwine CDJR') {
           setShopNameState(cloudSettings.shopName);
           localStorage.setItem(STORAGE_KEY_SHOP_NAME, cloudSettings.shopName);
+        } else if (cloudSettings.shopName === 'Woolwine CDJR') {
+          setShopNameState('');
+          try { localStorage.removeItem(STORAGE_KEY_SHOP_NAME); } catch {}
         }
         if (typeof cloudSettings.isSetupCompleted === 'boolean') {
           setIsInitialSetupCompleted(cloudSettings.isSetupCompleted);
@@ -868,12 +888,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let waitingDiagnosisAt = targetRO.waitingDiagnosisAt;
     let diagnosisStartedAt = targetRO.diagnosisStartedAt;
+    let completedAt = targetRO.completedAt;
+    let postRepairFollowUpDate = targetRO.postRepairFollowUpDate;
+    let postRepairFollowUpCompleted = targetRO.postRepairFollowUpCompleted;
 
     if (newStatus === 'WAITING_DIAGNOSTICS' || newStatus === 'WAITING_DIAGNOSIS') {
       waitingDiagnosisAt = now;
     } else if (newStatus === 'IN_DIAG' || newStatus === 'BEING_DIAGNOSED' || newStatus === 'IN_BAY') {
       if (!diagnosisStartedAt) {
         diagnosisStartedAt = now;
+      }
+    } else if (newStatus === 'CLOSED' || newStatus === 'COMPLETED') {
+      if (!completedAt) {
+        completedAt = now;
+      }
+      if (!postRepairFollowUpDate) {
+        // Automatically schedule 3-day post-repair customer follow-up call
+        const followUpTarget = new Date(now);
+        followUpTarget.setDate(followUpTarget.getDate() + 3);
+        if (followUpTarget.getDay() === 0) {
+          followUpTarget.setDate(followUpTarget.getDate() + 1); // roll past Sunday
+        }
+        postRepairFollowUpDate = followUpTarget.toISOString().split('T')[0];
+        postRepairFollowUpCompleted = false;
       }
     }
 
@@ -892,6 +929,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: newStatus,
       waitingDiagnosisAt,
       diagnosisStartedAt,
+      completedAt,
+      postRepairFollowUpDate,
+      postRepairFollowUpCompleted,
       isUrgent: isNowUrgent,
       history: [...targetRO.history, newHistoryItem],
     };
@@ -1066,6 +1106,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newPart: PartItem = {
       ...part,
+      price: (part.price !== undefined && !isNaN(Number(part.price))) ? Number(Number(part.price).toFixed(2)) : undefined,
       status: effectivePartStatus,
       id: `prt_${Date.now()}`,
       roId,
@@ -1074,6 +1115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const isWaitingOnDelivery = 
       effectivePartStatus === 'DAILY_ORDER' || 
+      effectivePartStatus === 'LOCAL_PURCHASE' ||
       effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' ||
       effectivePartStatus === 'SPECIAL_ORDER' || 
       effectivePartStatus === 'VOR_UPGRADE' || 
@@ -1085,6 +1127,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. Status: ${effectivePartStatus.replace(/_/g, ' ')}`;
     if (effectivePartStatus === 'IN_STOCK' || effectivePartStatus === 'ISSUED_TO_TECH') {
       historyNote = `[Parts Dept] Added IN STOCK part #${part.partNumber} (${part.description}) from ${part.vendor || 'inventory'}.`;
+    } else if (effectivePartStatus === 'LOCAL_PURCHASE') {
+      historyNote = `[Parts Dept] Dispatched LOCAL PURCHASE for part #${part.partNumber} (${part.description}) from ${part.vendor || 'local supplier'}. ETA: ${part.estimatedArrival || 'Today'}`;
     } else if (effectivePartStatus === 'DAILY_ORDER') {
       historyNote = `[Parts Dept] Placed DAILY ORDER for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
     } else if (effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' || effectivePartStatus === 'SPECIAL_ORDER') {
@@ -1097,10 +1141,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       historyNote = `[Parts Request] Part request submitted for #${part.partNumber} (${part.description}). Pending classification by Parts/Service Manager.`;
     }
 
+    // If quote exists on RO, automatically merge parts so labor and parts come together on the quote
+    let mergedQuote = targetRO.quote;
+    if (mergedQuote) {
+      const existingQuoteParts = mergedQuote.partsItems || [];
+      const matchIdx = existingQuoteParts.findIndex(qp => 
+        qp.sourcePartId === newPart.id || 
+        (newPart.partNumber && qp.partNumber && qp.partNumber.trim().toUpperCase() === newPart.partNumber.trim().toUpperCase())
+      );
+      let nextPartsItems = [...existingQuoteParts];
+      const partPrice = (newPart.price !== undefined && Number(newPart.price) > 0) ? Number(newPart.price) : 0;
+      if (matchIdx >= 0) {
+        nextPartsItems[matchIdx] = {
+          ...nextPartsItems[matchIdx],
+          description: newPart.description || newPart.name || nextPartsItems[matchIdx].description,
+          partNumber: newPart.partNumber || nextPartsItems[matchIdx].partNumber,
+          quantity: newPart.quantity || nextPartsItems[matchIdx].quantity || 1,
+          unitPrice: partPrice > 0 ? partPrice : nextPartsItems[matchIdx].unitPrice,
+          subtotal: (newPart.quantity || nextPartsItems[matchIdx].quantity || 1) * (partPrice > 0 ? partPrice : (Number(nextPartsItems[matchIdx].unitPrice) || 0)),
+          sourcePartId: newPart.id,
+        };
+      } else {
+        nextPartsItems.push({
+          id: `qpart_${Date.now()}_${newPart.id}`,
+          description: newPart.description || newPart.name,
+          partNumber: newPart.partNumber,
+          quantity: newPart.quantity || 1,
+          unitPrice: partPrice > 0 ? partPrice : ('' as any),
+          subtotal: (newPart.quantity || 1) * partPrice,
+          sourcePartId: newPart.id,
+        });
+      }
+      const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+      const totalLaborCost = mergedQuote.totalLaborCost || 0;
+      const supplies = mergedQuote.shopSuppliesFee || 0;
+      const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+      const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+      const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+
+      mergedQuote = {
+        ...mergedQuote,
+        partsItems: nextPartsItems,
+        totalPartsCost,
+        taxAmount,
+        grandTotal,
+      };
+    }
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: newROStatus,
       parts: [...targetRO.parts, newPart],
+      quote: mergedQuote,
       history: [
         ...targetRO.history,
         {
@@ -1194,6 +1286,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isUrgent,
       'PARTS_UPDATE'
     );
+  };
+
+  // Update Part Item Details (Full update: Part Number, Description, Vendor, Quantity, Price, ETA, Status, Notes)
+  const updatePartItem = (
+    roId: string,
+    partId: string,
+    updates: Partial<PartItem>
+  ) => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return;
+
+    let partDesc = '';
+    const updatedParts = targetRO.parts.map(p => {
+      if (p.id !== partId) return p;
+      partDesc = updates.description || p.description;
+      return {
+        ...p,
+        ...updates,
+        price: (updates.price !== undefined && !isNaN(Number(updates.price))) ? Number(Number(updates.price).toFixed(2)) : p.price,
+      };
+    });
+
+    // Check if parts are all received / issued
+    const allReceived = updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
+    let nextROStatus = targetRO.status;
+    if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
+      nextROStatus = (updates.status === 'ISSUED_TO_TECH') ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
+    } else if (updates.status && (updates.status === 'DAILY_ORDER' || updates.status === 'LOCAL_PURCHASE' || updates.status === 'SPECIAL_ORDER' || updates.status === 'SPECIAL_ORDER_1_5_DAYS' || updates.status === 'ORDERED' || updates.status === 'VOR_UPGRADE')) {
+      if (targetRO.status === 'WAITING_PARTS' || targetRO.status === 'BEING_DIAGNOSED') {
+        nextROStatus = 'PARTS_ORDERED';
+      }
+    }
+
+    // Sync quote if exists
+    let mergedQuote = targetRO.quote;
+    if (mergedQuote) {
+      const existingQuoteParts = mergedQuote.partsItems || [];
+      const matchIdx = existingQuoteParts.findIndex(qp => qp.sourcePartId === partId || (updates.partNumber && qp.partNumber === updates.partNumber));
+      let nextPartsItems = [...existingQuoteParts];
+      const partPrice = (updates.price !== undefined && Number(updates.price) > 0) ? Number(updates.price) : undefined;
+      if (matchIdx >= 0) {
+        const cur = nextPartsItems[matchIdx];
+        const newUnitPrice = partPrice !== undefined ? partPrice : cur.unitPrice;
+        const newQty = updates.quantity !== undefined ? updates.quantity : (cur.quantity || 1);
+        nextPartsItems[matchIdx] = {
+          ...cur,
+          description: updates.description || cur.description,
+          partNumber: updates.partNumber || cur.partNumber,
+          quantity: newQty,
+          unitPrice: newUnitPrice,
+          subtotal: newQty * (Number(newUnitPrice) || 0),
+          sourcePartId: partId,
+        };
+      } else if (partDesc) {
+        nextPartsItems.push({
+          id: `qpart_${Date.now()}_${partId}`,
+          description: partDesc,
+          partNumber: updates.partNumber || '',
+          quantity: updates.quantity || 1,
+          unitPrice: (partPrice && partPrice > 0) ? partPrice : ('' as any),
+          subtotal: (updates.quantity || 1) * (partPrice || 0),
+          sourcePartId: partId,
+        });
+      }
+      const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+      const totalLaborCost = mergedQuote.totalLaborCost || 0;
+      const supplies = mergedQuote.shopSuppliesFee || 0;
+      const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+      const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+      const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+
+      mergedQuote = {
+        ...mergedQuote,
+        partsItems: nextPartsItems,
+        totalPartsCost,
+        taxAmount,
+        grandTotal,
+      };
+    }
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      status: nextROStatus,
+      parts: updatedParts,
+      quote: mergedQuote,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist_${Date.now()}`,
+          status: nextROStatus,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: new Date().toISOString(),
+          notes: `[Parts Dept] Updated part #${updates.partNumber || ''} (${partDesc}). Status: ${(updates.status || 'UPDATED').replace(/_/g, ' ')}`,
+        },
+      ],
+    };
+
+    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
+    syncRepairOrder(updatedRO);
+  };
+
+  // Delete Part Item
+  const deletePartItem = (roId: string, partId: string) => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return;
+
+    const remainingParts = targetRO.parts.filter(p => p.id !== partId);
+    let mergedQuote = targetRO.quote;
+    if (mergedQuote && mergedQuote.partsItems) {
+      const nextPartsItems = mergedQuote.partsItems.filter(qp => qp.sourcePartId !== partId);
+      const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+      const totalLaborCost = mergedQuote.totalLaborCost || 0;
+      const supplies = mergedQuote.shopSuppliesFee || 0;
+      const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+      const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+      const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+
+      mergedQuote = {
+        ...mergedQuote,
+        partsItems: nextPartsItems,
+        totalPartsCost,
+        taxAmount,
+        grandTotal,
+      };
+    }
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      parts: remainingParts,
+      quote: mergedQuote,
+    };
+
+    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
+    syncRepairOrder(updatedRO);
   };
 
   // Create new repair order
@@ -1832,15 +2060,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return false;
 
-    const trimmedCause = cause.trim();
-    const trimmedCorrection = correction.trim();
+    const isAutoSave = options?.isAutoSave ?? false;
+    // CRITICAL: When auto-saving while typing, do NOT strip trailing whitespace/spaces,
+    // so pressing the spacebar does not snap the cursor back to the end of the previous word!
+    const effectiveCause = isAutoSave ? cause : cause.trim();
+    const effectiveCorrection = isAutoSave ? correction : correction.trim();
 
     // If nothing changed, return true without doing redundant work
-    if (targetRO.cause === trimmedCause && targetRO.correction === trimmedCorrection) {
+    if (targetRO.cause === effectiveCause && targetRO.correction === effectiveCorrection) {
       return true;
     }
 
-    const isAutoSave = options?.isAutoSave ?? false;
     const shouldNotify = options?.notify ?? (!isAutoSave);
 
     const now = new Date().toISOString();
@@ -1866,10 +2096,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updatedRO: RepairOrder = {
       ...targetRO,
-      cause: trimmedCause,
-      correction: trimmedCorrection,
+      cause: effectiveCause,
+      correction: effectiveCorrection,
       // For backwards compatibility, sync diagnosticNotes if empty
-      diagnosticNotes: trimmedCause || targetRO.diagnosticNotes,
+      diagnosticNotes: effectiveCause || targetRO.diagnosticNotes,
       history: newHistory
     };
 
@@ -1896,6 +2126,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    return true;
+  };
+
+  // Add a new customer complaint / concern line to an open or dispatched repair order (Service Manager or Service Advisor)
+  const addRepairOrderConcern = (
+    roId: string, 
+    concernText: string, 
+    payType: ConcernPayType = 'CUSTOMER_PAY', 
+    techId?: string, 
+    techName?: string
+  ): boolean => {
+    const canAdd = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
+    if (!canAdd) {
+      alert('Only Service Managers and Service Advisors can add customer complaints to an open repair order.');
+      return false;
+    }
+    const cleanConcern = concernText.trim();
+    if (!cleanConcern) return false;
+
+    let updatedRO: RepairOrder | null = null;
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const currentConcerns = ro.concerns && ro.concerns.length > 0 ? [...ro.concerns] : [ro.primaryConcern || 'General Service'];
+          const currentPayTypes = ro.concernPayTypes && ro.concernPayTypes.length >= currentConcerns.length
+            ? [...ro.concernPayTypes]
+            : currentConcerns.map((_, i) => ro.concernPayTypes?.[i] || 'CUSTOMER_PAY');
+          const currentTechIds = ro.concernTechIds && ro.concernTechIds.length >= currentConcerns.length
+            ? [...ro.concernTechIds]
+            : currentConcerns.map((_, i) => ro.concernTechIds?.[i] || ro.techId);
+          const currentTechNames = ro.concernTechNames && ro.concernTechNames.length >= currentConcerns.length
+            ? [...ro.concernTechNames]
+            : currentConcerns.map((_, i) => ro.concernTechNames?.[i] || ro.techName);
+
+          const finalTechId = techId || ro.techId;
+          const finalTechName = techName || (techId ? users.find(u => u.id === techId)?.name : ro.techName);
+
+          currentConcerns.push(cleanConcern);
+          currentPayTypes.push(payType);
+          currentTechIds.push(finalTechId);
+          currentTechNames.push(finalTechName);
+
+          const historyItem = {
+            id: `hist_${Date.now()}`,
+            status: ro.status,
+            updatedBy: currentUser.id,
+            updatedByName: currentUser.name,
+            userRole: currentUser.role,
+            timestamp: new Date().toISOString(),
+            notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) added Customer Complaint Line ${currentConcerns.length}: "${cleanConcern}" (${payType.replace(/_/g, ' ')})`
+          };
+
+          const updatedItem: RepairOrder = {
+            ...ro,
+            concerns: currentConcerns,
+            concernPayTypes: currentPayTypes,
+            concernTechIds: currentTechIds,
+            concernTechNames: currentTechNames,
+            history: [...ro.history, historyItem]
+          };
+          updatedRO = updatedItem;
+          return updatedItem;
+        }
+        return ro;
+      });
+
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (updatedRO) {
+      syncRepairOrder(updatedRO);
+      triggerNotification(
+        updatedRO,
+        'New Customer Complaint Added',
+        `${currentUser.name} added complaint line to RO #${updatedRO.id || roId}: "${cleanConcern}"`,
+        false,
+        'STATUS_CHANGE'
+      );
+    }
     return true;
   };
 
@@ -2164,6 +2478,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : targetRO.status;
 
     let newHistory = [...targetRO.history];
+    const isTechUser = currentUser.role === 'TECHNICIAN';
     if (submitToAdvisor) {
       newHistory.push({
         id: `hist_${Date.now()}`,
@@ -2172,7 +2487,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedByName: currentUser.name,
         userRole: currentUser.role,
         timestamp: now,
-        notes: `Tech ${currentUser.name} submitted repair quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts). Sent to Advisor for authorization.`,
+        notes: isTechUser
+          ? `Tech ${currentUser.name} submitted job labor time (${nextQuote.totalLaborHours} hrs) for RO #${targetRO.id}. Sent to Service Advisor to merge with parts pricing.`
+          : `Quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts) submitted to Service Advisor for customer authorization.`,
       });
     } else if (!isAutoSave) {
       newHistory.push({
@@ -2182,7 +2499,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedByName: currentUser.name,
         userRole: currentUser.role,
         timestamp: now,
-        notes: `Tech ${currentUser.name} saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)})`,
+        notes: isTechUser
+          ? `Tech ${currentUser.name} saved labor time draft (${nextQuote.totalLaborHours} hrs).`
+          : `Saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)}).`,
       });
     }
 
@@ -2209,8 +2528,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       playNotificationChime(true);
       triggerNotification(
         updatedRO,
-        `Quote Ready: $${nextQuote.grandTotal.toFixed(2)}`,
-        `Tech ${currentUser.name} submitted repair quote for RO #${targetRO.id} ($${nextQuote.grandTotal.toFixed(2)}: ${nextQuote.totalLaborHours} hrs labor, $${nextQuote.totalPartsCost.toFixed(2)} parts). Awaiting customer authorization.`,
+        isTechUser 
+          ? `Labor Time Ready: ${nextQuote.totalLaborHours} hrs`
+          : `Quote Ready: $${nextQuote.grandTotal.toFixed(2)}`,
+        isTechUser
+          ? `Tech ${currentUser.name} submitted ${nextQuote.totalLaborHours} hrs labor time for RO #${targetRO.id}. Ready for Service Advisor to review and merge with parts pricing.`
+          : `Repair quote for RO #${targetRO.id} ($${nextQuote.grandTotal.toFixed(2)}: ${nextQuote.totalLaborHours} hrs labor, $${nextQuote.totalPartsCost.toFixed(2)} parts). Awaiting customer authorization.`,
         true,
         'QUOTE_UPDATE'
       );
@@ -2640,6 +2963,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       partsEtaDiscussed?: string;
       promisedDateDiscussed?: string;
       nextScheduledContactDate?: string;
+      isPostRepairFollowUp?: boolean;
+      postRepairOutcome?: 'SATISFIED_NO_CONCERNS' | 'HAS_NEW_CONCERNS' | 'LEFT_VOICEMAIL' | 'NO_ANSWER' | 'CUSTOMER_CALLBACK_REQUESTED';
     }
   ): boolean => {
     const targetRO = repairOrders.find(r => r.id === roId);
@@ -2648,7 +2973,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date().toISOString();
     const contactId = `cnt_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
-    const nextDueDate = contactData.nextScheduledContactDate || calculateNextContactDate(now, 3.5);
+    const isPostRepair = Boolean(
+      contactData.isPostRepairFollowUp || 
+      contactData.outcome === 'POST_REPAIR_SATISFIED' || 
+      contactData.outcome === 'POST_REPAIR_HAS_CONCERNS' || 
+      contactData.outcome === 'POST_REPAIR_VOICEMAIL' ||
+      (targetRO.status === 'CLOSED' || targetRO.status === 'COMPLETED')
+    );
+
+    const postRepairFollowUpCompleted = isPostRepair ? true : targetRO.postRepairFollowUpCompleted;
+    const postRepairFollowUpCompletedAt = isPostRepair ? now : targetRO.postRepairFollowUpCompletedAt;
+    const postRepairFollowUpOutcome = isPostRepair 
+      ? (contactData.postRepairOutcome || (contactData.outcome === 'POST_REPAIR_HAS_CONCERNS' ? 'HAS_NEW_CONCERNS' : 'SATISFIED_NO_CONCERNS'))
+      : targetRO.postRepairFollowUpOutcome;
+    const postRepairFollowUpNotes = isPostRepair 
+      ? (contactData.notes || contactData.summary).trim()
+      : targetRO.postRepairFollowUpNotes;
+
+    const nextDueDate = contactData.nextScheduledContactDate || (isPostRepair ? undefined : calculateNextContactDate(now, 3.5));
 
     const newRecord: CustomerContactRecord = {
       id: contactId,
@@ -2673,7 +3015,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedByName: currentUser.name,
       userRole: currentUser.role,
       timestamp: now,
-      notes: `Customer contact logged (${typeInfo.label}): ${contactData.summary.trim()}. Next scheduled update: ${nextDueDate}.`,
+      notes: isPostRepair
+        ? `3-Day Follow Up conducted (${typeInfo.label}): ${contactData.summary.trim()}`
+        : `Customer contact logged (${typeInfo.label}): ${contactData.summary.trim()}.${nextDueDate ? ` Next scheduled update: ${nextDueDate}.` : ''}`,
     };
 
     const updatedContactHistory = [newRecord, ...(targetRO.contactHistory || [])];
@@ -2685,6 +3029,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastContactOutcome: contactData.outcome,
       nextContactDueDate: nextDueDate,
       contactHistory: updatedContactHistory,
+      postRepairFollowUpCompleted,
+      postRepairFollowUpCompletedAt,
+      postRepairFollowUpOutcome,
+      postRepairFollowUpNotes,
       history: [...targetRO.history, newHistoryEntry],
     };
 
@@ -2980,6 +3328,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isNewROModalOpen,
         isLoginModalOpen,
         isStaffManagementOpen,
+        isTimeCardCalculatorOpen,
         isCustomerDirectoryOpen,
         prefilledCustomerForNewRO,
         isSoundEnabled,
@@ -2994,6 +3343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsNewROModalOpen,
         setIsLoginModalOpen,
         setIsStaffManagementOpen,
+        setIsTimeCardCalculatorOpen,
         setIsCustomerDirectoryOpen,
         setPrefilledCustomerForNewRO,
         saveCustomer,
@@ -3014,11 +3364,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sendMessage,
         addPartOrder,
         updatePartStatus,
+        updatePartItem,
+        deletePartItem,
         createRepairOrder,
         markNotificationRead,
         markAllNotificationsRead,
         deleteRepairOrder,
         updateRepairOrderDetails,
+        addRepairOrderConcern,
         toggleCustomerTaxExempt,
         addVehiclePhoto,
         deleteVehiclePhoto,

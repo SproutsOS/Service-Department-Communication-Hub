@@ -30,7 +30,7 @@ import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
-  const { repairOrders, users, setSelectedRO, setIsNewROModalOpen, startDiagnosis } = useApp();
+  const { repairOrders, users, setSelectedRO, setIsNewROModalOpen, startDiagnosis, setIsTimeCardCalculatorOpen } = useApp();
 
   const [viewSection, setViewSection] = useState<'FLOOR' | 'CALL_SHEET'>('FLOOR');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
@@ -146,7 +146,7 @@ export const ManagerDashboard: React.FC = () => {
               }`}
             >
               <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
-              <span>Customer Call Sheet</span>
+              <span>Daily Call Log</span>
               {totalCallsDue > 0 && (
                 <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
                   {totalCallsDue}
@@ -154,6 +154,16 @@ export const ManagerDashboard: React.FC = () => {
               )}
             </button>
           </div>
+
+          <button
+            id="open-time-card-calculator-btn"
+            onClick={() => setIsTimeCardCalculatorOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-3 py-2 rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="Open 7-Day Time Card Calculator"
+          >
+            <Calculator className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Time Card Calc</span>
+          </button>
 
           <button
             id="create-new-ro-btn-mgr"
@@ -197,7 +207,7 @@ export const ManagerDashboard: React.FC = () => {
             className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
           >
             <PhoneCall className="w-3.5 h-3.5" />
-            <span>Manage Dealership Call Sheet</span>
+            <span>Manage Dealership Call Log</span>
           </button>
         </div>
       )}

@@ -298,11 +298,11 @@ export const CustomerDirectoryModal: React.FC = () => {
         <div className="bg-slate-900 px-5 py-3.5 flex items-center justify-between border-b border-slate-800 text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-blue-600 p-2 rounded-xl text-white shadow-xs">
-              <Users className="w-5 h-5" />
+              <Search className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold tracking-tight">Customer Cloud Directory</h2>
+                <h2 className="text-base sm:text-lg font-bold tracking-tight">Customer Search & Profiles</h2>
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800 px-2.5 py-0.5 rounded-full">
                   <Cloud className="w-3 h-3 text-emerald-400" />
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -310,7 +310,7 @@ export const CustomerDirectoryModal: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Persistent customer contact information, tax exemptions, registered vehicles & visit history
+                Shared customer database • Accessible to all Service Advisors & Managers (contact info, vehicles, history & tax status)
               </p>
             </div>
           </div>
@@ -369,6 +369,7 @@ export const CustomerDirectoryModal: React.FC = () => {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
+                  autoFocus
                   placeholder="Search name, phone, VIN, vehicle..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}

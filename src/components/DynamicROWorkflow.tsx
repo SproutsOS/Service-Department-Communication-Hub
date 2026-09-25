@@ -20,7 +20,9 @@ import {
   User,
   Phone,
   FileText,
-  Pencil
+  Pencil,
+  Plus,
+  X
 } from 'lucide-react';
 import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome } from '../types';
 import { formatTimeOnly, formatDurationSince, formatRelativeTime } from '../utils/formatters';
@@ -62,6 +64,7 @@ interface DynamicROWorkflowProps {
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string) => void;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => void;
   updateConcernTech: (roId: string, concernIndex: number, techId?: string, techName?: string) => void;
+  addRepairOrderConcern?: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string) => boolean;
   isTechScreen?: boolean;
 }
 
@@ -84,6 +87,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   updateTechCauseAndCorrection,
   updateConcernPayType,
   updateConcernTech,
+  addRepairOrderConcern,
   isTechScreen = false
 }) => {
   const [smartWorkflowOrder, setSmartWorkflowOrder] = useState<boolean>(true);
@@ -91,6 +95,10 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   const [quickTechCorrection, setQuickTechCorrection] = useState<string>(ro.correction || '');
   const [savedCauseCorrectionNotice, setSavedCauseCorrectionNotice] = useState<boolean>(false);
   const [isEditingThreeCs, setIsEditingThreeCs] = useState<boolean>(false);
+  const [isAddingConcern, setIsAddingConcern] = useState<boolean>(false);
+  const [newConcernText, setNewConcernText] = useState<string>('');
+  const [newConcernPayType, setNewConcernPayType] = useState<ConcernPayType>('CUSTOMER_PAY');
+  const [newConcernTechId, setNewConcernTechId] = useState<string>(ro.techId || '');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const cadence = useMemo(() => getContactCadenceStatus(ro), [ro]);
@@ -484,9 +492,154 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
 
             {/* Complaints List */}
             <div className="space-y-2">
-              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
-                1. Customer Complaint(s):
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                  1. Customer Complaint(s):
+                </span>
+                {!isTechScreen && (isAdvisor || isManager) && addRepairOrderConcern && !isAddingConcern && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewConcernTechId(ro.techId || '');
+                      setIsAddingConcern(true);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Customer Complaint</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Inline Form to Add Customer Complaint Line */}
+              {isAddingConcern && (
+                <div className="bg-white p-3.5 rounded-lg border-2 border-blue-400 shadow-2xs space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-blue-600" />
+                      <span>New Customer Complaint (Line {(ro.concerns?.length || 1) + 1})</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingConcern(false)}
+                      className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Customer Stated Concern / Complaint *
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={newConcernText}
+                      onChange={e => setNewConcernText(e.target.value)}
+                      placeholder="Enter customer concern or symptom..."
+                      className="w-full p-2 text-xs rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Pay Type
+                      </label>
+                      <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setNewConcernPayType('CUSTOMER_PAY')}
+                          className={`flex-1 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+                            newConcernPayType === 'CUSTOMER_PAY'
+                              ? 'bg-blue-600 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Customer Pay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewConcernPayType('WARRANTY')}
+                          className={`flex-1 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+                            newConcernPayType === 'WARRANTY'
+                              ? 'bg-amber-500 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Warranty
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewConcernPayType('INTERNAL')}
+                          className={`flex-1 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+                            newConcernPayType === 'INTERNAL'
+                              ? 'bg-purple-600 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Internal
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Assign Technician to this Line
+                      </label>
+                      <select
+                        value={newConcernTechId}
+                        onChange={e => setNewConcernTechId(e.target.value)}
+                        className="w-full text-xs font-semibold bg-white border border-slate-300 rounded px-2 py-1 text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="">{ro.techName ? `Default Primary: ${ro.techName}` : 'Unassigned'}</option>
+                        {technicians.map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingConcern(false)}
+                      className="px-3 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!newConcernText.trim()}
+                      onClick={() => {
+                        if (!newConcernText.trim()) return;
+                        const chosenTech = technicians.find(t => t.id === newConcernTechId);
+                        if (addRepairOrderConcern) {
+                          addRepairOrderConcern(
+                            ro.id, 
+                            newConcernText.trim(), 
+                            newConcernPayType, 
+                            chosenTech?.id, 
+                            chosenTech?.name
+                          );
+                        }
+                        setNewConcernText('');
+                        setNewConcernPayType('CUSTOMER_PAY');
+                        setIsAddingConcern(false);
+                        triggerActionNotice('✓ Added customer complaint line to repair order!');
+                      }}
+                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer flex items-center gap-1"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>Add Complaint Line</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {(ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern]).map((concern, idx) => (
                 <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="flex items-start gap-2 flex-1">
@@ -633,9 +786,11 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
     {
       key: 'section-quote',
       naturalOrder: 4,
-      title: 'Repair Quote & Labor Estimate',
-      isComplete: Boolean(ro.quote && ro.quote.status !== 'DRAFT'),
-      completeBadgeText: ro.quote ? `Quote: $${Number(ro.quote.grandTotal).toFixed(2)}` : 'Quote Finalized',
+      title: isTechScreen ? 'Job Labor Time Entry' : 'Repair Quote & Labor Estimate',
+      isComplete: Boolean(ro.quote && ro.quote.laborItems && ro.quote.laborItems.length > 0),
+      completeBadgeText: isTechScreen
+        ? `${((ro.quote?.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs Labor Logged`
+        : ro.quote ? `Quote: $${Number(ro.quote.grandTotal).toFixed(2)}` : 'Quote Finalized',
       render: (isPromoted: boolean) => (
         <div className={`bg-white rounded-xl border-2 overflow-hidden shadow-2xs transition-all ${
           isPromoted 
@@ -650,7 +805,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    Step 4: Repair Quote & Labor Estimate
+                    {isTechScreen ? 'Step 4: Job Labor Time Entry' : 'Step 4: Repair Quote & Labor Estimate'}
                   </h4>
                   {ro.quote ? (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -671,7 +826,9 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                   )}
                 </div>
                 <div className="text-xs text-slate-600 mt-0.5">
-                  Itemized ProDemand flat-rate labor times, replacement parts, shop supplies, and sales tax.
+                  {isTechScreen 
+                    ? 'Log flat-rate labor times (hours) for required repairs. Rate per hour and parts are priced by the Advisor and Parts Counter.'
+                    : 'Itemized ProDemand flat-rate labor times, replacement parts, shop supplies, and sales tax.'}
                 </div>
               </div>
             </div>
@@ -694,60 +851,95 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
               >
                 <Calculator className="w-3.5 h-3.5" />
-                <span>{ro.quote ? 'Open & Edit Quote' : '+ Initiate Repair Quote'}</span>
+                <span>
+                  {isTechScreen
+                    ? (ro.quote?.laborItems?.length ? 'View / Edit Labor Time' : '+ Enter Labor Time')
+                    : (ro.quote ? 'Open & Edit Quote' : '+ Initiate Repair Quote')}
+                </span>
               </button>
             </div>
           </div>
 
-          {ro.quote ? (
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">Labor Items</div>
-                  <div className="text-sm font-bold text-slate-800 mt-0.5">
-                    {(ro.quote.laborItems || []).length} lines ({((ro.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs)
+          {ro.quote && (!isTechScreen || (ro.quote.laborItems && ro.quote.laborItems.length > 0)) ? (
+            isTechScreen ? (
+              <div className="p-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200">
+                    <div className="text-[10px] uppercase font-bold text-blue-700">Estimated Labor Time</div>
+                    <div className="text-xl font-black text-blue-950 mt-0.5">
+                      {((ro.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs
+                    </div>
+                    <div className="text-xs font-medium text-blue-700 mt-0.5">
+                      Across {(ro.quote.laborItems || []).length} labor operation{(ro.quote.laborItems || []).length === 1 ? '' : 's'}
+                    </div>
                   </div>
-                  <div className="text-xs font-semibold text-slate-600 mt-0.5">
-                    ${(Number(ro.quote.totalLaborCost ?? (ro.quote as any).laborSubtotal) || 0).toFixed(2)}
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-500">Parts Status</div>
+                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                      {(ro.parts || []).length > 0 ? `${(ro.parts || []).length} parts requested with Parts Department` : 'No parts requested yet'}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      Managed by Parts Department
+                    </div>
                   </div>
                 </div>
-
-                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">Parts Required</div>
-                  <div className="text-sm font-bold text-slate-800 mt-0.5">
-                    {(ro.quote.partsItems || []).length} parts
+                <p className="text-[11px] text-slate-500 italic">
+                  Note: Technicians enter labor time only. Rate per hour and parts are priced and merged by the Service Advisor on the customer quote.
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-500">Labor Items</div>
+                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                      {(ro.quote.laborItems || []).length} lines ({((ro.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs)
+                    </div>
+                    <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                      ${(Number(ro.quote.totalLaborCost ?? (ro.quote as any).laborSubtotal) || 0).toFixed(2)}
+                    </div>
                   </div>
-                  <div className="text-xs font-semibold text-slate-600 mt-0.5">
-                    ${(Number(ro.quote.totalPartsCost ?? (ro.quote as any).partsSubtotal) || 0).toFixed(2)}
-                  </div>
-                </div>
 
-                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">Supplies & Tax</div>
-                  <div className="text-sm font-bold text-slate-800 mt-0.5">
-                    ${((Number(ro.quote.shopSuppliesFee ?? (ro.quote as any).shopSupplies) || 0) + (Number(ro.quote.taxAmount ?? (ro.quote as any).tax) || 0)).toFixed(2)}
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-500">Parts Required</div>
+                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                      {(ro.quote.partsItems || []).length} parts
+                    </div>
+                    <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                      ${(Number(ro.quote.totalPartsCost ?? (ro.quote as any).partsSubtotal) || 0).toFixed(2)}
+                    </div>
                   </div>
-                </div>
 
-                <div className="p-2.5 bg-indigo-50/80 rounded-lg border border-indigo-200">
-                  <div className="text-[10px] uppercase font-bold text-indigo-700">Grand Total</div>
-                  <div className="text-lg font-black text-indigo-950 mt-0.5">
-                    ${(Number(ro.quote.grandTotal) || 0).toFixed(2)}
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-500">Supplies & Tax</div>
+                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                      ${((Number(ro.quote.shopSuppliesFee ?? (ro.quote as any).shopSupplies) || 0) + (Number(ro.quote.taxAmount ?? (ro.quote as any).tax) || 0)).toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-indigo-50/80 rounded-lg border border-indigo-200">
+                    <div className="text-[10px] uppercase font-bold text-indigo-700">Grand Total</div>
+                    <div className="text-lg font-black text-indigo-950 mt-0.5">
+                      ${(Number(ro.quote.grandTotal) || 0).toFixed(2)}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )
           ) : (
             <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
               <p>
-                No formal repair quote has been initiated for this repair order yet. Technicians can look up OEM labor times in ProDemand and build an itemized quote to present to the advisor and customer.
+                {isTechScreen
+                  ? 'No labor time logged yet for this repair order. Technicians can look up flat-rate times in ProDemand and enter the labor hours required to complete the repair.'
+                  : 'No formal repair quote has been initiated for this repair order yet. Technicians can look up OEM labor times in ProDemand and build an itemized quote to present to the advisor and customer.'}
               </p>
               <button
                 type="button"
                 onClick={() => openQuoteModal(ro.id)}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shrink-0 cursor-pointer shadow-xs"
               >
-                Initiate Quote Now
+                {isTechScreen ? 'Enter Labor Time Now' : 'Initiate Quote Now'}
               </button>
             </div>
           )}
@@ -844,7 +1036,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                         {ro.status === 'APPROVED' 
                           ? 'Customer Authorized • Bay Repair Approved' 
                           : ro.status === 'WAITING_FOR_APPROVAL' 
-                          ? `Estimate Submitted ($${Number(ro.quote?.grandTotal || 0).toFixed(2)}) • Advisor Following Up` 
+                          ? 'Estimate Submitted • Advisor Following Up with Customer' 
                           : 'Customer Authorization Managed by Service Advisor'}
                       </span>
                     </span>

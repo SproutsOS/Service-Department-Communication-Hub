@@ -11,6 +11,7 @@ import {
   Clock,
   ShieldCheck,
   Users,
+  Search,
   Cloud,
   CheckCircle2,
   Lock,
@@ -28,7 +29,6 @@ export const Navbar: React.FC = () => {
     isSoundEnabled,
     pushPermission,
     toggleSound,
-    setIsNewROModalOpen,
     setIsLoginModalOpen,
     setIsStaffManagementOpen,
     isChatBoxOpen,
@@ -81,8 +81,6 @@ export const Navbar: React.FC = () => {
   const unreadUrgentCount = notifications.filter(n => !n.read && n.isUrgent).length;
   const unreadTotal = notifications.filter(n => !n.read).length;
 
-  const canCreateRO = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
-
   const handleNotificationClick = (roId: string, notifId: string) => {
     markNotificationRead(notifId);
     setShowNotifMenu(false);
@@ -101,16 +99,16 @@ export const Navbar: React.FC = () => {
           <Wrench className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight flex items-center gap-1.5">
-            <span>{shopName || 'Woolwine CDJR'}</span>
+          <h1 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-1.5">
+            <span>The HUB</span>
             <span className="text-blue-400 font-extrabold text-xs px-1.5 py-0.5 rounded bg-blue-950/60 border border-blue-800/80">Pro</span>
             <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/80 uppercase ml-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               <span>{isCloudSynced ? 'Cloud Synced' : 'Connecting Cloud...'}</span>
             </span>
           </h1>
-          <p className="text-[11px] text-slate-400 hidden sm:block">
-            Service Department & Repair Order Hub
+          <p className="text-[11px] text-slate-400 hidden sm:block font-medium">
+            Everything Moving. Everyone Connected
           </p>
         </div>
       </div>
@@ -309,34 +307,16 @@ export const Navbar: React.FC = () => {
           {isSoundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
         </button>
 
-        {/* Customer Cloud Directory Button */}
+        {/* Customer Search Button */}
         <button
           id="navbar-customers-directory-btn"
           onClick={() => setIsCustomerDirectoryOpen(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-600 shadow-xs"
-          title="Customer Cloud Directory (Saved profiles, tax exemptions, vehicles & history)"
+          title="Customer Search (Look up customer profiles, phone numbers, vehicles, repair history & tax exemptions)"
         >
-          <Users className="w-4 h-4 text-blue-400" />
-          <span className="hidden sm:inline">Customers</span>
-          {customers.length > 0 && (
-            <span className="text-[10px] bg-blue-900 text-blue-200 px-1.5 py-0.2 rounded-full font-extrabold border border-blue-700">
-              {customers.length}
-            </span>
-          )}
+          <Search className="w-4 h-4 text-blue-400" />
+          <span>Customer Search</span>
         </button>
-
-        {/* Create RO Button (for Advisor & Manager) */}
-        {canCreateRO && (
-          <button
-            id="create-ro-btn"
-            onClick={() => setIsNewROModalOpen(true)}
-            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Repair Order</span>
-            <span className="sm:hidden">New RO</span>
-          </button>
-        )}
 
         {/* Staff & Employee Directory Button (Service Manager Only) */}
         {currentUser.role === 'SERVICE_MANAGER' && (
@@ -350,19 +330,6 @@ export const Navbar: React.FC = () => {
             <span className="hidden md:inline">Staff ({users.length})</span>
           </button>
         )}
-
-        {/* Active User Details (Displays signed-in user name & role space) */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/60 text-xs">
-          <span className="font-semibold text-white">{currentUser.name}</span>
-          {currentUser.employeeNumber && (
-            <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
-              {currentUser.employeeNumber}
-            </span>
-          )}
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 uppercase">
-            {currentUser.title || currentUser.role}
-          </span>
-        </div>
 
         {/* Lock Terminal / Sign Out Button */}
         <button
