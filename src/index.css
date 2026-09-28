@@ -78,6 +78,25 @@ textarea.border-red-500 {
     border: none !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+    overflow: visible !important;
+  }
+
+  /* Keep each repair line item, table, and summary block intact so it never splits across page bottoms and tops */
+  #printable-quote-document .quote-line-item,
+  #printable-quote-document .quote-summary-block,
+  #printable-quote-document .break-inside-avoid,
+  #printable-quote-document [data-print-keep-together="true"],
+  #printable-quote-document table,
+  #printable-quote-document tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+  }
+
+  #printable-quote-document .quote-line-item {
+    overflow: visible !important;
+    display: block !important;
+    margin-bottom: 0.75rem !important;
   }
 
   /* Force all fonts in printable quote to be solid black (#000000) with uniform darkness and no lighter shades */

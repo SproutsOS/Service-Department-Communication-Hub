@@ -2214,7 +2214,12 @@ export const RepairQuoteModal: React.FC = () => {
             const lineTotalSum = lineLaborCostSum + linePartsCostSum;
 
             return (
-              <div key={idx} className="border-2 border-black rounded-lg overflow-hidden space-y-0">
+              <div 
+                key={idx} 
+                data-print-keep-together="true"
+                className="quote-line-item border-2 border-black rounded-lg overflow-hidden space-y-0 break-inside-avoid [page-break-inside:avoid]"
+                style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+              >
                 {/* Line Header Banner: Complaint, Concern/Cause, Correction */}
                 <div className="bg-slate-100 p-2.5 border-b-2 border-black space-y-1">
                   <div className="flex items-center justify-between">
@@ -2325,7 +2330,11 @@ export const RepairQuoteModal: React.FC = () => {
 
           {/* Additional Advisor Labor Operations (if any) */}
           {laborItems.filter(item => item.addedByAdvisor).length > 0 && (
-            <div className="border-2 border-black rounded-lg overflow-hidden space-y-0">
+            <div 
+              data-print-keep-together="true"
+              className="quote-line-item border-2 border-black rounded-lg overflow-hidden space-y-0 break-inside-avoid [page-break-inside:avoid]"
+              style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+            >
               <div className="bg-slate-100 p-2 border-b-2 border-black flex items-center justify-between text-xs font-black text-black">
                 <span>Additional Service Advisor Operations</span>
                 <span>
@@ -2349,7 +2358,11 @@ export const RepairQuoteModal: React.FC = () => {
         </div>
 
         {/* Financial Totals & Policies */}
-        <div className="grid grid-cols-2 gap-4 pt-1 break-inside-avoid">
+        <div 
+          data-print-keep-together="true"
+          className="quote-summary-block grid grid-cols-2 gap-4 pt-1 break-inside-avoid [page-break-inside:avoid]"
+          style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+        >
           {/* Left: Notes & Policies */}
           <div className="space-y-2 text-[11px] text-black">
             <div className="p-2.5 bg-white rounded-lg border-2 border-black space-y-1">
