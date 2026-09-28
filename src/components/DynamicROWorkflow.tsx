@@ -888,13 +888,6 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                           <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
                             Line {lineNum} Total: ${lineTotal.toFixed(2)}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => openQuoteModal(ro.id)}
-                            className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-300 transition-colors cursor-pointer"
-                          >
-                            {hasLineQuote ? 'Edit Quote' : '+ Quote Line'}
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -1562,37 +1555,10 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       )
     },
 
-    // 10. Time in Shop Duration
-    {
-      key: 'section-time-in-shop',
-      naturalOrder: 10,
-      title: 'Time in Shop',
-      isComplete: true,
-      completeBadgeText: 'Elapsed Tracked',
-      render: () => (
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600 shrink-0">
-              <Clock className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-500">Time in Shop</div>
-              <div className="text-base font-extrabold text-slate-900 mt-0.5">
-                {formatDurationSince(ro.createdAt) || 'Just arrived'}
-              </div>
-            </div>
-          </div>
-          <div className="text-right text-xs text-slate-400 font-medium">
-            Elapsed shop duration
-          </div>
-        </div>
-      )
-    },
-
-    // 11. Visual Ticket Flow Pipeline Stepper
+    // 10. Visual Ticket Flow Pipeline Stepper
     {
       key: 'section-pipeline-stepper',
-      naturalOrder: 11,
+      naturalOrder: 10,
       title: 'Ticket Flow Pipeline Stepper',
       isComplete: ro.status === 'CLOSED',
       completeBadgeText: 'Full Workflow Pipeline',

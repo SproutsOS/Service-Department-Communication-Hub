@@ -801,7 +801,7 @@ export const RODetailModal: React.FC = () => {
               </button>
 
               {/* Repair Quote Initiation / Status */}
-              {isTechScreen ? (
+              {isTechScreen && (
                 (() => {
                   const loggedHours = selectedRO.quote?.laborItems 
                     ? selectedRO.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
@@ -820,31 +820,6 @@ export const RODetailModal: React.FC = () => {
                     >
                       <Clock className={`w-3.5 h-3.5 ${isQuoteActive ? 'text-white' : 'text-blue-700'}`} />
                       <span>{loggedHours > 0 ? `Total Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Total Labor Time'}</span>
-                    </button>
-                  );
-                })()
-              ) : (
-                (() => {
-                  const isQuoteActive = activeQuoteRO?.id === selectedRO.id;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => openQuoteModal(selectedRO.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer border shadow-2xs shrink-0 ${
-                        isQuoteActive
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
-                      }`}
-                      title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
-                    >
-                      <Calculator className={`w-3.5 h-3.5 ${isQuoteActive ? 'text-white' : 'text-blue-700'}`} />
-                      {selectedRO.quote ? (
-                        <span>
-                          Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
-                        </span>
-                      ) : (
-                        <span>+ Repair Quote</span>
-                      )}
                     </button>
                   );
                 })()
@@ -880,6 +855,23 @@ export const RODetailModal: React.FC = () => {
                   <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
                 </button>
               )}
+
+              {/* Top Edit Quote Button (Blue) - Directly to the left of Print Warranty */}
+              <button
+                type="button"
+                id="header-edit-quote-btn"
+                onClick={() => openQuoteModal(selectedRO.id)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700"
+                title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
+              >
+                <Calculator className="w-3.5 h-3.5 text-white" />
+                <span>Edit Quote</span>
+                {selectedRO.quote && (
+                  <span className="text-blue-100 font-mono text-[11px] font-bold">
+                    (${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)})
+                  </span>
+                )}
+              </button>
 
               <button
                 id="header-print-warranty-btn"
@@ -956,6 +948,15 @@ export const RODetailModal: React.FC = () => {
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Time in Shop - Between Advisor and Vehicle */}
+            <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-lg border border-slate-200/90 shadow-2xs self-start md:self-auto shrink-0 min-h-[36px]">
+              <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Time in Shop:</span>
+              <span className="font-black text-slate-950 text-xs font-mono bg-blue-50 text-blue-900 px-2.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
+                {formatDurationSince(selectedRO.createdAt) || 'Just arrived'}
+              </span>
             </div>
 
             {/* Vehicle, VIN & Miles */}
@@ -1644,13 +1645,6 @@ export const RODetailModal: React.FC = () => {
                                     <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
                                       Line {lineNum} Total: ${lineTotal.toFixed(2)}
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => openQuoteModal(selectedRO.id)}
-                                      className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-300 transition-colors cursor-pointer"
-                                    >
-                                      {hasLineQuote ? 'Edit Quote' : '+ Quote Line'}
-                                    </button>
                                   </div>
                                 </div>
                               );

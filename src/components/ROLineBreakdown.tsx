@@ -394,15 +394,6 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                       <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
                         Line {lineNum} Total: ${lineTotal.toFixed(2)}
                       </span>
-                      {onOpenQuote && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenQuote(ro.id)}
-                          className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-300 transition-colors cursor-pointer"
-                        >
-                          {hasLineQuote ? 'Edit Quote' : '+ Quote Line'}
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
