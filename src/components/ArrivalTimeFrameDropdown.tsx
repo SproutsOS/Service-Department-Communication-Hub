@@ -20,6 +20,7 @@ interface ArrivalTimeFrameDropdownProps {
   className?: string;
   size?: 'sm' | 'md';
   autoFulfillId?: string; // roId or partId if used in inline list
+  disabled?: boolean;
 }
 
 export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> = ({
@@ -27,6 +28,7 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
   onChange,
   className = '',
   size = 'md',
+  disabled = false,
 }) => {
   const [options, setOptions] = useState<ArrivalTimeFrameOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -136,7 +138,8 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
         <select
           value={matchedOption?.id || value || 'TODAY_5PM'}
           onChange={handleSelectChange}
-          className={className || `w-full ${isSmall ? 'text-[11px] py-1 px-1.5' : 'text-xs py-2 px-2.5'} font-bold border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none shadow-2xs`}
+          disabled={disabled}
+          className={className || `w-full ${isSmall ? 'text-[11px] py-1 px-1.5' : 'text-xs py-2 px-2.5'} font-bold border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none shadow-2xs disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed`}
         >
           <optgroup label="Standard Arrival Expectations">
             {options.filter(o => !o.isCustom).map(opt => (
@@ -166,9 +169,10 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
         {/* Quick shortcut button to add custom timeframe */}
         <button
           type="button"
+          disabled={disabled}
           onClick={() => setIsModalOpen(true)}
           title="Add a custom arrival time frame"
-          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-slate-200 bg-slate-50 transition-colors shrink-0 cursor-pointer"
+          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-slate-200 bg-slate-50 transition-colors shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>

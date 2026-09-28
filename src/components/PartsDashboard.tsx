@@ -256,6 +256,16 @@ export const PartsDashboard: React.FC = () => {
     estimatedArrival?: string;
   }>>({});
   const [showManualPartLines, setShowManualPartLines] = useState(false);
+  const [sentToEstimatePartIds, setSentToEstimatePartIds] = useState<Set<string>>(new Set());
+
+  // Helper to determine if a quote-only part has been sent to estimate
+  const isPartSentToEstimate = (part: PartItem): boolean => {
+    return Boolean(
+      part.sentToEstimate ||
+      sentToEstimatePartIds.has(part.id) ||
+      (part.status === 'QUOTE_ONLY' && (part.estimatedArrival === 'Price Quoted for Main Estimate' || part.price !== undefined))
+    );
+  };
 
   // Helper to get or initialize draft values for any technician-requested part
   const getReqDraft = (part: PartItem) => {
@@ -338,6 +348,8 @@ export const PartsDashboard: React.FC = () => {
     const qty = Math.max(1, Number(draft.quantity) || part.quantity || 1);
     const effectiveVendor = draft.vendor || partVendor || 'Shop Inventory / Supplier';
 
+    setSentToEstimatePartIds(prev => new Set(prev).add(part.id));
+
     updatePartItem(roId, part.id, {
       partNumber: cleanPn,
       price: priceVal,
@@ -346,6 +358,7 @@ export const PartsDashboard: React.FC = () => {
       requestType: 'QUOTE_ONLY',
       vendor: effectiveVendor,
       estimatedArrival: 'Price Quoted for Main Estimate',
+      sentToEstimate: true,
       notes: partNotes.trim() || undefined,
     });
 
@@ -1030,6 +1043,7 @@ export const PartsDashboard: React.FC = () => {
                         requestedParts.map((rp, idx) => {
                           const draft = getReqDraft(rp);
                           const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                          const isSent = isQuoteOnly && isPartSentToEstimate(rp);
                           const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
                           const concernDesc = lineNum && ro.concerns && ro.concerns[lineNum - 1] 
                             ? ro.concerns[lineNum - 1] 
@@ -1039,7 +1053,9 @@ export const PartsDashboard: React.FC = () => {
                             <div 
                               key={rp.id || idx} 
                               className={`p-2.5 rounded-xl border text-xs space-y-2 transition-colors shadow-2xs ${
-                                isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
+                                isSent
+                                  ? 'bg-emerald-50/30 border-emerald-300'
+                                  : isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
                               }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-1">
@@ -1058,11 +1074,13 @@ export const PartsDashboard: React.FC = () => {
                                   </span>
                                 </div>
                                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
-                                  isQuoteOnly 
-                                    ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
-                                    : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
+                                  isSent
+                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold'
+                                    : isQuoteOnly 
+                                      ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
+                                      : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
                                 }`}>
-                                  {isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
+                                  {isSent ? 'SENT TO ESTIMATE' : isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
                                 </span>
                               </div>
 
@@ -1079,9 +1097,10 @@ export const PartsDashboard: React.FC = () => {
                                   <input
                                     type="text"
                                     placeholder="Enter Part # (e.g. 68052369AA)"
+                                    disabled={isSent}
                                     value={draft.partNumber}
                                     onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
-                                    className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900"
+                                    className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
                                   />
                                 </div>
 
@@ -1092,6 +1111,7 @@ export const PartsDashboard: React.FC = () => {
                                     step="0.01"
                                     min="0"
                                     placeholder="0.00"
+                                    disabled={isSent}
                                     value={draft.price}
                                     onChange={(e) => updateReqDraft(rp.id, 'price', e.target.value)}
                                     onBlur={(e) => {
@@ -1100,13 +1120,14 @@ export const PartsDashboard: React.FC = () => {
                                         updateReqDraft(rp.id, 'price', Number(val).toFixed(2));
                                       }
                                     }}
-                                    className="w-full pl-5 pr-2 py-1 text-xs font-bold bg-white border border-emerald-400 focus:border-emerald-600 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-400 text-slate-900"
+                                    className="w-full pl-5 pr-2 py-1 text-xs font-bold bg-white border border-emerald-400 focus:border-emerald-600 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
                                   />
                                 </div>
 
                                 <div className="w-36 sm:w-44 shrink-0">
                                   <ArrivalTimeFrameDropdown
                                     size="sm"
+                                    disabled={isSent}
                                     value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
                                     onChange={({ timeFrameId, status, estimatedArrival }) => {
                                       updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
@@ -1118,15 +1139,27 @@ export const PartsDashboard: React.FC = () => {
 
                                 <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                                   {isQuoteOnly ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
-                                      className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer flex items-center gap-1.5 border border-purple-700 transition-colors"
-                                      title="Save Quoted Price directly to Main Estimate"
-                                    >
-                                      <Calculator className="w-3.5 h-3.5" />
-                                      <span>Send to Estimate</span>
-                                    </button>
+                                    isSent ? (
+                                      <button
+                                        type="button"
+                                        disabled
+                                        className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-black shadow-none flex items-center gap-1.5 border border-slate-300 cursor-not-allowed select-none opacity-90"
+                                        title="Price already sent to Main Estimate"
+                                      >
+                                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                                        <span>Sent to Estimate</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
+                                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer flex items-center gap-1.5 border border-purple-700 transition-colors"
+                                        title="Save Quoted Price directly to Main Estimate"
+                                      >
+                                        <Calculator className="w-3.5 h-3.5" />
+                                        <span>Send to Estimate</span>
+                                      </button>
+                                    )
                                   ) : (
                                     <button
                                       type="button"
@@ -2643,6 +2676,7 @@ export const PartsDashboard: React.FC = () => {
                         {requestedPartsForSelectedRO.map((rp, idx) => {
                           const draft = getReqDraft(rp);
                           const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                          const isSent = isQuoteOnly && isPartSentToEstimate(rp);
                           const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
                           const concernDesc = lineNum && currentSelectedRO?.concerns && currentSelectedRO.concerns[lineNum - 1] 
                             ? currentSelectedRO.concerns[lineNum - 1] 
@@ -2652,7 +2686,9 @@ export const PartsDashboard: React.FC = () => {
                             <div 
                               key={rp.id || idx} 
                               className={`p-3.5 rounded-xl border-2 shadow-2xs space-y-2.5 transition-all ${
-                                isQuoteOnly ? 'bg-purple-50/30 border-purple-300' : 'bg-white border-amber-300'
+                                isSent 
+                                  ? 'bg-emerald-50/20 border-emerald-300'
+                                  : isQuoteOnly ? 'bg-purple-50/30 border-purple-300' : 'bg-white border-amber-300'
                               }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -2668,11 +2704,13 @@ export const PartsDashboard: React.FC = () => {
                                   <div className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
                                     <span>{rp.description || rp.name}</span>
                                     <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                                      isQuoteOnly
-                                        ? 'bg-purple-100 text-purple-900 border-purple-300'
-                                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                                      isSent
+                                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                        : isQuoteOnly
+                                          ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                          : 'bg-amber-100 text-amber-900 border-amber-300'
                                     }`}>
-                                      {isQuoteOnly ? 'Quote Only' : 'Order Now'}
+                                      {isSent ? 'Sent to Estimate' : isQuoteOnly ? 'Quote Only' : 'Order Now'}
                                     </span>
                                   </div>
                                 </div>
@@ -2683,9 +2721,10 @@ export const PartsDashboard: React.FC = () => {
                                     type="number"
                                     min="1"
                                     max="99"
+                                    disabled={isSent}
                                     value={draft.quantity}
                                     onChange={(e) => updateReqDraft(rp.id, 'quantity', parseInt(e.target.value) || 1)}
-                                    className="w-14 px-2 py-1 text-xs font-black border border-slate-300 rounded-lg text-center bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                                    className="w-14 px-2 py-1 text-xs font-black border border-slate-300 rounded-lg text-center bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
                                   />
                                 </div>
                               </div>
@@ -2712,10 +2751,11 @@ export const PartsDashboard: React.FC = () => {
                                   <input
                                     type="text"
                                     placeholder="e.g. 68052369AA"
+                                    disabled={isSent}
                                     value={draft.partNumber}
                                     onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
-                                    autoFocus={idx === 0}
-                                    className="w-full px-2.5 py-1.5 text-xs font-mono font-black uppercase bg-blue-50/40 border-2 border-blue-400 focus:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900"
+                                    autoFocus={idx === 0 && !isSent}
+                                    className="w-full px-2.5 py-1.5 text-xs font-mono font-black uppercase bg-blue-50/40 border-2 border-blue-400 focus:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
                                   />
                                 </div>
 
@@ -2731,6 +2771,7 @@ export const PartsDashboard: React.FC = () => {
                                       step="0.01"
                                       min="0"
                                       placeholder="0.00"
+                                      disabled={isSent}
                                       value={draft.price}
                                       onChange={(e) => updateReqDraft(rp.id, 'price', e.target.value)}
                                       onBlur={(e) => {
@@ -2739,7 +2780,7 @@ export const PartsDashboard: React.FC = () => {
                                           updateReqDraft(rp.id, 'price', Number(val).toFixed(2));
                                         }
                                       }}
-                                      className="w-full pl-6 pr-2.5 py-1.5 text-xs font-black border-2 border-emerald-400 focus:border-emerald-600 bg-emerald-50/30 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-400 text-slate-900"
+                                      className="w-full pl-6 pr-2.5 py-1.5 text-xs font-black border-2 border-emerald-400 focus:border-emerald-600 bg-emerald-50/30 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
                                     />
                                   </div>
                                 </div>
@@ -2751,6 +2792,7 @@ export const PartsDashboard: React.FC = () => {
                                   </label>
                                   <ArrivalTimeFrameDropdown
                                     size="sm"
+                                    disabled={isSent}
                                     value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
                                     onChange={({ timeFrameId, status, estimatedArrival }) => {
                                       updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
@@ -2763,15 +2805,27 @@ export const PartsDashboard: React.FC = () => {
                                 {/* Actions */}
                                 <div className="sm:col-span-2 flex items-center gap-1">
                                   {isQuoteOnly ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveQuotePriceOnly(currentSelectedRO.id, rp)}
-                                      className="w-full py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1 border border-purple-700"
-                                      title="Save Quoted Price directly to Main Estimate"
-                                    >
-                                      <Calculator className="w-3.5 h-3.5" />
-                                      <span>Send to Estimate</span>
-                                    </button>
+                                    isSent ? (
+                                      <button
+                                        type="button"
+                                        disabled
+                                        className="w-full py-2 px-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-black shadow-none flex items-center justify-center gap-1 border border-slate-300 cursor-not-allowed select-none opacity-90"
+                                        title="Price already sent to Main Estimate"
+                                      >
+                                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                                        <span>Sent to Estimate</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveQuotePriceOnly(currentSelectedRO.id, rp)}
+                                        className="w-full py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1 border border-purple-700"
+                                        title="Save Quoted Price directly to Main Estimate"
+                                      >
+                                        <Calculator className="w-3.5 h-3.5" />
+                                        <span>Send to Estimate</span>
+                                      </button>
+                                    )
                                   ) : (
                                     <button
                                       type="button"

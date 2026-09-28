@@ -165,9 +165,10 @@ export const RepairQuoteModal: React.FC = () => {
     const curLaborHours = Number(curLabor.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0).toFixed(2));
     const curLaborCost = Number(curLabor.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
     const fivePercent = curLaborCost * 0.05;
-    const curShopSupplies = !curApplySupplies ? 0 : Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 50) : curSuppliesFee).toFixed(2));
+    const curShopSupplies = !curApplySupplies ? 0 : Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : Math.min(curSuppliesFee, 35)).toFixed(2));
     const curPartsCost = Number(curParts.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
-    const curTax = curIsExempt ? 0 : Number((curPartsCost * ((curTaxPercent || 0) / 100)).toFixed(2));
+    const curTaxableAmount = curLaborCost + curPartsCost;
+    const curTax = curIsExempt ? 0 : Number((curTaxableAmount * ((curTaxPercent || 0) / 100)).toFixed(2));
     const curGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + curTax).toFixed(2));
 
     const autoQuote: RepairQuote = {
@@ -418,7 +419,7 @@ export const RepairQuoteModal: React.FC = () => {
 
       setPartsItems(existingQuoteParts);
       setApplyShopSupplies((q.shopSuppliesFee || 0) > 0);
-      setShopSuppliesFee(q.shopSuppliesFee || 0);
+      setShopSuppliesFee(Math.min(q.shopSuppliesFee || 0, 35));
       setTaxRatePercent(isExemptCustomer ? 0 : (q.taxRate !== undefined ? q.taxRate * 100 : 7.0));
       setTechNotes(q.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : ''));
     } else {
@@ -497,9 +498,9 @@ export const RepairQuoteModal: React.FC = () => {
 
   const calculatedShopSupplies = useMemo(() => {
     if (!applyShopSupplies) return 0;
-    // 5% of labor cost capped at $45, or the manual amount
+    // 5% of labor cost capped at max $35.00, or the manual amount capped at $35.00
     const fivePercent = totalLaborCost * 0.05;
-    return Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 50) : shopSuppliesFee).toFixed(2));
+    return Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : Math.min(shopSuppliesFee, 35)).toFixed(2));
   }, [applyShopSupplies, totalLaborCost, shopSuppliesFee]);
 
   const totalPartsCost = useMemo(() => {
@@ -509,9 +510,10 @@ export const RepairQuoteModal: React.FC = () => {
   const estimatedTaxAmount = useMemo(() => {
     if (isTaxExempt) return 0;
     const rate = (taxRatePercent || 0) / 100;
-    // Sales tax applied to parts at 7% standard rate (or custom rate if adjusted)
-    return Number((totalPartsCost * rate).toFixed(2));
-  }, [totalPartsCost, taxRatePercent, isTaxExempt]);
+    // Sales tax applied to parts and labor
+    const taxableAmount = (totalLaborCost || 0) + (totalPartsCost || 0);
+    return Number((taxableAmount * rate).toFixed(2));
+  }, [totalLaborCost, totalPartsCost, taxRatePercent, isTaxExempt]);
 
   const grandTotal = useMemo(() => {
     return Number(((totalLaborCost || 0) + (totalPartsCost || 0) + (calculatedShopSupplies || 0) + (estimatedTaxAmount || 0)).toFixed(2));
@@ -1834,7 +1836,7 @@ export const RepairQuoteModal: React.FC = () => {
                         onChange={(e) => setApplyShopSupplies(e.target.checked)}
                         className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
                       />
-                      <span>Shop Supplies & Hazmat Fee (5% of labor)</span>
+                      <span>Shop Supplies & Hazmat Fee (5% of labor, max $35.00)</span>
                     </label>
                     <span className="text-xs font-mono font-black text-slate-950">
                       ${calculatedShopSupplies.toFixed(2)}
@@ -1844,7 +1846,7 @@ export const RepairQuoteModal: React.FC = () => {
                   {/* Sales Tax */}
                   <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-slate-950">Sales Tax on Parts:</span>
+                      <span className="text-xs font-bold text-slate-950">Sales Tax (Parts & Labor):</span>
                       {!isTaxExempt ? (
                         <div className="flex items-center gap-1">
                           <input
@@ -1855,7 +1857,7 @@ export const RepairQuoteModal: React.FC = () => {
                             value={taxRatePercent}
                             onChange={(e) => setTaxRatePercent(Number(e.target.value) || 0)}
                             className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-black text-slate-950"
-                            title="Standard 7% sales tax rate"
+                            title="Sales tax rate applied to parts and labor"
                           />
                           <span className="text-xs text-slate-950 font-black">%</span>
                         </div>

@@ -1205,7 +1205,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const totalLaborCost = mergedQuote.totalLaborCost || 0;
         const supplies = mergedQuote.shopSuppliesFee || 0;
         const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-        const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+        const taxableAmount = totalLaborCost + totalPartsCost;
+        const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
         const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
         mergedQuote = {
@@ -1423,7 +1424,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const totalLaborCost = Number((mergedQuote.totalLaborCost || 0).toFixed(2));
       const supplies = Number((mergedQuote.shopSuppliesFee || 0).toFixed(2));
       const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-      const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+      const taxableAmount = totalLaborCost + totalPartsCost;
+      const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
       const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
       mergedQuote = {
@@ -1472,7 +1474,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const totalLaborCost = mergedQuote.totalLaborCost || 0;
       const supplies = mergedQuote.shopSuppliesFee || 0;
       const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-      const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+      const taxableAmount = totalLaborCost + totalPartsCost;
+      const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
       const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
       mergedQuote = {
@@ -1932,7 +1935,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const curPartsCost = Number((q.totalPartsCost || 0).toFixed(2));
             const curShopSupplies = Number((q.shopSuppliesFee || 0).toFixed(2));
             const newTaxRate = nextIsTaxExempt ? 0 : 0.07;
-            const newTaxAmount = nextIsTaxExempt ? 0 : Number((curPartsCost * 0.07).toFixed(2));
+            const taxableAmount = curLaborCost + curPartsCost;
+            const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * 0.07).toFixed(2));
             const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
             updatedQuote = {
               ...q,
@@ -1996,7 +2000,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const curShopSupplies = Number((q.shopSuppliesFee || 0).toFixed(2));
       
       const newTaxRate = nextIsTaxExempt ? 0 : 0.07;
-      const newTaxAmount = nextIsTaxExempt ? 0 : Number((curPartsCost * 0.07).toFixed(2));
+      const taxableAmount = curLaborCost + curPartsCost;
+      const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * 0.07).toFixed(2));
       const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
 
       updatedQuote = {
@@ -2293,7 +2298,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const shopSuppliesFee = ro.quote.shopSuppliesFee || 0;
             const isExempt = ro.isTaxExempt || ro.quote.isTaxExempt;
             const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
-            const taxAmount = isExempt ? 0 : Number((totalPartsCost * taxRate).toFixed(2));
+            const taxableAmount = totalLaborCost + totalPartsCost;
+            const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
             const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
             nextQuote = {
@@ -2301,6 +2307,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               laborItems: allItems,
               totalLaborHours,
               totalLaborCost,
+              taxAmount,
               grandTotal,
               updatedAt: new Date().toISOString(),
             };
@@ -2638,11 +2645,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const isExempt = targetRO.isTaxExempt || quote.isTaxExempt;
     const finalTaxRate = isExempt ? 0 : (quote.taxRate !== undefined ? quote.taxRate : 0.07);
-    const finalTaxAmount = isExempt ? 0 : Number(((quote.totalPartsCost || 0) * finalTaxRate).toFixed(2));
-    const finalGrandTotal = Number(((quote.totalLaborCost || 0) + (quote.totalPartsCost || 0) + (quote.shopSuppliesFee || 0) + finalTaxAmount).toFixed(2));
+    const taxableAmount = (Number(quote.totalLaborCost) || 0) + (Number(quote.totalPartsCost) || 0);
+    const finalTaxAmount = isExempt ? 0 : Number((taxableAmount * finalTaxRate).toFixed(2));
+    const finalSupplies = quote.shopSuppliesFee ? Math.min(Number(quote.shopSuppliesFee) || 0, 35) : 0;
+    const finalGrandTotal = Number(((quote.totalLaborCost || 0) + (quote.totalPartsCost || 0) + finalSupplies + finalTaxAmount).toFixed(2));
 
     const nextQuote: RepairQuote = {
       ...quote,
+      shopSuppliesFee: finalSupplies,
       isTaxExempt: isExempt,
       taxRate: finalTaxRate,
       taxAmount: finalTaxAmount,
@@ -2769,7 +2779,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const shopSuppliesFee = targetRO.quote?.shopSuppliesFee || 0;
     const isExempt = targetRO.isTaxExempt || targetRO.quote?.isTaxExempt;
     const taxRate = isExempt ? 0 : (targetRO.quote?.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
-    const taxAmount = isExempt ? 0 : Number((totalPartsCost * taxRate).toFixed(2));
+    const taxableAmount = totalLaborCost + totalPartsCost;
+    const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
     const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
     const updatedQuote: RepairQuote = {

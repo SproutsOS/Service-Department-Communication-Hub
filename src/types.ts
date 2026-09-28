@@ -83,6 +83,7 @@ export interface PartItem {
   price?: number;
   notes?: string;
   roLineNumber?: number; // 1-based concern line number (e.g., 1 for Line 1, 2 for Line 2)
+  sentToEstimate?: boolean; // Whether the quote pricing has been submitted to the estimate
 }
 
 export interface Message {
