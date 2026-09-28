@@ -622,6 +622,7 @@ export const AdvisorDashboard: React.FC = () => {
                     ro={ro} 
                     onClick={() => setSelectedRO(ro)} 
                     onOpenFollowUp={setSelectedFollowUpRO}
+                    hideCauseCorrection={true}
                   />
                 ))}
               </div>

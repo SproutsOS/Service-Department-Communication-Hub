@@ -27,11 +27,19 @@ interface ROCardProps {
   onClick: () => void;
   compact?: boolean;
   onOpenFollowUp?: (ro: RepairOrder) => void;
+  hideCauseCorrection?: boolean;
 }
 
-export const ROCard: React.FC<ROCardProps> = ({ ro: rawRO, onClick, compact = false, onOpenFollowUp }) => {
+export const ROCard: React.FC<ROCardProps> = ({ 
+  ro: rawRO, 
+  onClick, 
+  compact = false, 
+  onOpenFollowUp,
+  hideCauseCorrection = false
+}) => {
   const ro = cleanRO3700(rawRO);
-  const { users } = useApp();
+  const { users, currentUser } = useApp();
+  const shouldHideCauseCorrection = hideCauseCorrection || currentUser?.role === 'SERVICE_ADVISOR';
   const isCompleted = isROCompleted(ro);
   const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
@@ -311,7 +319,7 @@ export const ROCard: React.FC<ROCardProps> = ({ ro: rawRO, onClick, compact = fa
         })()}
 
         {/* Tech Diagnosis & Repair (Cause & Correction) if documented */}
-        {(ro.cause || ro.correction) && (
+        {!shouldHideCauseCorrection && (ro.cause || ro.correction) && (
           <div className="mt-1 text-[11px] bg-slate-50 p-1.5 rounded-md border-2 border-slate-700 space-y-0.5">
             {ro.cause && (
               <div className="flex items-start gap-1.5 truncate">
