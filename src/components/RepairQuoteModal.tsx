@@ -2401,41 +2401,87 @@ export const RepairQuoteModal: React.FC = () => {
         {/* Financial Totals & Policies */}
         <div 
           data-print-keep-together="true"
-          className="quote-summary-block grid grid-cols-2 gap-4 pt-1 break-inside-avoid [page-break-inside:avoid]"
+          className="quote-summary-block space-y-3 pt-1 break-inside-avoid [page-break-inside:avoid]"
           style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
         >
-          {/* Left: Manufacturer Warranty Disclaimer */}
-          <div className="border-2 border-black rounded-lg bg-white overflow-hidden text-black p-3.5 flex flex-col justify-center">
-            <p className="text-[9.5px] leading-relaxed text-black font-bold uppercase text-justify">
-              ANY WARRANTIES ON THE PRODUCT SOLD HEREBY ARE THOSE MADE BY THE MANUFACTURER. THE SELLER HEREBY EXPRESSLY DISCLAIMS ALL WARRANTIES, EITHER EXPRESS OR IMPLIED, INCLUDING ANY IMPLIED WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, AND THE SELLER NEITHER ASSUMES NOR AUTHORIZES ANY OTHER PERSON TO ASSUME FOR IT ANY LIABILITY IN CONNECTION WITH THE SALE OF SAID PRODUCTS.
-            </p>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left: Manufacturer Warranty Disclaimer */}
+            <div className="border-2 border-black rounded-lg bg-white overflow-hidden text-black p-3.5 flex flex-col justify-center">
+              <p className="text-[9.5px] leading-relaxed text-black font-bold uppercase text-justify">
+                ANY WARRANTIES ON THE PRODUCT SOLD HEREBY ARE THOSE MADE BY THE MANUFACTURER. THE SELLER HEREBY EXPRESSLY DISCLAIMS ALL WARRANTIES, EITHER EXPRESS OR IMPLIED, INCLUDING ANY IMPLIED WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, AND THE SELLER NEITHER ASSUMES NOR AUTHORIZES ANY OTHER PERSON TO ASSUME FOR IT ANY LIABILITY IN CONNECTION WITH THE SALE OF SAID PRODUCTS.
+              </p>
+            </div>
+
+            {/* Right: Totals Table */}
+            <div className="border-2 border-black rounded-lg overflow-hidden bg-white">
+              <div className="bg-slate-100 px-3 py-1 border-b-2 border-black font-black text-xs uppercase tracking-wider text-black">
+                Official Quote Summary
+              </div>
+              <div className="p-2.5 space-y-1 text-xs">
+                <div className="flex justify-between text-black font-bold">
+                  <span>Labor Total ({totalLaborHours.toFixed(1)} hrs):</span>
+                  <span className="font-mono font-black text-black">${totalLaborCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-black font-bold">
+                  <span>Parts & Materials ({partsItems.length} items):</span>
+                  <span className="font-mono font-black text-black">${totalPartsCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-black font-bold">
+                  <span>Shop Supplies & Environmental:</span>
+                  <span className="font-mono font-black text-black">${calculatedShopSupplies.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-black font-bold">
+                  <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
+                  <span className="font-mono font-black text-black">${estimatedTaxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1.5 mt-1 border-t-2 border-black font-black">
+                  <span className="text-black uppercase text-xs font-black">Grand Total Estimate:</span>
+                  <span className="font-mono text-black text-lg font-black">${grandTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Right: Totals Table */}
-          <div className="border-2 border-black rounded-lg overflow-hidden bg-white">
-            <div className="bg-slate-100 px-3 py-1 border-b-2 border-black font-black text-xs uppercase tracking-wider text-black">
-              Official Quote Summary
-            </div>
-            <div className="p-2.5 space-y-1 text-xs">
-              <div className="flex justify-between text-black font-bold">
-                <span>Labor Total ({totalLaborHours.toFixed(1)} hrs):</span>
-                <span className="font-mono font-black text-black">${totalLaborCost.toFixed(2)}</span>
+          {/* Customer / Management Approval Section */}
+          <div className="border-2 border-black rounded-lg p-3 bg-white">
+            <div className="flex items-end justify-between gap-6 text-black">
+              <div className="flex-[2] flex items-baseline gap-2">
+                <span className="font-black text-xs uppercase tracking-wider text-black shrink-0">
+                  APPROVED BY:
+                </span>
+                <div className="flex-1 border-b-2 border-black min-h-[20px] pb-0.5">
+                  {activeQuoteRO.quote?.approvedBy ? (
+                    <span className="font-black text-xs uppercase font-mono text-black">
+                      {activeQuoteRO.quote.approvedBy}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex justify-between text-black font-bold">
-                <span>Parts & Materials ({partsItems.length} items):</span>
-                <span className="font-mono font-black text-black">${totalPartsCost.toFixed(2)}</span>
+
+              <div className="w-48 flex items-baseline gap-2">
+                <span className="font-black text-xs uppercase tracking-wider text-black shrink-0">
+                  DATE:
+                </span>
+                <div className="flex-1 border-b-2 border-black min-h-[20px] pb-0.5 text-center">
+                  {activeQuoteRO.quote?.approvedAt ? (
+                    <span className="font-black text-xs font-mono text-black">
+                      {new Date(activeQuoteRO.quote.approvedAt).toLocaleDateString()}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex justify-between text-black font-bold">
-                <span>Shop Supplies & Environmental:</span>
-                <span className="font-mono font-black text-black">${calculatedShopSupplies.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-black font-bold">
-                <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
-                <span className="font-mono font-black text-black">${estimatedTaxAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center pt-1.5 mt-1 border-t-2 border-black font-black">
-                <span className="text-black uppercase text-xs font-black">Grand Total Estimate:</span>
-                <span className="font-mono text-black text-lg font-black">${grandTotal.toFixed(2)}</span>
+
+              <div className="w-40 flex items-baseline gap-2">
+                <span className="font-black text-xs uppercase tracking-wider text-black shrink-0">
+                  TIME:
+                </span>
+                <div className="flex-1 border-b-2 border-black min-h-[20px] pb-0.5 text-center">
+                  {activeQuoteRO.quote?.approvedAt ? (
+                    <span className="font-black text-xs font-mono text-black">
+                      {new Date(activeQuoteRO.quote.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
