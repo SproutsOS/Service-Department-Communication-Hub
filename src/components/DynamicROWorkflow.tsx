@@ -1032,7 +1032,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-slate-600 mt-0.5">
+                <div className="text-xs text-slate-900 font-semibold mt-0.5">
                   {isTechScreen 
                     ? 'Log flat-rate labor times (hours) for required repairs. Rate per hour and parts are priced by the Advisor and Parts Counter.'
                     : 'Itemized Pro Demand flat-rate labor times, replacement parts, shop supplies, and sales tax.'}
@@ -1045,7 +1045,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 href="https://www.prodemand.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-900 border border-blue-400 rounded-lg text-xs font-black flex items-center gap-1.5 shadow-2xs transition-colors"
                 title="Open Pro Demand for OEM flat rate labor times"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -1071,62 +1071,62 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
             isTechScreen ? (
               <div className="p-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200">
-                    <div className="text-[10px] uppercase font-bold text-blue-700">Estimated Labor Time</div>
+                  <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                    <div className="text-[10px] uppercase font-black text-blue-950">Estimated Labor Time</div>
                     <div className="text-xl font-black text-blue-950 mt-0.5">
                       {((ro.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs
                     </div>
-                    <div className="text-xs font-medium text-blue-700 mt-0.5">
+                    <div className="text-xs font-bold text-blue-950 mt-0.5">
                       Across {(ro.quote.laborItems || []).length} labor operation{(ro.quote.laborItems || []).length === 1 ? '' : 's'}
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="text-[10px] uppercase font-bold text-slate-500">Parts Status</div>
-                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-300">
+                    <div className="text-[10px] uppercase font-black text-slate-950">Parts Status</div>
+                    <div className="text-sm font-bold text-slate-950 mt-0.5">
                       {(ro.parts || []).length > 0 ? `${(ro.parts || []).length} parts requested with Parts Department` : 'No parts requested yet'}
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">
+                    <div className="text-xs text-slate-900 font-semibold mt-0.5">
                       Managed by Parts Department
                     </div>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-500 italic">
+                <p className="text-[11px] text-slate-900 font-bold italic">
                   Note: Technicians enter labor time only. Rate per hour and parts are priced and merged by the Service Advisor on the customer quote.
                 </p>
               </div>
             ) : (
               <div className="p-4 space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="text-[10px] uppercase font-bold text-slate-500">Labor Items</div>
-                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-300">
+                    <div className="text-[10px] uppercase font-black text-slate-950">Labor Items</div>
+                    <div className="text-sm font-black text-slate-950 mt-0.5">
                       {(ro.quote.laborItems || []).length} lines ({((ro.quote.laborItems || []).reduce((s, i) => s + (Number(i.laborHours) || 0), 0)).toFixed(1)} hrs)
                     </div>
-                    <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                    <div className="text-xs font-bold text-slate-950 mt-0.5">
                       ${(Number(ro.quote.totalLaborCost ?? (ro.quote as any).laborSubtotal) || 0).toFixed(2)}
                     </div>
                   </div>
 
-                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="text-[10px] uppercase font-bold text-slate-500">Parts Required</div>
-                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-300">
+                    <div className="text-[10px] uppercase font-black text-slate-950">Parts Required</div>
+                    <div className="text-sm font-black text-slate-950 mt-0.5">
                       {(ro.quote.partsItems || []).length} parts
                     </div>
-                    <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                    <div className="text-xs font-bold text-slate-950 mt-0.5">
                       ${(Number(ro.quote.totalPartsCost ?? (ro.quote as any).partsSubtotal) || 0).toFixed(2)}
                     </div>
                   </div>
 
-                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="text-[10px] uppercase font-bold text-slate-500">Supplies & Tax</div>
-                    <div className="text-sm font-bold text-slate-800 mt-0.5">
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-300">
+                    <div className="text-[10px] uppercase font-black text-slate-950">Supplies & Tax</div>
+                    <div className="text-sm font-black text-slate-950 mt-0.5">
                       ${((Number(ro.quote.shopSuppliesFee ?? (ro.quote as any).shopSupplies) || 0) + (Number(ro.quote.taxAmount ?? (ro.quote as any).tax) || 0)).toFixed(2)}
                     </div>
                   </div>
 
-                  <div className="p-2.5 bg-indigo-50/80 rounded-lg border border-indigo-200">
-                    <div className="text-[10px] uppercase font-bold text-indigo-700">Grand Total</div>
+                  <div className="p-2.5 bg-indigo-50 rounded-lg border border-indigo-300">
+                    <div className="text-[10px] uppercase font-black text-indigo-950">Grand Total</div>
                     <div className="text-lg font-black text-indigo-950 mt-0.5">
                       ${(Number(ro.quote.grandTotal) || 0).toFixed(2)}
                     </div>

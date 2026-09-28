@@ -80,10 +80,22 @@ textarea.border-red-500 {
     -webkit-print-color-adjust: exact;
   }
 
+  /* Force all fonts in printable quote to be solid black (#000000) with uniform darkness and no lighter shades */
+  #printable-quote-document,
   #printable-quote-document * {
     visibility: visible !important;
-    color-adjust: exact;
-    -webkit-print-color-adjust: exact;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+  }
+
+  /* Prevent dark inverted badges from having black text on black background when printed */
+  #printable-quote-document .bg-slate-950,
+  #printable-quote-document .bg-slate-900,
+  #printable-quote-document .bg-slate-800 {
+    background-color: #f1f5f9 !important;
+    border: 1.5px solid #000000 !important;
   }
 
   /* Support for printable warranty document */

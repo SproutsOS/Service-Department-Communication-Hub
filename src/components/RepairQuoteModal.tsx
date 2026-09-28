@@ -857,9 +857,9 @@ export const RepairQuoteModal: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-2.5 flex-wrap">
-                <span>Customer: <strong className="text-slate-200">{activeQuoteRO.customerName}</strong></span>
-                <span>•</span>
+              <p className="text-xs text-slate-100 font-semibold mt-1 flex items-center gap-2.5 flex-wrap">
+                <span>Customer: <strong className="text-white font-black">{activeQuoteRO.customerName}</strong></span>
+                <span className="text-slate-300 font-black">•</span>
                 {!isTech && (
                   <>
                     <button
@@ -868,25 +868,25 @@ export const RepairQuoteModal: React.FC = () => {
                       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
                         isTaxExempt 
                           ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/60 hover:bg-emerald-600/40' 
-                          : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700 hover:border-slate-500 hover:bg-slate-700'
+                          : 'bg-slate-800 text-slate-100 hover:text-white border-slate-700 hover:border-slate-500 hover:bg-slate-700'
                       }`}
                       title={isTaxExempt ? "Customer is Tax Exempt (0% sales tax). Click to change to taxable." : "Click if customer is Tax Exempt (0% sales tax)"}
                     >
-                      <ShieldCheck className={`w-3.5 h-3.5 ${isTaxExempt ? 'text-emerald-400' : 'text-slate-400'}`} />
+                      <ShieldCheck className={`w-3.5 h-3.5 ${isTaxExempt ? 'text-emerald-400' : 'text-slate-300'}`} />
                       <span>{isTaxExempt ? 'Tax Exempt Customer (0% Tax)' : 'Tax Exempt? Click if exempt'}</span>
                     </button>
-                    <span>•</span>
+                    <span className="text-slate-300 font-black">•</span>
                   </>
                 )}
-                <span>Vehicle: <strong className="text-slate-200">{vehicle.year} {vehicle.make} {vehicle.model}</strong></span>
+                <span>Vehicle: <strong className="text-white font-black">{vehicle.year} {vehicle.make} {vehicle.model}</strong></span>
                 {vehicle.vin && (
                   <>
-                    <span>•</span>
-                    <span>VIN: <strong className="text-slate-200 select-all">{vehicle.vin}</strong></span>
+                    <span className="text-slate-300 font-black">•</span>
+                    <span>VIN: <strong className="text-white font-black select-all">{vehicle.vin}</strong></span>
                   </>
                 )}
-                <span>•</span>
-                <span>Miles: <strong className="text-slate-200">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} mi` : `${vehicle.mileage ?? 0} mi`}</strong></span>
+                <span className="text-slate-300 font-black">•</span>
+                <span>Miles: <strong className="text-white font-black">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} mi` : `${vehicle.mileage ?? 0} mi`}</strong></span>
               </p>
             </div>
           </div>
@@ -895,16 +895,16 @@ export const RepairQuoteModal: React.FC = () => {
             {/* Auto-Save Status Badge */}
             <div 
               id="quote-autosave-badge"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 select-none text-slate-300"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 select-none text-slate-100"
               title="All changes are automatically saved"
             >
               {quoteAutoSaveStatus === 'saving' ? (
-                <span className="flex items-center gap-1.5 text-blue-400">
+                <span className="flex items-center gap-1.5 text-blue-300 font-bold">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span className="hidden sm:inline">Saving...</span>
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-slate-300">
+                <span className="flex items-center gap-1.5 text-slate-100 font-bold">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span className="hidden sm:inline">Saved</span>
                 </span>
@@ -916,16 +916,16 @@ export const RepairQuoteModal: React.FC = () => {
                 id="print-quote-btn"
                 onClick={handlePrint}
                 title="Print official repair quote"
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4 text-white" />
                 <span className="hidden sm:inline">Print Quote</span>
               </button>
             )}
             <button
               id="close-quote-modal-btn"
               onClick={handleCloseModal}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               title="Close quote editor"
             >
               <X className="w-5 h-5" />
@@ -952,18 +952,18 @@ export const RepairQuoteModal: React.FC = () => {
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
               <div className="space-y-1 max-w-xl">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 bg-blue-500/30 text-blue-300 text-[11px] font-bold rounded-full uppercase tracking-wider border border-blue-400/30">
+                  <span className="px-2.5 py-0.5 bg-blue-500/30 text-blue-200 text-[11px] font-black rounded-full uppercase tracking-wider border border-blue-400/40">
                     OEM Labor Time Lookup
                   </span>
-                  <span className="text-xs text-slate-300">Pro Demand Integration</span>
+                  <span className="text-xs text-white font-bold">Pro Demand Integration</span>
                 </div>
-                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <h3 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
                   Look Up Flat-Rate Labor in Pro Demand
                 </h3>
                 {vehicle.vin && (
-                  <div className="text-xs text-blue-200 font-mono flex items-center gap-2 pt-1">
-                    <span>VIN: <strong>{vehicle.vin}</strong></span>
-                    {vehicle.engine && <span>• Engine: <strong>{vehicle.engine}</strong></span>}
+                  <div className="text-xs text-white font-mono font-bold flex items-center gap-2 pt-1">
+                    <span>VIN: <strong className="text-white font-black">{vehicle.vin}</strong></span>
+                    {vehicle.engine && <span>• Engine: <strong className="text-white font-black">{vehicle.engine}</strong></span>}
                   </div>
                 )}
               </div>
@@ -994,18 +994,18 @@ export const RepairQuoteModal: React.FC = () => {
                 <button
                   id="copy-vehicle-info-btn"
                   onClick={handleCopyVehicleInfo}
-                  className="px-3.5 py-2.5 bg-slate-800/90 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all active:scale-95 shadow-sm cursor-pointer"
+                  className="px-3.5 py-2.5 bg-slate-800/90 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all active:scale-95 shadow-sm cursor-pointer"
                   title="Copy full vehicle info (Year, Make, Model, VIN)"
                 >
                   {copiedVehicleInfo ? (
                     <>
                       <Check className="w-4 h-4 text-emerald-400" />
-                      <span className="text-emerald-300">Copied!</span>
+                      <span className="text-emerald-300 font-bold">Copied!</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-4 h-4 text-slate-400" />
-                      <span>Copy Vehicle Info</span>
+                      <Copy className="w-4 h-4 text-white" />
+                      <span className="text-white font-bold">Copy Vehicle Info</span>
                     </>
                   )}
                 </button>
@@ -1026,14 +1026,14 @@ export const RepairQuoteModal: React.FC = () => {
           </div>
 
           {/* Quick Tools & Pay Rate Selector */}
-          <div className="flex items-center gap-2 flex-wrap bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs print:hidden">
+          <div className="flex items-center gap-2 flex-wrap bg-slate-100 p-3 rounded-xl border border-slate-300 text-xs print:hidden">
             {!isTech && activeQuoteRO.parts && activeQuoteRO.parts.length > 0 && (
               <button
                 id="import-ro-parts-btn"
                 onClick={handleImportROParts}
-                className="px-2.5 py-1.5 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-700 rounded-lg border border-slate-200 hover:border-amber-300 font-medium transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                className="px-2.5 py-1.5 bg-white hover:bg-amber-50 text-slate-900 hover:text-amber-800 rounded-lg border border-slate-300 hover:border-amber-400 font-bold transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
               >
-                <Package className="w-3.5 h-3.5 text-amber-600" />
+                <Package className="w-3.5 h-3.5 text-amber-700" />
                 <span>+ Import RO Parts ({activeQuoteRO.parts.length})</span>
               </button>
             )}
@@ -1042,9 +1042,9 @@ export const RepairQuoteModal: React.FC = () => {
               <button
                 id="import-cause-correction-btn"
                 onClick={handleImportCauseCorrection}
-                className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg border border-slate-200 hover:border-emerald-300 font-medium transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-slate-900 hover:text-emerald-800 rounded-lg border border-slate-300 hover:border-emerald-400 font-bold transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
               >
-                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <FileText className="w-3.5 h-3.5 text-emerald-700" />
                 <span>+ Import Cause & Correction into Notes</span>
               </button>
             )}
@@ -1052,15 +1052,15 @@ export const RepairQuoteModal: React.FC = () => {
             {!isTech ? (
               <div className="ml-auto flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase">Rate Tier:</span>
-                  <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100 shadow-2xs">
+                  <span className="text-[11px] font-black text-slate-950 uppercase">Rate Tier:</span>
+                  <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-200 shadow-2xs">
                     <button
                       type="button"
                       onClick={() => handleSetQuotePayType('CUSTOMER_PAY')}
                       className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
                         quotePayType === 'CUSTOMER_PAY'
                           ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                          : 'text-slate-900 hover:text-black hover:bg-slate-300'
                       }`}
                     >
                       Customer Pay ($165.00)
@@ -1071,7 +1071,7 @@ export const RepairQuoteModal: React.FC = () => {
                       className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
                         quotePayType === 'WARRANTY'
                           ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                          : 'text-slate-900 hover:text-black hover:bg-slate-300'
                       }`}
                     >
                       Warranty ($121.78)
@@ -1082,7 +1082,7 @@ export const RepairQuoteModal: React.FC = () => {
                       className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
                         quotePayType === 'INTERNAL'
                           ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                          : 'text-slate-900 hover:text-black hover:bg-slate-300'
                       }`}
                     >
                       Internal ($135.00)
@@ -1091,9 +1091,9 @@ export const RepairQuoteModal: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <label className="text-slate-600 font-medium text-xs">Rate:</label>
+                  <label className="text-slate-950 font-black text-xs">Rate:</label>
                   <div className="relative w-24">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
                     <input
                       type="number"
                       min="0"
@@ -1123,15 +1123,15 @@ export const RepairQuoteModal: React.FC = () => {
                         }
                       }}
                       onFocus={(e) => e.target.select()}
-                      className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-black text-slate-950 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
                 </div>
               </div>
             ) : (
               <div className="ml-auto flex items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-600 uppercase">Rate Tier:</span>
-                <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                <span className="text-[11px] font-black text-slate-950 uppercase">Rate Tier:</span>
+                <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-900 border border-blue-300">
                   {quotePayType === 'CUSTOMER_PAY' ? 'Customer Pay ($165.00/hr)' : quotePayType === 'WARRANTY' ? 'Warranty ($121.78/hr)' : 'Internal ($135.00/hr)'}
                 </span>
               </div>
@@ -1146,10 +1146,10 @@ export const RepairQuoteModal: React.FC = () => {
                   <Wrench className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-base">
+                  <h3 className="font-black text-slate-950 text-base">
                     {isTech ? 'Job Labor Operations' : 'Labor Operations'}
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-900 font-semibold">
                     {isTech 
                       ? 'Enter flat-rate labor hours.' 
                       : 'Labor operations, flat-rate hours, and procedures.'}
@@ -1163,7 +1163,7 @@ export const RepairQuoteModal: React.FC = () => {
                   href="https://www.prodemand.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-blue-200 transition-colors"
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-xl text-xs font-black flex items-center gap-1.5 border border-blue-300 transition-colors"
                   title="Open Pro Demand to verify flat rate hours"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -1175,14 +1175,14 @@ export const RepairQuoteModal: React.FC = () => {
                   <button
                     id="add-labor-line-btn"
                     onClick={() => handleAddLaborItem()}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                     title="Add an additional labor operation (Service Advisor only)"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Add Labor Line (Advisor)</span>
                   </button>
                 ) : (
-                  <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold border border-slate-200">
+                  <span className="px-2.5 py-1 bg-slate-200 text-slate-900 rounded-lg text-xs font-bold border border-slate-300">
                     Flat-rate hours only
                   </span>
                 )}
@@ -1191,8 +1191,8 @@ export const RepairQuoteModal: React.FC = () => {
 
             {/* Quick preset chips - Service Advisor only */}
             {isAdvisorOrManager && (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-slate-600 print:hidden">
-                <span className="font-bold text-slate-500 uppercase tracking-wider shrink-0 text-[10px]">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-slate-900 print:hidden">
+                <span className="font-black text-slate-950 uppercase tracking-wider shrink-0 text-[10px]">
                   Advisor Extra Line Presets:
                 </span>
                 {COMMON_LABOR_PRESETS.slice(0, 5).map((preset, idx) => (
@@ -1200,7 +1200,7 @@ export const RepairQuoteModal: React.FC = () => {
                     key={idx}
                     type="button"
                     onClick={() => handleAddLaborItem(preset)}
-                    className="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-blue-100 hover:text-blue-800 rounded-full border border-slate-200 hover:border-blue-300 font-medium transition-colors cursor-pointer"
+                    className="shrink-0 px-2.5 py-1 bg-white hover:bg-blue-100 text-slate-900 hover:text-blue-950 rounded-full border border-slate-300 hover:border-blue-400 font-bold transition-colors cursor-pointer shadow-2xs"
                     title={`Add "${preset.name}" as an additional advisor line`}
                   >
                     + {preset.name.split(' ')[0]} ({preset.hours}h)
@@ -1212,9 +1212,9 @@ export const RepairQuoteModal: React.FC = () => {
             {/* Labor Lines Table / Cards */}
             {laborItems.length === 0 ? (
               <div className="text-center py-8 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-                <Wrench className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-600">No labor operations configured</p>
-                <p className="text-xs text-slate-400 mt-1">
+                <Wrench className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-900">No labor operations configured</p>
+                <p className="text-xs text-slate-800 font-semibold mt-1">
                   Click "Sync RO Concerns & Correction" to load the line items from the Repair Order.
                 </p>
                 <div className="mt-3 flex items-center justify-center gap-2">
@@ -1244,28 +1244,28 @@ export const RepairQuoteModal: React.FC = () => {
                       key={item.id}
                       className={`p-3.5 rounded-xl border transition-colors space-y-2.5 ${
                         isMirroredROLine 
-                          ? 'bg-slate-50/90 border-slate-200 hover:border-blue-300' 
-                          : 'bg-purple-50/60 border-purple-200 hover:border-purple-300'
+                          ? 'bg-slate-50/90 border-slate-300 hover:border-blue-400' 
+                          : 'bg-purple-50/70 border-purple-300 hover:border-purple-400'
                       }`}
                     >
                       {/* Line Header Badge & Info */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           {isMirroredROLine ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-300">
-                              <FileText className="w-3 h-3 text-blue-700" />
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-950 border border-blue-400">
+                              <FileText className="w-3 h-3 text-blue-800" />
                               <span>RO Line #{roLineNum}</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-300">
-                              <User className="w-3 h-3 text-purple-700" />
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-950 border border-purple-400">
+                              <User className="w-3 h-3 text-purple-800" />
                               <span>Added by Service Advisor</span>
                             </span>
                           )}
 
                           {isMirroredROLine && cleanRO.correction && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-950 border border-emerald-300">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-700" />
                               <span>Correction Documented</span>
                             </span>
                           )}
@@ -1276,7 +1276,7 @@ export const RepairQuoteModal: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleRemoveLaborItem(item.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
+                            className="p-1 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
                             title={isMirroredROLine ? "Remove line from quote" : "Delete advisor added labor item"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1286,33 +1286,33 @@ export const RepairQuoteModal: React.FC = () => {
 
                       {/* Mirrored Concern & Correction Display when from RO */}
                       {isMirroredROLine && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-300">
                           {/* 1. Customer Stated Complaint */}
                           <div className="space-y-0.5">
-                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider block">
+                            <span className="text-[10px] font-black text-slate-950 uppercase tracking-wider block">
                               1. Customer Complaint:
                             </span>
-                            <p className="font-semibold text-slate-900 text-xs leading-snug">
+                            <p className="font-bold text-slate-950 text-xs leading-snug">
                               {item.concernText || cleanRO.concerns?.[roLineNum - 1] || cleanRO.primaryConcern}
                             </p>
                           </div>
 
                           {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
-                          <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-2.5">
-                            <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider block">
+                          <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-200 pt-1.5 md:pt-0 md:pl-2.5">
+                            <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">
                               2. Concern / Cause:
                             </span>
-                            <p className="font-semibold text-amber-950 text-xs leading-snug font-mono">
+                            <p className="font-bold text-amber-950 text-xs leading-snug font-mono">
                               {cleanRO.concernCauses?.[roLineNum - 1] || (roLineNum === 1 ? cleanRO.cause : '') || (
-                                <span className="italic text-slate-400 font-sans font-normal">Pending diagnosis</span>
+                                <span className="italic text-slate-800 font-sans font-medium">Pending diagnosis</span>
                               )}
                             </p>
                           </div>
 
                           {/* 3. Correction (Repair Procedure / Action Taken) */}
-                          <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-2.5">
+                          <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-200 pt-1.5 md:pt-0 md:pl-2.5">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider block">
+                              <span className="text-[10px] font-black text-emerald-950 uppercase tracking-wider block">
                                 3. Correction:
                               </span>
                               <button
@@ -1321,16 +1321,16 @@ export const RepairQuoteModal: React.FC = () => {
                                   setCorrectionInput(cleanRO.concernCorrections?.[roLineNum - 1] || cleanRO.correction || '');
                                   setShowCorrectionEditor(true);
                                 }}
-                                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+                                className="text-[10px] text-blue-700 hover:text-blue-900 font-black flex items-center gap-1 cursor-pointer"
                                 title="Edit correction on the Repair Order"
                               >
                                 <Edit3 className="w-3 h-3" />
                                 <span>{cleanRO.correction ? 'Edit' : '+ Add'}</span>
                               </button>
                             </div>
-                            <p className="font-semibold text-emerald-950 text-xs leading-snug font-mono">
+                            <p className="font-bold text-emerald-950 text-xs leading-snug font-mono">
                               {item.correctionText || cleanRO.concernCorrections?.[roLineNum - 1] || cleanRO.correction || (
-                                <span className="italic text-slate-400 font-sans font-normal">Pending technician repair plan</span>
+                                <span className="italic text-slate-800 font-sans font-medium">Pending technician repair plan</span>
                               )}
                             </p>
                           </div>
@@ -1338,7 +1338,7 @@ export const RepairQuoteModal: React.FC = () => {
                       )}
 
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        <span className="text-xs font-bold text-slate-400 w-5 shrink-0">#{index + 1}</span>
+                        <span className="text-xs font-black text-slate-950 w-5 shrink-0">#{index + 1}</span>
 
                         {/* Operation Description */}
                         <div className="flex-1 w-full">
@@ -1347,16 +1347,16 @@ export const RepairQuoteModal: React.FC = () => {
                             placeholder="Operation description (concern & correction)..."
                             value={item.description}
                             onChange={(e) => handleUpdateLaborItem(item.id, { description: e.target.value })}
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
                           />
-                          <span className="text-[10px] text-slate-400 mt-0.5 block">
+                          <span className="text-[10px] text-slate-900 font-semibold mt-0.5 block">
                             {isMirroredROLine ? 'Customer Concern & Technician Correction' : 'Advisor added custom labor operation'}
                           </span>
                         </div>
 
                         {/* Labor Hours (ProDemand) */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Hours:</label>
+                          <label className="text-[11px] font-black text-slate-950 uppercase">Hours:</label>
                           <input
                             type="number"
                             step="0.1"
@@ -1370,7 +1370,7 @@ export const RepairQuoteModal: React.FC = () => {
                               });
                             }}
                             onFocus={(e) => e.target.select()}
-                            className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
 
@@ -1379,7 +1379,7 @@ export const RepairQuoteModal: React.FC = () => {
                           <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                             {/* Pay Type Selector */}
                             <div className="flex items-center gap-1 shrink-0">
-                              <label className="text-[11px] font-bold text-slate-500 uppercase">Pay:</label>
+                              <label className="text-[11px] font-black text-slate-950 uppercase">Pay:</label>
                               <select
                                 value={item.payType || quotePayType}
                                 onChange={(e) => {
@@ -1391,7 +1391,7 @@ export const RepairQuoteModal: React.FC = () => {
                                     subtotal: Number(((Number(item.laborHours) || 0) * newR).toFixed(2))
                                   });
                                 }}
-                                className="px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                                className="px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
                               >
                                 <option value="CUSTOMER_PAY">Customer Pay ($165.00)</option>
                                 <option value="WARRANTY">Warranty ($121.78)</option>
@@ -1401,9 +1401,9 @@ export const RepairQuoteModal: React.FC = () => {
 
                             {/* Rate input */}
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <label className="text-[11px] font-bold text-slate-500 uppercase">Rate:</label>
+                              <label className="text-[11px] font-black text-slate-950 uppercase">Rate:</label>
                               <div className="relative w-22">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -1425,7 +1425,7 @@ export const RepairQuoteModal: React.FC = () => {
                                     }
                                   }}
                                   onFocus={(e) => e.target.select()}
-                                  className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                  className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                 />
                               </div>
                             </div>
@@ -1435,8 +1435,8 @@ export const RepairQuoteModal: React.FC = () => {
                         {/* Line Subtotal (Hidden from Tech) */}
                         {!isTech && (
                           <div className="text-right w-24 shrink-0">
-                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
-                            <span className="text-sm font-extrabold text-slate-900 font-mono">
+                            <span className="text-[10px] text-slate-950 block uppercase font-black">Subtotal</span>
+                            <span className="text-sm font-black text-slate-950 font-mono">
                               ${(item.subtotal || 0).toFixed(2)}
                             </span>
                           </div>
@@ -1450,7 +1450,7 @@ export const RepairQuoteModal: React.FC = () => {
                           placeholder="Optional labor notes or Pro Demand op code (e.g. Pro Demand Op #B-402, includes caliper lube)"
                           value={item.techNotes || ''}
                           onChange={(e) => handleUpdateLaborItem(item.id, { techNotes: e.target.value })}
-                          className="w-full px-3 py-1 bg-white/70 border border-slate-200 rounded-md text-[11px] text-slate-600 placeholder:text-slate-400 focus:bg-white focus:outline-none"
+                          className="w-full px-3 py-1 bg-white border border-slate-300 rounded-md text-xs text-slate-900 font-medium placeholder:text-slate-500 focus:bg-white focus:outline-none"
                         />
                       </div>
 
@@ -1473,9 +1473,9 @@ export const RepairQuoteModal: React.FC = () => {
                                 </div>
                                 <div className="space-y-1">
                                   {partsForThisLine.map(p => (
-                                    <div key={p.id} className="flex items-center justify-between text-[11px] text-slate-700 bg-white/90 px-2 py-0.5 rounded border border-amber-100">
+                                    <div key={p.id} className="flex items-center justify-between text-[11px] text-slate-900 font-medium bg-white px-2 py-0.5 rounded border border-amber-200">
                                       <span>{p.quantity}x {p.description} {p.partNumber ? `(#${p.partNumber})` : ''}</span>
-                                      <span className="font-mono font-semibold">${(Number(p.subtotal) || 0).toFixed(2)}</span>
+                                      <span className="font-mono font-bold">${(Number(p.subtotal) || 0).toFixed(2)}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -1483,8 +1483,8 @@ export const RepairQuoteModal: React.FC = () => {
                             )}
 
                             {!isTech && (
-                              <div className="flex items-center justify-between px-3 py-1.5 bg-indigo-50/80 border border-indigo-200 rounded-lg text-xs font-bold">
-                                <span className="text-indigo-900 text-[11px] uppercase tracking-wider">
+                              <div className="flex items-center justify-between px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-bold">
+                                <span className="text-indigo-950 text-[11px] uppercase tracking-wider font-black">
                                   Line #{roLineNum} Total (Labor ${(Number(item.subtotal) || 0).toFixed(2)} + Parts ${linePartsSubtotal.toFixed(2)}):
                                 </span>
                                 <span className="font-mono text-sm font-black text-indigo-950">
@@ -1500,13 +1500,13 @@ export const RepairQuoteModal: React.FC = () => {
                 })}
 
                 {/* Labor Subtotal Bar */}
-                <div className="flex items-center justify-between px-4 py-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs font-bold text-blue-900">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-black text-blue-950">
                   <div className="flex items-center gap-4">
                     <span>Total Operations: {laborItems.length}</span>
                     <span>Total Estimated Labor Time: {totalLaborHours.toFixed(1)} hrs</span>
                   </div>
                   {!isTech && (
-                    <div className="text-sm font-black font-mono">
+                    <div className="text-sm font-black font-mono text-blue-950">
                       Labor Total: ${totalLaborCost.toFixed(2)}
                     </div>
                   )}
@@ -1517,48 +1517,48 @@ export const RepairQuoteModal: React.FC = () => {
 
           {/* Section 2: Required Parts & Materials */}
           {isTech ? (
-            <div className="bg-slate-50/80 rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
+            <div className="bg-slate-50 rounded-2xl border border-slate-300 p-4 sm:p-5 shadow-2xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                  <div className="p-2 bg-amber-100 text-amber-800 rounded-lg">
                     <Package className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 text-base">Required Parts & Materials</h3>
-                    <p className="text-xs text-slate-500">
+                    <h3 className="font-black text-slate-950 text-base">Required Parts & Materials</h3>
+                    <p className="text-xs text-slate-900 font-semibold">
                       Parts pricing and inventory sourcing are managed exclusively by the Parts Department
                     </p>
                   </div>
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-lg text-xs font-bold border border-amber-200">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-950 rounded-lg text-xs font-bold border border-amber-300">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
                   <span>Managed by Parts Specialist</span>
                 </div>
               </div>
 
               {activeQuoteRO.parts && activeQuoteRO.parts.length > 0 ? (
                 <div className="space-y-2">
-                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  <div className="text-[11px] font-black text-slate-950 uppercase tracking-wider">
                     Parts Logged for this Repair Order ({activeQuoteRO.parts.length})
                   </div>
-                  <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                  <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-300 overflow-hidden shadow-2xs">
                     {activeQuoteRO.parts.map((p, idx) => (
                       <div key={p.id || idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                         <div className="space-y-0.5">
-                          <span className="font-bold text-slate-900 text-sm block">{p.description || p.name}</span>
+                          <span className="font-bold text-slate-950 text-sm block">{p.description || p.name}</span>
                           {p.partNumber && (
-                            <span className="text-xs font-mono text-slate-500">Part #: <strong>{p.partNumber}</strong></span>
+                            <span className="text-xs font-mono text-slate-950 font-bold">Part #: <strong>{p.partNumber}</strong></span>
                           )}
                           {p.notes && (
-                            <p className="text-[11px] text-slate-500 italic mt-0.5">{p.notes}</p>
+                            <p className="text-[11px] text-slate-900 italic mt-0.5 font-medium">{p.notes}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="px-2.5 py-1 bg-slate-100 text-slate-800 font-bold rounded-lg border border-slate-200 text-xs">
+                          <span className="px-2.5 py-1 bg-slate-200 text-slate-950 font-black rounded-lg border border-slate-300 text-xs">
                             Qty: {p.quantity || 1}
                           </span>
-                          <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 text-[11px] uppercase">
+                          <span className="px-2.5 py-1 bg-blue-100 text-blue-950 font-black rounded-lg border border-blue-300 text-[11px] uppercase">
                             {p.status?.replace(/_/g, ' ') || 'LOGGED'}
                           </span>
                         </div>
@@ -1567,41 +1567,41 @@ export const RepairQuoteModal: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-600 flex items-start sm:items-center gap-3 shadow-2xs">
-                  <Package className="w-5 h-5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
+                <div className="p-4 bg-white rounded-xl border border-slate-300 text-xs text-slate-900 flex items-start sm:items-center gap-3 shadow-2xs">
+                  <Package className="w-5 h-5 text-slate-600 shrink-0 mt-0.5 sm:mt-0" />
                   <div className="leading-relaxed">
-                    <span className="font-bold text-slate-800 block">No parts currently logged on this RO.</span>
+                    <span className="font-bold text-slate-950 block">No parts currently logged on this RO.</span>
                     <span>If this job requires replacement parts, use the <strong>"Request Parts"</strong> button on your dashboard to submit a parts requisition to the Parts Counter.</span>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-300 p-4 sm:p-5 shadow-2xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                  <div className="p-2 bg-amber-100 text-amber-800 rounded-lg">
                     <Package className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 text-base">Required Parts & Materials</h3>
-                    <p className="text-xs text-slate-500">
+                    <h3 className="font-black text-slate-950 text-base">Required Parts & Materials</h3>
+                    <p className="text-xs text-slate-900 font-semibold">
                       OEM or aftermarket parts required to complete the repair
                     </p>
                   </div>
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-lg text-xs font-bold border border-amber-200">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-950 rounded-lg text-xs font-bold border border-amber-300">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
                   <span>Managed by Parts Specialist</span>
                 </div>
               </div>
 
               {partsItems.length === 0 ? (
                 <div className="text-center py-6 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-                  <Package className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
-                  <p className="text-xs font-semibold text-slate-600">No parts on quote yet (Labor only)</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <Package className="w-7 h-7 text-slate-600 mx-auto mb-1.5" />
+                  <p className="text-xs font-bold text-slate-900">No parts on quote yet (Labor only)</p>
+                  <p className="text-[11px] text-slate-800 font-semibold mt-0.5">
                     Parts requested through the Parts Counter will appear here automatically.
                   </p>
                 </div>
@@ -1610,10 +1610,10 @@ export const RepairQuoteModal: React.FC = () => {
                   {partsItems.map((part, index) => (
                     <div
                       key={part.id}
-                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors"
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-300 hover:border-slate-400 transition-colors"
                     >
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        <span className="text-xs font-bold text-slate-400 w-5 shrink-0">#{index + 1}</span>
+                        <span className="text-xs font-black text-slate-950 w-5 shrink-0">#{index + 1}</span>
 
                         {/* Part Description */}
                         <div className="flex-1 w-full">
@@ -1622,7 +1622,7 @@ export const RepairQuoteModal: React.FC = () => {
                             placeholder="e.g. Front Ceramic Brake Pad Set"
                             value={part.description}
                             onChange={(e) => handleUpdatePartItem(part.id, { description: e.target.value })}
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
                           />
                         </div>
 
@@ -1633,13 +1633,13 @@ export const RepairQuoteModal: React.FC = () => {
                             placeholder="Part # (optional)"
                             value={part.partNumber || ''}
                             onChange={(e) => handleUpdatePartItem(part.id, { partNumber: e.target.value })}
-                            className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
                           />
                         </div>
 
                         {/* Quantity */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Qty:</label>
+                          <label className="text-[11px] font-black text-slate-950 uppercase">Qty:</label>
                           <input
                             type="number"
                             min="1"
@@ -1652,15 +1652,15 @@ export const RepairQuoteModal: React.FC = () => {
                               });
                             }}
                             onFocus={(e) => e.target.select()}
-                            className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
 
                         {/* Unit Price */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Price:</label>
+                          <label className="text-[11px] font-black text-slate-950 uppercase">Price:</label>
                           <div className="relative w-24">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
                             <input
                               type="number"
                               step="0.01"
@@ -1682,15 +1682,15 @@ export const RepairQuoteModal: React.FC = () => {
                                 }
                               }}
                               onFocus={(e) => e.target.select()}
-                              className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                           </div>
                         </div>
 
                         {/* Line Subtotal */}
                         <div className="text-right w-24 shrink-0">
-                          <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
-                          <span className="text-sm font-extrabold text-slate-900 font-mono">
+                          <span className="text-[10px] text-slate-950 block uppercase font-black">Subtotal</span>
+                          <span className="text-sm font-black text-slate-950 font-mono">
                             ${(part.subtotal || 0).toFixed(2)}
                           </span>
                         </div>
@@ -1699,7 +1699,7 @@ export const RepairQuoteModal: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleRemovePartItem(part.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
+                          className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
                           title="Delete part item"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1709,7 +1709,7 @@ export const RepairQuoteModal: React.FC = () => {
                   ))}
 
                   {/* Parts Subtotal Bar */}
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/70 border border-amber-100 rounded-xl text-xs font-bold text-amber-900">
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-black text-amber-950">
                     <span>Total Parts Items: {partsItems.length}</span>
                     <span className="text-sm font-black font-mono">
                       Parts Total: ${totalPartsCost.toFixed(2)}
@@ -1724,15 +1724,15 @@ export const RepairQuoteModal: React.FC = () => {
           {isTech ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Technician Diagnostic Notes & Findings */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3">
+              <div className="bg-white rounded-2xl border border-slate-300 p-4 sm:p-5 shadow-2xs space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <h4 className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
                     <FileText className="w-4 h-4 text-blue-600" />
                     Technician Diagnostic Notes & Repair Scope
                   </h4>
-                  <span className="text-[10px] text-slate-400">Sent to Service Advisor</span>
+                  <span className="text-[10px] text-slate-950 font-bold">Sent to Service Advisor</span>
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-900 font-semibold">
                   Document diagnostic findings, test results, cause of component failure, and scope of recommended service.
                 </p>
                 <textarea
@@ -1740,7 +1740,7 @@ export const RepairQuoteModal: React.FC = () => {
                   placeholder="e.g. Inspected front brake assembly. Brake pads measured at 2mm (safety discard spec). Rotors have deep scoring beyond minimum refinish thickness. Caliper slide pins clean and free."
                   value={techNotes}
                   onChange={(e) => setTechNotes(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
+                  className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-950 placeholder:text-slate-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
                 />
               </div>
 
@@ -1752,25 +1752,25 @@ export const RepairQuoteModal: React.FC = () => {
                       <Clock className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 text-base">Job Labor Time Summary</h4>
-                      <p className="text-xs text-blue-700">Estimated repair duration entered by technician</p>
+                      <h4 className="font-black text-slate-950 text-base">Job Labor Time Summary</h4>
+                      <p className="text-xs text-blue-900 font-bold">Estimated repair duration entered by technician</p>
                     </div>
                   </div>
 
                   <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-100 shadow-2xs">
-                      <span className="text-xs font-semibold text-slate-600">Total Labor Operations:</span>
-                      <span className="text-sm font-bold text-slate-900">{laborItems.length} lines</span>
+                    <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-200 shadow-2xs">
+                      <span className="text-xs font-bold text-slate-950">Total Labor Operations:</span>
+                      <span className="text-sm font-black text-slate-950">{laborItems.length} lines</span>
                     </div>
 
                     <div className="flex items-center justify-between p-3.5 bg-blue-600 text-white rounded-xl shadow-sm">
-                      <span className="text-xs font-bold uppercase tracking-wide">Total Estimated Job Time:</span>
+                      <span className="text-xs font-black uppercase tracking-wide">Total Estimated Job Time:</span>
                       <span className="text-2xl font-black font-mono">{totalLaborHours.toFixed(1)} hrs</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-4 text-[11px] text-slate-500 border-t border-blue-100 mt-4 leading-relaxed">
+                <div className="pt-4 text-[11px] text-slate-900 font-bold border-t border-blue-200 mt-4 leading-relaxed">
                   Hourly labor rates, parts pricing, shop supplies, and taxes are applied automatically by the Service Advisor to generate the customer quote.
                 </div>
               </div>
@@ -1780,14 +1780,14 @@ export const RepairQuoteModal: React.FC = () => {
               
               {/* Left: Settings & Notes */}
               <div className="space-y-4">
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                <div className="bg-white rounded-2xl border border-slate-300 p-4 sm:p-5 shadow-2xs space-y-3">
+                  <h4 className="text-xs font-black text-slate-950 uppercase tracking-wider">
                     Supplies & Taxes
                   </h4>
 
                   {/* Shop Supplies Fee */}
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-950 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={applyShopSupplies}
@@ -1796,15 +1796,15 @@ export const RepairQuoteModal: React.FC = () => {
                       />
                       <span>Shop Supplies & Hazmat Fee (5% of labor)</span>
                     </label>
-                    <span className="text-xs font-mono font-bold text-slate-800">
+                    <span className="text-xs font-mono font-black text-slate-950">
                       ${calculatedShopSupplies.toFixed(2)}
                     </span>
                   </div>
 
                   {/* Sales Tax */}
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap">
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-slate-700">Sales Tax on Parts:</span>
+                      <span className="text-xs font-bold text-slate-950">Sales Tax on Parts:</span>
                       {!isTaxExempt ? (
                         <div className="flex items-center gap-1">
                           <input
@@ -1814,14 +1814,14 @@ export const RepairQuoteModal: React.FC = () => {
                             max="20"
                             value={taxRatePercent}
                             onChange={(e) => setTaxRatePercent(Number(e.target.value) || 0)}
-                            className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-bold"
+                            className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-center font-black text-slate-950"
                             title="Standard 7% sales tax rate"
                           />
-                          <span className="text-xs text-slate-500 font-bold">%</span>
+                          <span className="text-xs text-slate-950 font-black">%</span>
                         </div>
                       ) : (
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded border border-emerald-300 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-950 text-[10px] font-black uppercase rounded border border-emerald-300 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-700" />
                           0% Tax Exempt
                         </span>
                       )}
@@ -1833,7 +1833,7 @@ export const RepairQuoteModal: React.FC = () => {
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
                           isTaxExempt 
                             ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs hover:bg-emerald-700' 
-                            : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-300'
+                            : 'bg-slate-100 hover:bg-emerald-50 text-slate-900 hover:text-emerald-900 border-slate-300 hover:border-emerald-300'
                         }`}
                         title={isTaxExempt ? "Customer is marked Tax Exempt. Click to remove exemption." : "Click if customer is Tax Exempt (0% sales tax)"}
                       >
@@ -1841,92 +1841,92 @@ export const RepairQuoteModal: React.FC = () => {
                         <span>{isTaxExempt ? 'Tax Exempt Active ✓' : 'Click if Tax Exempt'}</span>
                       </button>
                     </div>
-                    <span className={`text-xs font-mono font-bold ${isTaxExempt ? 'text-emerald-600' : 'text-slate-800'}`}>
+                    <span className={`text-xs font-mono font-black ${isTaxExempt ? 'text-emerald-700' : 'text-slate-950'}`}>
                       ${estimatedTaxAmount.toFixed(2)}
                     </span>
                   </div>
                 </div>
 
                 {/* Technician Quote Remarks / Customer Explanation */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-2">
+                <div className="bg-white rounded-2xl border border-slate-300 p-4 sm:p-5 shadow-2xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <h4 className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-blue-600" />
                       Technician Notes & Scope Details
                     </h4>
-                    <span className="text-[10px] text-slate-400">Visible to Advisor & Customer</span>
+                    <span className="text-[10px] text-slate-950 font-bold">Visible to Advisor & Customer</span>
                   </div>
                   <textarea
                     rows={3}
                     placeholder="Explain findings, why parts are needed, warranty details (e.g. 12mo/12k mile warranty), or any secondary safety concerns observed during inspection..."
                     value={techNotes}
                     onChange={(e) => setTechNotes(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-950 placeholder:text-slate-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
 
               {/* Right: Financial Summary Card */}
-              <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-800 flex flex-col justify-between space-y-5 print:bg-white print:text-black print:border-2 print:border-black">
+              <div className="bg-slate-950 text-white rounded-2xl p-5 shadow-xl border border-slate-800 flex flex-col justify-between space-y-5 print:bg-white print:text-black print:border-2 print:border-black">
                 <div>
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800 print:border-black">
-                    <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider print:text-black">
+                    <h4 className="text-sm font-black text-white uppercase tracking-wider print:text-black">
                       Official Quote Summary
                     </h4>
-                    <span className="text-xs font-mono text-blue-400 print:text-black">
+                    <span className="text-xs font-mono font-bold text-white print:text-black">
                       RO #{activeQuoteRO.id}
                     </span>
                   </div>
 
                   <div className="space-y-3 pt-4 text-xs">
-                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                    <div className="flex items-center justify-between text-white font-bold print:text-black">
                       <span>Labor ({totalLaborHours.toFixed(1)} hrs @ ${Number(defaultRate).toFixed(2)}/hr):</span>
-                      <span className="font-mono font-bold text-white print:text-black">${totalLaborCost.toFixed(2)}</span>
+                      <span className="font-mono font-black text-white print:text-black">${totalLaborCost.toFixed(2)}</span>
                     </div>
 
-                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                    <div className="flex items-center justify-between text-white font-bold print:text-black">
                       <span>Parts & Materials ({partsItems.length} item{partsItems.length === 1 ? '' : 's'}):</span>
-                      <span className="font-mono font-bold text-white print:text-black">${totalPartsCost.toFixed(2)}</span>
+                      <span className="font-mono font-black text-white print:text-black">${totalPartsCost.toFixed(2)}</span>
                     </div>
 
-                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                    <div className="flex items-center justify-between text-white font-bold print:text-black">
                       <span>Shop Supplies & Environmental:</span>
-                      <span className="font-mono font-bold text-white print:text-black">${calculatedShopSupplies.toFixed(2)}</span>
+                      <span className="font-mono font-black text-white print:text-black">${calculatedShopSupplies.toFixed(2)}</span>
                     </div>
 
-                    <div className="flex items-center justify-between text-slate-300 print:text-black">
+                    <div className="flex items-center justify-between text-white font-bold print:text-black">
                       <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
-                      <span className={`font-mono font-bold print:text-black ${isTaxExempt ? 'text-emerald-400' : 'text-white'}`}>${estimatedTaxAmount.toFixed(2)}</span>
+                      <span className={`font-mono font-black print:text-black ${isTaxExempt ? 'text-emerald-300' : 'text-white'}`}>${estimatedTaxAmount.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Grand Total Callout */}
-                <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 print:bg-slate-100 print:border-black">
+                <div className="p-4 bg-slate-900 rounded-xl border border-slate-700 print:bg-slate-100 print:border-black">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block print:text-black">
+                      <span className="text-xs font-black text-white uppercase tracking-wider block print:text-black">
                         Grand Total Estimate
                       </span>
-                      <span className="text-[11px] text-slate-400 print:text-black">Parts, Labor, Supplies & Tax included</span>
+                      <span className="text-[11px] text-slate-100 font-bold print:text-black">Parts, Labor, Supplies & Tax included</span>
                     </div>
-                    <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight print:text-black">
+                    <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono tracking-tight print:text-black">
                       ${grandTotal.toFixed(2)}
                     </div>
                   </div>
                 </div>
 
                 {/* Quote Status / Metadata */}
-                <div className="text-[11px] text-slate-400 space-y-1 pt-2 border-t border-slate-800 print:border-black print:text-black">
-                  <div>Initiated by: <strong className="text-slate-200 print:text-black">{quote?.initiatedByTechName || currentUser.name}</strong></div>
+                <div className="text-[11px] text-slate-100 font-semibold space-y-1 pt-2 border-t border-slate-800 print:border-black print:text-black">
+                  <div>Initiated by: <strong className="text-white font-bold print:text-black">{quote?.initiatedByTechName || currentUser.name}</strong></div>
                   {quote?.submittedAt && (
-                    <div>Submitted at: {new Date(quote.submittedAt).toLocaleDateString()} {new Date(quote.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    <div>Submitted at: <strong className="text-white font-bold">{new Date(quote.submittedAt).toLocaleDateString()} {new Date(quote.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
                   )}
                   {quote?.approvedBy && (
-                    <div className="text-emerald-400 print:text-black font-semibold">Authorized by: {quote.approvedBy}</div>
+                    <div className="text-emerald-300 print:text-black font-bold">Authorized by: {quote.approvedBy}</div>
                   )}
                   {quote?.declinedReason && (
-                    <div className="text-rose-400 print:text-black">Declined reason: {quote.declinedReason}</div>
+                    <div className="text-rose-300 print:text-black font-bold">Declined reason: {quote.declinedReason}</div>
                   )}
                 </div>
               </div>
@@ -1938,19 +1938,19 @@ export const RepairQuoteModal: React.FC = () => {
           {showCorrectionEditor && (
             <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-xl space-y-3 animate-fade-in print:hidden shadow-md">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+                <div className="flex items-center gap-2 text-emerald-950 font-black text-sm">
                   <Wrench className="w-4 h-4 text-emerald-700" />
                   <span>Update Technician Correction on RO #{cleanRO.id}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowCorrectionEditor(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  className="text-slate-600 hover:text-slate-900 p-1 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-xs text-emerald-800">
+              <p className="text-xs text-emerald-950 font-bold">
                 This will save directly to the Repair Order and immediately mirror across all quote and labor estimate line items.
               </p>
               <textarea
@@ -1958,14 +1958,14 @@ export const RepairQuoteModal: React.FC = () => {
                 placeholder="e.g. Replaced front brake pads and rotors, lubed caliper slide pins, flushed brake fluid, and road tested 5 miles..."
                 value={correctionInput}
                 onChange={(e) => setCorrectionInput(e.target.value)}
-                className="w-full p-2.5 bg-white border border-emerald-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="w-full p-2.5 bg-white border border-emerald-300 rounded-lg text-xs text-slate-950 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 autoFocus
               />
               <div className="flex items-center gap-2 justify-end">
                 <button
                   type="button"
                   onClick={() => setShowCorrectionEditor(false)}
-                  className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-300 transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-200 text-slate-900 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1984,7 +1984,7 @@ export const RepairQuoteModal: React.FC = () => {
           {/* Decline Prompt Modal for Advisor/Manager */}
           {showDeclinePrompt && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3 animate-fade-in print:hidden">
-              <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+              <div className="flex items-center gap-2 text-rose-950 font-black text-sm">
                 <AlertCircle className="w-4 h-4" />
                 <span>Document Customer Decline Reason</span>
               </div>
@@ -1993,13 +1993,13 @@ export const RepairQuoteModal: React.FC = () => {
                 placeholder="e.g. Customer decided to trade in vehicle / Price exceeded budget / Postponing until next month..."
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
-                className="w-full p-2.5 bg-white border border-rose-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                className="w-full p-2.5 bg-white border border-rose-300 rounded-lg text-xs text-slate-950 font-bold focus:ring-2 focus:ring-rose-500 focus:outline-none"
               />
               <div className="flex items-center gap-2 justify-end">
                 <button
                   type="button"
                   onClick={() => setShowDeclinePrompt(false)}
-                  className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-300 transition-colors"
+                  className="px-3 py-1.5 bg-slate-200 text-slate-900 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors"
                 >
                   Cancel
                 </button>
@@ -2017,15 +2017,15 @@ export const RepairQuoteModal: React.FC = () => {
         </div>
 
         {/* Footer Actions */}
-        <div className="bg-slate-100 px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
+        <div className="bg-slate-100 px-6 py-4 border-t border-slate-300 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               id="close-quote-footer-btn"
               type="button"
               onClick={handleCloseModal}
-              className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer w-full sm:w-auto text-center flex items-center justify-center gap-1.5"
+              className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-900 rounded-xl text-xs font-bold border border-slate-300 transition-colors cursor-pointer w-full sm:w-auto text-center flex items-center justify-center gap-1.5"
             >
-              <X className="w-4 h-4 text-slate-400" />
+              <X className="w-4 h-4 text-slate-700" />
               <span>Exit Quote</span>
             </button>
 
@@ -2035,9 +2035,9 @@ export const RepairQuoteModal: React.FC = () => {
                 id="print-quote-footer-btn"
                 type="button"
                 onClick={handlePrint}
-                className="px-3.5 py-2.5 bg-white hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-3.5 py-2.5 bg-white hover:bg-slate-200 text-slate-900 rounded-xl text-xs font-bold border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
               >
-                <Printer className="w-4 h-4 text-slate-500" />
+                <Printer className="w-4 h-4 text-slate-700" />
                 <span>Print Quote</span>
               </button>
             )}
@@ -2051,7 +2051,7 @@ export const RepairQuoteModal: React.FC = () => {
                   id="decline-quote-btn"
                   type="button"
                   onClick={() => setShowDeclinePrompt(true)}
-                  className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <XCircle className="w-4 h-4" />
                   <span>Customer Declined</span>
@@ -2061,7 +2061,7 @@ export const RepairQuoteModal: React.FC = () => {
                   id="authorize-quote-btn"
                   type="button"
                   onClick={handleApproveQuote}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Authorize & Approve ($ {(Number(grandTotal) || 0).toFixed(2)})</span>
@@ -2074,9 +2074,9 @@ export const RepairQuoteModal: React.FC = () => {
               id="save-quote-draft-btn"
               type="button"
               onClick={() => handleSave(false)}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Save className="w-4 h-4 text-slate-300" />
+              <Save className="w-4 h-4 text-white" />
               <span>{isTech ? 'Save Labor Time' : 'Save Draft'}</span>
             </button>
 
@@ -2087,7 +2087,7 @@ export const RepairQuoteModal: React.FC = () => {
               onClick={() => handleSave(true)}
               className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all hover:scale-102 active:scale-98 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 text-white" />
               <span>
                 {isTech 
                   ? `Submit Labor Time to Advisor (${totalLaborHours.toFixed(1)} hrs)` 
@@ -2104,38 +2104,38 @@ export const RepairQuoteModal: React.FC = () => {
       {typeof document !== 'undefined' && createPortal(
         <div 
           id="printable-quote-document"
-          className="bg-white text-slate-950 max-w-4xl mx-auto space-y-4 font-sans text-xs"
+          className="bg-white text-black max-w-4xl mx-auto space-y-4 font-sans text-xs"
         >
         {/* Dealership & Repair Quote Header */}
-        <div className="border-b-2 border-slate-950 pb-3">
+        <div className="border-b-2 border-black pb-3">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-2xl font-black tracking-tight text-slate-950 uppercase">
+              <div className="text-2xl font-black tracking-tight text-black uppercase">
                 {shopName || 'Precision Auto & Truck Service'}
               </div>
-              <div className="text-xs font-bold text-slate-700 tracking-wider uppercase mt-0.5">
+              <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
                 Official Repair Quote & Estimate • Service Department
               </div>
-              <div className="text-[11px] text-slate-600 mt-0.5">
+              <div className="text-[11px] font-bold text-black mt-0.5">
                 Certified Automotive Service • OEM & High-Grade Replacement Specifications
               </div>
             </div>
 
             <div className="text-right shrink-0">
-              <div className="inline-block px-3 py-1 bg-slate-950 text-white font-mono font-black text-sm rounded">
+              <div className="inline-block px-3 py-1 bg-white text-black font-mono font-black text-sm rounded border-2 border-black">
                 RO #{activeQuoteRO.id}
               </div>
-              <div className="text-[11px] text-slate-800 font-semibold mt-1 font-mono">
+              <div className="text-[11px] text-black font-bold mt-1 font-mono">
                 Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
-              <div className="text-[11px] font-bold mt-0.5">
+              <div className="text-[11px] font-black text-black mt-0.5">
                 Status:{' '}
-                {quoteStatus === 'APPROVED' && <span className="text-emerald-700 font-black">AUTHORIZED BY CUSTOMER</span>}
-                {quoteStatus === 'SUBMITTED' && <span className="text-blue-700 font-black">PENDING AUTHORIZATION</span>}
-                {quoteStatus === 'DECLINED' && <span className="text-rose-700 font-black">DECLINED BY CUSTOMER</span>}
-                {quoteStatus === 'DRAFT' && <span className="text-amber-700 font-black">ESTIMATE DRAFT</span>}
+                {quoteStatus === 'APPROVED' && <span className="text-black font-black uppercase underline">AUTHORIZED BY CUSTOMER</span>}
+                {quoteStatus === 'SUBMITTED' && <span className="text-black font-black uppercase underline">PENDING AUTHORIZATION</span>}
+                {quoteStatus === 'DECLINED' && <span className="text-black font-black uppercase underline">DECLINED BY CUSTOMER</span>}
+                {quoteStatus === 'DRAFT' && <span className="text-black font-black uppercase underline">ESTIMATE DRAFT</span>}
               </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+              <div className="text-[10px] text-black font-mono font-bold mt-0.5">
                 Advisor: {activeQuoteRO.advisorName}
               </div>
             </div>
@@ -2143,50 +2143,48 @@ export const RepairQuoteModal: React.FC = () => {
         </div>
 
         {/* Customer & Vehicle Information Grid */}
-        <div className="grid grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-300 text-xs">
+        <div className="grid grid-cols-4 gap-3 bg-white p-3 rounded-lg border-2 border-black text-xs">
           <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase block">Customer Information</span>
-            <span className="font-bold text-slate-950 text-sm block">{activeQuoteRO.customerName}</span>
-            <span className="text-slate-700 block text-[11px] font-medium">{activeQuoteRO.customerPhone}</span>
+            <span className="text-[10px] font-black text-black uppercase block">Customer Information</span>
+            <span className="font-black text-black text-sm block">{activeQuoteRO.customerName}</span>
+            <span className="text-black block text-[11px] font-bold">{activeQuoteRO.customerPhone}</span>
             <div className="mt-1">
-              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-                isTaxExempt ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-slate-200 text-slate-800 border-slate-300'
-              }`}>
+              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase border border-black bg-white text-black">
                 {isTaxExempt ? `0.00% Tax Exempt${taxExemptNumber ? ` (Cert #${taxExemptNumber})` : ''}` : 'Taxable (7.00%)'}
               </span>
             </div>
           </div>
 
           <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle Year / Make / Model</span>
-            <span className="font-bold text-slate-950 text-sm block">
+            <span className="text-[10px] font-black text-black uppercase block">Vehicle Year / Make / Model</span>
+            <span className="font-black text-black text-sm block">
               {vehicle.year} {vehicle.make} {vehicle.model}
             </span>
-            <span className="text-slate-700 block text-[11px]">
+            <span className="text-black block text-[11px] font-bold">
               Mileage: {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : 'N/A'}
             </span>
             {vehicle.engine && (
-              <span className="text-slate-600 block text-[10px]">Engine: {vehicle.engine}</span>
+              <span className="text-black block text-[10px] font-bold">Engine: {vehicle.engine}</span>
             )}
           </div>
 
           <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle VIN (17-Digit)</span>
-            <span className="font-mono font-black text-slate-950 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 inline-block text-[11px]">
+            <span className="text-[10px] font-black text-black uppercase block">Vehicle VIN (17-Digit)</span>
+            <span className="font-mono font-black text-black bg-white px-1.5 py-0.5 rounded border border-black inline-block text-[11px]">
               {vehicle.vin || 'N/A'}
             </span>
-            <span className="text-slate-600 block text-[11px] mt-0.5 font-mono">
+            <span className="text-black block text-[11px] mt-0.5 font-mono font-bold">
               Tag: RO #{activeQuoteRO.id}
             </span>
           </div>
 
           <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase block">Service Assignment</span>
-            <span className="text-slate-800 block">
-              Advisor: <strong className="font-bold text-slate-950">{activeQuoteRO.advisorName}</strong>
+            <span className="text-[10px] font-black text-black uppercase block">Service Assignment</span>
+            <span className="text-black font-semibold block">
+              Advisor: <strong className="font-black text-black">{activeQuoteRO.advisorName}</strong>
             </span>
-            <span className="text-slate-800 block">
-              Technician: <strong className="font-bold text-slate-950">{activeQuoteRO.techName || quote?.initiatedByTechName || 'Assigned Tech'}</strong>
+            <span className="text-black font-semibold block">
+              Technician: <strong className="font-black text-black">{activeQuoteRO.techName || quote?.initiatedByTechName || 'Assigned Tech'}</strong>
             </span>
           </div>
         </div>
@@ -2194,14 +2192,14 @@ export const RepairQuoteModal: React.FC = () => {
         {/* Customer Stated Complaints / Concerns */}
         {((activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0) || activeQuoteRO.primaryConcern) && (
           <div>
-            <div className="text-xs font-black text-slate-950 uppercase tracking-wider mb-1 flex items-center gap-1.5 border-b border-slate-300 pb-1">
+            <div className="text-xs font-black text-black uppercase tracking-wider mb-1 flex items-center gap-1.5 border-b-2 border-black pb-1">
               <span>Customer Stated Concern(s):</span>
             </div>
             <div className="space-y-1">
               {(activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0 ? activeQuoteRO.concerns : [activeQuoteRO.primaryConcern!]).map((c, idx) => (
-                <div key={idx} className="bg-slate-50 p-1.5 rounded border border-slate-300 text-xs flex items-start gap-2">
-                  <span className="text-[10px] font-mono font-bold bg-slate-200 px-1.5 py-0.2 rounded shrink-0">Line {idx + 1}</span>
-                  <span className="font-medium text-slate-900">{c}</span>
+                <div key={idx} className="bg-white p-1.5 rounded border border-black text-xs flex items-start gap-2">
+                  <span className="text-[10px] font-mono font-black border border-black px-1.5 py-0.2 rounded shrink-0 bg-white text-black">Line {idx + 1}</span>
+                  <span className="font-bold text-black">{c}</span>
                 </div>
               ))}
             </div>
@@ -2212,15 +2210,15 @@ export const RepairQuoteModal: React.FC = () => {
         {(activeQuoteRO.cause || activeQuoteRO.correction || techNotes) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             {activeQuoteRO.cause && (
-              <div className="bg-amber-50/60 p-2 rounded-lg border border-amber-300">
-                <span className="text-[10px] font-bold text-amber-900 uppercase block mb-0.5">Diagnostic Finding / Cause:</span>
-                <p className="font-mono text-slate-900 leading-snug">{activeQuoteRO.cause}</p>
+              <div className="bg-white p-2 rounded-lg border-2 border-black">
+                <span className="text-[10px] font-black text-black uppercase block mb-0.5">Diagnostic Finding / Cause:</span>
+                <p className="font-mono text-black font-bold leading-snug">{activeQuoteRO.cause}</p>
               </div>
             )}
             {activeQuoteRO.correction && (
-              <div className="bg-emerald-50/60 p-2 rounded-lg border border-emerald-300">
-                <span className="text-[10px] font-bold text-emerald-900 uppercase block mb-0.5">Recommended Correction:</span>
-                <p className="font-mono text-slate-900 leading-snug">{activeQuoteRO.correction}</p>
+              <div className="bg-white p-2 rounded-lg border-2 border-black">
+                <span className="text-[10px] font-black text-black uppercase block mb-0.5">Recommended Correction:</span>
+                <p className="font-mono text-black font-bold leading-snug">{activeQuoteRO.correction}</p>
               </div>
             )}
           </div>
@@ -2228,9 +2226,9 @@ export const RepairQuoteModal: React.FC = () => {
 
         {/* Itemized by RO Line Items (Complaint, Concern/Cause, Correction, Labor & Parts) */}
         <div className="space-y-4">
-          <div className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center justify-between border-b border-slate-300 pb-1">
+          <div className="text-xs font-black text-black uppercase tracking-wider flex items-center justify-between border-b-2 border-black pb-1">
             <span>Itemized Repair Estimate & Work Order (By Line Item)</span>
-            <span className="text-[11px] font-bold text-slate-600 font-mono">
+            <span className="text-[11px] font-black text-black font-mono">
               Labor Rate: ${defaultRate.toFixed(2)}/hr ({quotePayType === 'CUSTOMER_PAY' ? 'Customer Pay' : quotePayType === 'WARRANTY' ? 'Warranty' : 'Internal'})
             </span>
           </div>
@@ -2251,32 +2249,32 @@ export const RepairQuoteModal: React.FC = () => {
             const lineTotalSum = lineLaborCostSum + linePartsCostSum;
 
             return (
-              <div key={idx} className="border border-slate-300 rounded-lg overflow-hidden space-y-0">
+              <div key={idx} className="border-2 border-black rounded-lg overflow-hidden space-y-0">
                 {/* Line Header Banner: Complaint, Concern/Cause, Correction */}
-                <div className="bg-slate-100 p-2.5 border-b border-slate-300 space-y-1">
+                <div className="bg-slate-100 p-2.5 border-b-2 border-black space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white">
+                      <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-white text-black border border-black">
                         Line #{lineNum}
                       </span>
-                      <span className="font-bold text-slate-950 text-xs">
+                      <span className="font-black text-black text-xs">
                         1. Complaint: {concern}
                       </span>
                     </div>
-                    <span className="font-mono text-xs font-black text-indigo-950 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+                    <span className="font-mono text-xs font-black text-black bg-white border border-black px-2 py-0.5 rounded">
                       Line Total: ${lineTotalSum.toFixed(2)}
                     </span>
                   </div>
 
                   {/* 2. Concern / Cause & 3. Correction */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
-                    <div className="bg-white p-1.5 rounded border border-slate-200">
-                      <strong className="text-amber-900 uppercase text-[9px] tracking-wider block">2. Concern / Cause (Diagnostic Finding):</strong>
-                      <span className="font-mono text-slate-800">{lineCause || <span className="italic text-slate-400 font-sans">Pending diagnosis</span>}</span>
+                    <div className="bg-white p-1.5 rounded border border-black">
+                      <strong className="text-black uppercase text-[9px] font-black tracking-wider block">2. Concern / Cause (Diagnostic Finding):</strong>
+                      <span className="font-mono font-bold text-black">{lineCause || <span className="italic text-black font-sans font-semibold">Pending diagnosis</span>}</span>
                     </div>
-                    <div className="bg-white p-1.5 rounded border border-slate-200">
-                      <strong className="text-emerald-900 uppercase text-[9px] tracking-wider block">3. Correction (Repair Procedure):</strong>
-                      <span className="font-mono text-slate-800">{lineCorrection || <span className="italic text-slate-400 font-sans">Pending technician repair plan</span>}</span>
+                    <div className="bg-white p-1.5 rounded border border-black">
+                      <strong className="text-black uppercase text-[9px] font-black tracking-wider block">3. Correction (Repair Procedure):</strong>
+                      <span className="font-mono font-bold text-black">{lineCorrection || <span className="italic text-black font-sans font-semibold">Pending technician repair plan</span>}</span>
                     </div>
                   </div>
                 </div>
@@ -2284,32 +2282,32 @@ export const RepairQuoteModal: React.FC = () => {
                 {/* Operations & Parts Table for this Line */}
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
-                      <th className="py-1 px-2 w-16 text-center border-r border-slate-200">Category</th>
-                      <th className="py-1 px-3 border-r border-slate-200">Description / Part #</th>
-                      <th className="py-1 px-2.5 w-20 text-center border-r border-slate-200">Qty / Hrs</th>
-                      <th className="py-1 px-2.5 w-24 text-right border-r border-slate-200">Rate / Price</th>
+                    <tr className="bg-slate-100 border-b-2 border-black text-[10px] font-black text-black uppercase">
+                      <th className="py-1 px-2 w-16 text-center border-r border-black">Category</th>
+                      <th className="py-1 px-3 border-r border-black">Description / Part #</th>
+                      <th className="py-1 px-2.5 w-20 text-center border-r border-black">Qty / Hrs</th>
+                      <th className="py-1 px-2.5 w-24 text-right border-r border-black">Rate / Price</th>
                       <th className="py-1 px-3 w-24 text-right">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
                     {/* Labor items for this line */}
                     {lineLabor.map((item) => (
-                      <tr key={item.id} className="border-b border-slate-200/80 bg-white">
-                        <td className="py-1 px-2 text-center border-r border-slate-200">
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-900">Labor</span>
+                      <tr key={item.id} className="border-b border-black/30 bg-white">
+                        <td className="py-1 px-2 text-center border-r border-black/30">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black border border-black bg-white text-black">Labor</span>
                         </td>
-                        <td className="py-1 px-3 border-r border-slate-200">
-                          <span className="font-semibold text-slate-900">{item.description}</span>
-                          {item.techNotes && <div className="text-[10px] text-slate-500 font-mono">{item.techNotes}</div>}
+                        <td className="py-1 px-3 border-r border-black/30">
+                          <span className="font-bold text-black">{item.description}</span>
+                          {item.techNotes && <div className="text-[10px] text-black font-mono font-bold">{item.techNotes}</div>}
                         </td>
-                        <td className="py-1 px-2.5 text-center font-mono border-r border-slate-200">
+                        <td className="py-1 px-2.5 text-center font-mono font-bold text-black border-r border-black/30">
                           {(Number(item.laborHours) || 0).toFixed(1)}h
                         </td>
-                        <td className="py-1 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">
+                        <td className="py-1 px-2.5 text-right font-mono font-bold text-black border-r border-black/30">
                           ${(Number(item.hourlyRate) || 0).toFixed(2)}
                         </td>
-                        <td className="py-1 px-3 text-right font-mono font-bold text-slate-950">
+                        <td className="py-1 px-3 text-right font-mono font-black text-black">
                           ${(Number(item.subtotal) || 0).toFixed(2)}
                         </td>
                       </tr>
@@ -2317,21 +2315,21 @@ export const RepairQuoteModal: React.FC = () => {
 
                     {/* Parts items for this line */}
                     {lineParts.map((part) => (
-                      <tr key={part.id} className="border-b border-slate-200/80 bg-amber-50/20">
-                        <td className="py-1 px-2 text-center border-r border-slate-200">
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900">Part</span>
+                      <tr key={part.id} className="border-b border-black/30 bg-white">
+                        <td className="py-1 px-2 text-center border-r border-black/30">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black border border-black bg-white text-black">Part</span>
                         </td>
-                        <td className="py-1 px-3 border-r border-slate-200">
-                          <span className="font-semibold text-slate-900">{part.description}</span>
-                          {part.partNumber && <span className="text-[10px] text-slate-500 font-mono ml-1.5">#{part.partNumber}</span>}
+                        <td className="py-1 px-3 border-r border-black/30">
+                          <span className="font-bold text-black">{part.description}</span>
+                          {part.partNumber && <span className="text-[10px] text-black font-mono font-bold ml-1.5">#{part.partNumber}</span>}
                         </td>
-                        <td className="py-1 px-2.5 text-center font-mono border-r border-slate-200">
+                        <td className="py-1 px-2.5 text-center font-mono font-bold text-black border-r border-black/30">
                           {part.quantity}
                         </td>
-                        <td className="py-1 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">
+                        <td className="py-1 px-2.5 text-right font-mono font-bold text-black border-r border-black/30">
                           ${(Number(part.unitPrice) || 0).toFixed(2)}
                         </td>
-                        <td className="py-1 px-3 text-right font-mono font-bold text-slate-950">
+                        <td className="py-1 px-3 text-right font-mono font-black text-black">
                           ${(Number(part.subtotal) || 0).toFixed(2)}
                         </td>
                       </tr>
@@ -2339,18 +2337,18 @@ export const RepairQuoteModal: React.FC = () => {
 
                     {lineLabor.length === 0 && lineParts.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-2 text-center text-slate-400 italic text-[11px]">
+                        <td colSpan={5} className="py-2 text-center text-black font-bold italic text-[11px]">
                           No labor or parts priced for this line yet
                         </td>
                       </tr>
                     )}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-100/80 font-bold border-t border-slate-300">
-                      <td colSpan={4} className="py-1 px-3 text-right text-slate-700 uppercase text-[10px]">
+                    <tr className="bg-slate-100 font-bold border-t-2 border-black">
+                      <td colSpan={4} className="py-1 px-3 text-right text-black uppercase text-[10px] font-black">
                         Line #{lineNum} Subtotal (Labor ${lineLaborCostSum.toFixed(2)} + Parts ${linePartsCostSum.toFixed(2)}):
                       </td>
-                      <td className="py-1 px-3 text-right font-mono font-black text-slate-950 text-xs">
+                      <td className="py-1 px-3 text-right font-mono font-black text-black text-xs">
                         ${lineTotalSum.toFixed(2)}
                       </td>
                     </tr>
@@ -2362,8 +2360,8 @@ export const RepairQuoteModal: React.FC = () => {
 
           {/* Additional Advisor Labor Operations (if any) */}
           {laborItems.filter(item => item.addedByAdvisor).length > 0 && (
-            <div className="border border-purple-200 rounded-lg overflow-hidden space-y-0">
-              <div className="bg-purple-50 p-2 border-b border-purple-200 flex items-center justify-between text-xs font-bold text-purple-900">
+            <div className="border-2 border-black rounded-lg overflow-hidden space-y-0">
+              <div className="bg-slate-100 p-2 border-b-2 border-black flex items-center justify-between text-xs font-black text-black">
                 <span>Additional Service Advisor Operations</span>
                 <span>
                   ${laborItems.filter(item => item.addedByAdvisor).reduce((s, i) => s + (Number(i.subtotal) || 0), 0).toFixed(2)}
@@ -2372,11 +2370,11 @@ export const RepairQuoteModal: React.FC = () => {
               <table className="w-full text-left text-xs border-collapse">
                 <tbody>
                   {laborItems.filter(item => item.addedByAdvisor).map((item) => (
-                    <tr key={item.id} className="border-b border-purple-100 bg-white">
-                      <td className="py-1 px-3 font-semibold text-slate-900">{item.description}</td>
-                      <td className="py-1 px-2.5 w-20 text-center font-mono">{(Number(item.laborHours) || 0).toFixed(1)}h</td>
-                      <td className="py-1 px-2.5 w-24 text-right font-mono text-slate-700">${(Number(item.hourlyRate) || 0).toFixed(2)}</td>
-                      <td className="py-1 px-3 w-24 text-right font-mono font-bold text-slate-950">${(Number(item.subtotal) || 0).toFixed(2)}</td>
+                    <tr key={item.id} className="border-b border-black/30 bg-white">
+                      <td className="py-1 px-3 font-bold text-black">{item.description}</td>
+                      <td className="py-1 px-2.5 w-20 text-center font-mono font-bold text-black">{(Number(item.laborHours) || 0).toFixed(1)}h</td>
+                      <td className="py-1 px-2.5 w-24 text-right font-mono font-bold text-black">${(Number(item.hourlyRate) || 0).toFixed(2)}</td>
+                      <td className="py-1 px-3 w-24 text-right font-mono font-black text-black">${(Number(item.subtotal) || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2388,46 +2386,46 @@ export const RepairQuoteModal: React.FC = () => {
         {/* Financial Totals & Policies */}
         <div className="grid grid-cols-2 gap-4 pt-1 break-inside-avoid">
           {/* Left: Notes & Policies */}
-          <div className="space-y-2 text-[11px] text-slate-600">
-            <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-300 space-y-1">
-              <span className="font-bold text-slate-900 uppercase tracking-wider block text-[10px]">Warranty & Terms</span>
-              <p className="leading-snug text-[10px]">
+          <div className="space-y-2 text-[11px] text-black">
+            <div className="p-2.5 bg-white rounded-lg border-2 border-black space-y-1">
+              <span className="font-black text-black uppercase tracking-wider block text-[10px]">Warranty & Terms</span>
+              <p className="leading-snug text-[10px] text-black font-semibold">
                 All parts and labor are backed by our standard 12-Month / 12,000-Mile Warranty. Shop supplies and environmental hazmat fees cover consumables, fluid recycling, and shop equipment.
               </p>
               {techNotes && (
-                <div className="pt-1 border-t border-slate-200">
-                  <span className="font-bold text-slate-800 block text-[10px]">Technician Notes:</span>
-                  <p className="font-mono text-slate-800 text-[10px] leading-tight whitespace-pre-wrap">{techNotes}</p>
+                <div className="pt-1 border-t border-black">
+                  <span className="font-black text-black block text-[10px]">Technician Notes:</span>
+                  <p className="font-mono text-black font-bold text-[10px] leading-tight whitespace-pre-wrap">{techNotes}</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Right: Totals Table */}
-          <div className="border border-slate-400 rounded-lg overflow-hidden">
-            <div className="bg-slate-100 px-3 py-1 border-b border-slate-300 font-black text-xs uppercase tracking-wider text-slate-900">
+          <div className="border-2 border-black rounded-lg overflow-hidden bg-white">
+            <div className="bg-slate-100 px-3 py-1 border-b-2 border-black font-black text-xs uppercase tracking-wider text-black">
               Official Quote Summary
             </div>
             <div className="p-2.5 space-y-1 text-xs">
-              <div className="flex justify-between text-slate-700">
+              <div className="flex justify-between text-black font-bold">
                 <span>Labor Total ({totalLaborHours.toFixed(1)} hrs):</span>
-                <span className="font-mono font-bold text-slate-950">${totalLaborCost.toFixed(2)}</span>
+                <span className="font-mono font-black text-black">${totalLaborCost.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-700">
+              <div className="flex justify-between text-black font-bold">
                 <span>Parts & Materials ({partsItems.length} items):</span>
-                <span className="font-mono font-bold text-slate-950">${totalPartsCost.toFixed(2)}</span>
+                <span className="font-mono font-black text-black">${totalPartsCost.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-700">
+              <div className="flex justify-between text-black font-bold">
                 <span>Shop Supplies & Environmental:</span>
-                <span className="font-mono font-bold text-slate-950">${calculatedShopSupplies.toFixed(2)}</span>
+                <span className="font-mono font-black text-black">${calculatedShopSupplies.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-700">
+              <div className="flex justify-between text-black font-bold">
                 <span>Sales Tax (${(isTaxExempt ? 0 : Number(taxRatePercent || 0)).toFixed(2)}%):</span>
-                <span className="font-mono font-bold text-slate-950">${estimatedTaxAmount.toFixed(2)}</span>
+                <span className="font-mono font-black text-black">${estimatedTaxAmount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center pt-1.5 mt-1 border-t-2 border-slate-950 font-black">
-                <span className="text-slate-950 uppercase text-xs">Grand Total Estimate:</span>
-                <span className="font-mono text-slate-950 text-lg font-black">${grandTotal.toFixed(2)}</span>
+              <div className="flex justify-between items-center pt-1.5 mt-1 border-t-2 border-black font-black">
+                <span className="text-black uppercase text-xs font-black">Grand Total Estimate:</span>
+                <span className="font-mono text-black text-lg font-black">${grandTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
