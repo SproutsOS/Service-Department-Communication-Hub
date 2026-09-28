@@ -52,10 +52,10 @@ export const InitialSetupModal: React.FC = () => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: Shop & Manager
-  const [shopNameInput, setShopNameInput] = useState(existingShopName || 'My Service Department');
+  const [shopNameInput, setShopNameInput] = useState(existingShopName || 'Woolwine CDJR');
   const [mgrName, setMgrName] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.name !== 'Service Manager' ? currentUser.name : '');
   const [mgrEmployeeNumber, setMgrEmployeeNumber] = useState(currentUser.employeeNumber || '');
-  const [mgrEmail, setMgrEmail] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.email !== 'admin@precisionauto.com' ? currentUser.email : '');
+  const [mgrEmail, setMgrEmail] = useState(currentUser.role === 'SERVICE_MANAGER' && currentUser.email !== 'manager@woolwinecdjr.com' ? currentUser.email : '');
   const [mgrPin, setMgrPin] = useState(currentUser.pin || '1234');
   const [mgrTitle, setMgrTitle] = useState(currentUser.title || 'Service Manager');
   const [mgrPhone, setMgrPhone] = useState(currentUser.phone || '');
@@ -634,7 +634,7 @@ export const InitialSetupModal: React.FC = () => {
 
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1">
                 <div className="font-bold text-slate-800">Setup Summary:</div>
-                <div>• Shop Name: <span className="font-semibold text-slate-900">{shopNameInput || 'Precision Auto Care'}</span></div>
+                <div>• Shop Name: <span className="font-semibold text-slate-900">{shopNameInput || 'Woolwine CDJR'}</span></div>
                 <div>• Primary Manager: <span className="font-semibold text-slate-900">{mgrName} ({mgrEmail})</span></div>
                 <div>• Team Size: <span className="font-semibold text-slate-900">{staffDrafts.length + 1} employees registered</span></div>
               </div>

@@ -421,7 +421,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
       {/* Bottom Legal / Copyright Strip */}
       <footer className="relative z-10 w-full py-3 px-6 text-center text-[11px] text-slate-500 border-t border-slate-900 bg-slate-950/60">
-        Precision Auto Service Management System • Version 2.4.0 • Secure Terminal Access Only
+        {shopName ? `${shopName} Service Management System` : 'Woolwine CDJR Service Management System'} • Version 2.4.0 • Secure Terminal Access Only
       </footer>
 
     </div>

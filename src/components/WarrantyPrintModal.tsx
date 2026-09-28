@@ -195,7 +195,7 @@ export const WarrantyPrintModal: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase">
-                    {shopName || 'Service Department'}
+                    {shopName || 'Woolwine CDJR'}
                   </div>
                   <div className="text-xs font-bold text-slate-600 tracking-wider uppercase mt-0.5">
                     Warranty Repair & Labor Time Verification Record

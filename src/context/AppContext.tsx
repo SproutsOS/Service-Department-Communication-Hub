@@ -275,17 +275,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [shopName, setShopNameState] = useState<string>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_SHOP_NAME);
-      if (stored && stored !== 'Woolwine CDJR') {
-        return stored;
+      if (stored && stored.trim()) {
+        return stored.trim();
       }
-      try {
-        localStorage.removeItem(STORAGE_KEY_SHOP_NAME);
-      } catch {
-        // ignore
-      }
-      return '';
+      return 'Woolwine CDJR';
     } catch {
-      return '';
+      return 'Woolwine CDJR';
     }
   });
 
@@ -658,12 +653,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Subscribe to real-time Shop Settings
     const unsubscribeSettings = subscribeToShopSettings((cloudSettings) => {
       if (cloudSettings) {
-        if (cloudSettings.shopName && cloudSettings.shopName !== 'Woolwine CDJR') {
-          setShopNameState(cloudSettings.shopName);
-          localStorage.setItem(STORAGE_KEY_SHOP_NAME, cloudSettings.shopName);
-        } else if (cloudSettings.shopName === 'Woolwine CDJR') {
-          setShopNameState('');
-          try { localStorage.removeItem(STORAGE_KEY_SHOP_NAME); } catch {}
+        if (cloudSettings.shopName && cloudSettings.shopName.trim()) {
+          setShopNameState(cloudSettings.shopName.trim());
+          localStorage.setItem(STORAGE_KEY_SHOP_NAME, cloudSettings.shopName.trim());
         }
         if (typeof cloudSettings.isSetupCompleted === 'boolean') {
           setIsInitialSetupCompleted(cloudSettings.isSetupCompleted);
@@ -3444,14 +3436,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initialUsers: User[];
     startWithEmptyROs: boolean;
   }) => {
-    const trimmedShop = config.shopName.trim() || 'Precision Auto Care';
+    const trimmedShop = config.shopName.trim() || 'Woolwine CDJR';
     setShopName(trimmedShop);
 
     const managerUser: User = {
       id: `usr_mgr_${Date.now()}`,
       name: config.manager.name.trim() || 'Service Manager',
       employeeNumber: config.manager.employeeNumber?.trim() || undefined,
-      email: config.manager.email.trim().toLowerCase() || 'manager@precisionauto.com',
+      email: config.manager.email.trim().toLowerCase() || 'manager@woolwinecdjr.com',
       pin: config.manager.pin?.trim() || '1234',
       role: 'SERVICE_MANAGER',
       title: config.manager.title?.trim() || 'Service Director / General Manager',

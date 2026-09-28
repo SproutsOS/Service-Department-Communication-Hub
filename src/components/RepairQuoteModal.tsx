@@ -2111,7 +2111,7 @@ export const RepairQuoteModal: React.FC = () => {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-2xl font-black tracking-tight text-black uppercase">
-                {shopName || 'Precision Auto & Truck Service'}
+                {shopName || 'Woolwine CDJR'}
               </div>
               <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
                 Official Repair Quote & Estimate • Service Department
@@ -2188,41 +2188,6 @@ export const RepairQuoteModal: React.FC = () => {
             </span>
           </div>
         </div>
-
-        {/* Customer Stated Complaints / Concerns */}
-        {((activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0) || activeQuoteRO.primaryConcern) && (
-          <div>
-            <div className="text-xs font-black text-black uppercase tracking-wider mb-1 flex items-center gap-1.5 border-b-2 border-black pb-1">
-              <span>Customer Stated Concern(s):</span>
-            </div>
-            <div className="space-y-1">
-              {(activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0 ? activeQuoteRO.concerns : [activeQuoteRO.primaryConcern!]).map((c, idx) => (
-                <div key={idx} className="bg-white p-1.5 rounded border border-black text-xs flex items-start gap-2">
-                  <span className="text-[10px] font-mono font-black border border-black px-1.5 py-0.2 rounded shrink-0 bg-white text-black">Line {idx + 1}</span>
-                  <span className="font-bold text-black">{c}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Technician Findings / Diagnostics */}
-        {(activeQuoteRO.cause || activeQuoteRO.correction || techNotes) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {activeQuoteRO.cause && (
-              <div className="bg-white p-2 rounded-lg border-2 border-black">
-                <span className="text-[10px] font-black text-black uppercase block mb-0.5">Diagnostic Finding / Cause:</span>
-                <p className="font-mono text-black font-bold leading-snug">{activeQuoteRO.cause}</p>
-              </div>
-            )}
-            {activeQuoteRO.correction && (
-              <div className="bg-white p-2 rounded-lg border-2 border-black">
-                <span className="text-[10px] font-black text-black uppercase block mb-0.5">Recommended Correction:</span>
-                <p className="font-mono text-black font-bold leading-snug">{activeQuoteRO.correction}</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Itemized by RO Line Items (Complaint, Concern/Cause, Correction, Labor & Parts) */}
         <div className="space-y-4">
