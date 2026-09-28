@@ -2156,10 +2156,7 @@ export const RepairQuoteModal: React.FC = () => {
                 {shopName || 'Woolwine CDJR'}
               </div>
               <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
-                Official Repair Quote & Estimate • Service Department
-              </div>
-              <div className="text-[11px] font-bold text-black mt-0.5">
-                Certified Automotive Service • OEM & High-Grade Replacement Specifications
+                REPAIR ESTIMATE
               </div>
             </div>
 
@@ -2407,19 +2404,36 @@ export const RepairQuoteModal: React.FC = () => {
           className="quote-summary-block grid grid-cols-2 gap-4 pt-1 break-inside-avoid [page-break-inside:avoid]"
           style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
         >
-          {/* Left: Notes & Policies */}
-          <div className="space-y-2 text-[11px] text-black">
-            <div className="p-2.5 bg-white rounded-lg border-2 border-black space-y-1">
-              <span className="font-black text-black uppercase tracking-wider block text-[10px]">Warranty & Terms</span>
-              <p className="leading-snug text-[10px] text-black font-semibold">
-                All parts and labor are backed by our standard 12-Month / 12,000-Mile Warranty. Shop supplies and environmental hazmat fees cover consumables, fluid recycling, and shop equipment.
+          {/* Left: Hours, Warranty & Terms */}
+          <div className="border-2 border-black rounded-lg bg-white overflow-hidden text-black flex flex-col justify-between">
+            {/* Service Department Hours */}
+            <div className="p-2.5 text-center">
+              <div className="font-black text-black text-[11px] uppercase tracking-wider">
+                SERVICE DEPARTMENT HOURS:
+              </div>
+              <div className="font-black text-black text-[11px] mt-0.5">
+                7:30 AM TO 5:30 PM
+              </div>
+              <div className="font-black text-black text-[11px] mt-0.5">
+                MONDAY THROUGH FRIDAY
+              </div>
+            </div>
+
+            {/* Repair Warranty */}
+            <div className="p-2 text-center border-t-2 border-black">
+              <div className="font-black text-black text-[10px] uppercase tracking-wide">
+                ALL REPAIRS COVERED 90-DAYS OR 4000 MILES
+              </div>
+              <div className="font-black text-black text-[9.5px] uppercase tracking-wider mt-0.5">
+                WHICHEVER COMES FIRST
+              </div>
+            </div>
+
+            {/* Manufacturer Warranty Disclaimer */}
+            <div className="p-2 border-t-2 border-black">
+              <p className="text-[8.5px] leading-tight text-black font-bold uppercase text-justify">
+                ANY WARRANTIES ON THE PRODUCT SOLD HEREBY ARE THOSE MADE BY THE MANUFACTURER. THE SELLER HEREBY EXPRESSLY DISCLAIMS ALL WARRANTIES, EITHER EXPRESS OR IMPLIED, INCLUDING ANY IMPLIED WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, AND THE SELLER NEITHER ASSUMES NOR AUTHORIZES ANY OTHER PERSON TO ASSUME FOR IT ANY LIABILITY IN CONNECTION WITH THE SALE OF SAID PRODUCTS.
               </p>
-              {techNotes && (
-                <div className="pt-1 border-t border-black">
-                  <span className="font-black text-black block text-[10px]">Technician Notes:</span>
-                  <p className="font-mono text-black font-bold text-[10px] leading-tight whitespace-pre-wrap">{techNotes}</p>
-                </div>
-              )}
             </div>
           </div>
 
