@@ -2747,7 +2747,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return {
         id: matched?.id || `labor_${Date.now()}_ro_${idx}`,
-        description: correction ? `Concern: ${concern} — Correction: ${correction}` : `Concern: ${concern}`,
+        description: correction || '',
         laborHours: currentHours,
         hourlyRate: itemRate,
         subtotal,

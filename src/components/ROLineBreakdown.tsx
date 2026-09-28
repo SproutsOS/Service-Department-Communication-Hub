@@ -334,11 +334,11 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 </p>
               </div>
 
-              {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+              {/* 2. Cause (Technician Diagnostic Findings) */}
               <div className="space-y-1 pt-2 border-t border-slate-100">
                 <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
-                  <span>Concern / Cause (Diagnostic Finding):</span>
+                  <span>Cause (Diagnostic Finding):</span>
                 </span>
                 <p className="text-xs font-semibold text-slate-900 pl-5.5 font-mono">
                   {ro.concernCauses?.[idx] || (idx === 0 ? ro.cause : '') || <span className="italic text-slate-400 font-sans font-normal">Pending diagnosis</span>}

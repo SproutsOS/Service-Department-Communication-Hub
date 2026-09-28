@@ -42,6 +42,22 @@ const COMMON_LABOR_PRESETS = [
   { name: 'Air Conditioning System Evacuate & Recharge', hours: 1.4, notes: 'Recover refrigerant, vacuum leak check, oil & dye fill' },
 ];
 
+/**
+ * Extracts a line-specific substring from multi-line text (e.g. "Line 1: ... Line 2: ...")
+ */
+export const parseLineFromCombinedText = (text: string | undefined | null, lineNum: number): string => {
+  if (!text) return '';
+  const regex = new RegExp(`(?:^|\\b)Line\\s*${lineNum}[:\\s-]+([^\\n]*?)(?=(?:Line\\s*\\d+|$))`, 'i');
+  const match = text.match(regex);
+  if (match && match[1]?.trim()) {
+    return match[1].trim();
+  }
+  if (lineNum === 1 && !/(?:^|\b)Line\s*\d+/i.test(text)) {
+    return text.trim();
+  }
+  return '';
+};
+
 export const RepairQuoteModal: React.FC = () => {
   const { 
     activeQuoteRO, 
@@ -278,6 +294,7 @@ export const RepairQuoteModal: React.FC = () => {
 
     // Helper to mirror RO concern and correction into a labor line
     const createMirroredROItem = (concern: string, idx: number, existing?: LaborLineItem): LaborLineItem => {
+      const roLineNumber = idx + 1;
       const linePayType = existing?.payType || cleanRO.concernPayTypes?.[idx] || initialPayType;
       const lineRate = (existing?.hourlyRate && existing.hourlyRate !== 150)
         ? existing.hourlyRate
@@ -289,21 +306,42 @@ export const RepairQuoteModal: React.FC = () => {
       
       const subtotalVal = hoursVal !== '' ? Number(((Number(hoursVal) || 0) * lineRate).toFixed(2)) : 0;
       
-      const mirroredDesc = cleanRO.correction 
-        ? `Concern: ${concern} — Correction: ${cleanRO.correction}` 
-        : `Concern: ${concern}`;
+      const lineCorrection = cleanRO.concernCorrections?.[idx] || parseLineFromCombinedText(cleanRO.correction, roLineNumber);
+
+      // Box to the left of hours must be the CORRECTION, not the concern or cause
+      let desc = '';
+      if (existing?.description) {
+        let raw = existing.description.trim();
+        if (raw.includes('— Correction:')) {
+          desc = raw.split('— Correction:')[1].trim();
+        } else if (/^Correction:\s*/i.test(raw)) {
+          desc = raw.replace(/^Correction:\s*/i, '').trim();
+        } else if (/^Concern:\s*/i.test(raw) || /^Cause:\s*/i.test(raw)) {
+          desc = lineCorrection;
+        } else {
+          desc = raw;
+        }
+      } else {
+        desc = lineCorrection;
+      }
+
+      // Clean techNotes so it NEVER repeats "Cause: Line 1: ..."
+      let notes = existing?.techNotes ? existing.techNotes.trim() : '';
+      if (/^Cause:\s*/i.test(notes)) {
+        notes = '';
+      }
 
       return {
         id: existing?.id || `labor_${Date.now()}_ro_${idx}`,
-        description: mirroredDesc,
+        description: desc,
         laborHours: hoursVal,
         hourlyRate: lineRate,
         subtotal: subtotalVal,
         payType: linePayType,
-        techNotes: existing?.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : (cleanRO.cause ? `Cause: ${cleanRO.cause}` : undefined)),
-        roLineNumber: idx + 1,
+        techNotes: notes || undefined,
+        roLineNumber,
         concernText: concern,
-        correctionText: cleanRO.correction || '',
+        correctionText: lineCorrection,
         addedByAdvisor: false,
       };
     };
@@ -608,7 +646,8 @@ export const RepairQuoteModal: React.FC = () => {
     if (concerns.length === 0) return;
 
     const mirrored: LaborLineItem[] = concerns.map((concern, idx) => {
-      const existing = laborItems.find(item => item.roLineNumber === idx + 1) || laborItems[idx];
+      const roLineNumber = idx + 1;
+      const existing = laborItems.find(item => item.roLineNumber === roLineNumber) || laborItems[idx];
       const linePayType = existing?.payType || cleanRO.concernPayTypes?.[idx] || quotePayType || 'CUSTOMER_PAY';
       const rate = (existing?.hourlyRate && existing.hourlyRate !== 150)
         ? existing.hourlyRate
@@ -617,19 +656,40 @@ export const RepairQuoteModal: React.FC = () => {
         ? existing.laborHours
         : ('' as any);
       const subtotalVal = hoursVal !== '' ? Number(((Number(hoursVal) || 0) * rate).toFixed(2)) : 0;
+      const lineCorrection = cleanRO.concernCorrections?.[idx] || parseLineFromCombinedText(cleanRO.correction, roLineNumber);
+
+      let desc = '';
+      if (existing?.description) {
+        let raw = existing.description.trim();
+        if (raw.includes('— Correction:')) {
+          desc = raw.split('— Correction:')[1].trim();
+        } else if (/^Correction:\s*/i.test(raw)) {
+          desc = raw.replace(/^Correction:\s*/i, '').trim();
+        } else if (/^Concern:\s*/i.test(raw) || /^Cause:\s*/i.test(raw)) {
+          desc = lineCorrection;
+        } else {
+          desc = raw;
+        }
+      } else {
+        desc = lineCorrection;
+      }
+
+      let notes = existing?.techNotes ? existing.techNotes.trim() : '';
+      if (/^Cause:\s*/i.test(notes)) {
+        notes = '';
+      }
+
       return {
         id: existing?.id || `labor_${Date.now()}_ro_${idx}`,
-        roLineNumber: idx + 1,
+        roLineNumber,
         concernText: concern,
-        correctionText: cleanRO.correction || '',
-        description: cleanRO.correction 
-          ? `Concern: ${concern} — Correction: ${cleanRO.correction}` 
-          : `Concern: ${concern}`,
+        correctionText: lineCorrection,
+        description: desc,
         laborHours: hoursVal,
         hourlyRate: rate,
         subtotal: subtotalVal,
         payType: linePayType,
-        techNotes: existing?.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : (cleanRO.cause ? `Cause: ${cleanRO.cause}` : undefined)),
+        techNotes: notes || undefined,
         addedByAdvisor: false,
       };
     });
@@ -652,12 +712,11 @@ export const RepairQuoteModal: React.FC = () => {
     updateTechCauseAndCorrection(activeQuoteRO.id, cleanRO.cause || '', trimmed);
     setLaborItems(prev => prev.map(item => {
       if (item.addedByAdvisor) return item;
-      const concern = item.concernText || cleanRO.concerns?.[(item.roLineNumber || 1) - 1] || cleanRO.primaryConcern;
       return {
         ...item,
         correctionText: trimmed,
-        description: `Concern: ${concern} — Correction: ${trimmed}`,
-        techNotes: item.techNotes ? item.techNotes : `Correction: ${trimmed}`,
+        description: trimmed,
+        techNotes: item.techNotes && !item.techNotes.startsWith('Cause:') ? item.techNotes : undefined,
       };
     }));
     setShowCorrectionEditor(false);
@@ -1297,13 +1356,13 @@ export const RepairQuoteModal: React.FC = () => {
                             </p>
                           </div>
 
-                          {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+                          {/* 2. Cause (Technician Diagnostic Findings) */}
                           <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-200 pt-1.5 md:pt-0 md:pl-2.5">
                             <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">
-                              2. Concern / Cause:
+                              2. Cause:
                             </span>
                             <p className="font-bold text-amber-950 text-xs leading-snug font-mono">
-                              {cleanRO.concernCauses?.[roLineNum - 1] || (roLineNum === 1 ? cleanRO.cause : '') || (
+                              {cleanRO.concernCauses?.[roLineNum - 1] || parseLineFromCombinedText(cleanRO.cause, roLineNum) || (
                                 <span className="italic text-slate-800 font-sans font-medium">Pending diagnosis</span>
                               )}
                             </p>
@@ -1318,18 +1377,18 @@ export const RepairQuoteModal: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setCorrectionInput(cleanRO.concernCorrections?.[roLineNum - 1] || cleanRO.correction || '');
+                                  setCorrectionInput(item.correctionText || cleanRO.concernCorrections?.[roLineNum - 1] || parseLineFromCombinedText(cleanRO.correction, roLineNum) || '');
                                   setShowCorrectionEditor(true);
                                 }}
                                 className="text-[10px] text-blue-700 hover:text-blue-900 font-black flex items-center gap-1 cursor-pointer"
                                 title="Edit correction on the Repair Order"
                               >
                                 <Edit3 className="w-3 h-3" />
-                                <span>{cleanRO.correction ? 'Edit' : '+ Add'}</span>
+                                <span>{cleanRO.correction || cleanRO.concernCorrections?.[roLineNum - 1] ? 'Edit' : '+ Add'}</span>
                               </button>
                             </div>
                             <p className="font-bold text-emerald-950 text-xs leading-snug font-mono">
-                              {item.correctionText || cleanRO.concernCorrections?.[roLineNum - 1] || cleanRO.correction || (
+                              {item.correctionText || cleanRO.concernCorrections?.[roLineNum - 1] || parseLineFromCombinedText(cleanRO.correction, roLineNum) || (
                                 <span className="italic text-slate-800 font-sans font-medium">Pending technician repair plan</span>
                               )}
                             </p>
@@ -1344,14 +1403,16 @@ export const RepairQuoteModal: React.FC = () => {
                         <div className="flex-1 w-full">
                           <input
                             type="text"
-                            placeholder="Operation description (concern & correction)..."
+                            placeholder="Correction..."
                             value={item.description}
                             onChange={(e) => handleUpdateLaborItem(item.id, { description: e.target.value })}
                             className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
                           />
-                          <span className="text-[10px] text-slate-900 font-semibold mt-0.5 block">
-                            {isMirroredROLine ? 'Customer Concern & Technician Correction' : 'Advisor added custom labor operation'}
-                          </span>
+                          {!isMirroredROLine && (
+                            <span className="text-[10px] text-slate-600 font-semibold mt-0.5 block">
+                              Advisor added custom labor operation
+                            </span>
+                          )}
                         </div>
 
                         {/* Labor Hours (ProDemand) */}
@@ -1443,12 +1504,12 @@ export const RepairQuoteModal: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Notes / ProDemand Operation code */}
+                      {/* Notes / Warranty Operation code */}
                       <div className="flex items-center gap-3 pl-8">
                         <input
                           type="text"
-                          placeholder="Optional labor notes or Pro Demand op code (e.g. Pro Demand Op #B-402, includes caliper lube)"
-                          value={item.techNotes || ''}
+                          placeholder="Optional labor notes or Warranty op code"
+                          value={item.techNotes && !item.techNotes.startsWith('Cause:') ? item.techNotes : ''}
                           onChange={(e) => handleUpdateLaborItem(item.id, { techNotes: e.target.value })}
                           className="w-full px-3 py-1 bg-white border border-slate-300 rounded-md text-xs text-slate-900 font-medium placeholder:text-slate-500 focus:bg-white focus:outline-none"
                         />
@@ -1720,30 +1781,9 @@ export const RepairQuoteModal: React.FC = () => {
             </div>
           )}
 
-          {/* Section 3: Diagnosis Notes & Financial Breakdown */}
+          {/* Section 3: Labor Time Summary & Breakdown */}
           {isTech ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Technician Diagnostic Notes & Findings */}
-              <div className="bg-white rounded-2xl border border-slate-300 p-4 sm:p-5 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    Technician Diagnostic Notes & Repair Scope
-                  </h4>
-                  <span className="text-[10px] text-slate-950 font-bold">Sent to Service Advisor</span>
-                </div>
-                <p className="text-xs text-slate-900 font-semibold">
-                  Document diagnostic findings, test results, cause of component failure, and scope of recommended service.
-                </p>
-                <textarea
-                  rows={4}
-                  placeholder="e.g. Inspected front brake assembly. Brake pads measured at 2mm (safety discard spec). Rotors have deep scoring beyond minimum refinish thickness. Caliper slide pins clean and free."
-                  value={techNotes}
-                  onChange={(e) => setTechNotes(e.target.value)}
-                  className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-950 placeholder:text-slate-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
-                />
-              </div>
-
+            <div className="max-w-2xl mx-auto w-full">
               {/* Job Labor Time Summary Card */}
               <div className="bg-gradient-to-br from-blue-50 via-indigo-50/60 to-slate-50 rounded-2xl border border-blue-200 p-5 shadow-2xs flex flex-col justify-between">
                 <div>
@@ -2205,8 +2245,8 @@ export const RepairQuoteModal: React.FC = () => {
             const lineNum = idx + 1;
             const lineLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
             const lineParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
-            const lineCause = activeQuoteRO.concernCauses?.[idx] || (idx === 0 ? activeQuoteRO.cause : '');
-            const lineCorrection = activeQuoteRO.concernCorrections?.[idx] || (idx === 0 ? activeQuoteRO.correction : '');
+            const lineCause = activeQuoteRO.concernCauses?.[idx] || parseLineFromCombinedText(activeQuoteRO.cause, lineNum);
+            const lineCorrection = activeQuoteRO.concernCorrections?.[idx] || parseLineFromCombinedText(activeQuoteRO.correction, lineNum);
             
             const lineLaborHoursSum = lineLabor.reduce((sum, item) => sum + (Number(item.laborHours) || 0), 0);
             const lineLaborCostSum = lineLabor.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
@@ -2236,10 +2276,10 @@ export const RepairQuoteModal: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* 2. Concern / Cause & 3. Correction */}
+                  {/* 2. Cause & 3. Correction */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
                     <div className="bg-white p-1.5 rounded border border-black">
-                      <strong className="text-black uppercase text-[9px] font-black tracking-wider block">2. Concern / Cause (Diagnostic Finding):</strong>
+                      <strong className="text-black uppercase text-[9px] font-black tracking-wider block">2. Cause (Diagnostic Finding):</strong>
                       <span className="font-mono font-bold text-black">{lineCause || <span className="italic text-black font-sans font-semibold">Pending diagnosis</span>}</span>
                     </div>
                     <div className="bg-white p-1.5 rounded border border-black">
@@ -2269,7 +2309,9 @@ export const RepairQuoteModal: React.FC = () => {
                         </td>
                         <td className="py-1 px-3 border-r border-black/30">
                           <span className="font-bold text-black">{item.description}</span>
-                          {item.techNotes && <div className="text-[10px] text-black font-mono font-bold">{item.techNotes}</div>}
+                          {item.techNotes && !item.techNotes.startsWith('Cause:') && (
+                            <div className="text-[10px] text-black font-mono font-bold">{item.techNotes}</div>
+                          )}
                         </td>
                         <td className="py-1 px-2.5 text-center font-mono font-bold text-black border-r border-black/30">
                           {(Number(item.laborHours) || 0).toFixed(1)}h

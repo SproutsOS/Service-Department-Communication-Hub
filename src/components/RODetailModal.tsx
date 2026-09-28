@@ -1559,11 +1559,11 @@ export const RODetailModal: React.FC = () => {
                               />
                             </div>
 
-                            {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+                            {/* 2. Cause (Technician Diagnostic Findings) */}
                             <div className="space-y-1">
                               <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
                                 <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
-                                <span>Concern / Cause (Diagnostic Finding)</span>
+                                <span>Cause (Diagnostic Finding)</span>
                               </label>
                               <input
                                 type="text"
