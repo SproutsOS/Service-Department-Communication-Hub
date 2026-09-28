@@ -115,12 +115,13 @@ const MainContent: React.FC = () => {
       {/* Main View Shell with Sidebar */}
       <div className="flex flex-1 overflow-hidden">
         
-        {/* Left Sidebar Navigation (Professional Polish Theme) */}
-        <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-700 p-4 flex-col shrink-0">
-          <nav className="space-y-1 mb-6">
-            <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
-              {isManager ? 'Workstation Views (Manager Access)' : 'Authorized Workstation'}
-            </div>
+        {/* Left Sidebar Navigation - Only shown for Managers with multi-workstation oversight */}
+        {isManager && (
+          <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-700 p-4 flex-col shrink-0">
+            <nav className="space-y-1 mb-6">
+              <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
+                Workstation Views (Manager Access)
+              </div>
 
             {/* Manager View: Has full oversight of all department boards */}
             {isManager ? (
@@ -365,6 +366,7 @@ const MainContent: React.FC = () => {
             </div>
           </div>
         </aside>
+      )}
 
         {/* Center Main Dashboard Content */}
         <div className="flex-1 flex flex-col overflow-hidden">

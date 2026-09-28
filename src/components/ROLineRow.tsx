@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { RepairOrder, User as AppUser } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
-import { formatDurationSince, formatDateTime, formatEtaBadge, getDiagnosticStatusDetails } from '../utils/formatters';
+import { formatDurationSince, formatDateTime, formatEtaBadge, getDiagnosticStatusDetails, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
 
 interface ROLineRowProps {
@@ -26,12 +26,13 @@ interface ROLineRowProps {
 }
 
 export const ROLineRow: React.FC<ROLineRowProps> = ({
-  ro,
+  ro: rawRO,
   onClick,
   users,
   showCadence = true,
   onOpenFollowUp
 }) => {
+  const ro = cleanRO3700(rawRO);
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
   const isCompleted = isROCompleted(ro);
   const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
@@ -44,6 +45,14 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
   const activePart = ro.parts.find(p => p.status === 'IN_TRANSIT' || p.status === 'ORDERED' || p.status === 'SPECIAL_ORDER_1_5_DAYS' || p.status === 'DAILY_ORDER');
   const etaBadge = activePart ? formatEtaBadge(activePart.estimatedArrival) : null;
   const pendingTechRecs = ro.recommendations ? ro.recommendations.filter(r => r.status === 'PENDING').length : 0;
+
+  const hasQuotedParts = Boolean(
+    (ro.quote?.partsItems && ro.quote.partsItems.length > 0) ||
+    ro.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')
+  );
+  const hasOrderedParts = Boolean(
+    ro.parts.some(p => p.status !== 'QUOTE_ONLY' && (p.requestType === 'ORDER_NOW' || ['ORDERED', 'DAILY_ORDER', 'IN_STOCK', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'LOCAL_PURCHASE'].includes(p.status)))
+  );
 
   return (
     <tr 
@@ -110,26 +119,52 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
       </td>
 
       {/* 4. Concern Lines / 3 C's */}
-      <td className="px-3 py-3 align-top max-w-xs">
-        <div className="text-slate-800 line-clamp-2">
-          <span className="font-bold text-slate-600">Line 1: </span>
-          <span>{ro.primaryConcern}</span>
-        </div>
-        {ro.concerns && ro.concerns.length > 1 && (
-          <div className="text-[10px] text-blue-600 font-bold mt-0.5">
-            +{ro.concerns.length - 1} more concern line{ro.concerns.length - 1 > 1 ? 's' : ''}
-          </div>
-        )}
+      <td className="px-3 py-3 align-top min-w-[200px] max-w-sm">
+        {(() => {
+          const allConcerns = ro.concerns && ro.concerns.length > 0 
+            ? ro.concerns 
+            : [ro.primaryConcern || 'General Inspection'];
+          return (
+            <div className="space-y-1.5">
+              {allConcerns.map((concernText, idx) => {
+                const payType = ro.concernPayTypes?.[idx];
+                return (
+                  <div key={idx} className="text-xs text-slate-900 leading-snug">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-[10px] font-black px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 border border-slate-300">
+                        Line {idx + 1}
+                      </span>
+                      {payType && (
+                        <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                          payType === 'WARRANTY' 
+                            ? 'bg-amber-100 text-amber-800' 
+                            : payType === 'INTERNAL' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : 'bg-blue-50 text-blue-700'
+                        }`}>
+                          {payType === 'WARRANTY' ? 'Warranty' : payType === 'INTERNAL' ? 'Internal' : 'CP'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-semibold text-slate-900 mt-0.5 whitespace-pre-wrap">
+                      {concernText}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
         {(ro.cause || ro.correction) && (
-          <div className="text-[10px] text-slate-600 mt-1 space-y-0.5 bg-slate-50 p-1 rounded border border-slate-200">
+          <div className="text-[10px] text-slate-600 mt-1.5 space-y-0.5 bg-slate-50 p-1.5 rounded border border-slate-200">
             {ro.cause && (
-              <div className="truncate">
+              <div>
                 <strong className="text-amber-800 font-bold">Cause: </strong>
                 <span>{ro.cause}</span>
               </div>
             )}
             {ro.correction && (
-              <div className="truncate">
+              <div>
                 <strong className="text-emerald-800 font-bold">Correction: </strong>
                 <span>{ro.correction}</span>
               </div>
@@ -141,9 +176,42 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
       {/* 5. Status & Diag Stage */}
       <td className="px-3 py-3 whitespace-nowrap align-top">
         <div className="flex flex-col gap-1 items-start">
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
-            {statusInfo.label}
-          </span>
+          {ro.status === 'PARTS_ORDERED' ? (
+            hasQuotedParts && hasOrderedParts ? (
+              <div className="flex flex-col gap-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400">
+                  Parts on Estimate
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400">
+                  Parts Ordered (ETA)
+                </span>
+              </div>
+            ) : hasQuotedParts ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400">
+                Parts on Estimate
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400">
+                Parts Ordered (ETA)
+              </span>
+            )
+          ) : (
+            <>
+              {!isCompleted && hasQuotedParts && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-50 text-indigo-800 border-indigo-300">
+                  Parts on Estimate
+                </span>
+              )}
+              {!isCompleted && hasOrderedParts && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-50 text-purple-800 border-purple-300">
+                  Parts Ordered (ETA)
+                </span>
+              )}
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
+                {statusInfo.label}
+              </span>
+            </>
+          )}
           {diagInfo && (
             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
               diagInfo.isWaiting 

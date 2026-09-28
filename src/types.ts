@@ -57,6 +57,7 @@ export type PredefinedPartStatus =
   | 'SPECIAL_ORDER'
   | 'VOR_UPGRADE'
   | 'REQUESTED' 
+  | 'QUOTE_ONLY'
   | 'ORDERED' 
   | 'IN_TRANSIT' 
   | 'RECEIVED' 
@@ -73,6 +74,7 @@ export interface PartItem {
   name?: string;
   quantity: number;
   status: PartStatus;
+  requestType?: 'ORDER_NOW' | 'QUOTE_ONLY'; // Whether technician requests immediate order or pricing quote only
   orderedAt?: string;
   estimatedArrival: string; // ISO string or human-readable format
   vendor: string;
@@ -80,6 +82,7 @@ export interface PartItem {
   cost?: number;
   price?: number;
   notes?: string;
+  roLineNumber?: number; // 1-based concern line number (e.g., 1 for Line 1, 2 for Line 2)
 }
 
 export interface Message {
@@ -175,6 +178,8 @@ export interface RepairOrder {
   diagnosticNotes?: string;
   cause?: string; // Diagnostic finding: root cause of failure/complaint
   correction?: string; // Repair performed: corrective action taken by technician
+  concernCauses?: string[]; // Line-by-line diagnostic findings (Line 1, Line 2, etc.)
+  concernCorrections?: string[]; // Line-by-line repair corrections (Line 1, Line 2, etc.)
   parts: PartItem[];
   messages: Message[];
   recommendations?: RecommendedService[]; // Tech additional requested items (air filter, tires, cabin air, scheduled maint, etc.)
@@ -234,8 +239,13 @@ export interface LaborLineItem {
   laborHours: number;
   hourlyRate: number;
   subtotal: number;
+  payType?: ConcernPayType;
   proDemandLaborGuide?: string;
   techNotes?: string;
+  roLineNumber?: number; // Mirrors RO Line 1, Line 2...
+  concernText?: string; // Mirrors RO customer concern
+  correctionText?: string; // Mirrors RO technician correction
+  addedByAdvisor?: boolean; // True if added as an extra line by the Service Advisor
 }
 
 export interface QuotePartItem {
@@ -246,6 +256,7 @@ export interface QuotePartItem {
   unitPrice: number;
   subtotal: number;
   sourcePartId?: string;
+  roLineNumber?: number; // 1-based concern line number (e.g., 1 for Line 1, 2 for Line 2)
 }
 
 export interface RepairQuote {
@@ -259,6 +270,7 @@ export interface RepairQuote {
   laborItems: LaborLineItem[];
   partsItems: QuotePartItem[];
   defaultLaborRate: number;
+  payType?: ConcernPayType;
   shopSuppliesFee: number;
   taxRate: number;
   taxAmount: number;

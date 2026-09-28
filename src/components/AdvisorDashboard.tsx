@@ -288,14 +288,14 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('ALL')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'ALL'
-                  ? 'bg-slate-900 text-white border-slate-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white text-slate-900 border-slate-800 hover:border-black hover:bg-slate-50 shadow-2xs'
               }`}
             >
-              <div className={`text-[10px] font-bold uppercase mb-0.5 truncate ${activeTab === 'ALL' ? 'text-slate-300' : 'text-slate-700'}`}>
+              <div className={`text-[10px] font-bold uppercase mb-0.5 truncate ${activeTab === 'ALL' ? 'text-red-950' : 'text-slate-700'}`}>
                 Active ROs
               </div>
-              <div className={`text-base sm:text-lg font-black ${activeTab === 'ALL' ? 'text-white' : 'text-black'}`}>
+              <div className="text-base sm:text-lg font-black text-black">
                 {myActiveROs.length}
               </div>
             </button>
@@ -322,12 +322,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('WAITING_DIAGNOSTICS')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'WAITING_DIAGNOSTICS'
-                  ? 'bg-amber-100 border-amber-700 ring-2 ring-amber-500/40 text-amber-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-amber-600 hover:bg-amber-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'WAITING_DIAGNOSTICS' ? 'text-amber-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'WAITING_DIAGNOSTICS' ? 'text-red-950' : 'text-slate-700'}`}>
                   Waiting Diag
                 </span>
                 <Clock className="w-3 h-3 text-amber-600" />
@@ -339,12 +339,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('IN_DIAG')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'IN_DIAG'
-                  ? 'bg-blue-100 border-blue-700 ring-2 ring-blue-500/40 text-blue-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-blue-600 hover:bg-blue-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'IN_DIAG' ? 'text-blue-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'IN_DIAG' ? 'text-red-950' : 'text-slate-700'}`}>
                   In Diag
                 </span>
                 <Wrench className="w-3 h-3 text-blue-600" />
@@ -356,12 +356,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('ESTIMATE_DONE')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'ESTIMATE_DONE'
-                  ? 'bg-indigo-100 border-indigo-700 ring-2 ring-indigo-500/40 text-indigo-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-indigo-600 hover:bg-indigo-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'ESTIMATE_DONE' ? 'text-indigo-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'ESTIMATE_DONE' ? 'text-red-950' : 'text-slate-700'}`}>
                   Estimate Done
                 </span>
                 <Calculator className="w-3 h-3 text-indigo-600" />
@@ -373,13 +373,13 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('WAITING_FOR_APPROVAL')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'WAITING_FOR_APPROVAL'
-                  ? 'bg-orange-100 border-orange-700 ring-2 ring-orange-500/40 text-orange-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-orange-600 hover:bg-orange-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
                 <span 
-                  className={`text-[10px] font-bold uppercase truncate ${activeTab === 'WAITING_FOR_APPROVAL' ? 'text-orange-950' : 'text-slate-700'}`}
+                  className={`text-[10px] font-bold uppercase truncate ${activeTab === 'WAITING_FOR_APPROVAL' ? 'text-red-950' : 'text-slate-700'}`}
                   title="Pending Approval"
                 >
                   Pending Approval
@@ -393,12 +393,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('APPROVED')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'APPROVED'
-                  ? 'bg-teal-100 border-teal-700 ring-2 ring-teal-500/40 text-teal-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-teal-600 hover:bg-teal-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'APPROVED' ? 'text-teal-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'APPROVED' ? 'text-red-950' : 'text-slate-700'}`}>
                   Approved
                 </span>
                 <ShieldCheck className="w-3 h-3 text-teal-600" />
@@ -410,12 +410,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('PARTS_ORDERED')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'PARTS_ORDERED'
-                  ? 'bg-purple-100 border-purple-700 ring-2 ring-purple-500/40 text-purple-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-purple-600 hover:bg-purple-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'PARTS_ORDERED' ? 'text-purple-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'PARTS_ORDERED' ? 'text-red-950' : 'text-slate-700'}`}>
                   Parts
                 </span>
                 <Package className="w-3 h-3 text-purple-600" />
@@ -427,12 +427,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('REPAIR_IN_PROGRESS')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'REPAIR_IN_PROGRESS'
-                  ? 'bg-cyan-100 border-cyan-700 ring-2 ring-cyan-500/40 text-cyan-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-cyan-600 hover:bg-cyan-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'REPAIR_IN_PROGRESS' ? 'text-cyan-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'REPAIR_IN_PROGRESS' ? 'text-red-950' : 'text-slate-700'}`}>
                   In Repair
                 </span>
                 <CheckCircle2 className="w-3 h-3 text-cyan-600" />
@@ -444,12 +444,12 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('READY_FOR_PICKUP')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'READY_FOR_PICKUP'
-                  ? 'bg-emerald-100 border-emerald-700 ring-2 ring-emerald-500/40 text-emerald-950 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : 'bg-white border-slate-800 hover:border-emerald-600 hover:bg-emerald-50/40 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'READY_FOR_PICKUP' ? 'text-emerald-950' : 'text-slate-700'}`}>
+                <span className={`text-[10px] font-bold uppercase truncate ${activeTab === 'READY_FOR_PICKUP' ? 'text-red-950' : 'text-slate-700'}`}>
                   Ready
                 </span>
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -462,7 +462,7 @@ export const AdvisorDashboard: React.FC = () => {
               onClick={() => setActiveTab('COMPLETED')}
               className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
                 activeTab === 'COMPLETED'
-                  ? 'bg-slate-900 text-white border-slate-950 ring-2 ring-slate-700 shadow-xs'
+                  ? 'bg-red-100 border-red-700 ring-2 ring-red-500/40 text-red-950 shadow-xs'
                   : postRepairDueCount > 0
                   ? 'bg-emerald-50 border-emerald-600 hover:border-emerald-700 shadow-2xs'
                   : 'bg-white border-slate-800 hover:border-slate-900 hover:bg-slate-50 shadow-2xs'
@@ -470,14 +470,14 @@ export const AdvisorDashboard: React.FC = () => {
             >
               <div className="flex items-center justify-between mb-0.5">
                 <span className={`text-[10px] font-bold uppercase truncate ${
-                  activeTab === 'COMPLETED' ? 'text-emerald-300' : postRepairDueCount > 0 ? 'text-emerald-900 font-black' : 'text-slate-700'
+                  activeTab === 'COMPLETED' ? 'text-red-950 font-bold' : postRepairDueCount > 0 ? 'text-emerald-900 font-black' : 'text-slate-700'
                 }`}>
                   Completed
                 </span>
-                <ShieldCheck className={`w-3 h-3 ${activeTab === 'COMPLETED' ? 'text-emerald-300' : 'text-emerald-600'}`} />
+                <ShieldCheck className={`w-3 h-3 ${activeTab === 'COMPLETED' ? 'text-red-600' : 'text-emerald-600'}`} />
               </div>
               <div className="flex items-baseline justify-between gap-1">
-                <div className={`text-base sm:text-lg font-black ${activeTab === 'COMPLETED' ? 'text-white' : 'text-black'}`}>
+                <div className="text-base sm:text-lg font-black text-black">
                   {completedCount}
                 </div>
                 {postRepairDueCount > 0 && (
@@ -586,7 +586,7 @@ export const AdvisorDashboard: React.FC = () => {
                 className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                   displayMode === 'LINE'
                     ? 'bg-blue-600 text-white shadow-2xs'
-                    : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200/60'
+                    : 'text-slate-900 font-extrabold hover:text-black hover:bg-slate-200/60'
                 }`}
                 title="Line View (Compact Detailed Table)"
               >

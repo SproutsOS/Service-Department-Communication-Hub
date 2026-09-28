@@ -30,7 +30,8 @@ import {
   LayoutGrid,
   List,
   Store,
-  ChevronDown
+  ChevronDown,
+  Calculator
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PartItem, PartStatus, RepairOrder } from '../types';
@@ -106,8 +107,9 @@ export const PartsDashboard: React.FC = () => {
     description: string;
     quantity: number;
     price: string;
+    roLineNumber?: number;
   }>>([
-    { id: 'pline_1', partNumber: '', description: '', quantity: 1, price: '' }
+    { id: 'pline_1', partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }
   ]);
   const [partVendor, setPartVendor] = useState<string>(INITIAL_VENDORS[0]);
   const [partStatus, setPartStatus] = useState<PartStatus>('IN_STOCK');
@@ -200,16 +202,34 @@ export const PartsDashboard: React.FC = () => {
     return repairOrders.find(ro => ro.id === selectedTargetRoId) || null;
   }, [repairOrders, selectedTargetRoId]);
 
-  // Parts on the currently selected RO that are in REQUESTED status from the technician
+  // Helper to identify technician requested parts (both Order Now and Quote Only)
+  const isTechRequestedPart = (p: PartItem) => 
+    p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY' || p.status === 'NEEDED' || p.requestType === 'ORDER_NOW' || p.requestType === 'QUOTE_ONLY';
+
+  // Helper to get numeric line order for a part (Line 1, Line 2, etc.)
+  const getPartLineOrder = (part: PartItem): number => {
+    if (typeof part.roLineNumber === 'number' && !isNaN(part.roLineNumber)) {
+      return part.roLineNumber;
+    }
+    if (part.notes) {
+      const match = part.notes.match(/Line (\d+)/i);
+      if (match && match[1]) {
+        return parseInt(match[1]);
+      }
+    }
+    return 999;
+  };
+
+  // Parts on the currently selected RO that are in REQUESTED or QUOTE_ONLY status from the technician
   const requestedPartsForSelectedRO = useMemo(() => {
     if (!currentSelectedRO) return [];
-    return currentSelectedRO.parts.filter(p => p.status === 'REQUESTED');
+    return [...currentSelectedRO.parts.filter(isTechRequestedPart)].sort((a, b) => getPartLineOrder(a) - getPartLineOrder(b));
   }, [currentSelectedRO]);
 
   // Technician notes on the selected RO
   const techNotesForSelectedRO = useMemo(() => {
     if (!currentSelectedRO) return '';
-    const partWithNotes = currentSelectedRO.parts.find(p => p.status === 'REQUESTED' && p.notes);
+    const partWithNotes = currentSelectedRO.parts.find(p => isTechRequestedPart(p) && p.notes);
     if (partWithNotes?.notes) return partWithNotes.notes;
     if (currentSelectedRO.quote?.techNotes) return currentSelectedRO.quote.techNotes;
     return '';
@@ -219,7 +239,7 @@ export const PartsDashboard: React.FC = () => {
   const rosWithPendingTechRequests = useMemo(() => {
     return repairOrders.filter(ro => 
       ro.status !== 'COMPLETED' && ro.status !== 'CLOSED' && (
-        ro.parts.some(p => p.status === 'REQUESTED') ||
+        ro.parts?.some(isTechRequestedPart) ||
         ro.status === 'WAITING_PARTS'
       )
     );
@@ -245,7 +265,7 @@ export const PartsDashboard: React.FC = () => {
       partNumber: part.partNumber && part.partNumber !== 'TBD' ? part.partNumber : '',
       price: formatPrice(part.price),
       quantity: Math.max(1, part.quantity || 1),
-      status: (part.status === 'REQUESTED' ? 'DAILY_ORDER' : part.status) as PartStatus,
+      status: (part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' ? 'DAILY_ORDER' : part.status) as PartStatus,
       vendor: part.vendor && part.vendor !== 'TBD' ? part.vendor : (vendors[0] || INITIAL_VENDORS[0]),
       timeFrameId: part.status === 'IN_STOCK' ? 'IN_STOCK' : 'TODAY_5PM',
       estimatedArrival: part.estimatedArrival || '',
@@ -310,11 +330,33 @@ export const PartsDashboard: React.FC = () => {
     showToast(`✓ "${part.description}": Part #${cleanPn} ($${priceVal !== undefined ? priceVal.toFixed(2) : '0.00'}) ordered for RO #${roId}!`);
   };
 
+  // Save price quote for technician-requested parts directly to Main Estimate
+  const handleSaveQuotePriceOnly = (roId: string, part: PartItem) => {
+    const draft = getReqDraft(part);
+    const cleanPn = draft.partNumber?.trim().toUpperCase() || 'TBD';
+    const priceVal = draft.price && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : undefined;
+    const qty = Math.max(1, Number(draft.quantity) || part.quantity || 1);
+    const effectiveVendor = draft.vendor || partVendor || 'Shop Inventory / Supplier';
+
+    updatePartItem(roId, part.id, {
+      partNumber: cleanPn,
+      price: priceVal,
+      quantity: qty,
+      status: 'QUOTE_ONLY',
+      requestType: 'QUOTE_ONLY',
+      vendor: effectiveVendor,
+      estimatedArrival: 'Price Quoted for Main Estimate',
+      notes: partNotes.trim() || undefined,
+    });
+
+    showToast(`💬 Quoted "${part.description}": Part #${cleanPn} ($${priceVal !== undefined ? priceVal.toFixed(2) : '0.00'}) sent to Main Estimate for RO #${roId}!`);
+  };
+
   // Batch fulfillment for all technician-requested parts on an RO
   const handleFulfillAllRequestedParts = (roId: string) => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return;
-    const reqs = targetRO.parts.filter(p => p.status === 'REQUESTED');
+    const reqs = targetRO.parts.filter(isTechRequestedPart);
     if (reqs.length === 0) return;
 
     let count = 0;
@@ -358,7 +400,7 @@ export const PartsDashboard: React.FC = () => {
 
   const handleImportRequestedParts = () => {
     if (!currentSelectedRO) return;
-    const reqs = currentSelectedRO.parts.filter(p => p.status === 'REQUESTED');
+    const reqs = currentSelectedRO.parts.filter(isTechRequestedPart);
     if (reqs.length === 0) {
       showToast('No pending requested parts on this RO.');
       return;
@@ -378,19 +420,19 @@ export const PartsDashboard: React.FC = () => {
   const handleAddPartLine = () => {
     setPartLines(prev => [
       ...prev,
-      { id: `pline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, partNumber: '', description: '', quantity: 1, price: '' }
+      { id: `pline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }
     ]);
   };
 
   const handleRemovePartLine = (id: string) => {
     if (partLines.length <= 1) {
-      setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '' }]);
+      setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }]);
       return;
     }
     setPartLines(prev => prev.filter(p => p.id !== id));
   };
 
-  const handleUpdatePartLine = (id: string, field: 'partNumber' | 'description' | 'quantity' | 'price', value: any) => {
+  const handleUpdatePartLine = (id: string, field: 'partNumber' | 'description' | 'quantity' | 'price' | 'roLineNumber', value: any) => {
     setPartLines(prev => prev.map(p => {
       if (p.id !== id) return p;
       return { ...p, [field]: value };
@@ -486,6 +528,8 @@ export const PartsDashboard: React.FC = () => {
   const specialOrderCount = allParts.filter(p => p.status === 'SPECIAL_ORDER_1_5_DAYS' || p.status === 'SPECIAL_ORDER').length;
   const vorUpgradeCount = allParts.filter(p => p.status === 'VOR_UPGRADE').length;
   const receivedCount = allParts.filter(p => p.status === 'RECEIVED').length;
+  const quoteOnlyCount = allParts.filter(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY').length;
+  const requestedTechCount = allParts.filter(p => isTechRequestedPart(p)).length;
 
   // Filtered ROs for RO Directory Tab - Hidden in background by default until entered or revealed
   const filteredROs = useMemo(() => {
@@ -496,7 +540,7 @@ export const PartsDashboard: React.FC = () => {
 
     return activeROs.filter(ro => {
       // 1. RO Status filter
-      if (roStatusFilter === 'TECH_REQUESTS' && !ro.parts.some(p => p.status === 'REQUESTED') && ro.status !== 'WAITING_PARTS') return false;
+      if (roStatusFilter === 'TECH_REQUESTS' && !ro.parts.some(isTechRequestedPart) && ro.status !== 'WAITING_PARTS') return false;
       if (roStatusFilter === 'NEEDS_PARTS' && ro.parts.length > 0) return false;
       if (roStatusFilter === 'HAS_PARTS' && ro.parts.length === 0) return false;
       if (roStatusFilter === 'WAITING_PARTS' && ro.status !== 'WAITING_PARTS') return false;
@@ -550,8 +594,8 @@ export const PartsDashboard: React.FC = () => {
 
       return true;
     }).sort((a, b) => {
-      const aReq = a.parts.some(p => p.status === 'REQUESTED');
-      const bReq = b.parts.some(p => p.status === 'REQUESTED');
+      const aReq = a.parts.some(isTechRequestedPart);
+      const bReq = b.parts.some(isTechRequestedPart);
       if (aReq && !bReq) return -1;
       if (!aReq && bReq) return 1;
       return 0;
@@ -571,6 +615,10 @@ export const PartsDashboard: React.FC = () => {
       if (statusFilter !== 'ALL') {
         if (statusFilter === 'SPECIAL_ORDER_1_5_DAYS' || statusFilter === 'SPECIAL_ORDER') {
           if (p.status !== 'SPECIAL_ORDER_1_5_DAYS' && p.status !== 'SPECIAL_ORDER') return false;
+        } else if (statusFilter === 'REQUESTED') {
+          if (p.status !== 'REQUESTED' && p.requestType !== 'ORDER_NOW') return false;
+        } else if (statusFilter === 'QUOTE_ONLY') {
+          if (p.status !== 'QUOTE_ONLY' && p.requestType !== 'QUOTE_ONLY') return false;
         } else if (p.status !== statusFilter) {
           return false;
         }
@@ -594,9 +642,15 @@ export const PartsDashboard: React.FC = () => {
 
       return true;
     }).sort((a, b) => {
-      // Prioritize parts with REQUESTED status to the top of the list
-      if (a.status === 'REQUESTED' && b.status !== 'REQUESTED') return -1;
-      if (b.status === 'REQUESTED' && a.status !== 'REQUESTED') return 1;
+      // Prioritize parts with requested/quote status to the top of the list
+      const aReq = isTechRequestedPart(a);
+      const bReq = isTechRequestedPart(b);
+      if (aReq && !bReq) return -1;
+      if (bReq && !aReq) return 1;
+      // If for the same RO, sort strictly by Line 1, Line 2, Line 3...
+      if (a.roId === b.roId) {
+        return getPartLineOrder(a) - getPartLineOrder(b);
+      }
       return 0;
     });
   }, [
@@ -635,7 +689,7 @@ export const PartsDashboard: React.FC = () => {
     setIsRoDropdownOpen(!roId); // If opened generally, start with the searchable dropdown ready to pick!
 
     const targetRO = targetRoId ? repairOrders.find(r => r.id === targetRoId) : null;
-    const reqs = targetRO ? targetRO.parts.filter(p => p.status === 'REQUESTED') : [];
+    const reqs = targetRO ? targetRO.parts.filter(isTechRequestedPart) : [];
 
     // Pre-populate quick draft entries for any technician-requested parts
     const initialDrafts: Record<string, any> = {};
@@ -644,7 +698,7 @@ export const PartsDashboard: React.FC = () => {
         partNumber: rp.partNumber && rp.partNumber !== 'TBD' ? rp.partNumber : '',
         price: formatPrice(rp.price),
         quantity: Math.max(1, rp.quantity || 1),
-        status: 'DAILY_ORDER',
+        status: rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'DAILY_ORDER',
         vendor: rp.vendor && rp.vendor !== 'TBD' ? rp.vendor : (vendors[0] || INITIAL_VENDORS[0]),
       };
     });
@@ -764,6 +818,7 @@ export const PartsDashboard: React.FC = () => {
           trackingNumber: partTracking.trim() || undefined,
           price: priceVal,
           notes: partNotes.trim() || undefined,
+          roLineNumber: line.roLineNumber,
         });
       } else {
         addPartOrder(selectedTargetRoId, {
@@ -776,13 +831,14 @@ export const PartsDashboard: React.FC = () => {
           trackingNumber: partTracking.trim() || undefined,
           price: priceVal,
           notes: partNotes.trim() || undefined,
+          roLineNumber: line.roLineNumber,
         });
       }
     });
 
     setIsAddPartModalOpen(false);
     showToast(`${validLines.length} part${validLines.length === 1 ? '' : 's'} (${formatStatusLabel(effectiveStatus)}) processed on RO #${selectedTargetRoId}!`);
-    setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '' }]);
+    setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }]);
     setPartNotes('');
     setPartTracking('');
   };
@@ -808,6 +864,8 @@ export const PartsDashboard: React.FC = () => {
         return 'IN TRANSIT';
       case 'ORDERED':
         return 'ORDERED';
+      case 'QUOTE_ONLY':
+        return 'QUOTE ONLY (TECH)';
       case 'REQUESTED':
         return 'REQUESTED BY TECH';
       default:
@@ -836,6 +894,8 @@ export const PartsDashboard: React.FC = () => {
         return 'bg-orange-100 text-orange-800 border-orange-300';
       case 'ORDERED':
         return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'QUOTE_ONLY':
+        return 'bg-purple-100 text-purple-900 border-purple-400 font-black';
       case 'REQUESTED':
         return 'bg-amber-100 text-amber-900 border-amber-400 font-black animate-pulse';
       default:
@@ -890,7 +950,7 @@ export const PartsDashboard: React.FC = () => {
           {/* Cards for each vehicle needing parts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
             {rosWithPendingTechRequests.map(ro => {
-              const requestedParts = ro.parts.filter(p => p.status === 'REQUESTED');
+              const requestedParts = [...ro.parts.filter(isTechRequestedPart)].sort((a, b) => getPartLineOrder(a) - getPartLineOrder(b));
               const techNotes = requestedParts.find(p => p.notes)?.notes || ro.quote?.techNotes || '';
 
               return (
@@ -961,7 +1021,7 @@ export const PartsDashboard: React.FC = () => {
                         <span>Items Requested by Tech in Bay ({requestedParts.length}):</span>
                       </span>
                       <span className="text-amber-800 bg-amber-100 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border border-amber-300">
-                        Add Part # & Price to Order
+                        Add Part # & Price to Fulfill / Quote
                       </span>
                     </div>
                     
@@ -969,29 +1029,53 @@ export const PartsDashboard: React.FC = () => {
                       {requestedParts.length > 0 ? (
                         requestedParts.map((rp, idx) => {
                           const draft = getReqDraft(rp);
+                          const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                          const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
+                          const concernDesc = lineNum && ro.concerns && ro.concerns[lineNum - 1] 
+                            ? ro.concerns[lineNum - 1] 
+                            : (lineNum === 1 ? ro.primaryConcern : undefined);
+
                           return (
                             <div 
                               key={rp.id || idx} 
-                              className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2 hover:border-amber-400 transition-colors shadow-2xs"
+                              className={`p-2.5 rounded-xl border text-xs space-y-2 transition-colors shadow-2xs ${
+                                isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
+                              }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-950 font-black text-[10px] flex items-center justify-center shrink-0">
                                     {idx + 1}
                                   </span>
+                                  {lineNum && (
+                                    <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200 shrink-0">
+                                      Line {lineNum}
+                                    </span>
+                                  )}
                                   <span className="font-extrabold text-slate-900">{rp.description || rp.name}</span>
-                                  <span className="text-[11px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                  <span className="text-[11px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">
                                     Qty: {rp.quantity || 1}
                                   </span>
                                 </div>
-                                <span className="text-[10px] font-bold uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                                  {rp.status}
+                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
+                                  isQuoteOnly 
+                                    ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
+                                    : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
+                                }`}>
+                                  {isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
                                 </span>
                               </div>
 
+                              {concernDesc && (
+                                <div className="text-[11px] text-slate-700 bg-white/80 p-1.5 rounded border border-slate-200 font-medium truncate">
+                                  <strong className="text-slate-900 font-bold uppercase text-[9px] mr-1">Line {lineNum} Concern:</strong>
+                                  <span>{concernDesc}</span>
+                                </div>
+                              )}
+
                               {/* Direct Part # & Price Inputs - Zero redundant typing! */}
-                              <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 flex-wrap sm:flex-nowrap">
-                                <div className="flex-1 min-w-[130px]">
+                              <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-slate-200/60">
+                                <div className="flex-1 min-w-[120px]">
                                   <input
                                     type="text"
                                     placeholder="Enter Part # (e.g. 68052369AA)"
@@ -1001,7 +1085,7 @@ export const PartsDashboard: React.FC = () => {
                                   />
                                 </div>
 
-                                <div className="w-24 relative shrink-0">
+                                <div className="w-20 relative shrink-0">
                                   <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-xs text-slate-400 font-bold">$</span>
                                   <input
                                     type="number"
@@ -1020,7 +1104,7 @@ export const PartsDashboard: React.FC = () => {
                                   />
                                 </div>
 
-                                <div className="min-w-[155px] max-w-[210px] shrink-0">
+                                <div className="w-36 sm:w-44 shrink-0">
                                   <ArrivalTimeFrameDropdown
                                     size="sm"
                                     value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
@@ -1032,15 +1116,29 @@ export const PartsDashboard: React.FC = () => {
                                   />
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleFulfillSingleRequestedPart(ro.id, rp)}
-                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1 shrink-0 border border-emerald-700 transition-colors"
-                                  title="Save Part # & Price, and place order for this item"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>Order</span>
-                                </button>
+                                <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                                  {isQuoteOnly ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
+                                      className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer flex items-center gap-1.5 border border-purple-700 transition-colors"
+                                      title="Save Quoted Price directly to Main Estimate"
+                                    >
+                                      <Calculator className="w-3.5 h-3.5" />
+                                      <span>Send to Estimate</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFulfillSingleRequestedPart(ro.id, rp)}
+                                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer flex items-center gap-1.5 border border-emerald-700 transition-colors"
+                                      title="Place order for this repair order item"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Order Part</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -1108,27 +1206,27 @@ export const PartsDashboard: React.FC = () => {
       </div>
 
       {/* KPI Metrics with Local Purchase Box */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
         <div 
           onClick={() => { 
             setActiveTab('RO_LIST'); 
             setRoStatusFilter('TECH_REQUESTS');
             setShowAllBackgroundROs(true); 
           }}
-          className={`p-3 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
             rosWithPendingTechRequests.length > 0
               ? 'border-amber-500 bg-amber-50/60 hover:border-amber-600 ring-2 ring-amber-300/40'
               : 'bg-white border-slate-300 hover:border-slate-500'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-amber-900 flex items-center justify-between gap-1">
             <span>Tech Requests</span>
-            <AlertTriangle className={`w-3.5 h-3.5 ${rosWithPendingTechRequests.length > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
+            <AlertTriangle className={`w-4 h-4 shrink-0 ${rosWithPendingTechRequests.length > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
           </div>
-          <div className="text-2xl font-black text-amber-900 my-2 w-full text-center flex items-center justify-center gap-1.5">
+          <div className="text-2xl sm:text-3xl font-black text-amber-900 my-2 w-full text-center flex items-center justify-center gap-1.5">
             <span>{rosWithPendingTechRequests.length}</span>
             {rosWithPendingTechRequests.length > 0 && (
-              <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-rose-600 text-white animate-pulse">
+              <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-rose-600 text-white animate-pulse">
                 Action
               </span>
             )}
@@ -1140,89 +1238,89 @@ export const PartsDashboard: React.FC = () => {
             setActiveTab('RO_LIST'); 
             setShowAllBackgroundROs(prev => !prev); 
           }}
-          className="bg-white p-3 rounded-xl border-2 border-slate-600 shadow-xs hover:border-blue-500 transition-colors cursor-pointer flex flex-col justify-between"
+          className="bg-white p-3.5 rounded-xl border-2 border-slate-600 shadow-xs hover:border-blue-500 transition-colors cursor-pointer flex flex-col justify-between"
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-700 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-slate-700 flex items-center justify-between gap-1">
             <span>ROs In Shop</span>
-            <FileText className="w-3.5 h-3.5 text-slate-600" />
+            <FileText className="w-4 h-4 text-slate-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-slate-900 my-2 w-full text-center flex items-center justify-center">{totalRoCount}</div>
+          <div className="text-2xl sm:text-3xl font-black text-slate-900 my-2 w-full text-center flex items-center justify-center">{totalRoCount}</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('IN_STOCK'); }}
-          className={`p-3 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
             statusFilter === 'IN_STOCK' && activeTab === 'PARTS_LIST'
               ? 'border-emerald-600 bg-emerald-100/50 ring-2 ring-emerald-400'
               : 'bg-white border-emerald-500 bg-emerald-50/20 hover:border-emerald-600'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-emerald-800 flex items-center justify-between gap-1">
             <span>In Stock</span>
-            <Package className="w-3.5 h-3.5 text-emerald-600" />
+            <Package className="w-4 h-4 text-emerald-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-emerald-700 my-2 w-full text-center flex items-center justify-center">{inStockCount}</div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-700 my-2 w-full text-center flex items-center justify-center">{inStockCount}</div>
         </div>
 
         {/* LOCAL PURCHASE BOX */}
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('LOCAL_PURCHASE'); }}
-          className={`p-3 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
             statusFilter === 'LOCAL_PURCHASE' && activeTab === 'PARTS_LIST'
               ? 'border-teal-600 bg-teal-100/50 ring-2 ring-teal-400'
               : 'bg-white border-teal-500 bg-teal-50/20 hover:border-teal-600'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-teal-800 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-teal-800 flex items-center justify-between gap-1">
             <span>Local Purchase</span>
-            <Store className="w-3.5 h-3.5 text-teal-600" />
+            <Store className="w-4 h-4 text-teal-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-teal-700 my-2 w-full text-center flex items-center justify-center">{localPurchaseCount}</div>
+          <div className="text-2xl sm:text-3xl font-black text-teal-700 my-2 w-full text-center flex items-center justify-center">{localPurchaseCount}</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('DAILY_ORDER'); }}
-          className={`p-3 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
             statusFilter === 'DAILY_ORDER' && activeTab === 'PARTS_LIST'
               ? 'border-blue-600 bg-blue-100/50 ring-2 ring-blue-400'
               : 'bg-white border-blue-500 shadow-xs hover:border-blue-600'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-blue-800 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-blue-800 flex items-center justify-between gap-1">
             <span>Daily Order</span>
-            <Truck className="w-3.5 h-3.5 text-blue-600" />
+            <Truck className="w-4 h-4 text-blue-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-blue-700 my-2 w-full text-center flex items-center justify-center">{dailyOrderCount}</div>
+          <div className="text-2xl sm:text-3xl font-black text-blue-700 my-2 w-full text-center flex items-center justify-center">{dailyOrderCount}</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('SPECIAL_ORDER_1_5_DAYS'); }}
-          className={`p-3 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
             (statusFilter === 'SPECIAL_ORDER_1_5_DAYS' || statusFilter === 'SPECIAL_ORDER') && activeTab === 'PARTS_LIST'
               ? 'border-amber-600 bg-amber-100/50 ring-2 ring-amber-400'
               : 'bg-white border-amber-500 shadow-xs hover:border-amber-600'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-amber-800 flex items-center justify-between gap-1">
             <span>1-5 Days</span>
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-amber-700 my-2 w-full text-center flex items-center justify-center">{specialOrderCount}</div>
+          <div className="text-2xl sm:text-3xl font-black text-amber-700 my-2 w-full text-center flex items-center justify-center">{specialOrderCount}</div>
         </div>
 
         <div 
           onClick={() => { setActiveTab('PARTS_LIST'); setStatusFilter('VOR_UPGRADE'); }}
-          className={`p-3 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
             statusFilter === 'VOR_UPGRADE' && activeTab === 'PARTS_LIST'
               ? 'border-rose-600 bg-rose-100/50 ring-2 ring-rose-400'
               : 'bg-white border-rose-500 bg-rose-50/20 shadow-xs hover:border-rose-600'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider text-rose-800 flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-rose-800 flex items-center justify-between gap-1">
             <span>VOR Upgrade</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
           </div>
-          <div className="text-2xl font-black text-rose-700 my-2 w-full text-center flex items-center justify-center">{vorUpgradeCount}</div>
+          <div className="text-2xl sm:text-3xl font-black text-rose-700 my-2 w-full text-center flex items-center justify-center">{vorUpgradeCount}</div>
         </div>
       </div>
 
@@ -1287,8 +1385,8 @@ export const PartsDashboard: React.FC = () => {
             onClick={() => handleSetViewMode('LINE')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               viewMode === 'LINE'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-300'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white text-slate-950 font-black shadow-xs border border-slate-400'
+                : 'text-slate-900 font-extrabold hover:text-black'
             }`}
             title="Line View (Compact spreadsheet lines)"
           >
@@ -1395,7 +1493,8 @@ export const PartsDashboard: React.FC = () => {
                 className="text-xs px-2.5 py-2 border-2 border-slate-500 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold text-slate-800"
               >
                 <option value="ALL">All Part Statuses ({allParts.length})</option>
-                <option value="REQUESTED">⚡ REQUESTED BY TECH ({allParts.filter(p => p.status === 'REQUESTED').length})</option>
+                <option value="REQUESTED">⚡ Tech Requests (Order Now) ({allParts.filter(p => p.status === 'REQUESTED' || p.requestType === 'ORDER_NOW').length})</option>
+                <option value="QUOTE_ONLY">💬 Tech Quote Requests ({allParts.filter(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY').length})</option>
                 <option value="LOCAL_PURCHASE">LOCAL PURCHASE</option>
                 <option value="IN_STOCK">IN STOCK</option>
                 <option value="DAILY_ORDER">DAILY ORDER</option>
@@ -1504,8 +1603,8 @@ export const PartsDashboard: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {filteredROs.map(ro => {
-                        const hasRequested = ro.parts.some(p => p.status === 'REQUESTED');
-                        const reqCount = ro.parts.filter(p => p.status === 'REQUESTED').length;
+                        const hasRequested = ro.parts.some(isTechRequestedPart);
+                        const reqCount = ro.parts.filter(isTechRequestedPart).length;
                         const assignedTech = users.find(u => u.id === ro.techId);
                         const advisor = users.find(u => u.id === ro.advisorId);
                         const partsTotal = ro.parts.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0);
@@ -1606,8 +1705,8 @@ export const PartsDashboard: React.FC = () => {
                 const assignedTech = users.find(u => u.id === ro.techId);
                 const advisor = users.find(u => u.id === ro.advisorId);
                 const hasParts = ro.parts && ro.parts.length > 0;
-                const hasRequestedParts = ro.parts.some(p => p.status === 'REQUESTED');
-                const requestedCount = ro.parts.filter(p => p.status === 'REQUESTED').length;
+                const hasRequestedParts = ro.parts.some(isTechRequestedPart);
+                const requestedCount = ro.parts.filter(isTechRequestedPart).length;
 
                 return (
                   <div
@@ -1813,14 +1912,20 @@ export const PartsDashboard: React.FC = () => {
 
                       {hasParts ? (
                         <div className="space-y-2">
-                          {ro.parts.map(part => {
+                          {[...ro.parts].sort((a, b) => getPartLineOrder(a) - getPartLineOrder(b)).map(part => {
                             const etaBadge = formatEtaBadge(part.estimatedArrival);
+                            const lineNum = part.roLineNumber || (part.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(part.notes.match(/For Line (\d+)/i)![1]) : undefined);
                             return (
                               <div
                                 key={part.id}
                                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-slate-200 text-xs shadow-2xs"
                               >
                                 <div className="flex items-center gap-2 flex-wrap">
+                                  {lineNum && (
+                                    <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200 shrink-0">
+                                      Line {lineNum}
+                                    </span>
+                                  )}
                                   <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                                     #{part.partNumber}
                                   </span>
@@ -1850,18 +1955,22 @@ export const PartsDashboard: React.FC = () => {
                                   </span>
 
                                   {/* Quick Actions */}
-                                  {part.status === 'REQUESTED' && (
+                                  {isTechRequestedPart(part) && (
                                     <button
                                       onClick={() => openAddPartModalForRO(ro.id, true)}
-                                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold cursor-pointer transition-colors shadow-xs flex items-center gap-1"
+                                      className={`px-2.5 py-1 text-white rounded text-[10px] font-bold cursor-pointer transition-colors shadow-xs flex items-center gap-1 ${
+                                        part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY'
+                                          ? 'bg-purple-600 hover:bg-purple-700'
+                                          : 'bg-amber-600 hover:bg-amber-700'
+                                      }`}
                                       title="Fulfill and price this requested part"
                                     >
                                       <Plus className="w-3 h-3" />
-                                      <span>Order / Price</span>
+                                      <span>{part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY' ? 'Price / Quote' : 'Order / Price'}</span>
                                     </button>
                                   )}
 
-                                  {part.status !== 'RECEIVED' && part.status !== 'ISSUED_TO_TECH' && part.status !== 'REQUESTED' && (
+                                  {part.status !== 'RECEIVED' && part.status !== 'ISSUED_TO_TECH' && !isTechRequestedPart(part) && (
                                     <button
                                       onClick={() => handleQuickReceive(ro.id, part.id)}
                                       className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold cursor-pointer transition-colors"
@@ -1982,19 +2091,33 @@ export const PartsDashboard: React.FC = () => {
                     {filteredParts.map(part => {
                       const etaBadge = formatEtaBadge(part.estimatedArrival);
                       const targetRO = repairOrders.find(r => r.id === part.roId);
+                      const lineNum = part.roLineNumber || (part.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(part.notes.match(/For Line (\d+)/i)![1]) : undefined);
                       return (
                         <tr 
                           key={part.id}
                           className={`hover:bg-slate-50 transition-colors ${
-                            part.status === 'REQUESTED' ? 'bg-amber-50/50' : ''
+                            part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY'
+                              ? 'bg-purple-50/50'
+                              : isTechRequestedPart(part)
+                              ? 'bg-amber-50/50'
+                              : ''
                           }`}
                         >
                           <td className="py-2.5 px-3">
-                            <div className="font-mono font-bold text-slate-900 flex items-center gap-1.5">
+                            <div className="font-mono font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                              {lineNum && (
+                                <span className="font-mono text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                                  Line {lineNum}
+                                </span>
+                              )}
                               <span>#{part.partNumber}</span>
-                              {part.status === 'REQUESTED' && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-600 text-white animate-pulse">
-                                  REQ
+                              {isTechRequestedPart(part) && (
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black text-white ${
+                                  part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY'
+                                    ? 'bg-purple-600'
+                                    : 'bg-rose-600 animate-pulse'
+                                }`}>
+                                  {part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY' ? 'QUOTE' : 'REQ'}
                                 </span>
                               )}
                             </div>
@@ -2104,6 +2227,7 @@ export const PartsDashboard: React.FC = () => {
               {filteredParts.map(part => {
                 const etaBadge = formatEtaBadge(part.estimatedArrival);
                 const targetRO = repairOrders.find(r => r.id === part.roId);
+                const lineNum = part.roLineNumber || (part.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(part.notes.match(/For Line (\d+)/i)![1]) : undefined);
 
                 return (
                   <div
@@ -2114,6 +2238,11 @@ export const PartsDashboard: React.FC = () => {
                     {/* Left Info: Part #, Description, Supplier, Vehicle */}
                     <div className="space-y-1.5 flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {lineNum && (
+                          <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200 shrink-0">
+                            Line {lineNum}
+                          </span>
+                        )}
                         <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
                           #{part.partNumber}
                         </span>
@@ -2366,7 +2495,7 @@ export const PartsDashboard: React.FC = () => {
                     {filteredActiveROsForDropdown.length === 0 ? null : (
                       filteredActiveROsForDropdown.map(ro => {
                         const isSelected = ro.id === selectedTargetRoId;
-                        const reqCount = ro.parts.filter(p => p.status === 'REQUESTED').length;
+                        const reqCount = ro.parts.filter(isTechRequestedPart).length;
                         return (
                           <button
                             key={ro.id}
@@ -2513,28 +2642,38 @@ export const PartsDashboard: React.FC = () => {
                       <div className="grid grid-cols-1 gap-2.5">
                         {requestedPartsForSelectedRO.map((rp, idx) => {
                           const draft = getReqDraft(rp);
+                          const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                          const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
+                          const concernDesc = lineNum && currentSelectedRO?.concerns && currentSelectedRO.concerns[lineNum - 1] 
+                            ? currentSelectedRO.concerns[lineNum - 1] 
+                            : (lineNum === 1 ? currentSelectedRO?.primaryConcern : undefined);
+
                           return (
                             <div 
                               key={rp.id || idx} 
-                              className="bg-white p-3.5 rounded-xl border-2 border-amber-300 shadow-2xs space-y-2.5 transition-all"
+                              className={`p-3.5 rounded-xl border-2 shadow-2xs space-y-2.5 transition-all ${
+                                isQuoteOnly ? 'bg-purple-50/30 border-purple-300' : 'bg-white border-amber-300'
+                              }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">
                                     {idx + 1}
                                   </span>
-                                  <div>
-                                    <div className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
-                                      <span>{rp.description || rp.name}</span>
-                                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                                        Tech Request
-                                      </span>
-                                    </div>
-                                    {rp.notes && (
-                                      <div className="text-[11px] text-slate-600 italic mt-0.5">
-                                        Bay Note: "{rp.notes}"
-                                      </div>
-                                    )}
+                                  {lineNum && (
+                                    <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200 shrink-0">
+                                      Line {lineNum}
+                                    </span>
+                                  )}
+                                  <div className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                                    <span>{rp.description || rp.name}</span>
+                                    <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                      isQuoteOnly
+                                        ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                                    }`}>
+                                      {isQuoteOnly ? 'Quote Only' : 'Order Now'}
+                                    </span>
                                   </div>
                                 </div>
 
@@ -2550,6 +2689,18 @@ export const PartsDashboard: React.FC = () => {
                                   />
                                 </div>
                               </div>
+
+                              {concernDesc && (
+                                <div className="text-[11px] text-slate-700 bg-white/90 p-1.5 rounded border border-slate-200 font-medium truncate">
+                                  <strong className="text-slate-900 font-bold uppercase text-[9px] mr-1">Line {lineNum} Concern:</strong>
+                                  <span>{concernDesc}</span>
+                                </div>
+                              )}
+                              {rp.notes && !rp.notes.startsWith('For Line') && (
+                                <div className="text-[11px] text-slate-600 italic">
+                                  Bay Note: "{rp.notes}"
+                                </div>
+                              )}
 
                               {/* Part Number, Price, Status, Supplier, and Instant Order button */}
                               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-2 border-t border-slate-100 items-end">
@@ -2609,17 +2760,29 @@ export const PartsDashboard: React.FC = () => {
                                   />
                                 </div>
 
-                                {/* Single Fulfill Action */}
-                                <div className="sm:col-span-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleFulfillSingleRequestedPart(currentSelectedRO.id, rp)}
-                                    className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1 border border-emerald-700"
-                                    title="Save Part # & Price, and place order for this item"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Order</span>
-                                  </button>
+                                {/* Actions */}
+                                <div className="sm:col-span-2 flex items-center gap-1">
+                                  {isQuoteOnly ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveQuotePriceOnly(currentSelectedRO.id, rp)}
+                                      className="w-full py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1 border border-purple-700"
+                                      title="Save Quoted Price directly to Main Estimate"
+                                    >
+                                      <Calculator className="w-3.5 h-3.5" />
+                                      <span>Send to Estimate</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFulfillSingleRequestedPart(currentSelectedRO.id, rp)}
+                                      className="w-full py-2 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1 border border-emerald-700"
+                                      title="Save Part # & Price, and place order for this item"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Order Part</span>
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2719,6 +2882,26 @@ export const PartsDashboard: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-start">
+                        {/* Concern Line Selector */}
+                        {currentSelectedRO && (currentSelectedRO.concerns && currentSelectedRO.concerns.length > 0 ? currentSelectedRO.concerns : [currentSelectedRO.primaryConcern || 'General Diagnostic & Service']).length > 1 && (
+                          <div className="sm:col-span-12">
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                              Target Concern Line on Repair Order
+                            </label>
+                            <select
+                              value={line.roLineNumber || 1}
+                              onChange={e => handleUpdatePartLine(line.id, 'roLineNumber', parseInt(e.target.value) || 1)}
+                              className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            >
+                              {(currentSelectedRO.concerns && currentSelectedRO.concerns.length > 0 ? currentSelectedRO.concerns : [currentSelectedRO.primaryConcern || 'General Diagnostic & Service']).map((c, cIdx) => (
+                                <option key={cIdx} value={cIdx + 1}>
+                                  Line {cIdx + 1}: {c}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
                         {/* Part Number */}
                         <div className="sm:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">

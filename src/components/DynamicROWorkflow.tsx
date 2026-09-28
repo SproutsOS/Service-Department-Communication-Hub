@@ -22,10 +22,11 @@ import {
   FileText,
   Pencil,
   Plus,
+  Receipt,
   X
 } from 'lucide-react';
 import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome } from '../types';
-import { formatTimeOnly, formatDurationSince, formatRelativeTime } from '../utils/formatters';
+import { formatTimeOnly, formatDurationSince, formatRelativeTime, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, formatContactOutcome } from '../utils/cadenceUtils';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { TicketFlowStepper } from './TicketFlowStepper';
@@ -61,7 +62,7 @@ interface DynamicROWorkflowProps {
   openQuoteModal: (roId: string) => void;
   setIsFollowUpModalOpen: (open: boolean) => void;
   setActiveTab: (tab: any) => void;
-  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string) => void;
+  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: any) => void;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => void;
   updateConcernTech: (roId: string, concernIndex: number, techId?: string, techName?: string) => void;
   addRepairOrderConcern?: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string) => boolean;
@@ -69,7 +70,7 @@ interface DynamicROWorkflowProps {
 }
 
 export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
-  ro,
+  ro: rawRO,
   currentUser,
   technicians,
   serviceAdvisors,
@@ -90,11 +91,15 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   addRepairOrderConcern,
   isTechScreen = false
 }) => {
+  const ro = cleanRO3700(rawRO);
   const [smartWorkflowOrder, setSmartWorkflowOrder] = useState<boolean>(true);
   const [quickTechCause, setQuickTechCause] = useState<string>(ro.cause || '');
   const [quickTechCorrection, setQuickTechCorrection] = useState<string>(ro.correction || '');
   const [savedCauseCorrectionNotice, setSavedCauseCorrectionNotice] = useState<boolean>(false);
   const [isEditingThreeCs, setIsEditingThreeCs] = useState<boolean>(false);
+  const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
+  const [lineCauseInput, setLineCauseInput] = useState<string>('');
+  const [lineCorrectionInput, setLineCorrectionInput] = useState<string>('');
   const [isAddingConcern, setIsAddingConcern] = useState<boolean>(false);
   const [newConcernText, setNewConcernText] = useState<string>('');
   const [newConcernPayType, setNewConcernPayType] = useState<ConcernPayType>('CUSTOMER_PAY');
@@ -189,7 +194,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
         sectionKey: 'section-quote',
         title: 'Build & Submit Repair Quote',
         badge: 'Estimate Due',
-        description: 'Diagnostic root cause is documented. Lookup OEM flat rate labor hours in ProDemand and finalize estimate for customer.',
+        description: 'Diagnostic root cause is documented. Lookup OEM flat rate labor hours in Pro Demand and finalize estimate for customer.',
         actionHint: 'Click "Initiate / Open Repair Quote" to construct the labor and parts estimate.'
       };
     }
@@ -286,6 +291,28 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
     setSavedCauseCorrectionNotice(true);
     triggerActionNotice('✓ Root Cause & Correction saved! Returned to standard workflow position.');
     setTimeout(() => setSavedCauseCorrectionNotice(false), 3000);
+  };
+
+  const handleSaveLineCauseCorrection = (idx: number) => {
+    const currentConcerns = ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern || ''];
+    const nextCauses = [...(ro.concernCauses || currentConcerns.map((_, i) => i === 0 ? (ro.cause || '') : ''))];
+    while (nextCauses.length < currentConcerns.length) nextCauses.push('');
+    nextCauses[idx] = lineCauseInput.trim();
+
+    const nextCorrections = [...(ro.concernCorrections || currentConcerns.map((_, i) => i === 0 ? (ro.correction || '') : ''))];
+    while (nextCorrections.length < currentConcerns.length) nextCorrections.push('');
+    nextCorrections[idx] = lineCorrectionInput.trim();
+
+    const primaryCause = idx === 0 ? lineCauseInput.trim() : (ro.cause || nextCauses[0] || '');
+    const primaryCorrection = idx === 0 ? lineCorrectionInput.trim() : (ro.correction || nextCorrections[0] || '');
+
+    updateTechCauseAndCorrection(ro.id, primaryCause, primaryCorrection, {
+      concernCauses: nextCauses,
+      concernCorrections: nextCorrections,
+      notify: true
+    });
+    setEditingLineIdx(null);
+    triggerActionNotice(`✓ Line ${idx + 1} Cause & Correction saved!`);
   };
 
   // Define each workflow section with its natural resting order (1 through 10)
@@ -640,126 +667,306 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 </div>
               )}
 
-              {(ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern]).map((concern, idx) => (
-                <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <div className="flex items-start gap-2 flex-1">
-                    <span className="font-bold text-slate-400">{idx + 1}.</span>
-                    <span className="font-semibold text-slate-900">{concern}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                      {ro.concernPayTypes?.[idx] || 'CUSTOMER_PAY'}
-                    </span>
-                    <span className="text-[10px] font-semibold text-slate-500">
-                      Tech: {ro.concernTechNames?.[idx] || ro.techName || 'Unassigned'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+              {/* Itemized Lines: Each line has Complaint, Concern/Cause, Correction, and Line Quote */}
+              <div className="space-y-4">
+                {(ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern || 'General Inspection & Diagnostic']).map((concern, idx) => {
+                  const lineNum = idx + 1;
+                  const currentCause = ro.concernCauses?.[idx] || (idx === 0 ? ro.cause : '');
+                  const currentCorrection = ro.concernCorrections?.[idx] || (idx === 0 ? ro.correction : '');
+                  const currentPayType: ConcernPayType = ro.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
+                  const currentTechId = ro.concernTechIds?.[idx] || ro.techId;
+                  const currentTechName = ro.concernTechNames?.[idx] || (currentTechId ? technicians.find(t => t.id === currentTechId)?.name : ro.techName) || 'Unassigned';
 
-            {/* Technician Cause & Correction Documentation */}
-            <div className="pt-2 border-t border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  2. Technician Cause & 3. Correction Documentation
-                </span>
-                {!isEditingThreeCs && (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingThreeCs(true)}
-                    className="text-[11px] font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>{ro.cause || ro.correction ? 'Edit' : 'Add Note'}</span>
-                  </button>
-                )}
+                  // Line quote calculation
+                  const lineLaborItems = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                  const linePartsItems = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lineNum);
+                  const lineROParts = (ro.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
+
+                  const lineLaborHours = lineLaborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+                  const lineLaborCost = lineLaborItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                  const lineQuotePartsCost = linePartsItems.reduce((acc, item) => acc + (Number(item.subtotal) || (Number(item.unitPrice || 0) * Number(item.quantity || 1))), 0);
+                  const lineROPartsCost = lineROParts.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+                  const linePartsCost = linePartsItems.length > 0 ? lineQuotePartsCost : lineROPartsCost;
+                  const linePartsCount = linePartsItems.length > 0 ? linePartsItems.length : lineROParts.length;
+                  const lineTotal = lineLaborCost + linePartsCost;
+                  const hasLineQuote = lineLaborItems.length > 0 || linePartsItems.length > 0 || lineROParts.length > 0;
+
+                  return (
+                    <div 
+                      key={idx}
+                      className="bg-white rounded-xl border-2 border-slate-300 shadow-2xs hover:border-slate-400 transition-all p-4 space-y-3.5"
+                    >
+                      {/* Line Header: Line Number, Pay Type, Tech Assignment, Edit button */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
+                            Line {lineNum}
+                          </span>
+                          {idx === 0 && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                              Primary Concern
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Pay Type */}
+                          {canSelectPayType ? (
+                            <div className="flex items-center gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY')}
+                                className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                                  currentPayType === 'CUSTOMER_PAY' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Customer Pay
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateConcernPayType(ro.id, idx, 'WARRANTY')}
+                                className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                                  currentPayType === 'WARRANTY' ? 'bg-amber-500 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Warranty
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateConcernPayType(ro.id, idx, 'INTERNAL')}
+                                className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                                  currentPayType === 'INTERNAL' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Internal
+                              </button>
+                            </div>
+                          ) : (
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                              currentPayType === 'WARRANTY' ? 'bg-amber-50 text-amber-900 border-amber-300' : currentPayType === 'INTERNAL' ? 'bg-purple-50 text-purple-900 border-purple-300' : 'bg-blue-50 text-blue-900 border-blue-300'
+                            }`}>
+                              {currentPayType.replace(/_/g, ' ')}
+                            </span>
+                          )}
+
+                          {/* Assigned Tech */}
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Wrench className="w-3.5 h-3.5 text-slate-500" />
+                            {canAssignTech ? (
+                              <select
+                                value={currentTechId || ''}
+                                onChange={(e) => {
+                                  const chosen = technicians.find(t => t.id === e.target.value);
+                                  updateConcernTech(ro.id, idx, chosen?.id, chosen?.name);
+                                  triggerActionNotice(`✓ Assigned Line ${lineNum} to ${chosen?.name || 'Technician'}`);
+                                }}
+                                className="text-xs font-semibold bg-white border border-slate-300 rounded px-2 py-0.5 text-slate-800 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                              >
+                                <option value="">{ro.techName ? `(Primary: ${ro.techName})` : 'Unassigned'}</option>
+                                {technicians.map(t => (
+                                  <option key={t.id} value={t.id}>{t.name}{t.employeeNumber ? ` #${t.employeeNumber}` : ''}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="font-bold text-slate-800 text-[11px]">{currentTechName}</span>
+                            )}
+                          </div>
+
+                          {/* Edit Cause & Correction for this line */}
+                          {editingLineIdx !== idx && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLineIdx(idx);
+                                setLineCauseInput(currentCause || '');
+                                setLineCorrectionInput(currentCorrection || '');
+                              }}
+                              className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 transition-colors cursor-pointer"
+                              title="Edit diagnostic cause and repair correction for this line"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>{currentCause || currentCorrection ? 'Edit 3Cs' : '+ Add Cause/Correction'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 1. Customer Stated Complaint */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
+                          <span>Complaint (Customer Stated Symptom):</span>
+                        </label>
+                        <div className="bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-950 whitespace-pre-wrap leading-relaxed">
+                          {concern}
+                        </div>
+                      </div>
+
+                      {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
+                          <span>Concern / Cause (Diagnostic Finding):</span>
+                        </label>
+                        {editingLineIdx === idx ? (
+                          <textarea
+                            rows={2}
+                            value={lineCauseInput}
+                            onChange={(e) => setLineCauseInput(e.target.value)}
+                            placeholder="Enter diagnostic root cause (e.g. DTC P0300, cracked coil pack, worn brake pads)..."
+                            className="w-full px-3 py-2 border-2 border-amber-400 rounded-lg text-xs font-mono bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          />
+                        ) : (
+                          <div className="bg-amber-50/50 px-3 py-2 rounded-lg border border-amber-200 text-xs font-semibold text-amber-950 font-mono">
+                            {currentCause || <span className="italic text-slate-400 font-sans font-normal">Awaiting technician diagnosis</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3. Correction (Repair Procedure / Action Taken) */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black inline-flex items-center justify-center">3</span>
+                          <span>Correction (Repair Procedure / Action Taken):</span>
+                        </label>
+                        {editingLineIdx === idx ? (
+                          <textarea
+                            rows={2}
+                            value={lineCorrectionInput}
+                            onChange={(e) => setLineCorrectionInput(e.target.value)}
+                            placeholder="Enter recommended repair procedure (e.g. Replaced ignition coil, cleared codes, road tested)..."
+                            className="w-full px-3 py-2 border-2 border-emerald-400 rounded-lg text-xs font-mono bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                          />
+                        ) : (
+                          <div className="bg-emerald-50/50 px-3 py-2 rounded-lg border border-emerald-200 text-xs font-semibold text-emerald-950 font-mono">
+                            {currentCorrection || <span className="italic text-slate-400 font-sans font-normal">Awaiting technician repair plan</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Save / Cancel buttons when editing this line */}
+                      {editingLineIdx === idx && (
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setEditingLineIdx(null)}
+                            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg hover:bg-slate-100 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveLineCauseCorrection(idx)}
+                            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Save Line {lineNum} Findings</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* 4. Line Quote Breakdown & Subtotal */}
+                      <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          <Calculator className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
+                          {hasLineQuote ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                                Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                                Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="italic text-slate-500 text-[11px]">Estimate pending</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+                          <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
+                            Line {lineNum} Total: ${lineTotal.toFixed(2)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => openQuoteModal(ro.id)}
+                            className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-300 transition-colors cursor-pointer"
+                          >
+                            {hasLineQuote ? 'Edit Quote' : '+ Quote Line'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {isEditingThreeCs ? (
-                <div className="space-y-3 bg-white p-3 rounded-lg border border-slate-300 shadow-2xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Quote Total Summary Bar: Totaled by Line */}
+              <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-indigo-400" />
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Root Cause (Diagnosis Findings)
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={quickTechCause}
-                        onChange={(e) => setQuickTechCause(e.target.value)}
-                        placeholder="Enter diagnostic root cause identified by technician..."
-                        className="w-full p-2.5 text-xs rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-sans"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Recommended Correction (Repair Plan)
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={quickTechCorrection}
-                        onChange={(e) => setQuickTechCorrection(e.target.value)}
-                        placeholder="Enter recommended repair procedure and required corrections..."
-                        className="w-full p-2.5 text-xs rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-sans"
-                      />
+                      <h5 className="text-xs font-black uppercase tracking-wider text-indigo-200">
+                        Quote Total (By Line & Totaled)
+                      </h5>
+                      <span className="text-[11px] text-slate-300">
+                        Itemized totals across all {(ro.concerns?.length || 1)} concern lines
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-2 pt-1">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setIsEditingThreeCs(false)}
-                      className="px-3 py-1.5 text-slate-600 hover:text-slate-800 text-xs font-semibold rounded-md transition-colors cursor-pointer"
+                      onClick={() => openQuoteModal(ro.id)}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSaveQuickCauseCorrection();
-                        setIsEditingThreeCs(false);
-                      }}
-                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Save Findings</span>
+                      <Calculator className="w-3.5 h-3.5" />
+                      <span>{ro.quote ? 'Open & Edit Full Quote' : '+ Initiate Repair Quote'}</span>
                     </button>
                   </div>
                 </div>
-              ) : (
-                /* Clean Read-Only Display for Service Advisors */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 bg-white rounded-lg border border-slate-200">
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                      Root Cause (Technician Findings)
-                    </span>
-                    {ro.cause ? (
-                      <p className="text-xs text-slate-900 font-medium whitespace-pre-wrap">
-                        {ro.cause}
-                      </p>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        Awaiting technician diagnosis
-                      </span>
+
+                {/* Line-by-line itemized totals summary */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  {(ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern || 'General Inspection']).map((_, i) => {
+                    const lNum = i + 1;
+                    const lLabor = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lNum).reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                    const lQuoteParts = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.subtotal) || (Number(p.unitPrice || 0) * Number(p.quantity || 1))), 0);
+                    const lROParts = (ro.parts || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.price || 0) * Number(p.quantity || 1)), 0);
+                    const lParts = lQuoteParts > 0 ? lQuoteParts : lROParts;
+                    const lTotal = lLabor + lParts;
+
+                    return (
+                      <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between">
+                        <span className="font-semibold text-slate-300 text-[11px]">Line {lNum}:</span>
+                        <span className="font-mono font-bold text-white">${lTotal.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Grand Total Breakdown */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs">
+                  <div className="flex items-center gap-4 text-slate-300 flex-wrap">
+                    <span>Total Labor: <strong className="font-mono text-white">${(ro.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
+                    <span>Total Parts: <strong className="font-mono text-white">${(ro.quote?.totalPartsCost || 0).toFixed(2)}</strong></span>
+                    {(ro.quote?.shopSuppliesFee || 0) > 0 && (
+                      <span>Shop Supplies: <strong className="font-mono text-white">${(ro.quote?.shopSuppliesFee || 0).toFixed(2)}</strong></span>
+                    )}
+                    {(ro.quote?.taxAmount || 0) > 0 && (
+                      <span>Sales Tax: <strong className="font-mono text-white">${(ro.quote?.taxAmount || 0).toFixed(2)}</strong></span>
                     )}
                   </div>
-                  <div className="p-3 bg-white rounded-lg border border-slate-200">
-                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-                      Recommended Correction (Repair Plan)
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black uppercase text-indigo-300 tracking-wider">Grand Total:</span>
+                    <span className="text-base sm:text-lg font-black font-mono text-emerald-400">
+                      ${(ro.quote?.grandTotal || 0).toFixed(2)}
                     </span>
-                    {ro.correction ? (
-                      <p className="text-xs text-slate-900 font-medium whitespace-pre-wrap">
-                        {ro.correction}
-                      </p>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        Awaiting technician repair plan
-                      </span>
-                    )}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -828,7 +1035,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 <div className="text-xs text-slate-600 mt-0.5">
                   {isTechScreen 
                     ? 'Log flat-rate labor times (hours) for required repairs. Rate per hour and parts are priced by the Advisor and Parts Counter.'
-                    : 'Itemized ProDemand flat-rate labor times, replacement parts, shop supplies, and sales tax.'}
+                    : 'Itemized Pro Demand flat-rate labor times, replacement parts, shop supplies, and sales tax.'}
                 </div>
               </div>
             </div>
@@ -839,10 +1046,10 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
-                title="Open Mitchell 1 ProDemand for OEM flat rate labor times"
+                title="Open Pro Demand for OEM flat rate labor times"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>ProDemand Labor ↗</span>
+                <span>Pro Demand Labor ↗</span>
               </a>
 
               <button
@@ -927,22 +1134,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 </div>
               </div>
             )
-          ) : (
-            <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-              <p>
-                {isTechScreen
-                  ? 'No labor time logged yet for this repair order. Technicians can look up flat-rate times in ProDemand and enter the labor hours required to complete the repair.'
-                  : 'No formal repair quote has been initiated for this repair order yet. Technicians can look up OEM labor times in ProDemand and build an itemized quote to present to the advisor and customer.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => openQuoteModal(ro.id)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shrink-0 cursor-pointer shadow-xs"
-              >
-                {isTechScreen ? 'Enter Labor Time Now' : 'Initiate Quote Now'}
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
       )
     },

@@ -71,8 +71,8 @@ export const NewROModal: React.FC = () => {
           setMake(firstVeh.make || '');
           setModel(firstVeh.model || '');
           setVin(firstVeh.vin || '');
-          setMileage(firstVeh.mileage || '');
-          setVinDecodedMsg(`Cloud Fleet Vehicle: ${firstVeh.year} ${firstVeh.make} ${firstVeh.model}`);
+          setMileage('');
+          setVinDecodedMsg(null);
         } else {
           setYear('');
           setMake('');
@@ -172,8 +172,8 @@ export const NewROModal: React.FC = () => {
       setMake(veh.make || '');
       setModel(veh.model || '');
       setVin(veh.vin || '');
-      setMileage(veh.mileage || '');
-      setVinDecodedMsg(`Cloud Fleet Vehicle: ${veh.year} ${veh.make} ${veh.model}`);
+      setMileage('');
+      setVinDecodedMsg(null);
     }
   };
 
@@ -694,8 +694,8 @@ export const NewROModal: React.FC = () => {
                           setMake(v.make || '');
                           setModel(v.model || '');
                           setVin(v.vin || '');
-                          setMileage(v.mileage || '');
-                          setVinDecodedMsg(`Cloud Fleet Vehicle: ${v.year} ${v.make} ${v.model}`);
+                          setMileage('');
+                          setVinDecodedMsg(null);
                         }}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shadow-2xs ${
                           isCurrent 
@@ -775,9 +775,6 @@ export const NewROModal: React.FC = () => {
                   className="w-full text-xs px-3 py-2.5 font-mono font-bold tracking-wider border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase bg-white shadow-xs text-slate-900"
                 />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">
-                Enter or paste any 17-digit VIN. Year, Make, and Model will automatically be fetched and entered into the fields below.
-              </p>
             </div>
 
             {/* Year, Make, Model & Trim */}
@@ -845,13 +842,6 @@ export const NewROModal: React.FC = () => {
                   {concerns.length} {concerns.length === 1 ? 'Line Item' : 'Line Items'}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => handleAddConcern()}
-                className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-md border-2 border-slate-400 hover:border-blue-600 transition-colors shadow-2xs"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Another Concern Line
-              </button>
             </div>
 
             {/* List of Concerns */}
@@ -959,8 +949,19 @@ export const NewROModal: React.FC = () => {
 
           </div>
 
-          {/* High Priority & Waiter Buttons */}
+          {/* Action Row: Add Another Concern Line, High Priority & Waiter Buttons */}
           <div className="flex items-center gap-3 pt-1 flex-wrap">
+            {/* Add Another Concern Line (Positioned to the left of High Priority) */}
+            <button
+              type="button"
+              id="new-ro-add-concern-btn"
+              onClick={() => handleAddConcern()}
+              className="px-3.5 py-2 rounded-lg border-2 border-slate-500 bg-white hover:border-blue-600 hover:bg-blue-50 text-blue-700 hover:text-blue-900 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer shadow-xs select-none"
+            >
+              <Plus className="w-4 h-4 text-blue-600" />
+              <span>Add Another Concern Line</span>
+            </button>
+
             {/* High Priority Button */}
             <button
               type="button"

@@ -240,3 +240,60 @@ export function formatCurrency(val?: number | string | null, fallback = '$0.00')
   if (isNaN(num)) return fallback;
   return `$${num.toFixed(2)}`;
 }
+
+/**
+ * Standard shop labor hourly rates by Pay Type:
+ * - Customer Pay: $165.00/hr
+ * - Warranty: $121.78/hr
+ * - Internal: $135.00/hr
+ */
+export const PAY_TYPE_RATES = {
+  CUSTOMER_PAY: 165.00,
+  WARRANTY: 121.78,
+  INTERNAL: 135.00,
+} as const;
+
+export function getPayTypeRate(payType?: string): number {
+  if (payType === 'WARRANTY') return 121.78;
+  if (payType === 'INTERNAL') return 135.00;
+  return 165.00; // Customer Pay default
+}
+
+/**
+ * Passes through the Repair Order intact without stripping or dropping customer concerns.
+ */
+export function cleanRO3700<T>(ro: T): T {
+  return ro;
+}
+
+/**
+ * Parse line-indexed strings (e.g., "Line 1: findings\n\nLine 2: findings") or single strings into an array of lines.
+ */
+export function parseLineIndexedField(text: string | undefined, lineCount: number): string[] {
+  const count = Math.max(1, lineCount);
+  const result: string[] = Array(count).fill('');
+  if (!text || !text.trim()) return result;
+
+  const raw = text.trim();
+  const linePattern = /(?:^|\n)\s*Line\s*(\d+)\s*:\s*/gi;
+  const matches = [...raw.matchAll(linePattern)];
+
+  if (matches.length > 0) {
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const lineNum = parseInt(match[1], 10);
+      const startIdx = match.index! + match[0].length;
+      const endIdx = (i + 1 < matches.length) ? matches[i + 1].index! : raw.length;
+      const content = raw.slice(startIdx, endIdx).trim();
+      const targetIdx = lineNum - 1;
+      if (targetIdx >= 0 && targetIdx < count) {
+        result[targetIdx] = content;
+      }
+    }
+    return result;
+  }
+
+  // If no "Line X:" pattern, assign the entire text to Line 1
+  result[0] = raw;
+  return result;
+}

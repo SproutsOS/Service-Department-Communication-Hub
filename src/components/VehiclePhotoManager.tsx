@@ -130,9 +130,6 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
                 {photos.length} / {maxPhotos}
               </span>
             </h4>
-            <p className="text-xs text-slate-600">
-              Auto-compressed client-side for fast loading and zero storage bloat. Snap with phone/tablet or upload files.
-            </p>
           </div>
         </div>
 
@@ -245,10 +242,6 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
             <Upload className="w-4 h-4 text-slate-600" />
             <span>Upload from Gallery / Files</span>
           </button>
-
-          <span className="text-[11px] text-slate-500 italic ml-auto">
-            Automatic background compression shrinks high-res photos to ~150KB
-          </span>
         </div>
       </div>
 

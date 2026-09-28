@@ -364,10 +364,10 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
                         <span className="text-purple-700">({waitingParts[0].description})</span>
                       </span>
                     ) : (
-                      <span className="line-clamp-1 italic text-[11px]">
-                        "{ro.concerns && ro.concerns.length > 1
-                          ? `${ro.concerns[0]} (+${ro.concerns.length - 1} more)`
-                          : ro.primaryConcern}"
+                      <span className="italic text-[11px] text-slate-800 font-medium">
+                        {ro.concerns && ro.concerns.length > 1
+                          ? ro.concerns.map((c, i) => `L${i + 1}: ${c}`).join(' • ')
+                          : `"${ro.primaryConcern}"`}
                       </span>
                     )}
 

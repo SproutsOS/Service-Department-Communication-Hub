@@ -19,7 +19,7 @@ import {
 import { RepairOrder, ROStatus } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
 import { useApp } from '../context/AppContext';
-import { formatDateTime, formatTimeOnly, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails } from '../utils/formatters';
+import { formatDateTime, formatTimeOnly, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
 
 interface ROCardProps {
@@ -29,7 +29,8 @@ interface ROCardProps {
   onOpenFollowUp?: (ro: RepairOrder) => void;
 }
 
-export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, onOpenFollowUp }) => {
+export const ROCard: React.FC<ROCardProps> = ({ ro: rawRO, onClick, compact = false, onOpenFollowUp }) => {
+  const ro = cleanRO3700(rawRO);
   const { users } = useApp();
   const isCompleted = isROCompleted(ro);
   const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
@@ -43,6 +44,15 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, on
   // Check parts in transit or with active ETA
   const activeParts = ro.parts.filter(p => p.status !== 'ISSUED_TO_TECH');
   const urgentPartsCount = ro.parts.filter(p => p.status === 'IN_TRANSIT' || p.status === 'ORDERED').length;
+
+  // Determine if RO has parts quoted on estimate vs ordered on repair order
+  const hasQuotedParts = Boolean(
+    (ro.quote?.partsItems && ro.quote.partsItems.length > 0) ||
+    ro.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')
+  );
+  const hasOrderedParts = Boolean(
+    ro.parts.some(p => p.status !== 'QUOTE_ONLY' && (p.requestType === 'ORDER_NOW' || ['ORDERED', 'DAILY_ORDER', 'IN_STOCK', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'LOCAL_PURCHASE'].includes(p.status)))
+  );
 
   const isWaitingApproval = ro.status === 'WAITING_FOR_APPROVAL';
   const hasPendingTechRec = ro.recommendations && ro.recommendations.some(r => r.status === 'PENDING');
@@ -160,11 +170,65 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, on
               <span>{cadence.label}</span>
             </span>
           )}
-          <span 
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}
-          >
-            {statusInfo.label}
-          </span>
+
+          {/* Service Advisor: Dynamic Parts Indicator / Status Badge */}
+          {ro.status === 'PARTS_ORDERED' ? (
+            hasQuotedParts && hasOrderedParts ? (
+              <>
+                <span 
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400"
+                  title="Has quoted parts on estimate"
+                >
+                  Parts on Estimate
+                </span>
+                <span 
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400"
+                  title="Has parts ordered tracking live ETA"
+                >
+                  Parts Ordered (ETA)
+                </span>
+              </>
+            ) : hasQuotedParts ? (
+              <span 
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400"
+                title="Parts quoted on customer estimate (awaiting approval)"
+              >
+                Parts on Estimate
+              </span>
+            ) : (
+              <span 
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400"
+                title="Parts ordered tracking live ETA arrival"
+              >
+                Parts Ordered (ETA)
+              </span>
+            )
+          ) : (
+            <>
+              {/* If in another status, still show parts indicator pill if parts are on estimate or ordered */}
+              {!isCompleted && hasQuotedParts && (
+                <span 
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-50 text-indigo-800 border-indigo-300"
+                  title="Has parts quoted on estimate"
+                >
+                  Parts on Estimate
+                </span>
+              )}
+              {!isCompleted && hasOrderedParts && (
+                <span 
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-50 text-purple-800 border-purple-300"
+                  title="Has active parts ordered"
+                >
+                  Parts Ordered (ETA)
+                </span>
+              )}
+              <span 
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}
+              >
+                {statusInfo.label}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -225,16 +289,26 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, on
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 mt-1 flex items-center justify-between gap-1">
-          <span className="truncate">
-            <span className="font-semibold text-slate-700">Concern:</span> {ro.primaryConcern}
-          </span>
-          {ro.concerns && ro.concerns.length > 1 && (
-            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded border-2 border-blue-400">
-              +{ro.concerns.length - 1} more
-            </span>
-          )}
-        </div>
+        {/* Customer Stated Complaints / Concerns */}
+        {(() => {
+          const cardConcerns = ro.concerns && ro.concerns.length > 0 
+            ? ro.concerns 
+            : [ro.primaryConcern || 'General Inspection'];
+          return (
+            <div className="text-xs text-slate-700 mt-1 space-y-1">
+              {cardConcerns.map((c, idx) => (
+                <div key={idx} className="flex items-start gap-1.5 leading-snug">
+                  <span className="font-mono text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 shrink-0">
+                    L{idx + 1}
+                  </span>
+                  <span className="font-semibold text-slate-900 line-clamp-2">
+                    {c}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Tech Diagnosis & Repair (Cause & Correction) if documented */}
         {(ro.cause || ro.correction) && (
@@ -317,24 +391,37 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, on
         </div>
       </div>
 
-      {/* Parts Ordered and Tracked with ETA Directly on Dashboard */}
-      {ro.parts.length > 0 && (
+      {/* Parts Quoted on Estimate or Ordered and Tracked with ETA */}
+      {(ro.parts.length > 0 || (ro.quote?.partsItems && ro.quote.partsItems.length > 0)) && (
         <div className="mt-1.5 p-1.5 bg-slate-50 rounded-lg border-2 border-slate-700">
           <div className="flex items-center justify-between text-[11px] mb-1">
             <span className="font-semibold text-slate-700 flex items-center gap-1">
-              <Package className="w-3.5 h-3.5 text-blue-600" />
-              Parts Ordered & Tracked ({ro.parts.length})
+              <Package className={`w-3.5 h-3.5 ${hasQuotedParts && !hasOrderedParts ? 'text-indigo-600' : 'text-blue-600'}`} />
+              {hasQuotedParts && hasOrderedParts ? (
+                <span>Parts on Estimate & Ordered ({ro.parts.length + (ro.quote?.partsItems?.length || 0)})</span>
+              ) : hasQuotedParts ? (
+                <span>Parts on Estimate ({ro.quote?.partsItems?.length || ro.parts.filter(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY').length})</span>
+              ) : (
+                <span>Parts Ordered & Tracked ({ro.parts.length})</span>
+              )}
             </span>
             {urgentPartsCount > 0 && (
               <span className="text-orange-600 font-bold uppercase text-[10px] flex items-center gap-1">
                 <Truck className="w-3 h-3" /> Live Delivery
               </span>
             )}
+            {hasQuotedParts && !hasOrderedParts && (
+              <span className="text-indigo-700 font-bold uppercase text-[10px] flex items-center gap-1">
+                Quote Only
+              </span>
+            )}
           </div>
 
           <div className="space-y-1">
+            {/* Show up to 2 items (prioritizing ordered parts first, then quoted parts) */}
             {ro.parts.slice(0, 2).map(part => {
               const etaBadge = formatEtaBadge(part.estimatedArrival);
+              const isQuote = part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY';
               return (
                 <div 
                   key={part.id} 
@@ -346,15 +433,17 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, on
                   </div>
                   <div className="shrink-0 flex items-center gap-1.5">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                      part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
+                      isQuote
+                        ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                        : part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
                         ? 'bg-green-100 text-green-800 border-green-300'
                         : part.status === 'IN_TRANSIT'
                         ? 'bg-orange-100 text-orange-800 border-orange-300'
                         : 'bg-blue-100 text-blue-800 border-blue-300'
                     }`}>
-                      {part.status.replace('_', ' ')}
+                      {isQuote ? 'ON ESTIMATE' : part.status.replace('_', ' ')}
                     </span>
-                    {part.estimatedArrival && part.status !== 'ISSUED_TO_TECH' && (
+                    {!isQuote && part.estimatedArrival && part.status !== 'ISSUED_TO_TECH' && (
                       <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                         etaBadge.pastDue 
                           ? 'bg-red-100 text-red-800 border-red-300' 
@@ -367,9 +456,28 @@ export const ROCard: React.FC<ROCardProps> = ({ ro, onClick, compact = false, on
                 </div>
               );
             })}
-            {ro.parts.length > 2 && (
+            {ro.parts.length === 0 && ro.quote?.partsItems && ro.quote.partsItems.slice(0, 2).map(qp => (
+              <div 
+                key={qp.id} 
+                className="flex items-center justify-between text-xs bg-white px-2 py-1 rounded border-2 border-slate-600"
+              >
+                <div className="truncate pr-2">
+                  {qp.partNumber && <span className="font-mono text-[11px] text-slate-500 mr-1.5">#{qp.partNumber}</span>}
+                  <span className="font-medium text-slate-900">{qp.description}</span>
+                </div>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border bg-indigo-100 text-indigo-800 border-indigo-300">
+                    ON ESTIMATE
+                  </span>
+                  <span className="font-mono font-bold text-slate-800 text-[11px]">
+                    ${(Number(qp.unitPrice) || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {(ro.parts.length > 2 || (ro.quote?.partsItems && ro.quote.partsItems.length > 2)) && (
               <p className="text-[10px] text-slate-500 text-right">
-                +{ro.parts.length - 2} more parts on order
+                +{Math.max(0, (ro.parts.length || ro.quote?.partsItems?.length || 0) - 2)} more parts
               </p>
             )}
           </div>

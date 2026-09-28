@@ -21,10 +21,13 @@ import {
   AlertCircle,
   Calculator,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  User,
+  Edit3
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { RepairQuote, LaborLineItem, QuotePartItem, QuoteStatus } from '../types';
+import { RepairQuote, LaborLineItem, QuotePartItem, QuoteStatus, ConcernPayType } from '../types';
+import { PAY_TYPE_RATES, getPayTypeRate, cleanRO3700 } from '../utils/formatters';
 
 const COMMON_LABOR_PRESETS = [
   { name: 'Diagnostic Scan & Pinpoint Testing', hours: 1.0, notes: 'Includes scan tool live data & diagnostic tree' },
@@ -47,7 +50,8 @@ export const RepairQuoteModal: React.FC = () => {
     updateQuoteStatus, 
     currentUser,
     activeRoleView,
-    shopName
+    shopName,
+    updateTechCauseAndCorrection
   } = useApp();
 
   const isTech = currentUser.role === 'TECHNICIAN' || activeRoleView === 'TECHNICIAN';
@@ -62,8 +66,9 @@ export const RepairQuoteModal: React.FC = () => {
   const [copiedVehicleInfo, setCopiedVehicleInfo] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // Quote Form State
-  const [defaultRate, setDefaultRate] = useState<number>(150);
+  // Quote Form State: Default to Customer Pay ($165.00/hr)
+  const [quotePayType, setQuotePayType] = useState<ConcernPayType>('CUSTOMER_PAY');
+  const [defaultRate, setDefaultRate] = useState<number>(165.00);
   const [laborItems, setLaborItems] = useState<LaborLineItem[]>([]);
   const [partsItems, setPartsItems] = useState<QuotePartItem[]>([]);
   const [applyShopSupplies, setApplyShopSupplies] = useState<boolean>(true);
@@ -74,6 +79,8 @@ export const RepairQuoteModal: React.FC = () => {
   const [techNotes, setTechNotes] = useState<string>('');
   const [declineReason, setDeclineReason] = useState<string>('');
   const [showDeclinePrompt, setShowDeclinePrompt] = useState<boolean>(false);
+  const [showCorrectionEditor, setShowCorrectionEditor] = useState<boolean>(false);
+  const [correctionInput, setCorrectionInput] = useState<string>('');
 
   // Auto-Save System State & Tracking
   const [quoteAutoSaveStatus, setQuoteAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -90,6 +97,7 @@ export const RepairQuoteModal: React.FC = () => {
     laborItems,
     partsItems,
     defaultRate,
+    quotePayType,
     applyShopSupplies,
     shopSuppliesFee,
     taxRatePercent,
@@ -103,6 +111,7 @@ export const RepairQuoteModal: React.FC = () => {
       laborItems,
       partsItems,
       defaultRate,
+      quotePayType,
       applyShopSupplies,
       shopSuppliesFee,
       taxRatePercent,
@@ -110,7 +119,7 @@ export const RepairQuoteModal: React.FC = () => {
       taxExemptNumber,
       techNotes,
     };
-  }, [laborItems, partsItems, defaultRate, applyShopSupplies, shopSuppliesFee, taxRatePercent, isTaxExempt, taxExemptNumber, techNotes]);
+  }, [laborItems, partsItems, defaultRate, quotePayType, applyShopSupplies, shopSuppliesFee, taxRatePercent, isTaxExempt, taxExemptNumber, techNotes]);
 
   // Flush pending quote auto-save immediately to storage
   const flushQuoteAutoSave = () => {
@@ -125,6 +134,7 @@ export const RepairQuoteModal: React.FC = () => {
       laborItems: curLabor,
       partsItems: curParts,
       defaultRate: curRate,
+      quotePayType: curPayType,
       applyShopSupplies: curApplySupplies,
       shopSuppliesFee: curSuppliesFee,
       taxRatePercent: curTaxPercent,
@@ -152,11 +162,13 @@ export const RepairQuoteModal: React.FC = () => {
       initiatedByTechId: currentRO.quote?.initiatedByTechId || currentUser.id,
       initiatedByTechName: currentRO.quote?.initiatedByTechName || currentUser.name,
       status: currentRO.quote?.status || 'DRAFT',
+      payType: curPayType,
       laborItems: curLabor.map(l => ({
         ...l,
         laborHours: Number(l.laborHours) || 0,
         hourlyRate: Number(l.hourlyRate) || 0,
         subtotal: Number(l.subtotal) || 0,
+        payType: l.payType || curPayType,
       })),
       partsItems: curParts.map(p => ({
         ...p,
@@ -245,15 +257,85 @@ export const RepairQuoteModal: React.FC = () => {
   useEffect(() => {
     if (!activeQuoteRO) return;
     hasInitializedRef.current = false;
+    const cleanRO = cleanRO3700(activeQuoteRO);
 
-    const isExemptCustomer = Boolean(activeQuoteRO.isTaxExempt || activeQuoteRO.quote?.isTaxExempt);
+    const isExemptCustomer = Boolean(cleanRO.isTaxExempt || cleanRO.quote?.isTaxExempt);
     setIsTaxExempt(isExemptCustomer);
-    setTaxExemptNumber(activeQuoteRO.taxExemptNumber || activeQuoteRO.quote?.taxExemptNumber || '');
+    setTaxExemptNumber(cleanRO.taxExemptNumber || cleanRO.quote?.taxExemptNumber || '');
 
-    if (activeQuoteRO.quote) {
-      const q = activeQuoteRO.quote;
-      setDefaultRate(q.defaultLaborRate || 150);
-      setLaborItems(q.laborItems || []);
+    const initialPayType: ConcernPayType = cleanRO.quote?.payType || cleanRO.concernPayTypes?.[0] || 'CUSTOMER_PAY';
+    setQuotePayType(initialPayType);
+
+    const initialRate = cleanRO.quote?.defaultLaborRate && cleanRO.quote.defaultLaborRate !== 150
+      ? cleanRO.quote.defaultLaborRate
+      : (PAY_TYPE_RATES[initialPayType] || 165.00);
+    setDefaultRate(initialRate);
+
+    // Build itemized list of customer concerns (Line 1, Line 2, etc.) mirroring the repair order
+    const concernsList = cleanRO.concerns && cleanRO.concerns.length > 0
+      ? cleanRO.concerns
+      : [cleanRO.primaryConcern || 'General Diagnostic & Inspection'];
+
+    // Helper to mirror RO concern and correction into a labor line
+    const createMirroredROItem = (concern: string, idx: number, existing?: LaborLineItem): LaborLineItem => {
+      const linePayType = existing?.payType || cleanRO.concernPayTypes?.[idx] || initialPayType;
+      const lineRate = (existing?.hourlyRate && existing.hourlyRate !== 150)
+        ? existing.hourlyRate
+        : (PAY_TYPE_RATES[linePayType] || initialRate);
+      
+      const hoursVal = (existing?.laborHours !== undefined && existing.laborHours !== ('' as any))
+        ? existing.laborHours
+        : ('' as any);
+      
+      const subtotalVal = hoursVal !== '' ? Number(((Number(hoursVal) || 0) * lineRate).toFixed(2)) : 0;
+      
+      const mirroredDesc = cleanRO.correction 
+        ? `Concern: ${concern} — Correction: ${cleanRO.correction}` 
+        : `Concern: ${concern}`;
+
+      return {
+        id: existing?.id || `labor_${Date.now()}_ro_${idx}`,
+        description: mirroredDesc,
+        laborHours: hoursVal,
+        hourlyRate: lineRate,
+        subtotal: subtotalVal,
+        payType: linePayType,
+        techNotes: existing?.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : (cleanRO.cause ? `Cause: ${cleanRO.cause}` : undefined)),
+        roLineNumber: idx + 1,
+        concernText: concern,
+        correctionText: cleanRO.correction || '',
+        addedByAdvisor: false,
+      };
+    };
+
+    if (cleanRO.quote) {
+      const q = cleanRO.quote;
+      const existingItems = q.laborItems || [];
+
+      // 1. Mirror RO concerns 1-to-1
+      const mirroredLabor: LaborLineItem[] = concernsList.map((concern, idx) => {
+        const matched = existingItems.find(item => item.roLineNumber === idx + 1) || existingItems[idx];
+        return createMirroredROItem(concern, idx, matched);
+      });
+
+      // 2. Only include additional lines IF added by the service advisor!
+      const advisorAddedLines: LaborLineItem[] = existingItems
+        .filter(item => item.addedByAdvisor === true)
+        .map(item => {
+          const itemPay = item.payType || initialPayType;
+          const itemRate = (item.hourlyRate && item.hourlyRate !== 150)
+            ? item.hourlyRate
+            : (PAY_TYPE_RATES[itemPay] || initialRate);
+          return {
+            ...item,
+            payType: itemPay,
+            hourlyRate: itemRate,
+            subtotal: Number(((Number(item.laborHours) || 0) * itemRate).toFixed(2)),
+            addedByAdvisor: true,
+          };
+        });
+
+      setLaborItems([...mirroredLabor, ...advisorAddedLines]);
 
       // Bring parts information from Parts Department together on the quote
       const existingQuoteParts: QuotePartItem[] = (q.partsItems || []).map(p => ({
@@ -261,8 +343,9 @@ export const RepairQuoteModal: React.FC = () => {
         unitPrice: (p.unitPrice && Number(p.unitPrice) > 0) ? p.unitPrice : ('' as any),
       }));
 
-      if (activeQuoteRO.parts && activeQuoteRO.parts.length > 0) {
-        activeQuoteRO.parts.forEach(roPart => {
+      if (cleanRO.parts && cleanRO.parts.length > 0) {
+        cleanRO.parts.forEach(roPart => {
+          const partLineNum = roPart.roLineNumber || (roPart.notes?.match(/Line (\d+)/i)?.[1] ? parseInt(roPart.notes.match(/Line (\d+)/i)![1]) : 1);
           const matchIndex = existingQuoteParts.findIndex(qp => 
             qp.sourcePartId === roPart.id || 
             (roPart.partNumber && qp.partNumber && qp.partNumber.trim().toUpperCase() === roPart.partNumber.trim().toUpperCase())
@@ -278,6 +361,7 @@ export const RepairQuoteModal: React.FC = () => {
               unitPrice: updatedPrice,
               subtotal: (roPart.quantity || current.quantity || 1) * (Number(updatedPrice) || 0),
               sourcePartId: roPart.id,
+              roLineNumber: current.roLineNumber || partLineNum,
             };
           } else {
             existingQuoteParts.push({
@@ -288,6 +372,7 @@ export const RepairQuoteModal: React.FC = () => {
               unitPrice: (roPart.price && Number(roPart.price) > 0) ? roPart.price : ('' as any),
               subtotal: (roPart.quantity || 1) * (roPart.price || 0),
               sourcePartId: roPart.id,
+              roLineNumber: partLineNum,
             });
           }
         });
@@ -297,37 +382,15 @@ export const RepairQuoteModal: React.FC = () => {
       setApplyShopSupplies((q.shopSuppliesFee || 0) > 0);
       setShopSuppliesFee(q.shopSuppliesFee || 0);
       setTaxRatePercent(isExemptCustomer ? 0 : (q.taxRate !== undefined ? q.taxRate * 100 : 7.0));
-      setTechNotes(q.techNotes || '');
+      setTechNotes(q.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : ''));
     } else {
-      // Tech is initiating a brand new quote
-      const initialRate = 150;
-      setDefaultRate(initialRate);
-
-      // Pre-populate first labor item from primary concern if available
-      const initialLabor: LaborLineItem[] = [];
-      if (activeQuoteRO.primaryConcern) {
-        initialLabor.push({
-          id: `labor_${Date.now()}_1`,
-          description: `Diagnose & Repair: ${activeQuoteRO.primaryConcern}`,
-          laborHours: 1.0,
-          hourlyRate: initialRate,
-          subtotal: initialRate * 1.0,
-          techNotes: activeQuoteRO.cause ? `Diagnosis finding: ${activeQuoteRO.cause}` : undefined,
-        });
-      } else {
-        initialLabor.push({
-          id: `labor_${Date.now()}_1`,
-          description: 'Primary Diagnostic & Repair Labor',
-          laborHours: 1.0,
-          hourlyRate: initialRate,
-          subtotal: initialRate * 1.0,
-        });
-      }
+      // Initiating a brand new quote — auto-populate customer concern and correction mirroring RO 1-to-1
+      const initialLabor: LaborLineItem[] = concernsList.map((concern, idx) => createMirroredROItem(concern, idx));
       setLaborItems(initialLabor);
 
       // Pre-populate parts from existing RO parts if any exist
-      if (activeQuoteRO.parts && activeQuoteRO.parts.length > 0) {
-        const initialParts: QuotePartItem[] = activeQuoteRO.parts.map(p => ({
+      if (cleanRO.parts && cleanRO.parts.length > 0) {
+        const initialParts: QuotePartItem[] = cleanRO.parts.map(p => ({
           id: `qpart_${Date.now()}_${p.id}`,
           description: p.description || p.name,
           partNumber: p.partNumber,
@@ -335,6 +398,7 @@ export const RepairQuoteModal: React.FC = () => {
           unitPrice: (p.price && Number(p.price) > 0) ? p.price : ('' as any),
           subtotal: (p.quantity || 1) * (p.price || 0),
           sourcePartId: p.id,
+          roLineNumber: p.roLineNumber || (p.notes?.match(/Line (\d+)/i)?.[1] ? parseInt(p.notes.match(/Line (\d+)/i)![1]) : 1),
         }));
         setPartsItems(initialParts);
       } else {
@@ -344,11 +408,19 @@ export const RepairQuoteModal: React.FC = () => {
       setApplyShopSupplies(true);
       setShopSuppliesFee(25);
       setTaxRatePercent(isExemptCustomer ? 0 : 7.0);
-      setTechNotes(
-        activeQuoteRO.cause && activeQuoteRO.correction
-          ? `Technician Findings:\nCause: ${activeQuoteRO.cause}\nCorrection: ${activeQuoteRO.correction}`
-          : ''
-      );
+
+      // Auto-populate quote notes with customer concerns, diagnostic findings, and correction
+      const notesParts: string[] = [];
+      if (concernsList.length > 0) {
+        notesParts.push(`Customer Concern${concernsList.length > 1 ? 's' : ''}:\n${concernsList.map((c, i) => `Line ${i + 1}: ${c}`).join('\n')}`);
+      }
+      if (cleanRO.cause) {
+        notesParts.push(`Diagnostic Finding (Cause):\n${cleanRO.cause}`);
+      }
+      if (cleanRO.correction) {
+        notesParts.push(`Technician Correction:\n${cleanRO.correction}`);
+      }
+      setTechNotes(notesParts.join('\n\n'));
     }
     setSaveSuccessMsg(null);
     setShowDeclinePrompt(false);
@@ -409,7 +481,9 @@ export const RepairQuoteModal: React.FC = () => {
 
   if (!activeQuoteRO) return null;
 
-  const vehicle = activeQuoteRO.vehicle || {
+  const cleanRO = cleanRO3700(activeQuoteRO);
+
+  const vehicle = cleanRO.vehicle || {
     year: '',
     make: 'Vehicle',
     model: '',
@@ -418,7 +492,7 @@ export const RepairQuoteModal: React.FC = () => {
     mileage: 0,
   };
 
-  const quote = activeQuoteRO.quote;
+  const quote = cleanRO.quote;
   const quoteStatus: QuoteStatus = quote?.status || 'DRAFT';
 
   // Copy helper for ProDemand VIN lookup
@@ -439,17 +513,35 @@ export const RepairQuoteModal: React.FC = () => {
     setTimeout(() => setCopiedVehicleInfo(false), 2500);
   };
 
-  // Labor line operations
-  const handleAddLaborItem = (preset?: { name: string; hours: number; notes?: string }) => {
-    const hours = preset ? preset.hours : ('' as any);
-    const rate = defaultRate;
+  const handleSetQuotePayType = (newPayType: ConcernPayType) => {
+    setQuotePayType(newPayType);
+    const newRate = PAY_TYPE_RATES[newPayType] || 165.00;
+    setDefaultRate(newRate);
+    setLaborItems(prev => prev.map(item => ({
+      ...item,
+      payType: newPayType,
+      hourlyRate: newRate,
+      subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
+    })));
+  };
+
+  // Labor line operations - only Service Advisors can add additional lines per user requirement
+  const handleAddLaborItem = (preset?: { name: string; hours?: number; notes?: string }) => {
+    if (!isAdvisorOrManager) {
+      alert('Only a Service Advisor can add additional lines to the repair quote / labor estimate.');
+      return;
+    }
+    const itemPayType = quotePayType;
+    const rate = PAY_TYPE_RATES[itemPayType] || defaultRate;
     const newItem: LaborLineItem = {
-      id: `labor_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `labor_${Date.now()}_adv_${Math.random().toString(36).substring(2, 6)}`,
       description: preset ? preset.name : '',
-      laborHours: hours,
+      laborHours: '' as any, // Do NOT auto-populate hours!
       hourlyRate: rate,
-      subtotal: preset ? Number((preset.hours * rate).toFixed(2)) : 0,
-      techNotes: preset?.notes,
+      subtotal: 0,
+      payType: itemPayType,
+      techNotes: preset?.notes || undefined,
+      addedByAdvisor: true,
     };
     setLaborItems(prev => [...prev, newItem]);
   };
@@ -458,6 +550,9 @@ export const RepairQuoteModal: React.FC = () => {
     setLaborItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       const updated = { ...item, ...updates };
+      if (updates.payType && updates.payType !== item.payType && !('hourlyRate' in updates)) {
+        updated.hourlyRate = PAY_TYPE_RATES[updates.payType] || updated.hourlyRate;
+      }
       const hours = Number(updated.laborHours) || 0;
       const rate = Number(updated.hourlyRate) || 0;
       updated.subtotal = Number((hours * rate).toFixed(2));
@@ -466,11 +561,16 @@ export const RepairQuoteModal: React.FC = () => {
   };
 
   const handleRemoveLaborItem = (id: string) => {
+    // Only Service Advisors can remove lines
+    if (!isAdvisorOrManager) {
+      alert('Only a Service Advisor can remove lines from the repair quote / labor estimate.');
+      return;
+    }
     setLaborItems(prev => prev.filter(item => item.id !== id));
   };
 
   // Parts operations
-  const handleAddPartItem = () => {
+  const handleAddPartItem = (targetLine = 1) => {
     const newItem: QuotePartItem = {
       id: `qpart_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       description: '',
@@ -478,6 +578,7 @@ export const RepairQuoteModal: React.FC = () => {
       quantity: 1,
       unitPrice: '' as any,
       subtotal: 0,
+      roLineNumber: targetLine,
     };
     setPartsItems(prev => [...prev, newItem]);
   };
@@ -497,46 +598,93 @@ export const RepairQuoteModal: React.FC = () => {
     setPartsItems(prev => prev.filter(item => item.id !== id));
   };
 
-  // Quick import helpers
-  const handleImportConcerns = () => {
-    const concerns = activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0 
-      ? activeQuoteRO.concerns 
-      : (activeQuoteRO.primaryConcern ? [activeQuoteRO.primaryConcern] : []);
+  // Quick helper to re-mirror RO concerns & correction without duplicate lines
+  const handleMirrorROConcernsAndCorrection = () => {
+    const cleanRO = cleanRO3700(activeQuoteRO);
+    const concerns = cleanRO.concerns && cleanRO.concerns.length > 0 
+      ? cleanRO.concerns 
+      : (cleanRO.primaryConcern ? [cleanRO.primaryConcern] : []);
 
     if (concerns.length === 0) return;
 
-    const newLabor: LaborLineItem[] = concerns.map((concern, idx) => ({
-      id: `labor_${Date.now()}_c_${idx}`,
-      description: `Diagnose & Repair: ${concern}`,
-      laborHours: 1.0,
-      hourlyRate: defaultRate,
-      subtotal: defaultRate * 1.0,
-      techNotes: 'Imported from customer concern list',
-    }));
+    const mirrored: LaborLineItem[] = concerns.map((concern, idx) => {
+      const existing = laborItems.find(item => item.roLineNumber === idx + 1) || laborItems[idx];
+      const linePayType = existing?.payType || cleanRO.concernPayTypes?.[idx] || quotePayType || 'CUSTOMER_PAY';
+      const rate = (existing?.hourlyRate && existing.hourlyRate !== 150)
+        ? existing.hourlyRate
+        : (PAY_TYPE_RATES[linePayType] || defaultRate);
+      const hoursVal = (existing?.laborHours !== undefined && existing.laborHours !== ('' as any))
+        ? existing.laborHours
+        : ('' as any);
+      const subtotalVal = hoursVal !== '' ? Number(((Number(hoursVal) || 0) * rate).toFixed(2)) : 0;
+      return {
+        id: existing?.id || `labor_${Date.now()}_ro_${idx}`,
+        roLineNumber: idx + 1,
+        concernText: concern,
+        correctionText: cleanRO.correction || '',
+        description: cleanRO.correction 
+          ? `Concern: ${concern} — Correction: ${cleanRO.correction}` 
+          : `Concern: ${concern}`,
+        laborHours: hoursVal,
+        hourlyRate: rate,
+        subtotal: subtotalVal,
+        payType: linePayType,
+        techNotes: existing?.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : (cleanRO.cause ? `Cause: ${cleanRO.cause}` : undefined)),
+        addedByAdvisor: false,
+      };
+    });
 
-    setLaborItems(prev => [...prev, ...newLabor]);
-    setSaveSuccessMsg('Imported customer concerns as labor line items!');
+    // Retain only advisor-added lines
+    const advisorLines = laborItems.filter(item => item.addedByAdvisor === true);
+
+    setLaborItems([...mirrored, ...advisorLines]);
+    setSaveSuccessMsg('Mirrored Repair Order concerns & correction 1:1');
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  // Allow tech or advisor to update the Repair Order correction and immediately mirror it into the quote/estimate lines
+  const handleSaveCorrectionToRO = (newCorrection: string) => {
+    const trimmed = newCorrection.trim();
+    if (!trimmed) {
+      alert('Please enter a valid correction procedure.');
+      return;
+    }
+    updateTechCauseAndCorrection(activeQuoteRO.id, cleanRO.cause || '', trimmed);
+    setLaborItems(prev => prev.map(item => {
+      if (item.addedByAdvisor) return item;
+      const concern = item.concernText || cleanRO.concerns?.[(item.roLineNumber || 1) - 1] || cleanRO.primaryConcern;
+      return {
+        ...item,
+        correctionText: trimmed,
+        description: `Concern: ${concern} — Correction: ${trimmed}`,
+        techNotes: item.techNotes ? item.techNotes : `Correction: ${trimmed}`,
+      };
+    }));
+    setShowCorrectionEditor(false);
+    setSaveSuccessMsg('Updated RO Correction and mirrored to estimate line items!');
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
   const handleImportCauseCorrection = () => {
-    if (!activeQuoteRO.cause && !activeQuoteRO.correction) {
+    const cleanRO = cleanRO3700(activeQuoteRO);
+    if (!cleanRO.cause && !cleanRO.correction) {
       alert('No Cause & Correction documented yet on this RO.');
       return;
     }
-    const textToAdd = `[Tech Diagnostic Findings]\nCause: ${activeQuoteRO.cause || 'N/A'}\nCorrection Required: ${activeQuoteRO.correction || 'N/A'}`;
+    const textToAdd = `[Tech Diagnostic Findings]\nCause: ${cleanRO.cause || 'N/A'}\nCorrection Required: ${cleanRO.correction || 'N/A'}`;
     setTechNotes(prev => prev ? `${prev}\n\n${textToAdd}` : textToAdd);
     setSaveSuccessMsg('Imported Cause & Correction into quote notes!');
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
   const handleImportROParts = () => {
-    if (!activeQuoteRO.parts || activeQuoteRO.parts.length === 0) {
+    const cleanRO = cleanRO3700(activeQuoteRO);
+    if (!cleanRO.parts || cleanRO.parts.length === 0) {
       alert('No parts currently logged in this Repair Order.');
       return;
     }
     const existingPartIds = new Set(partsItems.map(p => p.sourcePartId).filter(Boolean));
-    const partsToAdd = activeQuoteRO.parts
+    const partsToAdd = cleanRO.parts
       .filter(p => !existingPartIds.has(p.id))
       .map(p => ({
         id: `qpart_${Date.now()}_${p.id}`,
@@ -573,11 +721,13 @@ export const RepairQuoteModal: React.FC = () => {
       initiatedByTechId: quote?.initiatedByTechId || currentUser.id,
       initiatedByTechName: quote?.initiatedByTechName || currentUser.name,
       status: submitToAdvisor ? 'SUBMITTED' : (quote?.status || 'DRAFT'),
+      payType: quotePayType,
       laborItems: laborItems.map(l => ({
         ...l,
         laborHours: Number(l.laborHours) || 0,
         hourlyRate: Number(l.hourlyRate) || 0,
         subtotal: Number(l.subtotal) || 0,
+        payType: l.payType || quotePayType,
       })),
       partsItems: partsItems.map(p => ({
         ...p,
@@ -805,14 +955,11 @@ export const RepairQuoteModal: React.FC = () => {
                   <span className="px-2.5 py-0.5 bg-blue-500/30 text-blue-300 text-[11px] font-bold rounded-full uppercase tracking-wider border border-blue-400/30">
                     OEM Labor Time Lookup
                   </span>
-                  <span className="text-xs text-slate-300">Mitchell 1 Integration</span>
+                  <span className="text-xs text-slate-300">Pro Demand Integration</span>
                 </div>
                 <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                  Look Up Flat-Rate Labor in ProDemand
+                  Look Up Flat-Rate Labor in Pro Demand
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Open Mitchell 1 ProDemand to look up OEM flat-rate labor times, R&R procedures, service intervals, and repair specs for this vehicle.
-                </p>
                 {vehicle.vin && (
                   <div className="text-xs text-blue-200 font-mono flex items-center gap-2 pt-1">
                     <span>VIN: <strong>{vehicle.vin}</strong></span>
@@ -828,7 +975,7 @@ export const RepairQuoteModal: React.FC = () => {
                     id="copy-vin-for-prodemand-btn"
                     onClick={handleCopyVin}
                     className="px-4 py-2.5 bg-slate-950 hover:bg-black text-white rounded-xl text-xs font-bold flex items-center gap-2 border-2 border-slate-700 transition-all active:scale-95 shadow-md cursor-pointer"
-                    title="Copy VIN to paste into ProDemand vehicle selector"
+                    title="Copy VIN to paste into Pro Demand vehicle selector"
                   >
                     {copiedVin ? (
                       <>
@@ -872,27 +1019,14 @@ export const RepairQuoteModal: React.FC = () => {
                   className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-950/40 border border-blue-400/50 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
                 >
                   <ExternalLink className="w-4 h-4 text-blue-200" />
-                  <span>Open ProDemand ↗</span>
+                  <span>Open Pro Demand ↗</span>
                 </a>
               </div>
             </div>
           </div>
 
-          {/* Quick Import Tools */}
+          {/* Quick Tools & Pay Rate Selector */}
           <div className="flex items-center gap-2 flex-wrap bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs print:hidden">
-            <span className="font-bold text-slate-700 flex items-center gap-1.5 mr-1">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              Quick Import:
-            </span>
-
-            <button
-              id="import-concerns-btn"
-              onClick={handleImportConcerns}
-              className="px-2.5 py-1.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg border border-slate-200 hover:border-blue-300 font-medium transition-colors cursor-pointer shadow-2xs"
-            >
-              + Import Customer Concerns
-            </button>
-
             {!isTech && activeQuoteRO.parts && activeQuoteRO.parts.length > 0 && (
               <button
                 id="import-ro-parts-btn"
@@ -911,48 +1045,95 @@ export const RepairQuoteModal: React.FC = () => {
                 className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg border border-slate-200 hover:border-emerald-300 font-medium transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
               >
                 <FileText className="w-3.5 h-3.5 text-emerald-600" />
-                <span>+ Import Cause & Correction</span>
+                <span>+ Import Cause & Correction into Notes</span>
               </button>
             )}
 
-            {!isTech && (
-              <div className="ml-auto flex items-center gap-2">
-                <label className="text-slate-600 font-medium">Shop Hourly Rate:</label>
-                <div className="relative w-24">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
-                    placeholder=""
-                    value={defaultRate === 0 || !defaultRate ? '' : defaultRate}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const newRate = val === '' ? 0 : Number(val);
-                      setDefaultRate(newRate);
-                      // optionally update rate across existing items
-                      setLaborItems(prev => prev.map(item => ({
-                        ...item,
-                        hourlyRate: newRate,
-                        subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
-                      })));
-                    }}
-                    onBlur={(e) => {
-                      const val = e.target.value.trim();
-                      if (val !== '' && !isNaN(Number(val))) {
-                        const newRate = Number(Number(val).toFixed(2));
+            {!isTech ? (
+              <div className="ml-auto flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase">Rate Tier:</span>
+                  <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => handleSetQuotePayType('CUSTOMER_PAY')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        quotePayType === 'CUSTOMER_PAY'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      Customer Pay ($165.00)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetQuotePayType('WARRANTY')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        quotePayType === 'WARRANTY'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      Warranty ($121.78)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetQuotePayType('INTERNAL')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        quotePayType === 'INTERNAL'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      Internal ($135.00)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <label className="text-slate-600 font-medium text-xs">Rate:</label>
+                  <div className="relative w-24">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={defaultRate === 0 || !defaultRate ? '' : defaultRate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const newRate = val === '' ? 0 : Number(val);
                         setDefaultRate(newRate);
                         setLaborItems(prev => prev.map(item => ({
                           ...item,
                           hourlyRate: newRate,
                           subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
                         })));
-                      }
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val !== '' && !isNaN(Number(val))) {
+                          const newRate = Number(Number(val).toFixed(2));
+                          setDefaultRate(newRate);
+                          setLaborItems(prev => prev.map(item => ({
+                            ...item,
+                            hourlyRate: newRate,
+                            subtotal: Number(((Number(item.laborHours) || 0) * newRate).toFixed(2))
+                          })));
+                        }
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
+              </div>
+            ) : (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-600 uppercase">Rate Tier:</span>
+                <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                  {quotePayType === 'CUSTOMER_PAY' ? 'Customer Pay ($165.00/hr)' : quotePayType === 'WARRANTY' ? 'Warranty ($121.78/hr)' : 'Internal ($135.00/hr)'}
+                </span>
               </div>
             )}
           </div>
@@ -970,8 +1151,8 @@ export const RepairQuoteModal: React.FC = () => {
                   </h3>
                   <p className="text-xs text-slate-500">
                     {isTech 
-                      ? 'Enter the amount of time (flat-rate hours) it will take to do the job' 
-                      : 'OEM flat-rate hours from ProDemand or shop manual times'}
+                      ? 'Enter flat-rate labor hours.' 
+                      : 'Labor operations, flat-rate hours, and procedures.'}
                   </p>
                 </div>
               </div>
@@ -983,160 +1164,340 @@ export const RepairQuoteModal: React.FC = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-blue-200 transition-colors"
-                  title="Open ProDemand to verify flat rate hours"
+                  title="Open Pro Demand to verify flat rate hours"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>ProDemand Labor Times ↗</span>
+                  <span>Pro Demand Labor Times ↗</span>
                 </a>
 
-                <button
-                  id="add-labor-line-btn"
-                  onClick={() => handleAddLaborItem()}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Labor Item</span>
-                </button>
+                {/* Only Service Advisors / Managers can add additional lines */}
+                {isAdvisorOrManager ? (
+                  <button
+                    id="add-labor-line-btn"
+                    onClick={() => handleAddLaborItem()}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Add an additional labor operation (Service Advisor only)"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Labor Line (Advisor)</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold border border-slate-200">
+                    Flat-rate hours only
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Quick preset chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-slate-600 print:hidden">
-              <span className="font-bold text-slate-400 uppercase tracking-wider shrink-0 text-[10px]">Presets:</span>
-              {COMMON_LABOR_PRESETS.slice(0, 5).map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleAddLaborItem(preset)}
-                  className="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-blue-100 hover:text-blue-800 rounded-full border border-slate-200 hover:border-blue-300 font-medium transition-colors cursor-pointer"
-                >
-                  + {preset.name.split(' ')[0]} ({preset.hours}h)
-                </button>
-              ))}
-            </div>
+            {/* Quick preset chips - Service Advisor only */}
+            {isAdvisorOrManager && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-slate-600 print:hidden">
+                <span className="font-bold text-slate-500 uppercase tracking-wider shrink-0 text-[10px]">
+                  Advisor Extra Line Presets:
+                </span>
+                {COMMON_LABOR_PRESETS.slice(0, 5).map((preset, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleAddLaborItem(preset)}
+                    className="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-blue-100 hover:text-blue-800 rounded-full border border-slate-200 hover:border-blue-300 font-medium transition-colors cursor-pointer"
+                    title={`Add "${preset.name}" as an additional advisor line`}
+                  >
+                    + {preset.name.split(' ')[0]} ({preset.hours}h)
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Labor Lines Table / Cards */}
             {laborItems.length === 0 ? (
               <div className="text-center py-8 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
                 <Wrench className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-600">No labor operations added yet</p>
+                <p className="text-sm font-semibold text-slate-600">No labor operations configured</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Click "Add Labor Item", select a preset, or look up labor times in ProDemand.
+                  Click "Sync RO Concerns & Correction" to load the line items from the Repair Order.
                 </p>
-                <button
-                  onClick={() => handleAddLaborItem()}
-                  className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors"
-                >
-                  + Add First Labor Item
-                </button>
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <button
+                    onClick={handleMirrorROConcernsAndCorrection}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors cursor-pointer"
+                  >
+                    Sync RO Concerns & Correction
+                  </button>
+                  {isAdvisorOrManager && (
+                    <button
+                      onClick={() => handleAddLaborItem()}
+                      className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-colors cursor-pointer"
+                    >
+                      + Add Advisor Labor Line
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
-                {laborItems.map((item, index) => (
-                  <div 
-                    key={item.id}
-                    className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-2.5"
-                  >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      <span className="text-xs font-bold text-slate-400 w-5 shrink-0">#{index + 1}</span>
+                {laborItems.map((item, index) => {
+                  const isMirroredROLine = !item.addedByAdvisor;
+                  const roLineNum = item.roLineNumber || (index + 1);
+                  return (
+                    <div 
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border transition-colors space-y-2.5 ${
+                        isMirroredROLine 
+                          ? 'bg-slate-50/90 border-slate-200 hover:border-blue-300' 
+                          : 'bg-purple-50/60 border-purple-200 hover:border-purple-300'
+                      }`}
+                    >
+                      {/* Line Header Badge & Info */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {isMirroredROLine ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-300">
+                              <FileText className="w-3 h-3 text-blue-700" />
+                              <span>RO Line #{roLineNum}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-300">
+                              <User className="w-3 h-3 text-purple-700" />
+                              <span>Added by Service Advisor</span>
+                            </span>
+                          )}
 
-                      {/* Operation Description */}
-                      <div className="flex-1 w-full">
-                        <input
-                          type="text"
-                          placeholder="e.g. Front Brake Pads & Rotors Replacement"
-                          value={item.description}
-                          onChange={(e) => handleUpdateLaborItem(item.id, { description: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
+                          {isMirroredROLine && cleanRO.correction && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Correction Documented</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Remove Button - Only Service Advisors can delete lines */}
+                        {isAdvisorOrManager && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLaborItem(item.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
+                            title={isMirroredROLine ? "Remove line from quote" : "Delete advisor added labor item"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
 
-                      {/* Labor Hours (ProDemand) */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase">Hours:</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          placeholder=""
-                          value={item.laborHours === 0 || item.laborHours === undefined || (item.laborHours as any) === '' ? '' : item.laborHours}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            handleUpdateLaborItem(item.id, { 
-                              laborHours: val === '' ? ('' as any) : Number(val) 
-                            });
-                          }}
-                          onFocus={(e) => e.target.select()}
-                          className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
+                      {/* Mirrored Concern & Correction Display when from RO */}
+                      {isMirroredROLine && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200">
+                          {/* 1. Customer Stated Complaint */}
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider block">
+                              1. Customer Complaint:
+                            </span>
+                            <p className="font-semibold text-slate-900 text-xs leading-snug">
+                              {item.concernText || cleanRO.concerns?.[roLineNum - 1] || cleanRO.primaryConcern}
+                            </p>
+                          </div>
 
-                      {/* Hourly Rate (Hidden from Tech) */}
-                      {!isTech && (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Rate:</label>
-                          <div className="relative w-22">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="0.00"
-                              value={item.hourlyRate === 0 || item.hourlyRate === undefined || (item.hourlyRate as any) === '' ? '' : item.hourlyRate}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                handleUpdateLaborItem(item.id, { 
-                                  hourlyRate: val === '' ? ('' as any) : Number(val) 
-                                });
-                              }}
-                              onBlur={(e) => {
-                                const val = e.target.value.trim();
-                                if (val !== '' && !isNaN(Number(val))) {
-                                  handleUpdateLaborItem(item.id, { 
-                                    hourlyRate: Number(Number(val).toFixed(2)) 
-                                  });
-                                }
-                              }}
-                              onFocus={(e) => e.target.select()}
-                              className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
+                          {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+                          <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-2.5">
+                            <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider block">
+                              2. Concern / Cause:
+                            </span>
+                            <p className="font-semibold text-amber-950 text-xs leading-snug font-mono">
+                              {cleanRO.concernCauses?.[roLineNum - 1] || (roLineNum === 1 ? cleanRO.cause : '') || (
+                                <span className="italic text-slate-400 font-sans font-normal">Pending diagnosis</span>
+                              )}
+                            </p>
+                          </div>
+
+                          {/* 3. Correction (Repair Procedure / Action Taken) */}
+                          <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider block">
+                                3. Correction:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCorrectionInput(cleanRO.concernCorrections?.[roLineNum - 1] || cleanRO.correction || '');
+                                  setShowCorrectionEditor(true);
+                                }}
+                                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+                                title="Edit correction on the Repair Order"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>{cleanRO.correction ? 'Edit' : '+ Add'}</span>
+                              </button>
+                            </div>
+                            <p className="font-semibold text-emerald-950 text-xs leading-snug font-mono">
+                              {item.correctionText || cleanRO.concernCorrections?.[roLineNum - 1] || cleanRO.correction || (
+                                <span className="italic text-slate-400 font-sans font-normal">Pending technician repair plan</span>
+                              )}
+                            </p>
                           </div>
                         </div>
                       )}
 
-                      {/* Line Subtotal (Hidden from Tech) */}
-                      {!isTech && (
-                        <div className="text-right w-24 shrink-0">
-                          <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
-                          <span className="text-sm font-extrabold text-slate-900 font-mono">
-                            ${(item.subtotal || 0).toFixed(2)}
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <span className="text-xs font-bold text-slate-400 w-5 shrink-0">#{index + 1}</span>
+
+                        {/* Operation Description */}
+                        <div className="flex-1 w-full">
+                          <input
+                            type="text"
+                            placeholder="Operation description (concern & correction)..."
+                            value={item.description}
+                            onChange={(e) => handleUpdateLaborItem(item.id, { description: e.target.value })}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">
+                            {isMirroredROLine ? 'Customer Concern & Technician Correction' : 'Advisor added custom labor operation'}
                           </span>
                         </div>
-                      )}
 
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveLaborItem(item.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
-                        title="Delete labor item"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                        {/* Labor Hours (ProDemand) */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase">Hours:</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            placeholder=""
+                            value={item.laborHours === 0 || item.laborHours === undefined || (item.laborHours as any) === '' ? '' : item.laborHours}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleUpdateLaborItem(item.id, { 
+                                laborHours: val === '' ? ('' as any) : Number(val) 
+                              });
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
 
-                    {/* Notes / ProDemand Operation code */}
-                    <div className="flex items-center gap-3 pl-8">
-                      <input
-                        type="text"
-                        placeholder="Optional labor notes or ProDemand op code (e.g. ProDemand Op #B-402, includes caliper lube)"
-                        value={item.techNotes || ''}
-                        onChange={(e) => handleUpdateLaborItem(item.id, { techNotes: e.target.value })}
-                        className="w-full px-3 py-1 bg-white/70 border border-slate-200 rounded-md text-[11px] text-slate-600 placeholder:text-slate-400 focus:bg-white focus:outline-none"
-                      />
+                        {/* Hourly Rate & Pay Type (Hidden from Tech) */}
+                        {!isTech && (
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                            {/* Pay Type Selector */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Pay:</label>
+                              <select
+                                value={item.payType || quotePayType}
+                                onChange={(e) => {
+                                  const newPT = e.target.value as ConcernPayType;
+                                  const newR = PAY_TYPE_RATES[newPT] || 165.00;
+                                  handleUpdateLaborItem(item.id, { 
+                                    payType: newPT,
+                                    hourlyRate: newR,
+                                    subtotal: Number(((Number(item.laborHours) || 0) * newR).toFixed(2))
+                                  });
+                                }}
+                                className="px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                              >
+                                <option value="CUSTOMER_PAY">Customer Pay ($165.00)</option>
+                                <option value="WARRANTY">Warranty ($121.78)</option>
+                                <option value="INTERNAL">Internal ($135.00)</option>
+                              </select>
+                            </div>
+
+                            {/* Rate input */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Rate:</label>
+                              <div className="relative w-22">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={item.hourlyRate === 0 || item.hourlyRate === undefined || (item.hourlyRate as any) === '' ? '' : item.hourlyRate}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    handleUpdateLaborItem(item.id, { 
+                                      hourlyRate: val === '' ? ('' as any) : Number(val) 
+                                    });
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = e.target.value.trim();
+                                    if (val !== '' && !isNaN(Number(val))) {
+                                      handleUpdateLaborItem(item.id, { 
+                                        hourlyRate: Number(Number(val).toFixed(2)) 
+                                      });
+                                    }
+                                  }}
+                                  onFocus={(e) => e.target.select()}
+                                  className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Line Subtotal (Hidden from Tech) */}
+                        {!isTech && (
+                          <div className="text-right w-24 shrink-0">
+                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Subtotal</span>
+                            <span className="text-sm font-extrabold text-slate-900 font-mono">
+                              ${(item.subtotal || 0).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Notes / ProDemand Operation code */}
+                      <div className="flex items-center gap-3 pl-8">
+                        <input
+                          type="text"
+                          placeholder="Optional labor notes or Pro Demand op code (e.g. Pro Demand Op #B-402, includes caliper lube)"
+                          value={item.techNotes || ''}
+                          onChange={(e) => handleUpdateLaborItem(item.id, { techNotes: e.target.value })}
+                          className="w-full px-3 py-1 bg-white/70 border border-slate-200 rounded-md text-[11px] text-slate-600 placeholder:text-slate-400 focus:bg-white focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Parts assigned to this Line and Line Total (Labor + Parts) */}
+                      {(() => {
+                        const partsForThisLine = partsItems.filter(p => (p.roLineNumber || 1) === roLineNum);
+                        const linePartsSubtotal = partsForThisLine.reduce((sum, p) => sum + (Number(p.subtotal) || 0), 0);
+                        const lineTotal = (Number(item.subtotal) || 0) + linePartsSubtotal;
+
+                        return (
+                          <div className="pt-2 border-t border-slate-200/80 space-y-1.5 pl-8">
+                            {partsForThisLine.length > 0 && (
+                              <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-200 text-xs">
+                                <div className="flex items-center justify-between font-bold text-amber-950 text-[11px] mb-1">
+                                  <span className="flex items-center gap-1">
+                                    <Package className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Parts for Line #{roLineNum} ({partsForThisLine.length}):</span>
+                                  </span>
+                                  <span className="font-mono">${linePartsSubtotal.toFixed(2)}</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {partsForThisLine.map(p => (
+                                    <div key={p.id} className="flex items-center justify-between text-[11px] text-slate-700 bg-white/90 px-2 py-0.5 rounded border border-amber-100">
+                                      <span>{p.quantity}x {p.description} {p.partNumber ? `(#${p.partNumber})` : ''}</span>
+                                      <span className="font-mono font-semibold">${(Number(p.subtotal) || 0).toFixed(2)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {!isTech && (
+                              <div className="flex items-center justify-between px-3 py-1.5 bg-indigo-50/80 border border-indigo-200 rounded-lg text-xs font-bold">
+                                <span className="text-indigo-900 text-[11px] uppercase tracking-wider">
+                                  Line #{roLineNum} Total (Labor ${(Number(item.subtotal) || 0).toFixed(2)} + Parts ${linePartsSubtotal.toFixed(2)}):
+                                </span>
+                                <span className="font-mono text-sm font-black text-indigo-950">
+                                  ${lineTotal.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* Labor Subtotal Bar */}
                 <div className="flex items-center justify-between px-4 py-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs font-bold text-blue-900">
@@ -1230,15 +1591,9 @@ export const RepairQuoteModal: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    id="add-part-line-btn"
-                    onClick={handleAddPartItem}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Part</span>
-                  </button>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-lg text-xs font-bold border border-amber-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Managed by Parts Specialist</span>
                 </div>
               </div>
 
@@ -1247,7 +1602,7 @@ export const RepairQuoteModal: React.FC = () => {
                   <Package className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
                   <p className="text-xs font-semibold text-slate-600">No parts on quote yet (Labor only)</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Click "Add Part" or use "Import RO Parts" if parts have already been requested.
+                    Parts requested through the Parts Counter will appear here automatically.
                   </p>
                 </div>
               ) : (
@@ -1579,6 +1934,53 @@ export const RepairQuoteModal: React.FC = () => {
             </div>
           )}
 
+          {/* Quick RO Correction Editor for Tech & Advisor */}
+          {showCorrectionEditor && (
+            <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-xl space-y-3 animate-fade-in print:hidden shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+                  <Wrench className="w-4 h-4 text-emerald-700" />
+                  <span>Update Technician Correction on RO #{cleanRO.id}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCorrectionEditor(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-emerald-800">
+                This will save directly to the Repair Order and immediately mirror across all quote and labor estimate line items.
+              </p>
+              <textarea
+                rows={3}
+                placeholder="e.g. Replaced front brake pads and rotors, lubed caliper slide pins, flushed brake fluid, and road tested 5 miles..."
+                value={correctionInput}
+                onChange={(e) => setCorrectionInput(e.target.value)}
+                className="w-full p-2.5 bg-white border border-emerald-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                autoFocus
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowCorrectionEditor(false)}
+                  className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-300 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveCorrectionToRO(correctionInput)}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Save & Mirror to Estimate</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Decline Prompt Modal for Advisor/Manager */}
           {showDeclinePrompt && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3 animate-fade-in print:hidden">
@@ -1824,119 +2226,163 @@ export const RepairQuoteModal: React.FC = () => {
           </div>
         )}
 
-        {/* Section: Labor Operations */}
-        <div className="space-y-1">
+        {/* Itemized by RO Line Items (Complaint, Concern/Cause, Correction, Labor & Parts) */}
+        <div className="space-y-4">
           <div className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center justify-between border-b border-slate-300 pb-1">
-            <span>Labor Operations & Flat-Rate Procedures</span>
+            <span>Itemized Repair Estimate & Work Order (By Line Item)</span>
             <span className="text-[11px] font-bold text-slate-600 font-mono">
-              Shop Labor Rate: ${defaultRate.toFixed(2)}/hr
+              Labor Rate: ${defaultRate.toFixed(2)}/hr ({quotePayType === 'CUSTOMER_PAY' ? 'Customer Pay' : quotePayType === 'WARRANTY' ? 'Warranty' : 'Internal'})
             </span>
           </div>
 
-          <table className="w-full text-left text-xs border-collapse border border-slate-300">
-            <thead>
-              <tr className="bg-slate-100 border-b border-slate-300 text-[11px] font-bold text-slate-700 uppercase">
-                <th className="py-1.5 px-2 w-10 text-center border-r border-slate-300">#</th>
-                <th className="py-1.5 px-3 border-r border-slate-300">Operation Description & Procedures</th>
-                <th className="py-1.5 px-2.5 w-24 text-center border-r border-slate-300">Hours</th>
-                <th className="py-1.5 px-2.5 w-24 text-right border-r border-slate-300">Rate</th>
-                <th className="py-1.5 px-3 w-28 text-right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {laborItems.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-2.5 text-center text-slate-500 italic">No labor items on this estimate</td>
-                </tr>
-              ) : (
-                laborItems.map((item, idx) => (
-                  <tr key={item.id} className="border-b border-slate-200">
-                    <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 border-r border-slate-200">{idx + 1}</td>
-                    <td className="py-1.5 px-3 border-r border-slate-200">
-                      <div className="font-bold text-slate-900">{item.description}</div>
-                      {item.techNotes && (
-                        <div className="text-[10px] text-slate-600 font-mono mt-0.5">{item.techNotes}</div>
-                      )}
-                    </td>
-                    <td className="py-1.5 px-2.5 text-center font-mono font-semibold border-r border-slate-200">
-                      {(Number(item.laborHours) || 0).toFixed(1)} hrs
-                    </td>
-                    <td className="py-1.5 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">
-                      ${(Number(item.hourlyRate) || 0).toFixed(2)}
-                    </td>
-                    <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-950">
-                      ${(Number(item.subtotal) || 0).toFixed(2)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            <tfoot>
-              <tr className="bg-slate-50 border-t-2 border-slate-400 font-bold">
-                <td colSpan={2} className="py-1.5 px-3 text-right text-slate-700 uppercase text-[11px]">
-                  Total Labor:
-                </td>
-                <td className="py-1.5 px-2.5 text-center font-mono text-slate-900">
-                  {totalLaborHours.toFixed(1)} hrs
-                </td>
-                <td className="py-1.5 px-2.5 text-right text-slate-500"></td>
-                <td className="py-1.5 px-3 text-right font-mono font-black text-slate-950 text-sm">
-                  ${totalLaborCost.toFixed(2)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+          {(activeQuoteRO.concerns && activeQuoteRO.concerns.length > 0 
+            ? activeQuoteRO.concerns 
+            : [activeQuoteRO.primaryConcern || 'General Inspection & Diagnostic']
+          ).map((concern, idx) => {
+            const lineNum = idx + 1;
+            const lineLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
+            const lineParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
+            const lineCause = activeQuoteRO.concernCauses?.[idx] || (idx === 0 ? activeQuoteRO.cause : '');
+            const lineCorrection = activeQuoteRO.concernCorrections?.[idx] || (idx === 0 ? activeQuoteRO.correction : '');
+            
+            const lineLaborHoursSum = lineLabor.reduce((sum, item) => sum + (Number(item.laborHours) || 0), 0);
+            const lineLaborCostSum = lineLabor.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+            const linePartsCostSum = lineParts.reduce((sum, p) => sum + (Number(p.subtotal) || 0), 0);
+            const lineTotalSum = lineLaborCostSum + linePartsCostSum;
 
-        {/* Section: Parts & Materials */}
-        <div className="space-y-1">
-          <div className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center justify-between border-b border-slate-300 pb-1">
-            <span>Required Parts & Materials</span>
-            <span className="text-[11px] font-bold text-slate-600">
-              Total Items: {partsItems.length}
-            </span>
-          </div>
+            return (
+              <div key={idx} className="border border-slate-300 rounded-lg overflow-hidden space-y-0">
+                {/* Line Header Banner: Complaint, Concern/Cause, Correction */}
+                <div className="bg-slate-100 p-2.5 border-b border-slate-300 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white">
+                        Line #{lineNum}
+                      </span>
+                      <span className="font-bold text-slate-950 text-xs">
+                        1. Complaint: {concern}
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-black text-indigo-950 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+                      Line Total: ${lineTotalSum.toFixed(2)}
+                    </span>
+                  </div>
 
-          <table className="w-full text-left text-xs border-collapse border border-slate-300">
-            <thead>
-              <tr className="bg-slate-100 border-b border-slate-300 text-[11px] font-bold text-slate-700 uppercase">
-                <th className="py-1.5 px-2 w-10 text-center border-r border-slate-300">#</th>
-                <th className="py-1.5 px-3 border-r border-slate-300">Part Description</th>
-                <th className="py-1.5 px-3 w-36 border-r border-slate-300">Part Number</th>
-                <th className="py-1.5 px-2 w-16 text-center border-r border-slate-300">Qty</th>
-                <th className="py-1.5 px-2.5 w-24 text-right border-r border-slate-300">Unit Price</th>
-                <th className="py-1.5 px-3 w-28 text-right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {partsItems.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-2.5 text-center text-slate-500 italic">No replacement parts required for this estimate (Labor only)</td>
-                </tr>
-              ) : (
-                partsItems.map((part, idx) => (
-                  <tr key={part.id} className="border-b border-slate-200">
-                    <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 border-r border-slate-200">{idx + 1}</td>
-                    <td className="py-1.5 px-3 font-semibold text-slate-900 border-r border-slate-200">{part.description}</td>
-                    <td className="py-1.5 px-3 font-mono text-slate-700 text-[11px] border-r border-slate-200">{part.partNumber || 'OEM / Standard'}</td>
-                    <td className="py-1.5 px-2 text-center font-mono font-semibold border-r border-slate-200">{part.quantity}</td>
-                    <td className="py-1.5 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">${(Number(part.unitPrice) || 0).toFixed(2)}</td>
-                    <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-950">${(Number(part.subtotal) || 0).toFixed(2)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            <tfoot>
-              <tr className="bg-slate-50 border-t-2 border-slate-400 font-bold">
-                <td colSpan={5} className="py-1.5 px-3 text-right text-slate-700 uppercase text-[11px]">
-                  Total Parts & Materials:
-                </td>
-                <td className="py-1.5 px-3 text-right font-mono font-black text-slate-950 text-sm">
-                  ${totalPartsCost.toFixed(2)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+                  {/* 2. Concern / Cause & 3. Correction */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div className="bg-white p-1.5 rounded border border-slate-200">
+                      <strong className="text-amber-900 uppercase text-[9px] tracking-wider block">2. Concern / Cause (Diagnostic Finding):</strong>
+                      <span className="font-mono text-slate-800">{lineCause || <span className="italic text-slate-400 font-sans">Pending diagnosis</span>}</span>
+                    </div>
+                    <div className="bg-white p-1.5 rounded border border-slate-200">
+                      <strong className="text-emerald-900 uppercase text-[9px] tracking-wider block">3. Correction (Repair Procedure):</strong>
+                      <span className="font-mono text-slate-800">{lineCorrection || <span className="italic text-slate-400 font-sans">Pending technician repair plan</span>}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Operations & Parts Table for this Line */}
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
+                      <th className="py-1 px-2 w-16 text-center border-r border-slate-200">Category</th>
+                      <th className="py-1 px-3 border-r border-slate-200">Description / Part #</th>
+                      <th className="py-1 px-2.5 w-20 text-center border-r border-slate-200">Qty / Hrs</th>
+                      <th className="py-1 px-2.5 w-24 text-right border-r border-slate-200">Rate / Price</th>
+                      <th className="py-1 px-3 w-24 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Labor items for this line */}
+                    {lineLabor.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-200/80 bg-white">
+                        <td className="py-1 px-2 text-center border-r border-slate-200">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-900">Labor</span>
+                        </td>
+                        <td className="py-1 px-3 border-r border-slate-200">
+                          <span className="font-semibold text-slate-900">{item.description}</span>
+                          {item.techNotes && <div className="text-[10px] text-slate-500 font-mono">{item.techNotes}</div>}
+                        </td>
+                        <td className="py-1 px-2.5 text-center font-mono border-r border-slate-200">
+                          {(Number(item.laborHours) || 0).toFixed(1)}h
+                        </td>
+                        <td className="py-1 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">
+                          ${(Number(item.hourlyRate) || 0).toFixed(2)}
+                        </td>
+                        <td className="py-1 px-3 text-right font-mono font-bold text-slate-950">
+                          ${(Number(item.subtotal) || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {/* Parts items for this line */}
+                    {lineParts.map((part) => (
+                      <tr key={part.id} className="border-b border-slate-200/80 bg-amber-50/20">
+                        <td className="py-1 px-2 text-center border-r border-slate-200">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900">Part</span>
+                        </td>
+                        <td className="py-1 px-3 border-r border-slate-200">
+                          <span className="font-semibold text-slate-900">{part.description}</span>
+                          {part.partNumber && <span className="text-[10px] text-slate-500 font-mono ml-1.5">#{part.partNumber}</span>}
+                        </td>
+                        <td className="py-1 px-2.5 text-center font-mono border-r border-slate-200">
+                          {part.quantity}
+                        </td>
+                        <td className="py-1 px-2.5 text-right font-mono text-slate-700 border-r border-slate-200">
+                          ${(Number(part.unitPrice) || 0).toFixed(2)}
+                        </td>
+                        <td className="py-1 px-3 text-right font-mono font-bold text-slate-950">
+                          ${(Number(part.subtotal) || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {lineLabor.length === 0 && lineParts.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-2 text-center text-slate-400 italic text-[11px]">
+                          No labor or parts priced for this line yet
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-100/80 font-bold border-t border-slate-300">
+                      <td colSpan={4} className="py-1 px-3 text-right text-slate-700 uppercase text-[10px]">
+                        Line #{lineNum} Subtotal (Labor ${lineLaborCostSum.toFixed(2)} + Parts ${linePartsCostSum.toFixed(2)}):
+                      </td>
+                      <td className="py-1 px-3 text-right font-mono font-black text-slate-950 text-xs">
+                        ${lineTotalSum.toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })}
+
+          {/* Additional Advisor Labor Operations (if any) */}
+          {laborItems.filter(item => item.addedByAdvisor).length > 0 && (
+            <div className="border border-purple-200 rounded-lg overflow-hidden space-y-0">
+              <div className="bg-purple-50 p-2 border-b border-purple-200 flex items-center justify-between text-xs font-bold text-purple-900">
+                <span>Additional Service Advisor Operations</span>
+                <span>
+                  ${laborItems.filter(item => item.addedByAdvisor).reduce((s, i) => s + (Number(i.subtotal) || 0), 0).toFixed(2)}
+                </span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse">
+                <tbody>
+                  {laborItems.filter(item => item.addedByAdvisor).map((item) => (
+                    <tr key={item.id} className="border-b border-purple-100 bg-white">
+                      <td className="py-1 px-3 font-semibold text-slate-900">{item.description}</td>
+                      <td className="py-1 px-2.5 w-20 text-center font-mono">{(Number(item.laborHours) || 0).toFixed(1)}h</td>
+                      <td className="py-1 px-2.5 w-24 text-right font-mono text-slate-700">${(Number(item.hourlyRate) || 0).toFixed(2)}</td>
+                      <td className="py-1 px-3 w-24 text-right font-mono font-bold text-slate-950">${(Number(item.subtotal) || 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Financial Totals & Policies */}

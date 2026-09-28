@@ -15,6 +15,7 @@ import {
   ShopChatMessage,
   RepairQuote,
   QuoteStatus,
+  LaborLineItem,
   WarrantyLaborTimePunch,
   WarrantyOperationType,
   ConcernPayType,
@@ -22,6 +23,7 @@ import {
   VehiclePhoto
 } from '../types';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
+import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
@@ -120,6 +122,7 @@ interface AppContextType {
   reassignServiceWriter: (roId: string, newAdvisorId: string, notes?: string) => boolean;
   sendMessage: (roId: string, content: string, isUrgent?: boolean) => void;
   addPartOrder: (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => void;
+  addMultiplePartOrders: (roId: string, parts: Array<Omit<PartItem, 'id' | 'roId'>>) => void;
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
   updatePartItem: (roId: string, partId: string, updates: Partial<PartItem>) => void;
   deletePartItem: (roId: string, partId: string) => void;
@@ -151,8 +154,8 @@ interface AppContextType {
   markAllNotificationsRead: () => void;
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
-  addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string) => boolean;
-  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
+  addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string) => boolean;
+  updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean; concernCauses?: string[]; concernCorrections?: string[] }) => boolean;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
   updateConcernTech: (roId: string, concernIndex: number, techId: string, techName?: string) => boolean;
   logCustomerContact: (
@@ -215,6 +218,7 @@ interface AppContextType {
   openQuoteModal: (roId: string) => void;
   closeQuoteModal: () => void;
   saveRepairQuote: (roId: string, quote: RepairQuote, submitToAdvisor?: boolean, options?: { isAutoSave?: boolean; notify?: boolean }) => boolean;
+  updateLineLaborHours: (roId: string, lineIndex: number, hoursVal: number | string) => boolean;
   updateQuoteStatus: (roId: string, status: 'APPROVED' | 'DECLINED', reason?: string) => boolean;
 
   // Warranty Labor Time Clock & Multi-Punch Tracking
@@ -384,7 +388,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return parsed.map((ro: RepairOrder) => cleanRO3700(ro));
         }
       }
     } catch {
@@ -775,8 +779,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [users, currentUser]);
 
-  const selectedRO = repairOrders.find(ro => ro.id === selectedROId) || null;
-  const activeQuoteRO = repairOrders.find(ro => ro.id === quoteModalROId) || null;
+  const selectedRO = useMemo(() => {
+    const found = repairOrders.find(ro => ro.id === selectedROId);
+    return found ? cleanRO3700(found) : null;
+  }, [repairOrders, selectedROId]);
+
+  const activeQuoteRO = useMemo(() => {
+    const found = repairOrders.find(ro => ro.id === quoteModalROId);
+    return found ? cleanRO3700(found) : null;
+  }, [repairOrders, quoteModalROId]);
+
   const activeWarrantyPrintRO = repairOrders.find(ro => ro.id === warrantyPrintROId) || null;
 
   const setSelectedRO = (ro: RepairOrder | null) => {
@@ -1090,135 +1102,157 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Add Part Order
-  const addPartOrder = (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => {
-    if (currentUser.role === 'SALES') {
+  // Add Multiple Part Orders (Atomic batch insert)
+  const addMultiplePartOrders = (roId: string, partsToAdd: Array<Omit<PartItem, 'id' | 'roId'>>) => {
+    if (currentUser.role === 'SALES' || !partsToAdd.length) {
       return;
     }
-    const targetRO = repairOrders.find(r => r.id === roId);
-    if (!targetRO) return;
 
-    // Service Advisor and unauthorized roles cannot arbitrarily set initial status to IN_STOCK, DAILY_ORDER, etc.
+    let updatedROToSync: RepairOrder | null = null;
     const isAuthorizedForPartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && activeRoleView !== 'SERVICE_ADVISOR';
-    const effectivePartStatus: PartStatus = isAuthorizedForPartStatus 
-      ? part.status 
-      : (part.status === 'NEEDED' || part.status === 'REQUESTED' ? part.status : 'REQUESTED');
 
-    const newPart: PartItem = {
-      ...part,
-      price: (part.price !== undefined && !isNaN(Number(part.price))) ? Number(Number(part.price).toFixed(2)) : undefined,
-      status: effectivePartStatus,
-      id: `prt_${Date.now()}`,
-      roId,
-      orderedAt: part.orderedAt || new Date().toISOString(),
-    };
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
 
-    const isWaitingOnDelivery = 
-      effectivePartStatus === 'DAILY_ORDER' || 
-      effectivePartStatus === 'LOCAL_PURCHASE' ||
-      effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' ||
-      effectivePartStatus === 'SPECIAL_ORDER' || 
-      effectivePartStatus === 'VOR_UPGRADE' || 
-      effectivePartStatus === 'ORDERED' || 
-      effectivePartStatus === 'IN_TRANSIT' || 
-      effectivePartStatus === 'REQUESTED';
-    const newROStatus = isWaitingOnDelivery ? 'WAITING_PARTS' : targetRO.status;
-    
-    let historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. Status: ${effectivePartStatus.replace(/_/g, ' ')}`;
-    if (effectivePartStatus === 'IN_STOCK' || effectivePartStatus === 'ISSUED_TO_TECH') {
-      historyNote = `[Parts Dept] Added IN STOCK part #${part.partNumber} (${part.description}) from ${part.vendor || 'inventory'}.`;
-    } else if (effectivePartStatus === 'LOCAL_PURCHASE') {
-      historyNote = `[Parts Dept] Dispatched LOCAL PURCHASE for part #${part.partNumber} (${part.description}) from ${part.vendor || 'local supplier'}. ETA: ${part.estimatedArrival || 'Today'}`;
-    } else if (effectivePartStatus === 'DAILY_ORDER') {
-      historyNote = `[Parts Dept] Placed DAILY ORDER for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
-    } else if (effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' || effectivePartStatus === 'SPECIAL_ORDER') {
-      historyNote = `[Parts Dept] Placed SPECIAL ORDER 1-5 DAYS for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
-    } else if (effectivePartStatus === 'VOR_UPGRADE') {
-      historyNote = `[Parts Dept] Placed VOR UPGRADE order for part #${part.partNumber} (${part.description}) from ${part.vendor || 'supplier'}. ETA: ${part.estimatedArrival || 'TBD'}`;
-    } else if (effectivePartStatus === 'RECEIVED') {
-      historyNote = `[Parts Dept] Added part #${part.partNumber} (${part.description}) as in-stock/received.`;
-    } else if (effectivePartStatus === 'REQUESTED') {
-      historyNote = `[Parts Request] Part request submitted for #${part.partNumber} (${part.description}). Pending classification by Parts/Service Manager.`;
-    }
+      const newParts: PartItem[] = partsToAdd.map((part, idx) => {
+        const defaultInitialStatus: PartStatus = part.requestType === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'REQUESTED';
+        const effectivePartStatus: PartStatus = isAuthorizedForPartStatus 
+          ? part.status 
+          : (part.status === 'NEEDED' || part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' ? part.status : defaultInitialStatus);
 
-    // If quote exists on RO, automatically merge parts so labor and parts come together on the quote
-    let mergedQuote = targetRO.quote;
-    if (mergedQuote) {
-      const existingQuoteParts = mergedQuote.partsItems || [];
-      const matchIdx = existingQuoteParts.findIndex(qp => 
-        qp.sourcePartId === newPart.id || 
-        (newPart.partNumber && qp.partNumber && qp.partNumber.trim().toUpperCase() === newPart.partNumber.trim().toUpperCase())
-      );
-      let nextPartsItems = [...existingQuoteParts];
-      const partPrice = (newPart.price !== undefined && Number(newPart.price) > 0) ? Number(newPart.price) : 0;
-      if (matchIdx >= 0) {
-        nextPartsItems[matchIdx] = {
-          ...nextPartsItems[matchIdx],
-          description: newPart.description || newPart.name || nextPartsItems[matchIdx].description,
-          partNumber: newPart.partNumber || nextPartsItems[matchIdx].partNumber,
-          quantity: newPart.quantity || nextPartsItems[matchIdx].quantity || 1,
-          unitPrice: partPrice > 0 ? partPrice : nextPartsItems[matchIdx].unitPrice,
-          subtotal: (newPart.quantity || nextPartsItems[matchIdx].quantity || 1) * (partPrice > 0 ? partPrice : (Number(nextPartsItems[matchIdx].unitPrice) || 0)),
-          sourcePartId: newPart.id,
+        return {
+          ...part,
+          price: (part.price !== undefined && !isNaN(Number(part.price))) ? Number(Number(part.price).toFixed(2)) : undefined,
+          status: effectivePartStatus,
+          id: `prt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+          roId,
+          orderedAt: part.orderedAt || new Date().toISOString(),
         };
-      } else {
-        nextPartsItems.push({
-          id: `qpart_${Date.now()}_${newPart.id}`,
-          description: newPart.description || newPart.name,
-          partNumber: newPart.partNumber,
-          quantity: newPart.quantity || 1,
-          unitPrice: partPrice > 0 ? partPrice : ('' as any),
-          subtotal: (newPart.quantity || 1) * partPrice,
-          sourcePartId: newPart.id,
-        });
-      }
-      const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
-      const totalLaborCost = mergedQuote.totalLaborCost || 0;
-      const supplies = mergedQuote.shopSuppliesFee || 0;
-      const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-      const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
-      const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+      });
 
-      mergedQuote = {
-        ...mergedQuote,
-        partsItems: nextPartsItems,
-        totalPartsCost,
-        taxAmount,
-        grandTotal,
-      };
-    }
+      const isWaitingOnDelivery = newParts.some(newPart => 
+        newPart.status === 'DAILY_ORDER' || 
+        newPart.status === 'LOCAL_PURCHASE' ||
+        newPart.status === 'SPECIAL_ORDER_1_5_DAYS' ||
+        newPart.status === 'SPECIAL_ORDER' || 
+        newPart.status === 'VOR_UPGRADE' || 
+        newPart.status === 'ORDERED' || 
+        newPart.status === 'IN_TRANSIT' || 
+        (newPart.status === 'REQUESTED' && newPart.requestType !== 'QUOTE_ONLY')
+      );
+      const newROStatus = isWaitingOnDelivery ? 'WAITING_PARTS' : targetRO.status;
 
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      status: newROStatus,
-      parts: [...targetRO.parts, newPart],
-      quote: mergedQuote,
-      history: [
-        ...targetRO.history,
-        {
-          id: `hist_${Date.now()}`,
+      const newHistoryEntries = newParts.map((newPart, idx) => {
+        const effectivePartStatus = newPart.status;
+        let historyNote = `[Parts Dept] Added part #${newPart.partNumber} (${newPart.description}) from ${newPart.vendor || 'supplier'}. Status: ${effectivePartStatus.replace(/_/g, ' ')}`;
+        if (effectivePartStatus === 'QUOTE_ONLY' || newPart.requestType === 'QUOTE_ONLY') {
+          historyNote = `[Parts Quote Request] Tech ${currentUser.name} requested parts quote/pricing for #${newPart.partNumber} (${newPart.description}) (Quote Only).`;
+        } else if (newPart.requestType === 'ORDER_NOW') {
+          historyNote = `[Parts Order Request] Tech ${currentUser.name} requested to ORDER #${newPart.partNumber} (${newPart.description}) (Order Now).`;
+        } else if (effectivePartStatus === 'IN_STOCK' || effectivePartStatus === 'ISSUED_TO_TECH') {
+          historyNote = `[Parts Dept] Added IN STOCK part #${newPart.partNumber} (${newPart.description}) from ${newPart.vendor || 'inventory'}.`;
+        } else if (effectivePartStatus === 'LOCAL_PURCHASE') {
+          historyNote = `[Parts Dept] Dispatched LOCAL PURCHASE for part #${newPart.partNumber} (${newPart.description}) from ${newPart.vendor || 'local supplier'}. ETA: ${newPart.estimatedArrival || 'Today'}`;
+        } else if (effectivePartStatus === 'DAILY_ORDER') {
+          historyNote = `[Parts Dept] Placed DAILY ORDER for part #${newPart.partNumber} (${newPart.description}) from ${newPart.vendor || 'supplier'}. ETA: ${newPart.estimatedArrival || 'TBD'}`;
+        } else if (effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' || effectivePartStatus === 'SPECIAL_ORDER') {
+          historyNote = `[Parts Dept] Placed SPECIAL ORDER 1-5 DAYS for part #${newPart.partNumber} (${newPart.description}) from ${newPart.vendor || 'supplier'}. ETA: ${newPart.estimatedArrival || 'TBD'}`;
+        } else if (effectivePartStatus === 'VOR_UPGRADE') {
+          historyNote = `[Parts Dept] Placed VOR UPGRADE order for part #${newPart.partNumber} (${newPart.description}) from ${newPart.vendor || 'supplier'}. ETA: ${newPart.estimatedArrival || 'TBD'}`;
+        } else if (effectivePartStatus === 'RECEIVED') {
+          historyNote = `[Parts Dept] Added part #${newPart.partNumber} (${newPart.description}) as in-stock/received.`;
+        } else if (effectivePartStatus === 'REQUESTED') {
+          historyNote = `[Parts Request] Part request submitted for #${newPart.partNumber} (${newPart.description}). Pending classification by Parts/Service Manager.`;
+        }
+
+        return {
+          id: `hist_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
           status: newROStatus,
           updatedBy: currentUser.id,
           updatedByName: currentUser.name,
           userRole: currentUser.role,
           timestamp: new Date().toISOString(),
           notes: historyNote,
-        },
-      ],
-    };
+        };
+      });
 
-    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
-    syncRepairOrder(updatedRO);
+      // If quote exists on RO, automatically merge parts so labor and parts come together on the quote
+      let mergedQuote = targetRO.quote;
+      if (mergedQuote) {
+        let nextPartsItems = [...(mergedQuote.partsItems || [])];
+        for (const newPart of newParts) {
+          const matchIdx = nextPartsItems.findIndex(qp => 
+            qp.sourcePartId === newPart.id || 
+            (newPart.partNumber && qp.partNumber && qp.partNumber.trim().toUpperCase() === newPart.partNumber.trim().toUpperCase())
+          );
+          const partPrice = (newPart.price !== undefined && Number(newPart.price) > 0) ? Number(newPart.price) : 0;
+          if (matchIdx >= 0) {
+            nextPartsItems[matchIdx] = {
+              ...nextPartsItems[matchIdx],
+              description: newPart.description || newPart.name || nextPartsItems[matchIdx].description,
+              partNumber: newPart.partNumber || nextPartsItems[matchIdx].partNumber,
+              quantity: newPart.quantity || nextPartsItems[matchIdx].quantity || 1,
+              unitPrice: partPrice > 0 ? partPrice : nextPartsItems[matchIdx].unitPrice,
+              subtotal: (newPart.quantity || nextPartsItems[matchIdx].quantity || 1) * (partPrice > 0 ? partPrice : (Number(nextPartsItems[matchIdx].unitPrice) || 0)),
+              sourcePartId: newPart.id,
+            };
+          } else {
+            nextPartsItems.push({
+              id: `qpart_${Date.now()}_${newPart.id}`,
+              description: newPart.description || newPart.name,
+              partNumber: newPart.partNumber,
+              quantity: newPart.quantity || 1,
+              unitPrice: partPrice > 0 ? partPrice : ('' as any),
+              subtotal: (newPart.quantity || 1) * partPrice,
+              sourcePartId: newPart.id,
+            });
+          }
+        }
+        const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+        const totalLaborCost = mergedQuote.totalLaborCost || 0;
+        const supplies = mergedQuote.shopSuppliesFee || 0;
+        const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+        const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
+        const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
-    triggerNotification(
-      updatedRO,
-      effectivePartStatus === 'ISSUED_TO_TECH'
-        ? `Parts Issued: ${part.description}`
-        : `Parts Added: ${part.description}`,
-      `Part #${part.partNumber} (${part.description}) added by ${currentUser.name}. Status: ${effectivePartStatus === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : effectivePartStatus.replace(/_/g, ' ')}`,
-      true,
-      'PARTS_UPDATE'
-    );
+        mergedQuote = {
+          ...mergedQuote,
+          partsItems: nextPartsItems,
+          totalPartsCost,
+          taxAmount,
+          grandTotal,
+        };
+      }
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        status: newROStatus,
+        parts: [...targetRO.parts, ...newParts],
+        quote: mergedQuote,
+        history: [...targetRO.history, ...newHistoryEntries],
+      };
+
+      updatedROToSync = updatedRO;
+      return prev.map(ro => ro.id === roId ? updatedRO : ro);
+    });
+
+    if (updatedROToSync) {
+      syncRepairOrder(updatedROToSync);
+      const firstPart = partsToAdd[0];
+      triggerNotification(
+        updatedROToSync,
+        partsToAdd.length === 1 ? `Parts Requested: ${firstPart.description}` : `${partsToAdd.length} Parts Requested`,
+        `Submitted by ${currentUser.name}`,
+        true,
+        'PARTS_UPDATE'
+      );
+    }
+  };
+
+  // Add Part Order (Single)
+  const addPartOrder = (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => {
+    addMultiplePartOrders(roId, [part]);
   };
 
   // Update Part Status
@@ -1319,8 +1353,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Sync quote if exists
+    // Sync quote: Ensure quote exists and is updated with part pricing for estimate
     let mergedQuote = targetRO.quote;
+    if (!mergedQuote) {
+      const concernsList = (targetRO.concerns && targetRO.concerns.length > 0)
+        ? targetRO.concerns
+        : [targetRO.primaryConcern || 'General Diagnostic & Service'];
+      const defaultPay = targetRO.concernPayTypes?.[0] || 'CUSTOMER_PAY';
+      const hourlyRate = PAY_TYPE_RATES[defaultPay] || 165.00;
+      
+      const laborItems: LaborLineItem[] = concernsList.map((concern, idx) => ({
+        id: `labor_${Date.now()}_ro_${idx}`,
+        description: targetRO.correction ? `Concern: ${concern} — Correction: ${targetRO.correction}` : `Concern: ${concern}`,
+        laborHours: 0,
+        hourlyRate,
+        subtotal: 0,
+        payType: targetRO.concernPayTypes?.[idx] || defaultPay,
+        roLineNumber: idx + 1,
+        concernText: concern,
+        correctionText: targetRO.correction || '',
+        addedByAdvisor: false,
+      }));
+
+      mergedQuote = {
+        id: `quote_${Date.now()}`,
+        roId: targetRO.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        initiatedByTechId: currentUser.id,
+        initiatedByTechName: currentUser.name,
+        status: 'DRAFT',
+        payType: defaultPay,
+        laborItems,
+        partsItems: [],
+        defaultLaborRate: hourlyRate,
+        shopSuppliesFee: 0,
+        taxRate: targetRO.isTaxExempt ? 0 : 0.07,
+        taxAmount: 0,
+        totalLaborHours: 0,
+        totalLaborCost: 0,
+        totalPartsCost: 0,
+        grandTotal: 0,
+        techNotes: targetRO.correction ? `Correction: ${targetRO.correction}` : undefined,
+      };
+    }
+
     if (mergedQuote) {
       const existingQuoteParts = mergedQuote.partsItems || [];
       const matchIdx = existingQuoteParts.findIndex(qp => qp.sourcePartId === partId || (updates.partNumber && qp.partNumber === updates.partNumber));
@@ -1336,7 +1413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           partNumber: updates.partNumber || cur.partNumber,
           quantity: newQty,
           unitPrice: newUnitPrice,
-          subtotal: newQty * (Number(newUnitPrice) || 0),
+          subtotal: Number((newQty * (Number(newUnitPrice) || 0)).toFixed(2)),
           sourcePartId: partId,
         };
       } else if (partDesc) {
@@ -1346,13 +1423,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           partNumber: updates.partNumber || '',
           quantity: updates.quantity || 1,
           unitPrice: (partPrice && partPrice > 0) ? partPrice : ('' as any),
-          subtotal: (updates.quantity || 1) * (partPrice || 0),
+          subtotal: Number(((updates.quantity || 1) * (partPrice || 0)).toFixed(2)),
           sourcePartId: partId,
         });
       }
-      const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
-      const totalLaborCost = mergedQuote.totalLaborCost || 0;
-      const supplies = mergedQuote.shopSuppliesFee || 0;
+      const totalPartsCost = Number(nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
+      const totalLaborCost = Number((mergedQuote.totalLaborCost || 0).toFixed(2));
+      const supplies = Number((mergedQuote.shopSuppliesFee || 0).toFixed(2));
       const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
       const taxAmount = Number((totalPartsCost * taxRate).toFixed(2));
       const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
@@ -1363,6 +1440,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalPartsCost,
         taxAmount,
         grandTotal,
+        updatedAt: new Date().toISOString(),
       };
     }
 
@@ -2055,7 +2133,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     roId: string, 
     cause: string, 
     correction: string,
-    options?: { isAutoSave?: boolean; notify?: boolean }
+    options?: { isAutoSave?: boolean; notify?: boolean; concernCauses?: string[]; concernCorrections?: string[] }
   ): boolean => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return false;
@@ -2066,8 +2144,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const effectiveCause = isAutoSave ? cause : cause.trim();
     const effectiveCorrection = isAutoSave ? correction : correction.trim();
 
+    const effectiveConcernCauses = options?.concernCauses;
+    const effectiveConcernCorrections = options?.concernCorrections;
+
+    const causesChanged = effectiveConcernCauses !== undefined && 
+      JSON.stringify(effectiveConcernCauses) !== JSON.stringify(targetRO.concernCauses || []);
+    const correctionsChanged = effectiveConcernCorrections !== undefined && 
+      JSON.stringify(effectiveConcernCorrections) !== JSON.stringify(targetRO.concernCorrections || []);
+
     // If nothing changed, return true without doing redundant work
-    if (targetRO.cause === effectiveCause && targetRO.correction === effectiveCorrection) {
+    if (
+      targetRO.cause === effectiveCause && 
+      targetRO.correction === effectiveCorrection &&
+      !causesChanged &&
+      !correctionsChanged
+    ) {
       return true;
     }
 
@@ -2098,6 +2189,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...targetRO,
       cause: effectiveCause,
       correction: effectiveCorrection,
+      concernCauses: effectiveConcernCauses !== undefined ? effectiveConcernCauses : targetRO.concernCauses,
+      concernCorrections: effectiveConcernCorrections !== undefined ? effectiveConcernCorrections : targetRO.concernCorrections,
       // For backwards compatibility, sync diagnosticNotes if empty
       diagnosticNotes: effectiveCause || targetRO.diagnosticNotes,
       history: newHistory
@@ -2129,19 +2222,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Add a new customer complaint / concern line to an open or dispatched repair order (Service Manager or Service Advisor)
+  // Add a new customer complaint / additional concern found line to an open or dispatched repair order
   const addRepairOrderConcern = (
     roId: string, 
     concernText: string, 
     payType: ConcernPayType = 'CUSTOMER_PAY', 
     techId?: string, 
-    techName?: string
+    techName?: string,
+    initialLaborHours?: number | string
   ): boolean => {
-    const canAdd = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
-    if (!canAdd) {
-      alert('Only Service Managers and Service Advisors can add customer complaints to an open repair order.');
-      return false;
-    }
     const cleanConcern = concernText.trim();
     if (!cleanConcern) return false;
 
@@ -2160,8 +2249,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? [...ro.concernTechNames]
             : currentConcerns.map((_, i) => ro.concernTechNames?.[i] || ro.techName);
 
-          const finalTechId = techId || ro.techId;
-          const finalTechName = techName || (techId ? users.find(u => u.id === techId)?.name : ro.techName);
+          const finalTechId = techId || (currentUser.role === 'TECHNICIAN' ? currentUser.id : ro.techId);
+          const finalTechName = techName || (techId ? users.find(u => u.id === techId)?.name : (currentUser.role === 'TECHNICIAN' ? currentUser.name : ro.techName));
 
           currentConcerns.push(cleanConcern);
           currentPayTypes.push(payType);
@@ -2175,8 +2264,101 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updatedByName: currentUser.name,
             userRole: currentUser.role,
             timestamp: new Date().toISOString(),
-            notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) added Customer Complaint Line ${currentConcerns.length}: "${cleanConcern}" (${payType.replace(/_/g, ' ')})`
+            notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) added ${currentUser.role === 'TECHNICIAN' ? 'Additional Concern Found' : 'Customer Complaint'} Line ${currentConcerns.length}: "${cleanConcern}" (${payType.replace(/_/g, ' ')})`
           };
+
+          const currentCauses = ro.concernCauses ? [...ro.concernCauses, ''] : undefined;
+          const currentCorrections = ro.concernCorrections ? [...ro.concernCorrections, ''] : undefined;
+
+          // Mirror into quote (create if doesn't exist, or update existing)
+          const lineNum = currentConcerns.length;
+          const lineRate = PAY_TYPE_RATES[payType] || ro.quote?.defaultLaborRate || 165.00;
+          const parsedHours = (initialLaborHours !== undefined && initialLaborHours !== null && initialLaborHours !== '')
+            ? Math.max(0, Number(initialLaborHours) || 0)
+            : 0;
+          const subtotal = Number((parsedHours * lineRate).toFixed(2));
+
+          const newLaborItem: LaborLineItem = {
+            id: `labor_${Date.now()}_ro_${lineNum}`,
+            description: `Concern: ${cleanConcern}`,
+            laborHours: parsedHours > 0 ? parsedHours : 0,
+            hourlyRate: lineRate,
+            subtotal,
+            payType,
+            roLineNumber: lineNum,
+            concernText: cleanConcern,
+            correctionText: '',
+            addedByAdvisor: false,
+          };
+
+          let nextQuote: RepairQuote;
+          if (ro.quote) {
+            const existingItems = ro.quote.laborItems || [];
+            const allItems = [...existingItems, newLaborItem];
+            const totalLaborHours = Number(allItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+            const totalLaborCost = Number(allItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+            const totalPartsCost = ro.quote.totalPartsCost || 0;
+            const shopSuppliesFee = ro.quote.shopSuppliesFee || 0;
+            const isExempt = ro.isTaxExempt || ro.quote.isTaxExempt;
+            const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
+            const taxAmount = isExempt ? 0 : Number((totalPartsCost * taxRate).toFixed(2));
+            const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
+
+            nextQuote = {
+              ...ro.quote,
+              laborItems: allItems,
+              totalLaborHours,
+              totalLaborCost,
+              grandTotal,
+              updatedAt: new Date().toISOString(),
+            };
+          } else {
+            // Build fresh quote mirroring all lines up to lineNum
+            const mirroredItems: LaborLineItem[] = currentConcerns.map((c, i) => {
+              const pType = currentPayTypes[i] || 'CUSTOMER_PAY';
+              const pRate = PAY_TYPE_RATES[pType] || 165.00;
+              const pHours = i === lineNum - 1 ? parsedHours : 0;
+              return {
+                id: `labor_${Date.now()}_ro_${i + 1}`,
+                description: `Concern: ${c}`,
+                laborHours: pHours,
+                hourlyRate: pRate,
+                subtotal: Number((pHours * pRate).toFixed(2)),
+                payType: pType,
+                roLineNumber: i + 1,
+                concernText: c,
+                correctionText: '',
+                addedByAdvisor: false,
+              };
+            });
+            const totalLaborHours = Number(mirroredItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+            const totalLaborCost = Number(mirroredItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+            const isExempt = ro.isTaxExempt || false;
+            const taxRate = isExempt ? 0 : 0.07;
+            const grandTotal = totalLaborCost;
+
+            nextQuote = {
+              id: `quote_${Date.now()}`,
+              roId: ro.id,
+              status: 'DRAFT',
+              laborItems: mirroredItems,
+              partsItems: [],
+              totalLaborHours,
+              totalLaborCost,
+              totalPartsCost: 0,
+              shopSuppliesFee: 0,
+              isTaxExempt: isExempt,
+              taxRate,
+              taxAmount: 0,
+              grandTotal,
+              defaultLaborRate: lineRate,
+              payType,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              initiatedByTechId: currentUser.id,
+              initiatedByTechName: currentUser.name,
+            };
+          }
 
           const updatedItem: RepairOrder = {
             ...ro,
@@ -2184,6 +2366,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             concernPayTypes: currentPayTypes,
             concernTechIds: currentTechIds,
             concernTechNames: currentTechNames,
+            concernCauses: currentCauses,
+            concernCorrections: currentCorrections,
+            quote: nextQuote,
             history: [...ro.history, historyItem]
           };
           updatedRO = updatedItem;
@@ -2542,6 +2727,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Update labor hours requested for a specific customer concern line (syncs directly to repair quote)
+  const updateLineLaborHours = (roId: string, lineIndex: number, hoursVal: number | string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const numHours = Math.max(0, Number(hoursVal) || 0);
+    const concernsList = (targetRO.concerns && targetRO.concerns.length > 0)
+      ? targetRO.concerns
+      : [targetRO.primaryConcern || 'General Diagnostic & Service'];
+
+    const linePayType: ConcernPayType = targetRO.concernPayTypes?.[lineIndex] || targetRO.quote?.payType || 'CUSTOMER_PAY';
+    const hourlyRate = PAY_TYPE_RATES[linePayType] || targetRO.quote?.defaultLaborRate || 165.00;
+
+    const existingLaborItems: LaborLineItem[] = targetRO.quote?.laborItems ? [...targetRO.quote.laborItems] : [];
+
+    // Ensure all concerns have mirrored labor items
+    const mirroredItems: LaborLineItem[] = concernsList.map((concern, idx) => {
+      const matched = existingLaborItems.find(item => item.roLineNumber === idx + 1);
+      const itemPay = matched?.payType || targetRO.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
+      const itemRate = matched?.hourlyRate || PAY_TYPE_RATES[itemPay] || 165.00;
+      const currentHours = idx === lineIndex 
+        ? numHours 
+        : (matched?.laborHours !== undefined ? Number(matched.laborHours) || 0 : 0);
+      const subtotal = Number((currentHours * itemRate).toFixed(2));
+      const correction = targetRO.concernCorrections?.[idx] || targetRO.correction;
+
+      return {
+        id: matched?.id || `labor_${Date.now()}_ro_${idx}`,
+        description: correction ? `Concern: ${concern} — Correction: ${correction}` : `Concern: ${concern}`,
+        laborHours: currentHours,
+        hourlyRate: itemRate,
+        subtotal,
+        payType: itemPay,
+        roLineNumber: idx + 1,
+        concernText: concern,
+        correctionText: correction || '',
+        addedByAdvisor: false,
+      };
+    });
+
+    // Keep advisor added lines if any
+    const advisorLines = existingLaborItems.filter(item => item.addedByAdvisor === true);
+    const updatedLaborItems = [...mirroredItems, ...advisorLines];
+
+    const totalLaborHours = Number(updatedLaborItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+    const totalLaborCost = Number(updatedLaborItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+    const totalPartsCost = targetRO.quote?.totalPartsCost || 0;
+    const shopSuppliesFee = targetRO.quote?.shopSuppliesFee || 0;
+    const isExempt = targetRO.isTaxExempt || targetRO.quote?.isTaxExempt;
+    const taxRate = isExempt ? 0 : (targetRO.quote?.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
+    const taxAmount = isExempt ? 0 : Number((totalPartsCost * taxRate).toFixed(2));
+    const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
+
+    const updatedQuote: RepairQuote = {
+      ...(targetRO.quote || {
+        id: `quote_${Date.now()}`,
+        roId: targetRO.id,
+        createdAt: new Date().toISOString(),
+        initiatedByTechId: currentUser.id,
+        initiatedByTechName: currentUser.name,
+        partsItems: [],
+        defaultLaborRate: hourlyRate,
+        payType: linePayType,
+        shopSuppliesFee: 0,
+      }),
+      status: targetRO.quote?.status || 'DRAFT',
+      laborItems: updatedLaborItems,
+      totalLaborHours,
+      totalLaborCost,
+      totalPartsCost,
+      shopSuppliesFee,
+      isTaxExempt: isExempt,
+      taxRate,
+      taxAmount,
+      grandTotal,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return saveRepairQuote(roId, updatedQuote, false, { isAutoSave: true });
+  };
+
   const updateQuoteStatus = (roId: string, status: 'APPROVED' | 'DECLINED', reason?: string): boolean => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO || !targetRO.quote) return false;
@@ -2571,9 +2837,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : `${currentUser.name} marked repair quote as declined${reason ? `: ${reason}` : ''}`,
     };
 
+    const updatedParts = status === 'APPROVED'
+      ? targetRO.parts.map(p => {
+          if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
+            return {
+              ...p,
+              status: 'ORDERED' as PartStatus,
+              requestType: 'ORDER_NOW' as const,
+              orderedAt: now,
+              estimatedArrival: p.estimatedArrival && !p.estimatedArrival.includes('Quote') ? p.estimatedArrival : 'Daily Order (Arriving ~5:00 PM)',
+            };
+          }
+          return p;
+        })
+      : targetRO.parts;
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: targetROStatus,
+      parts: updatedParts,
       quote: updatedQuote,
       history: [...targetRO.history, historyItem],
     };
@@ -3363,6 +3645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reassignServiceWriter,
         sendMessage,
         addPartOrder,
+        addMultiplePartOrders,
         updatePartStatus,
         updatePartItem,
         deletePartItem,
@@ -3402,6 +3685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openQuoteModal,
         closeQuoteModal,
         saveRepairQuote,
+        updateLineLaborHours,
         updateQuoteStatus,
         clockInToRO,
         clockOutOfRO,

@@ -12,7 +12,6 @@ import {
   Play, 
   Car, 
   CheckCheck, 
-  ChevronRight,
   ArrowRight,
   Send,
   Calendar
@@ -186,18 +185,18 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
       
-      {/* Top Banner with Flow Pipeline Label */}
-      <div className="p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800">
+      {/* Top Banner with Flow Pipeline & Current Stage Combined */}
+      <div className="p-4 bg-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800">
         <div>
           <div className="text-[10px] uppercase font-bold text-blue-400 tracking-wider flex items-center gap-1.5">
             <span>Ticket Workflow Pipeline</span>
             <span className="text-slate-500">•</span>
-            <span>11 Sequential Stages</span>
+            <span>Stage {currentStep.stepNumber} of 11</span>
           </div>
-          <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 mt-0.5">
+          <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2 mt-0.5">
             <span>Current Stage:</span>
-            <span className="text-blue-400 font-extrabold">
-              {STATUS_CONFIG[currentNormalized]?.label || ro.status}
+            <span className="text-blue-400">
+              {currentStep.label}
             </span>
             {ro.status === 'DENIED' && (
               <span className="bg-rose-500/20 text-rose-300 text-xs px-2 py-0.5 rounded-full border border-rose-500/40">
@@ -205,102 +204,16 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
               </span>
             )}
           </h3>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            {currentStep.description}
+          </p>
         </div>
 
-        {/* Quick Advance Button if available */}
-        {canEdit && nextStatus && (
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              onClick={() => handleAdvance(nextStatus)}
-              className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer hover:shadow-md"
-              title={`Advance to ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
-            >
-              <span>Advance to {STATUS_CONFIG[nextStatus]?.label || nextStatus}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Horizontal Scrollable Step Bar */}
-      <div className="p-4 overflow-x-auto bg-slate-50/70 border-b border-slate-200">
-        <div className="flex items-center min-w-max gap-1">
-          {FLOW_STEPS.map((step, idx) => {
-            const isCompleted = currentIndex > idx;
-            const isCurrent = currentIndex === idx;
-            const isUpcoming = currentIndex < idx;
-
-            const Icon = step.icon;
-
-            return (
-              <React.Fragment key={step.id}>
-                {/* Step Pill */}
-                <button
-                  disabled={!canEdit}
-                  onClick={() => {
-                    if (canEdit) {
-                      handleAdvance(step.key);
-                    }
-                  }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all border shrink-0 cursor-pointer ${
-                    isCurrent
-                      ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-400/40 shadow-sm font-bold'
-                      : isCompleted
-                      ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100 font-medium'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 font-medium'
-                  }`}
-                  title={`${step.stepNumber}. ${step.label} — ${step.description}`}
-                >
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                    isCurrent
-                      ? 'bg-white text-blue-600'
-                      : isCompleted
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : step.stepNumber}
-                  </div>
-
-                  <div className="flex flex-col">
-                    <span className="text-xs leading-tight whitespace-nowrap">{step.shortLabel}</span>
-                    {isCurrent && (
-                      <span className="text-[9px] text-blue-100 font-normal leading-none uppercase tracking-wider">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                </button>
-
-                {/* Arrow Connector */}
-                {idx < FLOW_STEPS.length - 1 && (
-                  <ChevronRight className={`w-4 h-4 shrink-0 mx-0.5 ${
-                    isCompleted ? 'text-emerald-500' : 'text-slate-300'
-                  }`} />
-                )}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Stage Detail & Context Actions */}
-      <div className="p-4 bg-white space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-          <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Stage {currentStep.stepNumber} of 11:
-            </div>
-            <div className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-              <span>{currentStep.label}</span>
-            </div>
-            <p className="text-xs text-slate-600 mt-0.5">
-              {currentStep.description}
-            </p>
-          </div>
-
+        {/* Action Controls: Quick Advance or Approval Decisions or ETA */}
+        <div className="flex items-center gap-2 flex-wrap self-start md:self-center">
           {/* Decision Buttons for Approval Step */}
           {currentStep.isDecision && canEdit && (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => handleAdvance('APPROVED', 'Customer approved estimate via phone / authorization')}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer ${
@@ -329,15 +242,15 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
 
           {/* Parts Ordered (ETA) Input Shortcut */}
           {currentNormalized === 'PARTS_ORDERED' && canEdit && (
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 bg-white border-2 border-slate-600 rounded-lg px-2.5 py-1">
-                <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1">
+                <Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                 <input
                   type="text"
                   placeholder="Parts ETA (e.g. Today 2 PM)"
                   value={customEta}
                   onChange={e => setCustomEta(e.target.value)}
-                  className="text-xs outline-none w-36 sm:w-44 text-slate-900 font-medium"
+                  className="text-xs outline-none w-36 sm:w-44 text-white placeholder:text-slate-500 bg-transparent font-medium"
                 />
               </div>
               <button
@@ -353,30 +266,57 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
               </button>
             </div>
           )}
-        </div>
 
-        {/* 1-Click Stage Picker Grid */}
+          {/* Quick Advance Button if available and not decision */}
+          {canEdit && nextStatus && !currentStep.isDecision && (
+            <button
+              onClick={() => handleAdvance(nextStatus)}
+              className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer hover:shadow-md"
+              title={`Advance to ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
+            >
+              <span>Advance to {STATUS_CONFIG[nextStatus]?.label || nextStatus}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 1-Click Jump to Stage Picker & Status Notes */}
+      <div className="p-4 bg-white space-y-3">
         {canEdit && (
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-              Jump to Stage:
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                Jump to Stage (1-Click Advance):
+              </span>
+              <span className="text-[11px] font-bold text-slate-500">
+                Stage {currentStep.stepNumber} of 11 Active
+              </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              {FLOW_STEPS.map(s => {
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {FLOW_STEPS.map((s, idx) => {
                 const isCurrent = currentNormalized === s.key;
+                const isCompleted = currentIndex > idx;
                 return (
                   <button
                     key={s.id}
                     onClick={() => handleAdvance(s.key)}
-                    className={`p-2 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                    className={`p-2.5 rounded-lg border-2 text-left transition-all cursor-pointer ${
                       isCurrent
                         ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-300 shadow-xs font-bold'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-400 hover:border-slate-600'
+                        : isCompleted
+                        ? 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-950 border-emerald-300 font-semibold'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-300 hover:border-slate-500 font-medium'
                     }`}
+                    title={`${s.stepNumber}. ${s.label}: ${s.description}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold truncate">{s.stepNumber}. {s.shortLabel}</span>
-                      {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold truncate">{s.stepNumber}. {s.shortLabel}</span>
+                      {isCurrent ? (
+                        <span className="w-2 h-2 rounded-full bg-white shrink-0 animate-pulse" />
+                      ) : isCompleted ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      ) : null}
                     </div>
                   </button>
                 );

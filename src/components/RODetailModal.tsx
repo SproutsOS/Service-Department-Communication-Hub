@@ -37,12 +37,13 @@ import {
   Printer,
   Camera,
   ListFilter,
+  Receipt,
   Copy
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails, formatCurrency } from '../utils/formatters';
+import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails, formatCurrency, cleanRO3700 } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { computeEtaAndStatus } from '../utils/partArrivalOptions';
 import { TicketFlowStepper } from './TicketFlowStepper';
@@ -75,6 +76,7 @@ export const RODetailModal: React.FC = () => {
     deleteRepairOrder,
     openDirectChat,
     openQuoteModal,
+    activeQuoteRO,
     openWarrantyPrintModal,
     updateConcernPayType,
     updateConcernTech,
@@ -92,6 +94,7 @@ export const RODetailModal: React.FC = () => {
   const isPartsManager = currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST';
   const isSales = currentUser.role === 'SALES' || activeRoleView === 'SALES';
   const canChangePartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && !isAdvisorScreen && !isTechScreen;
+  const canOrderParts = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'SERVICE_MANAGER' || activeRoleView === 'PARTS_SPECIALIST') && !isAdvisorScreen && !isTechScreen && currentUser.role !== 'SERVICE_ADVISOR' && activeRoleView !== 'SERVICE_ADVISOR';
   const canSelectPayType = isManager || isAdvisor;
   const canAssignTech = isManager || isAdvisor;
   const canReassignServiceWriter = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
@@ -123,6 +126,16 @@ export const RODetailModal: React.FC = () => {
     selectedRO?.concernTechIds && selectedRO.concernTechIds.length > 0
       ? selectedRO.concernTechIds
       : (selectedRO?.concerns || [selectedRO?.primaryConcern || '']).map(() => selectedRO?.techId)
+  );
+  const [editConcernCauses, setEditConcernCauses] = useState<string[]>(
+    selectedRO?.concernCauses && selectedRO.concernCauses.length > 0
+      ? selectedRO.concernCauses
+      : (selectedRO?.concerns || [selectedRO?.primaryConcern || '']).map((_, i) => i === 0 ? (selectedRO?.cause || '') : '')
+  );
+  const [editConcernCorrections, setEditConcernCorrections] = useState<string[]>(
+    selectedRO?.concernCorrections && selectedRO.concernCorrections.length > 0
+      ? selectedRO.concernCorrections
+      : (selectedRO?.concerns || [selectedRO?.primaryConcern || '']).map((_, i) => i === 0 ? (selectedRO?.correction || '') : '')
   );
   const [editPromisedTime, setEditPromisedTime] = useState(selectedRO?.promisedTime || '');
   const [editDiagnosticNotes, setEditDiagnosticNotes] = useState(selectedRO?.diagnosticNotes || '');
@@ -168,6 +181,16 @@ export const RODetailModal: React.FC = () => {
         ? selectedRO.concernTechIds
         : (selectedRO.concerns || [selectedRO.primaryConcern || '']).map(() => selectedRO.techId)
     );
+    setEditConcernCauses(
+      selectedRO.concernCauses && selectedRO.concernCauses.length > 0
+        ? selectedRO.concernCauses
+        : (selectedRO.concerns || [selectedRO.primaryConcern || '']).map((_, i) => i === 0 ? (selectedRO.cause || '') : '')
+    );
+    setEditConcernCorrections(
+      selectedRO.concernCorrections && selectedRO.concernCorrections.length > 0
+        ? selectedRO.concernCorrections
+        : (selectedRO.concerns || [selectedRO.primaryConcern || '']).map((_, i) => i === 0 ? (selectedRO.correction || '') : '')
+    );
     setEditPromisedTime(selectedRO.promisedTime || '');
     setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
     setEditCause(selectedRO.cause || '');
@@ -201,6 +224,8 @@ export const RODetailModal: React.FC = () => {
       const validConcerns = (overrides?.concerns || editConcerns).map(c => c.trim()).filter(Boolean);
       const finalPrimary = validConcerns[0] || (overrides?.primaryConcern ?? editPrimaryConcern).trim() || selectedRO.primaryConcern;
       const finalConcernTechIds = overrides?.concernTechIds !== undefined ? overrides.concernTechIds : editConcernTechIds;
+      const finalConcernCauses = overrides?.concernCauses !== undefined ? overrides.concernCauses : editConcernCauses;
+      const finalConcernCorrections = overrides?.concernCorrections !== undefined ? overrides.concernCorrections : editConcernCorrections;
 
       updateRepairOrderDetails(selectedRO.id, {
         customerName: overrides?.customerName !== undefined ? overrides.customerName : editCustomerName.trim(),
@@ -218,10 +243,12 @@ export const RODetailModal: React.FC = () => {
         concernPayTypes: overrides?.concernPayTypes !== undefined ? overrides.concernPayTypes : editConcernPayTypes,
         concernTechIds: finalConcernTechIds,
         concernTechNames: finalConcernTechIds.map(id => id ? users.find(u => u.id === id)?.name : undefined),
+        concernCauses: finalConcernCauses,
+        concernCorrections: finalConcernCorrections,
         promisedTime: overrides?.promisedTime !== undefined ? overrides.promisedTime : editPromisedTime,
         diagnosticNotes: overrides?.diagnosticNotes !== undefined ? overrides.diagnosticNotes : editDiagnosticNotes.trim(),
-        cause: overrides?.cause !== undefined ? overrides.cause : editCause.trim(),
-        correction: overrides?.correction !== undefined ? overrides.correction : editCorrection.trim(),
+        cause: finalConcernCauses[0] || (overrides?.cause !== undefined ? overrides.cause : editCause.trim()),
+        correction: finalConcernCorrections[0] || (overrides?.correction !== undefined ? overrides.correction : editCorrection.trim()),
         isUrgent: overrides?.isUrgent !== undefined ? overrides.isUrgent : editIsUrgent,
         isWaiter: overrides?.isWaiter !== undefined ? overrides.isWaiter : editIsWaiter,
         ...overrides
@@ -257,10 +284,12 @@ export const RODetailModal: React.FC = () => {
       concernPayTypes: editConcernPayTypes,
       concernTechIds: editConcernTechIds,
       concernTechNames: editConcernTechIds.map(id => id ? users.find(u => u.id === id)?.name : undefined),
+      concernCauses: editConcernCauses,
+      concernCorrections: editConcernCorrections,
       promisedTime: editPromisedTime,
       diagnosticNotes: editDiagnosticNotes.trim(),
-      cause: editCause.trim(),
-      correction: editCorrection.trim(),
+      cause: editConcernCauses[0] || editCause.trim(),
+      correction: editConcernCorrections[0] || editCorrection.trim(),
       isUrgent: editIsUrgent,
       isWaiter: editIsWaiter
     }, { isAutoSave: true });
@@ -300,10 +329,36 @@ export const RODetailModal: React.FC = () => {
     });
   };
 
+  const handleEditConcernCauseChange = (index: number, val: string) => {
+    setEditConcernCauses(prev => {
+      const next = [...prev];
+      while (next.length <= index) next.push('');
+      next[index] = val;
+      return next;
+    });
+    if (index === 0) {
+      setEditCause(val);
+    }
+  };
+
+  const handleEditConcernCorrectionChange = (index: number, val: string) => {
+    setEditConcernCorrections(prev => {
+      const next = [...prev];
+      while (next.length <= index) next.push('');
+      next[index] = val;
+      return next;
+    });
+    if (index === 0) {
+      setEditCorrection(val);
+    }
+  };
+
   const handleAddEditConcern = () => {
     setEditConcerns(prev => [...prev, '']);
     setEditConcernPayTypes(prev => [...prev, 'CUSTOMER_PAY']);
     setEditConcernTechIds(prev => [...prev, selectedRO?.techId || undefined]);
+    setEditConcernCauses(prev => [...prev, '']);
+    setEditConcernCorrections(prev => [...prev, '']);
   };
 
   const handleRemoveEditConcern = (index: number) => {
@@ -317,6 +372,14 @@ export const RODetailModal: React.FC = () => {
     });
     setEditConcernTechIds(prev => {
       if (prev.length <= 1) return [undefined];
+      return prev.filter((_, i) => i !== index);
+    });
+    setEditConcernCauses(prev => {
+      if (prev.length <= 1) return [''];
+      return prev.filter((_, i) => i !== index);
+    });
+    setEditConcernCorrections(prev => {
+      if (prev.length <= 1) return [''];
       return prev.filter((_, i) => i !== index);
     });
   };
@@ -413,21 +476,22 @@ export const RODetailModal: React.FC = () => {
       setEditVehicleMake(selectedRO.vehicle.make);
       setEditVehicleModel(selectedRO.vehicle.model);
       setEditVehicleVin(selectedRO.vehicle.vin);
-      setEditPrimaryConcern(selectedRO.primaryConcern);
-      const initialConcerns = selectedRO.concerns && selectedRO.concerns.length > 0
-        ? selectedRO.concerns
-        : [selectedRO.primaryConcern || ''];
+      const cleanRO = cleanRO3700(selectedRO);
+      setEditPrimaryConcern(cleanRO.primaryConcern);
+      const initialConcerns = cleanRO.concerns && cleanRO.concerns.length > 0
+        ? cleanRO.concerns
+        : [cleanRO.primaryConcern || ''];
+
       setEditConcerns(initialConcerns);
-      setEditConcernPayTypes(
-        selectedRO.concernPayTypes && selectedRO.concernPayTypes.length > 0
-          ? selectedRO.concernPayTypes
-          : initialConcerns.map(() => 'CUSTOMER_PAY')
-      );
-      setEditConcernTechIds(
-        selectedRO.concernTechIds && selectedRO.concernTechIds.length > 0
-          ? selectedRO.concernTechIds
-          : initialConcerns.map(() => selectedRO.techId)
-      );
+      const rawPayTypes: ConcernPayType[] = cleanRO.concernPayTypes && cleanRO.concernPayTypes.length > 0
+        ? (cleanRO.concernPayTypes as ConcernPayType[])
+        : initialConcerns.map(() => 'CUSTOMER_PAY' as ConcernPayType);
+      setEditConcernPayTypes(rawPayTypes);
+
+      const rawTechIds = cleanRO.concernTechIds && cleanRO.concernTechIds.length > 0
+        ? cleanRO.concernTechIds
+        : initialConcerns.map(() => cleanRO.techId);
+      setEditConcernTechIds(rawTechIds);
       setEditPromisedTime(selectedRO.promisedTime);
       setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
       setEditCause(selectedRO.cause || '');
@@ -691,31 +755,31 @@ export const RODetailModal: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {/* ProDemand Labor Guide Link */}
+              {/* Pro Demand Labor Guide Link */}
               <a
                 href="https://www.prodemand.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shadow-2xs shrink-0"
-                title="Open Mitchell 1 ProDemand flat rate labor times"
+                title="Open Pro Demand flat rate labor times"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">ProDemand</span> Labor ↗
+                <span className="hidden sm:inline">Pro Demand</span> Labor ↗
               </a>
 
               {/* Advisor Quick Photos Action */}
-              {isAdvisorScreen && (
+              {(isAdvisorScreen || isManager) && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('PHOTOS')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
                     activeTab === 'PHOTOS'
-                      ? 'bg-blue-600 text-white border-blue-700'
-                      : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-300'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
                   }`}
                   title="Vehicle Intake & Walkaround Photos"
                 >
-                  <Camera className="w-3.5 h-3.5" />
+                  <Camera className={`w-3.5 h-3.5 ${activeTab === 'PHOTOS' ? 'text-white' : 'text-blue-700'}`} />
                   <span>Photos ({(selectedRO.vehiclePhotos?.length || 0)})</span>
                 </button>
               )}
@@ -725,15 +789,15 @@ export const RODetailModal: React.FC = () => {
                 type="button"
                 id="ro-modal-line-view-toggle"
                 onClick={() => setActiveTab(activeTab === 'LINES' ? 'DETAILS' : 'LINES')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
                   activeTab === 'LINES'
-                    ? 'bg-blue-600 text-white border-blue-700'
-                    : 'bg-white hover:bg-blue-50 text-slate-700 border-slate-300'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
                 }`}
                 title="Toggle between Workflow and Itemized Line View"
               >
-                <ListFilter className="w-3.5 h-3.5 text-blue-600" />
-                <span>{activeTab === 'LINES' ? 'Workflow View' : 'Line View'}</span>
+                <ListFilter className={`w-3.5 h-3.5 ${activeTab === 'LINES' ? 'text-white' : 'text-blue-700'}`} />
+                <span>Line View</span>
               </button>
 
               {/* Repair Quote Initiation / Status */}
@@ -742,49 +806,51 @@ export const RODetailModal: React.FC = () => {
                   const loggedHours = selectedRO.quote?.laborItems 
                     ? selectedRO.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
                     : 0;
+                  const isQuoteActive = activeQuoteRO?.id === selectedRO.id;
                   return (
                     <button
                       type="button"
                       onClick={() => openQuoteModal(selectedRO.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs shrink-0 ${
-                        loggedHours > 0
-                          ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
-                          : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer border shadow-2xs shrink-0 ${
+                        isQuoteActive
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
                       }`}
                       title={loggedHours > 0 ? `View / Log Labor Time (${loggedHours.toFixed(1)} hrs)` : 'Enter Job Labor Time'}
                     >
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{loggedHours > 0 ? `Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Labor Time'}</span>
+                      <Clock className={`w-3.5 h-3.5 ${isQuoteActive ? 'text-white' : 'text-blue-700'}`} />
+                      <span>{loggedHours > 0 ? `Total Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Total Labor Time'}</span>
                     </button>
                   );
                 })()
               ) : (
-                <button
-                  type="button"
-                  onClick={() => openQuoteModal(selectedRO.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs shrink-0 ${
-                    selectedRO.quote
-                      ? selectedRO.quote.status === 'APPROVED'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                        : selectedRO.quote.status === 'SUBMITTED'
-                        ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                        : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
-                      : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 hover:scale-102'
-                  }`}
-                  title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
-                >
-                  <Calculator className="w-3.5 h-3.5" />
-                  {selectedRO.quote ? (
-                    <span>
-                      Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
-                    </span>
-                  ) : (
-                    <span>+ Repair Quote</span>
-                  )}
-                </button>
+                (() => {
+                  const isQuoteActive = activeQuoteRO?.id === selectedRO.id;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => openQuoteModal(selectedRO.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer border shadow-2xs shrink-0 ${
+                        isQuoteActive
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
+                      }`}
+                      title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
+                    >
+                      <Calculator className={`w-3.5 h-3.5 ${isQuoteActive ? 'text-white' : 'text-blue-700'}`} />
+                      {selectedRO.quote ? (
+                        <span>
+                          Quote: <strong>${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)}</strong>
+                        </span>
+                      ) : (
+                        <span>+ Repair Quote</span>
+                      )}
+                    </button>
+                  );
+                })()
               )}
 
-              {isManager ? (
+              {isManager && (
                 <button
                   type="button"
                   onClick={() => {
@@ -803,21 +869,16 @@ export const RODetailModal: React.FC = () => {
                     }
                     setIsEditingDetails(!isEditingDetails);
                   }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer border shrink-0 ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shrink-0 ${
                     isEditingDetails 
                       ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 shadow-2xs'
+                      : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100 shadow-2xs'
                   }`}
                   title="Service Manager: Edit core repair order details"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
                 </button>
-              ) : (
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-200/80 border border-slate-300 text-slate-700 text-xs font-semibold shrink-0">
-                  <Lock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Info Locked</span>
-                </span>
               )}
 
               <button
@@ -951,13 +1012,13 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-details"
             onClick={() => setActiveTab('DETAILS')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'DETAILS'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-800 hover:text-black'
             }`}
           >
-            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <FileText className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'DETAILS' ? 'text-blue-700' : 'text-slate-800'}`} />
             <span>{isTechScreen ? 'Technician Workflow & Tasks' : 'RO Details & Assignment'}</span>
           </button>
 
@@ -965,16 +1026,18 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-lines"
             onClick={() => setActiveTab('LINES')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'LINES'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-800 hover:text-black'
             }`}
           >
-            <ListFilter className="w-3.5 h-3.5 shrink-0" />
+            <ListFilter className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'LINES' ? 'text-blue-700' : 'text-slate-800'}`} />
             <span>Line View</span>
             {((selectedRO.concerns?.length || 1) > 0) && (
-              <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                activeTab === 'LINES' ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-900'
+              }`}>
                 {selectedRO.concerns?.length || 1}
               </span>
             )}
@@ -985,16 +1048,16 @@ export const RODetailModal: React.FC = () => {
             <button
               id="ro-tab-photos"
               onClick={() => setActiveTab('PHOTOS')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === 'PHOTOS'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-800 hover:text-black'
               }`}
             >
-              <Camera className="w-3.5 h-3.5 shrink-0" />
+              <Camera className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'PHOTOS' ? 'text-blue-700' : 'text-slate-800'}`} />
               <span>Vehicle Photos</span>
               {(selectedRO.vehiclePhotos?.length || 0) > 0 && (
-                <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                <span className="bg-blue-100 text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
                   {selectedRO.vehiclePhotos?.length}
                 </span>
               )}
@@ -1004,52 +1067,54 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-chat"
             onClick={() => setActiveTab('CHAT')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'CHAT'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-800 hover:text-black'
             }`}
           >
-            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+            <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CHAT' ? 'text-blue-700' : 'text-slate-800'}`} />
             <span>Live Communication</span>
             {selectedRO.messages.length > 0 && (
-              <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className="bg-slate-200 text-slate-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
                 {selectedRO.messages.length}
               </span>
             )}
           </button>
 
-          <button
-            id="ro-tab-warranty"
-            onClick={() => setActiveTab('WARRANTY')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'WARRANTY'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-            <span>Warranty Time Clock</span>
-            {(selectedRO.timePunches?.length || 0) > 0 && (
-              <span className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                {selectedRO.timePunches?.length}
-              </span>
-            )}
-          </button>
+          {!isAdvisorScreen && currentUser.role !== 'SERVICE_ADVISOR' && activeRoleView !== 'SERVICE_ADVISOR' && (
+            <button
+              id="ro-tab-warranty"
+              onClick={() => setActiveTab('WARRANTY')}
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'WARRANTY'
+                  ? 'border-indigo-600 text-indigo-700'
+                  : 'border-transparent text-slate-800 hover:text-black'
+              }`}
+            >
+              <Clock className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'WARRANTY' ? 'text-indigo-700' : 'text-slate-800'}`} />
+              <span>Warranty Time Clock</span>
+              {(selectedRO.timePunches?.length || 0) > 0 && (
+                <span className="bg-indigo-100 text-indigo-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {selectedRO.timePunches?.length}
+                </span>
+              )}
+            </button>
+          )}
 
           <button
             id="ro-tab-parts"
             onClick={() => setActiveTab('PARTS')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'PARTS'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-800 hover:text-black'
             }`}
           >
-            <Package className="w-3.5 h-3.5 shrink-0" />
+            <Package className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'PARTS' ? 'text-blue-700' : 'text-slate-800'}`} />
             <span>Parts ETA</span>
             {selectedRO.parts.length > 0 && (
-              <span className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className="bg-orange-100 text-orange-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
                 {selectedRO.parts.length}
               </span>
             )}
@@ -1058,29 +1123,29 @@ export const RODetailModal: React.FC = () => {
           <button
             id="ro-tab-history"
             onClick={() => setActiveTab('HISTORY')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'HISTORY'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-800 hover:text-black'
             }`}
           >
-            <History className="w-3.5 h-3.5 shrink-0" />
+            <History className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'HISTORY' ? 'text-blue-700' : 'text-slate-800'}`} />
             <span>Audit History ({selectedRO.history.length})</span>
           </button>
 
           <button
             id="ro-tab-contacts"
             onClick={() => setActiveTab('CONTACTS')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'CONTACTS'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-800 hover:text-black'
             }`}
           >
-            <Phone className="w-3.5 h-3.5 shrink-0" />
+            <Phone className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CONTACTS' ? 'text-blue-700' : 'text-slate-800'}`} />
             <span>Follow-Ups</span>
             {(selectedRO.contactHistory?.length || 0) > 0 && (
-              <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className="bg-blue-100 text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
                 {selectedRO.contactHistory?.length}
               </span>
             )}
@@ -1353,15 +1418,26 @@ export const RODetailModal: React.FC = () => {
                       </button>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {editConcerns.map((c, idx) => {
                         const currentPayType: ConcernPayType = editConcernPayTypes[idx] || 'CUSTOMER_PAY';
+                        const currentCause = editConcernCauses[idx] ?? (idx === 0 ? editCause : '');
+                        const currentCorrection = editConcernCorrections[idx] ?? (idx === 0 ? editCorrection : '');
+
                         return (
-                          <div key={idx} className="bg-white p-2.5 rounded-lg border-2 border-slate-400 space-y-2 shadow-2xs">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider">
-                                {idx === 0 ? 'Line 1 (Primary Concern)' : `Line ${idx + 1}`}
-                              </span>
+                          <div key={idx} className="bg-white p-3.5 rounded-xl border-2 border-slate-400 space-y-3 shadow-xs">
+                            {/* Line Header: Line Number, Pay Type, Tech, Remove */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
+                                  Line {idx + 1}
+                                </span>
+                                {idx === 0 && (
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                    Primary Line
+                                  </span>
+                                )}
+                              </div>
 
                               <div className="flex flex-wrap items-center gap-2">
                                 {canSelectPayType ? (
@@ -1456,30 +1532,194 @@ export const RODetailModal: React.FC = () => {
                                   className="text-[10px] text-red-500 hover:text-red-700 cursor-pointer flex items-center gap-1 hover:bg-red-50 px-1.5 py-0.5 rounded ml-auto"
                                   title="Remove line"
                                 >
-                                  <Trash2 className="w-3 h-3" /> Remove
+                                  <Trash2 className="w-3 h-3" /> Remove Line
                                 </button>
                               )}
                             </div>
-                            <textarea
-                              rows={2}
-                              value={c}
-                              onChange={e => {
-                                const val = e.target.value;
-                                handleEditConcernChange(idx, val);
-                                const next = [...editConcerns];
-                                next[idx] = val;
-                                triggerManagerAutoSave({ concerns: next });
-                              }}
-                              onBlur={flushManagerAutoSave}
-                              placeholder={idx === 0 ? "Customer primary concern / complaint..." : `Additional concern / complaint line ${idx + 1}...`}
-                              className="w-full px-2.5 py-1.5 border-2 border-slate-600 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
-                            />
+
+                            {/* 1. Customer Stated Complaint */}
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
+                                <span>Complaint (Customer Stated Symptom)</span>
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={c}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  handleEditConcernChange(idx, val);
+                                  const next = [...editConcerns];
+                                  next[idx] = val;
+                                  triggerManagerAutoSave({ concerns: next });
+                                }}
+                                onBlur={flushManagerAutoSave}
+                                placeholder={idx === 0 ? "Customer primary complaint / stated symptom..." : `Customer complaint for line ${idx + 1}...`}
+                                className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                              />
+                            </div>
+
+                            {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
+                                <span>Concern / Cause (Diagnostic Finding)</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={currentCause}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  handleEditConcernCauseChange(idx, val);
+                                  const nextCauses = [...editConcernCauses];
+                                  while (nextCauses.length <= idx) nextCauses.push('');
+                                  nextCauses[idx] = val;
+                                  triggerManagerAutoSave({ concernCauses: nextCauses, cause: nextCauses[0] });
+                                }}
+                                onBlur={flushManagerAutoSave}
+                                placeholder={idx === 0 ? "Root cause / diagnostic finding (e.g. Code P0300 cylinder 3 misfire, cracked coil pack)..." : `Diagnostic finding / cause for line ${idx + 1}...`}
+                                className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                              />
+                            </div>
+
+                            {/* 3. Correction (Repair Procedure / Action Taken) */}
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black inline-flex items-center justify-center">3</span>
+                                <span>Correction (Repair Procedure / Action Taken)</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={currentCorrection}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  handleEditConcernCorrectionChange(idx, val);
+                                  const nextCorrections = [...editConcernCorrections];
+                                  while (nextCorrections.length <= idx) nextCorrections.push('');
+                                  nextCorrections[idx] = val;
+                                  triggerManagerAutoSave({ concernCorrections: nextCorrections, correction: nextCorrections[0] });
+                                }}
+                                onBlur={flushManagerAutoSave}
+                                placeholder={idx === 0 ? "Corrective repair (e.g. Replaced cylinder 3 coil pack & plugs, cleared codes, road tested 5 mi)..." : `Repair correction for line ${idx + 1}...`}
+                                className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                              />
+                            </div>
+
+                            {/* 4. Line Quote Breakdown & Subtotal */}
+                            {(() => {
+                              const lineNum = idx + 1;
+                              const lineLaborItems = (selectedRO.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                              const linePartsItems = (selectedRO.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lineNum);
+                              const lineROParts = (selectedRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
+
+                              const lineLaborHours = lineLaborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+                              const lineLaborCost = lineLaborItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                              const lineQuotePartsCost = linePartsItems.reduce((acc, item) => acc + (Number(item.subtotal) || (Number(item.unitPrice || 0) * Number(item.quantity || 1))), 0);
+                              const lineROPartsCost = lineROParts.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+                              const linePartsCost = linePartsItems.length > 0 ? lineQuotePartsCost : lineROPartsCost;
+                              const linePartsCount = linePartsItems.length > 0 ? linePartsItems.length : lineROParts.length;
+                              const lineTotal = lineLaborCost + linePartsCost;
+                              const hasLineQuote = lineLaborItems.length > 0 || linePartsItems.length > 0 || lineROParts.length > 0;
+
+                              return (
+                                <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
+                                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                                    <Calculator className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                    <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
+                                    {hasLineQuote ? (
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                                          Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                                          Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="italic text-slate-500 text-[11px]">Estimate pending</span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+                                    <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
+                                      Line {lineNum} Total: ${lineTotal.toFixed(2)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => openQuoteModal(selectedRO.id)}
+                                      className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-300 transition-colors cursor-pointer"
+                                    >
+                                      {hasLineQuote ? 'Edit Quote' : '+ Quote Line'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
                     </div>
+
+                    {/* Quote Total Summary Bar */}
+                    <div className="mt-3 p-3.5 rounded-xl bg-slate-900 text-white shadow-xs space-y-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Receipt className="w-4 h-4 text-indigo-400" />
+                          <span className="text-xs font-black uppercase tracking-wider text-indigo-200">
+                            Estimate / Quote Total (By Line & Totaled)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openQuoteModal(selectedRO.id)}
+                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Calculator className="w-3.5 h-3.5" />
+                          <span>{selectedRO.quote ? 'Open & Edit Full Quote' : '+ Initiate Repair Quote'}</span>
+                        </button>
+                      </div>
+
+                      {/* Line-by-line itemized totals summary */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        {editConcerns.map((_, i) => {
+                          const lNum = i + 1;
+                          const lLabor = (selectedRO.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lNum).reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                          const lQuoteParts = (selectedRO.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.subtotal) || (Number(p.unitPrice || 0) * Number(p.quantity || 1))), 0);
+                          const lROParts = (selectedRO.parts || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.price || 0) * Number(p.quantity || 1)), 0);
+                          const lParts = lQuoteParts > 0 ? lQuoteParts : lROParts;
+                          const lTotal = lLabor + lParts;
+
+                          return (
+                            <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between">
+                              <span className="font-semibold text-slate-300 text-[11px]">Line {lNum}:</span>
+                              <span className="font-mono font-bold text-white">${lTotal.toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs">
+                        <div className="flex items-center gap-3 text-slate-300 flex-wrap">
+                          <span>Labor: <strong className="font-mono text-white">${(selectedRO.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
+                          <span>Parts: <strong className="font-mono text-white">${(selectedRO.quote?.totalPartsCost || 0).toFixed(2)}</strong></span>
+                          {(selectedRO.quote?.shopSuppliesFee || 0) > 0 && (
+                            <span>Supplies: <strong className="font-mono text-white">${(selectedRO.quote?.shopSuppliesFee || 0).toFixed(2)}</strong></span>
+                          )}
+                          {(selectedRO.quote?.taxAmount || 0) > 0 && (
+                            <span>Tax: <strong className="font-mono text-white">${(selectedRO.quote?.taxAmount || 0).toFixed(2)}</strong></span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-black uppercase text-indigo-300 tracking-wider">Grand Total:</span>
+                          <span className="text-base font-black font-mono text-emerald-400">
+                            ${(selectedRO.quote?.grandTotal || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
+                  {/* Customer Promised Time and Technician Diagnostic Notes */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -1501,49 +1741,6 @@ export const RODetailModal: React.FC = () => {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                          <span>Cause</span>
-                        </label>
-                      </div>
-                      <input
-                        type="text"
-                        value={editCause}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEditCause(val);
-                          triggerManagerAutoSave({ cause: val.trim() });
-                        }}
-                        onBlur={flushManagerAutoSave}
-                        placeholder="Root cause (e.g., Code P0300 cylinder 3 plug fouled with oil, broken belt tensioner)..."
-                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                          <span>Correction</span>
-                        </label>
-                      </div>
-                      <input
-                        type="text"
-                        value={editCorrection}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEditCorrection(val);
-                          triggerManagerAutoSave({ correction: val.trim() });
-                        }}
-                        onBlur={flushManagerAutoSave}
-                        placeholder="Corrective repair (e.g., Replaced spark plug tube seals & plugs, road tested 5 mi)..."
-                        className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700">
                           Technician Diagnostic Notes
                         </label>
@@ -1557,7 +1754,7 @@ export const RODetailModal: React.FC = () => {
                           triggerManagerAutoSave({ diagnosticNotes: val.trim() });
                         }}
                         onBlur={flushManagerAutoSave}
-                        placeholder="Diagnostic notes, inspection findings..."
+                        placeholder="Diagnostic notes, scan tool logs, inspection findings..."
                         className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                       />
                     </div>
@@ -1674,6 +1871,7 @@ export const RODetailModal: React.FC = () => {
                 onAddConcern={(text, payType, techId, techName) => {
                   addRepairOrderConcern(selectedRO.id, text, payType, techId, techName);
                 }}
+                onOpenQuote={openQuoteModal}
               />
             </div>
           )}
@@ -1830,7 +2028,7 @@ export const RODetailModal: React.FC = () => {
                   </p>
                 </div>
 
-                {!isSales && (
+                {canOrderParts && (
                   <button
                     id="add-part-toggle-btn"
                     onClick={() => setShowAddPart(!showAddPart)}
@@ -1843,7 +2041,7 @@ export const RODetailModal: React.FC = () => {
               </div>
 
               {/* Add Part Form */}
-              {showAddPart && (
+              {canOrderParts && showAddPart && (
                 <form 
                   onSubmit={handleAddPartSubmit}
                   className="p-4 bg-slate-50 rounded-xl border-2 border-slate-400 space-y-3 animate-in fade-in duration-100 shadow-sm"
@@ -2121,8 +2319,13 @@ export const RODetailModal: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {selectedRO.parts.map(part => {
+                  {[...selectedRO.parts].sort((a, b) => {
+                    const lineA = a.roLineNumber || (a.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(a.notes.match(/For Line (\d+)/i)![1]) : 999);
+                    const lineB = b.roLineNumber || (b.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(b.notes.match(/For Line (\d+)/i)![1]) : 999);
+                    return lineA - lineB;
+                  }).map(part => {
                     const etaBadge = formatEtaBadge(part.estimatedArrival);
+                    const lineNum = part.roLineNumber || (part.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(part.notes.match(/For Line (\d+)/i)![1]) : undefined);
                     return (
                       <div 
                         key={part.id}
@@ -2131,6 +2334,11 @@ export const RODetailModal: React.FC = () => {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
+                              {lineNum && (
+                                <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                                  Line {lineNum}
+                                </span>
+                              )}
                               <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                                 #{part.partNumber}
                               </span>
@@ -2454,7 +2662,7 @@ export const RODetailModal: React.FC = () => {
           )}
 
           {/* TAB 6: WARRANTY TIME CLOCK & AUDIT PUNCHES */}
-          {activeTab === 'WARRANTY' && (
+          {!isAdvisorScreen && currentUser.role !== 'SERVICE_ADVISOR' && activeRoleView !== 'SERVICE_ADVISOR' && activeTab === 'WARRANTY' && (
             <div className="space-y-4">
               <WarrantyTimeClockSection ro={selectedRO} />
             </div>

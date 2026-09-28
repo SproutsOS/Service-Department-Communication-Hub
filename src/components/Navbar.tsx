@@ -81,6 +81,12 @@ export const Navbar: React.FC = () => {
   const unreadUrgentCount = notifications.filter(n => !n.read && n.isUrgent).length;
   const unreadTotal = notifications.filter(n => !n.read).length;
 
+  // Real-time capacity calculation (configured for 12-bay shop)
+  const TOTAL_SHOP_BAYS = 12;
+  const totalActive = repairOrders.filter(r => r.status !== 'COMPLETED').length;
+  const inRepair = repairOrders.filter(r => r.status === 'IN_BAY' || r.status === 'IN_REPAIR').length;
+  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / TOTAL_SHOP_BAYS) * 100), 100);
+
   const handleNotificationClick = (roId: string, notifId: string) => {
     markNotificationRead(notifId);
     setShowNotifMenu(false);
@@ -114,7 +120,31 @@ export const Navbar: React.FC = () => {
       </div>
 
       {/* Right Action Tools */}
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+
+        {/* 12-Bay Shop Load Status Widget */}
+        <div 
+          className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-700/80 shadow-xs"
+          title={`Shop Load Status: ${efficiency}% Capacity (${inRepair} in repair across 12 bays)`}
+        >
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between gap-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              <span>Shop Load</span>
+              <span className="text-slate-500 font-mono text-[9px]">12 Bays</span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <div className="w-16 sm:w-20 bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-emerald-500 h-full transition-all duration-300"
+                  style={{ width: `${efficiency}%` }}
+                />
+              </div>
+              <span className="text-[11px] font-black text-emerald-400 font-mono">
+                {efficiency}%
+              </span>
+            </div>
+          </div>
+        </div>
 
         {/* Urgent Alerts Pill (Matches Theme) or Bell Button */}
         <div ref={notifRef} className="relative">
@@ -330,6 +360,15 @@ export const Navbar: React.FC = () => {
             <span className="hidden md:inline">Staff ({users.length})</span>
           </button>
         )}
+
+        {/* Active User Badge */}
+        <div className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/70 text-xs">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <div className="flex flex-col text-left leading-tight">
+            <span className="text-[11px] font-bold text-white truncate max-w-[120px]">{currentUser.name}</span>
+            <span className="text-[9px] text-slate-400 truncate uppercase tracking-wider">{currentUser.title || currentUser.role.replace('_', ' ')}</span>
+          </div>
+        </div>
 
         {/* Lock Terminal / Sign Out Button */}
         <button

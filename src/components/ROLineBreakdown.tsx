@@ -11,11 +11,13 @@ import {
   ShieldCheck, 
   Building2, 
   Receipt,
+  Calculator,
   Plus,
   Check,
   X
 } from 'lucide-react';
 import { RepairOrder, User as AppUser, ConcernPayType } from '../types';
+import { cleanRO3700 } from '../utils/formatters';
 
 interface ROLineBreakdownProps {
   ro: RepairOrder;
@@ -23,17 +25,20 @@ interface ROLineBreakdownProps {
   onAssignTech?: (concernIndex: number, techId?: string, techName?: string) => void;
   onUpdatePayType?: (concernIndex: number, payType: ConcernPayType) => void;
   onAddConcern?: (concernText: string, payType: ConcernPayType, techId?: string, techName?: string) => void;
+  onOpenQuote?: (roId: string) => void;
   canEdit?: boolean;
 }
 
 export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
-  ro,
+  ro: rawRO,
   users,
   onAssignTech,
   onUpdatePayType,
   onAddConcern,
+  onOpenQuote,
   canEdit = false
 }) => {
+  const ro = cleanRO3700(rawRO);
   const [isAddingLine, setIsAddingLine] = useState(false);
   const [newConcernText, setNewConcernText] = useState('');
   const [newPayType, setNewPayType] = useState<ConcernPayType>('CUSTOMER_PAY');
@@ -62,16 +67,16 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
         <div>
-          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <h4 className="text-sm font-black text-slate-950 flex items-center gap-2">
             <FileText className="w-4 h-4 text-blue-600" />
             <span>Repair Order Line Items & Customer Complaints</span>
           </h4>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-700 font-semibold">
             Line-by-line itemization of customer concerns, labor assignments, pay types, and diagnostic findings
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="text-xs font-black px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
             {concerns.length} Line Item{concerns.length === 1 ? '' : 's'}
           </span>
           {canEdit && onAddConcern && (
@@ -305,10 +310,10 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                         ))}
                       </select>
                     ) : (
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-bold text-slate-900">
                         {assignedTechName}
                         {assignedTechUser?.employeeNumber && (
-                          <span className="ml-1 font-mono text-[10px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                          <span className="ml-1 font-mono text-[10px] font-black px-1 py-0.2 rounded bg-slate-200 text-slate-900 border border-slate-300">
                             #{assignedTechUser.employeeNumber}
                           </span>
                         )}
@@ -318,40 +323,159 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 </div>
               </div>
 
-              {/* Complaint Description */}
+              {/* 1. Customer Stated Complaint */}
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Customer Stated Concern / Request:
+                <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
+                  <span>Complaint (Customer Stated Symptom):</span>
                 </span>
-                <p className="text-xs font-semibold text-slate-900 whitespace-pre-wrap leading-relaxed">
+                <p className="text-xs font-bold text-slate-950 whitespace-pre-wrap leading-relaxed pl-5.5">
                   {concernText}
                 </p>
               </div>
 
-              {/* Diagnosis Findings (Cause & Correction for this line or RO) */}
-              {(ro.cause || ro.correction) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100 text-xs">
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                    <span className="block text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-0.5">
-                      Technician Root Cause:
-                    </span>
-                    <p className="text-slate-700 font-medium whitespace-pre-wrap">
-                      {ro.cause || <span className="italic text-slate-400">Not documented yet</span>}
-                    </p>
+              {/* 2. Concern / Cause (Technician Diagnostic Findings) */}
+              <div className="space-y-1 pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
+                  <span>Concern / Cause (Diagnostic Finding):</span>
+                </span>
+                <p className="text-xs font-semibold text-slate-900 pl-5.5 font-mono">
+                  {ro.concernCauses?.[idx] || (idx === 0 ? ro.cause : '') || <span className="italic text-slate-400 font-sans font-normal">Pending diagnosis</span>}
+                </p>
+              </div>
+
+              {/* 3. Correction (Repair Procedure / Action Taken) */}
+              <div className="space-y-1 pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black inline-flex items-center justify-center">3</span>
+                  <span>Correction (Repair Procedure / Action Taken):</span>
+                </span>
+                <p className="text-xs font-semibold text-slate-900 pl-5.5 font-mono">
+                  {ro.concernCorrections?.[idx] || (idx === 0 ? ro.correction : '') || <span className="italic text-slate-400 font-sans font-normal">Pending technician repair</span>}
+                </p>
+              </div>
+
+              {/* 4. Line Quote Breakdown & Total */}
+              {(() => {
+                const lineLaborItems = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                const linePartsItems = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lineNum);
+                const lineROParts = (ro.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
+
+                const lineLaborHours = lineLaborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+                const lineLaborCost = lineLaborItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                const lineQuotePartsCost = linePartsItems.reduce((acc, item) => acc + (Number(item.subtotal) || (Number(item.unitPrice || 0) * Number(item.quantity || 1))), 0);
+                const lineROPartsCost = lineROParts.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+                const linePartsCost = linePartsItems.length > 0 ? lineQuotePartsCost : lineROPartsCost;
+                const linePartsCount = linePartsItems.length > 0 ? linePartsItems.length : lineROParts.length;
+                const lineTotal = lineLaborCost + linePartsCost;
+                const hasLineQuote = lineLaborItems.length > 0 || linePartsItems.length > 0 || lineROParts.length > 0;
+
+                return (
+                  <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <Calculator className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
+                      {hasLineQuote ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                            Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                            Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="italic text-slate-500 text-[11px]">Estimate pending</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+                      <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
+                        Line {lineNum} Total: ${lineTotal.toFixed(2)}
+                      </span>
+                      {onOpenQuote && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenQuote(ro.id)}
+                          className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-300 transition-colors cursor-pointer"
+                        >
+                          {hasLineQuote ? 'Edit Quote' : '+ Quote Line'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                    <span className="block text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-0.5">
-                      Recommended Correction:
-                    </span>
-                    <p className="text-slate-700 font-medium whitespace-pre-wrap">
-                      {ro.correction || <span className="italic text-slate-400">Not documented yet</span>}
-                    </p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           );
         })}
+      </div>
+
+      {/* Quote Total Summary Bar */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-indigo-400" />
+            <div>
+              <h5 className="text-xs font-black uppercase tracking-wider text-indigo-200">
+                Repair Order Quote Total (By Line & Totaled)
+              </h5>
+              <span className="text-[11px] text-slate-300">
+                Itemized totals across all {concerns.length} concern line{concerns.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+          {onOpenQuote && (
+            <button
+              type="button"
+              onClick={() => onOpenQuote(ro.id)}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>{ro.quote ? 'Open & Edit Full Quote' : '+ Initiate Repair Quote'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Line-by-line itemized totals summary */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          {concerns.map((_, i) => {
+            const lNum = i + 1;
+            const lLabor = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lNum).reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+            const lQuoteParts = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.subtotal) || (Number(p.unitPrice || 0) * Number(p.quantity || 1))), 0);
+            const lROParts = (ro.parts || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.price || 0) * Number(p.quantity || 1)), 0);
+            const lParts = lQuoteParts > 0 ? lQuoteParts : lROParts;
+            const lTotal = lLabor + lParts;
+
+            return (
+              <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between">
+                <span className="font-semibold text-slate-300 text-[11px]">Line {lNum}:</span>
+                <span className="font-mono font-bold text-white">${lTotal.toFixed(2)}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Grand Total Breakdown */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs">
+          <div className="flex items-center gap-4 text-slate-300 flex-wrap">
+            <span>Total Labor: <strong className="font-mono text-white">${(ro.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
+            <span>Total Parts: <strong className="font-mono text-white">${(ro.quote?.totalPartsCost || 0).toFixed(2)}</strong></span>
+            {(ro.quote?.shopSuppliesFee || 0) > 0 && (
+              <span>Shop Supplies: <strong className="font-mono text-white">${(ro.quote?.shopSuppliesFee || 0).toFixed(2)}</strong></span>
+            )}
+            {(ro.quote?.taxAmount || 0) > 0 && (
+              <span>Sales Tax: <strong className="font-mono text-white">${(ro.quote?.taxAmount || 0).toFixed(2)}</strong></span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-black uppercase text-indigo-300 tracking-wider">Grand Total:</span>
+            <span className="text-base sm:text-lg font-black font-mono text-emerald-400">
+              ${(ro.quote?.grandTotal || 0).toFixed(2)}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
