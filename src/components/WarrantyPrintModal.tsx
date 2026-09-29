@@ -97,7 +97,7 @@ export const WarrantyPrintModal: React.FC = () => {
     } else {
       punches.forEach((p, idx) => {
         const start = formatDateTime(p.clockIn);
-        const end = p.clockOut ? formatDateTime(p.clockOut) : 'Active / In-Bay';
+        const end = p.clockOut ? formatDateTime(p.clockOut) : 'Active / In Progress';
         const dur = p.durationMinutes ? `${(p.durationMinutes / 60).toFixed(2)} hrs (${p.durationMinutes} min)` : 'In Progress';
         lines.push(`  Punch #${idx + 1}: Tech: ${p.techName}${p.techEmployeeNumber ? ` (#${p.techEmployeeNumber})` : ''}`);
         lines.push(`    - Phase: ${p.operationType || 'REPAIR'}`);

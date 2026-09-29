@@ -117,11 +117,11 @@ export const Navbar: React.FC = () => {
   const unreadUrgentCount = relevantNotifications.filter(n => !n.read && n.isUrgent).length;
   const unreadTotal = relevantNotifications.filter(n => !n.read).length;
 
-  // Real-time capacity calculation (configured for 12-bay shop)
-  const TOTAL_SHOP_BAYS = 12;
+  // Real-time capacity calculation
+  const TOTAL_SHOP_CAPACITY = 12;
   const totalActive = repairOrders.filter(r => r.status !== 'COMPLETED').length;
   const inRepair = repairOrders.filter(r => r.status === 'IN_BAY' || r.status === 'IN_REPAIR').length;
-  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / TOTAL_SHOP_BAYS) * 100), 100);
+  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / TOTAL_SHOP_CAPACITY) * 100), 100);
 
   const handleNotificationClick = (roId: string, notifId: string) => {
     markNotificationRead(notifId);
@@ -158,15 +158,15 @@ export const Navbar: React.FC = () => {
       {/* Right Action Tools */}
       <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
 
-        {/* 12-Bay Shop Load Status Widget */}
+        {/* Shop Load Status Widget */}
         <div 
           className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-700/80 shadow-xs"
-          title={`Shop Load Status: ${efficiency}% Capacity (${inRepair} in repair across 12 bays)`}
+          title={`Shop Load Status: ${efficiency}% Capacity (${inRepair} active repairs)`}
         >
           <div className="flex flex-col">
             <div className="flex items-center justify-between gap-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
               <span>Shop Load</span>
-              <span className="text-slate-500 font-mono text-[9px]">12 Bays</span>
+              <span className="text-slate-500 font-mono text-[9px]">Capacity</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div className="w-16 sm:w-20 bg-slate-700 h-1.5 rounded-full overflow-hidden">

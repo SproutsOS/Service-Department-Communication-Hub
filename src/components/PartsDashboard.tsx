@@ -150,7 +150,6 @@ export const PartsDashboard: React.FC = () => {
       const vehicleFull = `${vehicleYear} ${vehicleMake} ${vehicleModel} ${vehiclePlate}`.toLowerCase();
       const techMatch = (ro.techName || '').toLowerCase().includes(q);
       const advisorMatch = (ro.advisorName || '').toLowerCase().includes(q);
-      const bayMatch = (ro.bay || '').toLowerCase().includes(q);
 
       // Multi-word search support (e.g. "smith chevy", "2021 silverado", "#1042")
       const multiWordMatch = terms.length > 1 && terms.every(term => {
@@ -161,8 +160,7 @@ export const PartsDashboard: React.FC = () => {
           vehicleFull.includes(term) ||
           vehicleVin.includes(term) ||
           (ro.techName || '').toLowerCase().includes(term) ||
-          (ro.advisorName || '').toLowerCase().includes(term) ||
-          (ro.bay || '').toLowerCase().includes(term)
+          (ro.advisorName || '').toLowerCase().includes(term)
         );
       });
 
@@ -176,7 +174,6 @@ export const PartsDashboard: React.FC = () => {
         vehicleFull.includes(q) ||
         techMatch ||
         advisorMatch ||
-        bayMatch ||
         multiWordMatch
       );
     });
@@ -987,7 +984,7 @@ export const PartsDashboard: React.FC = () => {
                   </h2>
                 </div>
                 <p className="text-xs text-slate-700 font-medium">
-                  The following repair orders have parts requested by technicians in the bay. Review, price, source, and place orders.
+                  The following repair orders have parts requested by technicians. Review, price, source, and place orders.
                 </p>
               </div>
             </div>
@@ -1032,8 +1029,6 @@ export const PartsDashboard: React.FC = () => {
                       <div className="text-xs text-slate-600 mt-1 flex items-center gap-2 flex-wrap">
                         <span>Customer: <strong className="text-slate-800">{ro.customerName}</strong></span>
                         <span>•</span>
-                        <span>Bay: <strong className="text-slate-800">{ro.bay || 'General Bay'}</strong></span>
-                        <span>•</span>
                         <span className="text-amber-800 font-bold">Tech: {ro.techName || 'Unassigned'}</span>
                       </div>
                     </div>
@@ -1063,7 +1058,7 @@ export const PartsDashboard: React.FC = () => {
                     <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <Zap className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Items Requested by Tech in Bay ({requestedParts.length}):</span>
+                        <span>Items Requested by Technician ({requestedParts.length}):</span>
                       </span>
                       <span className="text-amber-800 bg-amber-100 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border border-amber-300">
                         Add Part # & Price to Fulfill / Quote
@@ -1212,7 +1207,7 @@ export const PartsDashboard: React.FC = () => {
                         })
                       ) : (
                         <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 italic">
-                          RO is marked Waiting on Parts — Technician finished diagnosis and bay is staged.
+                          RO is marked Waiting on Parts — Technician finished diagnosis.
                         </div>
                       )}
                     </div>
@@ -1281,7 +1276,7 @@ export const PartsDashboard: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Requisition parts, source local stock, monitor orders, and issue items directly to bay technicians.
+            Requisition parts, source local stock, monitor orders, and issue items directly to technicians.
           </p>
         </div>
 
@@ -1577,7 +1572,7 @@ export const PartsDashboard: React.FC = () => {
                 <option value="NEEDS_PARTS">Needs Parts (0 Parts on RO)</option>
                 <option value="HAS_PARTS">Has Parts Attached</option>
                 <option value="WAITING_PARTS">Status: Waiting on Parts</option>
-                <option value="IN_BAY">Status: In Bay / In Repair</option>
+                <option value="IN_BAY">Status: In Repair</option>
               </select>
             ) : (
               <select
@@ -2556,7 +2551,7 @@ export const PartsDashboard: React.FC = () => {
                           • {currentSelectedRO.customerName}
                         </span>
                         <span className="text-slate-500 hidden sm:inline">
-                          (Tech: <strong>{currentSelectedRO.techName || 'Unassigned'}</strong>{currentSelectedRO.bay ? ` / Bay ${currentSelectedRO.bay}` : ''})
+                          (Tech: <strong>{currentSelectedRO.techName || 'Unassigned'}</strong>)
                         </span>
                       </div>
                     </div>

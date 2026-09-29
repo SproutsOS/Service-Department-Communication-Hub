@@ -125,7 +125,7 @@ export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro
     },
     {
       title: 'Repair In Progress Update',
-      text: `Updated customer that parts are in hand and technician is actively working on vehicle in bay. Projected completion on track.`,
+      text: `Updated customer that parts are in hand and technician is actively working on vehicle. Projected completion on track.`,
       outcome: 'SPOKE_WITH_CUSTOMER' as CustomerContactOutcome,
       decision: 'NONE' as const,
     },
@@ -188,7 +188,7 @@ export const CustomerFollowUpModal: React.FC<CustomerFollowUpModalProps> = ({ ro
             onSuccess(`3-Day Follow Up logged for ${ro.customerName}! Verified vehicle running smoothly & zero concerns.`);
           }
         } else if (approvalDecision === 'APPROVED') {
-          onSuccess(`Customer call logged & Repair Order #${ro.id} APPROVED! Advancing to parts/bay repair.`);
+          onSuccess(`Customer call logged & Repair Order #${ro.id} APPROVED! Advancing to parts/repair.`);
         } else if (approvalDecision === 'DENIED') {
           onSuccess(`Customer call logged & estimate declined for RO #${ro.id}.`);
         } else {

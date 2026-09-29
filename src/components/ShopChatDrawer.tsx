@@ -54,7 +54,7 @@ const ROLE_BADGE_STYLES: Record<UserRole, { label: string; badgeClass: string; a
 
 const DIRECT_PRESETS = [
   'Got it, working on it!',
-  'Can you stop by my bay/desk?',
+  'Can you stop by my desk?',
   'Parts are ready for pickup',
   'Waiting on customer approval',
   'All done, vehicle ready'

@@ -124,7 +124,7 @@ export const TICKET_FLOW_STEPS: FlowStepConfig[] = [
     bgClass: 'bg-teal-50',
     textClass: 'text-teal-800',
     icon: 'Truck',
-    description: 'Parts arrived at shop and handed off to technician bay',
+    description: 'Parts arrived at shop and handed off to technician',
   },
   {
     key: 'REPAIR_IN_PROGRESS',
@@ -136,7 +136,7 @@ export const TICKET_FLOW_STEPS: FlowStepConfig[] = [
     bgClass: 'bg-cyan-50',
     textClass: 'text-cyan-800',
     icon: 'Play',
-    description: 'Technician actively performing repairs and assembly in bay',
+    description: 'Technician actively performing repairs and assembly',
   },
   {
     key: 'REPAIR_COMPLETE',
@@ -235,14 +235,14 @@ export const STATUS_CONFIG: Record<
     badgeClass: 'bg-teal-100 text-teal-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-teal-300',
     borderClass: 'border-teal-400',
     icon: 'Truck',
-    description: 'Parts arrived at shop and handed off to technician bay',
+    description: 'Parts arrived at shop and handed off to technician',
   },
   REPAIR_IN_PROGRESS: {
     label: 'Repair in Progress',
     badgeClass: 'bg-cyan-100 text-cyan-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-cyan-300',
     borderClass: 'border-cyan-400',
     icon: 'Play',
-    description: 'Technician actively performing repairs and assembly in bay',
+    description: 'Technician actively performing repairs and assembly',
   },
   REPAIR_COMPLETE: {
     label: 'Repair Complete',
@@ -279,7 +279,7 @@ export const STATUS_CONFIG: Record<
     badgeClass: 'bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-amber-300',
     borderClass: 'border-amber-400',
     icon: 'Clock',
-    description: 'Assigned to technician bay, awaiting diagnostics',
+    description: 'Assigned to technician, awaiting diagnostics',
   },
   WAITING_DIAGNOSIS: {
     label: 'Waiting Diagnostics',
@@ -300,7 +300,7 @@ export const STATUS_CONFIG: Record<
     badgeClass: 'bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-blue-300',
     borderClass: 'border-blue-400',
     icon: 'Wrench',
-    description: 'Active diagnosis or teardown in bay',
+    description: 'Active diagnosis or teardown underway',
   },
   GETTING_ESTIMATE: {
     label: 'Estimate Done',
@@ -328,7 +328,7 @@ export const STATUS_CONFIG: Record<
     badgeClass: 'bg-cyan-100 text-cyan-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-cyan-300',
     borderClass: 'border-cyan-400',
     icon: 'Play',
-    description: 'Parts in hand, repair underway in bay',
+    description: 'Parts in hand, repair underway',
   },
   QC_TEST: {
     label: 'Repair Complete',

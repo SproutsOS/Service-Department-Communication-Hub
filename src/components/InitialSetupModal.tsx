@@ -549,10 +549,10 @@ export const InitialSetupModal: React.FC = () => {
                               {draft.employeeNumber}
                             </span>
                           )}
-                          {(draft.certificationLevel || draft.bayNumber) && (
+                          {draft.certificationLevel && (
                             <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                               <Award className="w-3 h-3 text-blue-600" />
-                              <span>{draft.certificationLevel || draft.bayNumber}</span>
+                              <span>{draft.certificationLevel}</span>
                             </span>
                           )}
                         </div>

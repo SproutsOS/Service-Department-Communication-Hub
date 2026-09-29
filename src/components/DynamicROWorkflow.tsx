@@ -170,7 +170,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
         sectionKey: 'section-diagnostics',
         title: 'Start Vehicle Diagnostics',
         badge: 'Diagnostic Queue',
-        description: `Vehicle is assigned to ${ro.techName || 'technician'}. Clock into bay and initiate diagnostic scan & teardown.`,
+        description: `Vehicle is assigned to ${ro.techName || 'technician'}. Clock in and initiate diagnostic scan & teardown.`,
         actionHint: 'Click "Begin Diagnosis Now" to place vehicle in active diagnostic status.'
       };
     }
@@ -199,27 +199,27 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       };
     }
 
-    // 7. Parts Ordered or Waiting for Parts Delivery to Bay
+    // 7. Parts Ordered or Waiting for Parts Delivery to Tech
     if (ro.status === 'PARTS_ORDERED' || (ro.status === 'APPROVED' && ro.parts && ro.parts.length > 0 && ro.parts.some(p => p.status === 'NEEDED' || p.status === 'ORDERED'))) {
       return {
         id: 'PARTS_ORDERING',
         sectionKey: 'section-parts',
-        title: 'Receive & Deliver Parts to Tech Bay',
+        title: 'Receive & Deliver Parts to Technician',
         badge: 'Parts ETA Pending',
-        description: 'Components are on order or being sourced. Verify tracking ETA and deliver parts to technician bay once received.',
-        actionHint: 'Verify parts tracking or mark parts delivered to bay below.'
+        description: 'Components are on order or being sourced. Verify tracking ETA and deliver parts to technician once received.',
+        actionHint: 'Verify parts tracking or mark parts delivered to tech below.'
       };
     }
 
-    // 8. Parts In Bay or Approved -> Active Bay Repair
+    // 8. Parts In to Tech or Approved -> Active Repair
     if (ro.status === 'PARTS_IN_TO_TECH' || (ro.status === 'APPROVED' && (!ro.parts || ro.parts.length === 0 || ro.parts.every(p => p.status === 'IN_BAY')))) {
       return {
         id: 'ACTIVE_REPAIR',
         sectionKey: 'section-repair-execution',
-        title: 'Step 7: Begin Active Bay Repair',
-        badge: 'Parts in Bay',
-        description: 'All authorizations granted and parts are staged in bay. Technician should begin active repair execution.',
-        actionHint: 'Start bay repair work and transition status to Repair in Progress.'
+        title: 'Step 7: Begin Active Repair',
+        badge: 'Parts with Tech',
+        description: 'All authorizations granted and parts are delivered to technician. Technician should begin active repair execution.',
+        actionHint: 'Start repair work and transition status to Repair in Progress.'
       };
     }
 
@@ -227,9 +227,9 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       return {
         id: 'REPAIR_COMPLETE',
         sectionKey: 'section-repair-execution',
-        title: `Step 7: Repair in Progress${ro.techName ? ` (${ro.techName}${ro.bay ? ` • Bay ${ro.bay}` : ''})` : ''}`,
-        badge: 'In Bay Work Active',
-        description: `Vehicle is actively being repaired by ${ro.techName || 'assigned technician'}${ro.bay ? ` in Bay ${ro.bay}` : ''}.`,
+        title: `Step 7: Repair in Progress${ro.techName ? ` (${ro.techName})` : ''}`,
+        badge: 'Repair Work Active',
+        description: `Vehicle is actively being repaired by ${ro.techName || 'assigned technician'}.`,
         actionHint: 'Work actively in progress. Complete quality inspection and road test when done.'
       };
     }
@@ -1219,7 +1219,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                       <UserCheck className="w-3.5 h-3.5 text-blue-600" />
                       <span>
                         {ro.status === 'APPROVED' 
-                          ? 'Customer Authorized • Bay Repair Approved' 
+                          ? 'Customer Authorized • Repair Approved' 
                           : ro.status === 'WAITING_FOR_APPROVAL' 
                           ? 'Estimate Submitted • Advisor Following Up with Customer' 
                           : 'Customer Authorization Managed by Service Advisor'}
@@ -1276,9 +1276,9 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
     {
       key: 'section-parts',
       naturalOrder: 6,
-      title: 'Parts Sourcing & Bay Delivery',
+      title: 'Parts Sourcing & Tech Delivery',
       isComplete: ro.status !== 'PARTS_ORDERED' && (!ro.parts || ro.parts.length === 0 || ro.parts.every(p => p.status === 'IN_BAY' || p.status === 'RECEIVED')),
-      completeBadgeText: 'Parts Staged in Bay',
+      completeBadgeText: 'Parts Staged with Tech',
       render: (isPromoted: boolean) => (
         <div className={`p-4 rounded-xl border transition-all ${
           isPromoted || ro.status === 'PARTS_ORDERED'
@@ -1293,7 +1293,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    Step 6: Parts Sourcing & Bay Delivery
+                    Step 6: Parts Sourcing & Tech Delivery
                   </h4>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     ro.parts && ro.parts.length > 0
@@ -1325,13 +1325,13 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    handleStatusChange('PARTS_IN_TO_TECH', 'All ordered parts arrived and delivered to technician bay');
-                    triggerActionNotice('✓ Parts marked delivered to bay! Step completed & returned to workflow.');
+                    handleStatusChange('PARTS_IN_TO_TECH', 'All ordered parts arrived and delivered to technician');
+                    triggerActionNotice('✓ Parts marked delivered to technician! Step completed & returned to workflow.');
                   }}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Mark All Parts In Bay</span>
+                  <span>Mark All Parts In to Tech</span>
                 </button>
               )}
             </div>
@@ -1340,11 +1340,11 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       )
     },
 
-    // 7. Active Bay Repair Execution
+    // 7. Active Repair Execution
     {
       key: 'section-repair-execution',
       naturalOrder: 7,
-      title: 'Step 7: Active Bay Repair & Road Test',
+      title: 'Step 7: Active Repair & Road Test',
       isComplete: ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP' || ro.status === 'CLOSED',
       completeBadgeText: 'Repair & Road Test Complete',
       render: (isPromoted: boolean) => (
@@ -1361,15 +1361,15 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    Step 7: Active Bay Repair & Road Test
+                    Step 7: Active Repair & Road Test
                   </h4>
                   {ro.status === 'REPAIR_IN_PROGRESS' ? (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 animate-pulse">
-                      In Bay Work Active
+                      Repair Work Active
                     </span>
                   ) : ro.status === 'PARTS_IN_TO_TECH' ? (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-300">
-                      Parts In Bay • Ready to Repair
+                      Parts In • Ready to Repair
                     </span>
                   ) : ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP' || ro.status === 'CLOSED' ? (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -1383,9 +1383,9 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 </div>
                 <div className="text-xs text-slate-600 mt-0.5">
                   {ro.status === 'REPAIR_IN_PROGRESS'
-                    ? `Technician ${ro.techName || 'assigned tech'} is actively performing authorized repairs${ro.bay ? ` in Bay ${ro.bay}` : ''}. Next: quality inspection & final road test.`
+                    ? `Technician ${ro.techName || 'assigned tech'} is actively performing authorized repairs. Next: quality inspection & final road test.`
                     : ro.status === 'PARTS_IN_TO_TECH'
-                    ? `Parts delivered to bay. ${ro.techName || 'Technician'} may commence active teardown and reassembly.`
+                    ? `Parts delivered to technician. ${ro.techName || 'Technician'} may commence active teardown and reassembly.`
                     : 'Physical repair execution phase.'}
                 </div>
               </div>
@@ -1396,13 +1396,13 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    handleStatusChange('REPAIR_IN_PROGRESS', 'Technician started active bay repair work');
+                    handleStatusChange('REPAIR_IN_PROGRESS', 'Technician started active repair work');
                     triggerActionNotice('✓ Repair work started! Status updated to Repair in Progress.');
                   }}
                   className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
-                  <span>Start Bay Repair Work</span>
+                  <span>Start Repair Work</span>
                 </button>
               )}
 

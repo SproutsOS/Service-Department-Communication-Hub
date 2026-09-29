@@ -89,13 +89,13 @@ const MainContent: React.FC = () => {
     );
   }
 
-  // Real-time capacity calculation (configured for 12-bay shop)
-  const TOTAL_SHOP_BAYS = 12;
+  // Real-time capacity calculation
+  const TOTAL_SHOP_CAPACITY = 12;
   const totalActive = repairOrders.filter(r => r.status !== 'COMPLETED').length;
   const inRepair = repairOrders.filter(r => r.status === 'IN_BAY' || r.status === 'IN_REPAIR').length;
   const partsTrackingCount = repairOrders.flatMap(r => r.parts.filter(p => p.status === 'IN_TRANSIT' || p.status === 'ORDERED')).length;
   const assignedCount = repairOrders.filter(r => r.status === 'DISPATCHED' || (r.techId && r.status !== 'COMPLETED')).length;
-  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / TOTAL_SHOP_BAYS) * 100), 100);
+  const efficiency = totalActive === 0 ? 0 : Math.min(Math.round(((inRepair + 2) / TOTAL_SHOP_CAPACITY) * 100), 100);
 
   const handleSelectRole = (role: UserRole) => {
     // Non-managers are strictly blocked from accessing any other role's space
@@ -352,7 +352,7 @@ const MainContent: React.FC = () => {
           <div className="mt-auto p-4 bg-slate-800 rounded-xl border border-slate-700">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5 font-medium">
               <span>Shop Load Status</span>
-              <span className="text-[10px] text-slate-400 font-medium">12 Bays</span>
+              <span className="text-[10px] text-slate-400 font-medium">Capacity</span>
             </div>
             <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
               <div 

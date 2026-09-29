@@ -157,7 +157,7 @@ export const LoginModal: React.FC = () => {
                   )}
                 </div>
                 <div className="text-xs text-blue-700">
-                  {currentUser.title} {(currentUser.certificationLevel || currentUser.bayNumber) ? `• ${currentUser.certificationLevel || currentUser.bayNumber}` : ''}
+                  {currentUser.title} {currentUser.certificationLevel ? `• ${currentUser.certificationLevel}` : ''}
                 </div>
               </div>
             </div>
@@ -293,10 +293,10 @@ export const LoginModal: React.FC = () => {
                             {getRoleIcon(user.role)}
                           </div>
                           <p className="text-xs text-slate-500 truncate">{user.title}</p>
-                          {(user.certificationLevel || user.bayNumber) && (
+                          {user.certificationLevel && (
                             <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
                               {user.role === 'TECHNICIAN' && <Award className="w-3 h-3 text-blue-600" />}
-                              <span>{user.certificationLevel || user.bayNumber}</span>
+                              <span>{user.certificationLevel}</span>
                             </span>
                           )}
                         </div>

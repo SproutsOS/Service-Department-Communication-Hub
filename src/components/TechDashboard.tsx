@@ -1625,7 +1625,7 @@ export const TechDashboard: React.FC = () => {
                 )}
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
                   <Award className="w-3 h-3 text-blue-400" />
-                  <span>{currentUser.certificationLevel || currentUser.bayNumber || 'Technician'}</span>
+                  <span>{currentUser.certificationLevel || 'Technician'}</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5 font-medium">
@@ -1644,7 +1644,7 @@ export const TechDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Bay Metrics including Diagnostic Breakdown */}
+        {/* Quick Metrics including Diagnostic Breakdown */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 pt-5 border-t border-slate-700 text-xs">
           <div>
             <span className="text-amber-400 text-[11px] uppercase font-bold tracking-wider block">Waiting Diag:</span>
@@ -1714,9 +1714,9 @@ export const TechDashboard: React.FC = () => {
         {displayList.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
             <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <h3 className="text-sm font-bold text-slate-800">Your Bay Queue is Clear</h3>
+            <h3 className="text-sm font-bold text-slate-800">Your Work Queue is Clear</h3>
             <p className="text-xs text-slate-500 mt-1">
-              No repair orders currently in this queue. When a Service Advisor assigns work to your bay, it will show up here immediately with real-time push alerts.
+              No repair orders currently in this queue. When a Service Advisor assigns work to you, it will show up here immediately with real-time push alerts.
             </p>
           </div>
         ) : (
@@ -1950,7 +1950,7 @@ export const TechDashboard: React.FC = () => {
                         <span>Vehicle is Waiting to be Diagnosed</span>
                       </div>
                       <div className="text-xs text-amber-800 mt-0.5 font-medium">
-                        Staged in bay • In queue since {formatTimeOnly(ro.waitingDiagnosisAt)} ({formatDurationSince(ro.waitingDiagnosisAt)} wait)
+                        Assigned to you • In queue since {formatTimeOnly(ro.waitingDiagnosisAt)} ({formatDurationSince(ro.waitingDiagnosisAt)} wait)
                       </div>
                     </div>
                     <button
@@ -2038,9 +2038,6 @@ export const TechDashboard: React.FC = () => {
                         <span>Chat with {ro.advisorName.split(' ')[0]}</span>
                       </button>
                     )}
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-600 font-semibold text-xs">
-                    <span>Assigned Bay: <strong className="text-slate-900 font-bold">{ro.bay ? `Bay ${ro.bay}` : 'Standard Bay'}</strong></span>
                   </div>
                 </div>
 

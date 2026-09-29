@@ -104,7 +104,7 @@ const FLOW_STEPS: StepItem[] = [
     shortLabel: 'Parts In / To Tech',
     stepNumber: 7,
     icon: Truck,
-    description: 'Parts arrived at shop and handed off to technician bay',
+    description: 'Parts arrived at shop and handed off to technician',
   },
   {
     id: 'step-8',
@@ -113,7 +113,7 @@ const FLOW_STEPS: StepItem[] = [
     shortLabel: 'Repair in Progress',
     stepNumber: 8,
     icon: Play,
-    description: 'Technician actively performing repairs and assembly in bay',
+    description: 'Technician actively performing repairs and assembly',
   },
   {
     id: 'step-9',

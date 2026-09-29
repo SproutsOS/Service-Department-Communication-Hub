@@ -1656,7 +1656,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       techName: tech?.name,
       dispatchedAt: tech ? now : undefined,
       waitingDiagnosisAt: tech ? now : undefined,
-      bay: data.bay || tech?.bayNumber,
+      bay: '',
       status: initialStatus,
       isUrgent: !!data.isUrgent,
       isWaiter: !!data.isWaiter,

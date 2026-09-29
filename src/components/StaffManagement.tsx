@@ -340,8 +340,8 @@ export const StaffManagement: React.FC = () => {
       const matchEmpNum = user.employeeNumber ? user.employeeNumber.toLowerCase().includes(q) || `#${user.employeeNumber.toLowerCase()}`.includes(q) : false;
       const matchEmail = user.email.toLowerCase().includes(q);
       const matchTitle = user.title.toLowerCase().includes(q);
-      const matchBay = (user.certificationLevel || user.bayNumber)?.toLowerCase().includes(q);
-      return matchName || matchEmpNum || matchEmail || matchTitle || matchBay;
+      const matchCert = (user.certificationLevel || '').toLowerCase().includes(q);
+      return matchName || matchEmpNum || matchEmail || matchTitle || matchCert;
     }
     return true;
   });
@@ -503,7 +503,7 @@ export const StaffManagement: React.FC = () => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search employee or bay..."
+            placeholder="Search employee or role..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
@@ -616,7 +616,7 @@ export const StaffManagement: React.FC = () => {
                           <Award className="w-3.5 h-3.5 text-blue-500" /> Certification Level:
                         </span>
                         <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                          {user.certificationLevel || user.bayNumber || 'Standard Tech'}
+                          {user.certificationLevel || 'Standard Tech'}
                         </span>
                       </div>
                     )}
@@ -892,7 +892,7 @@ export const StaffManagement: React.FC = () => {
                 >
                   <option value="SERVICE_MANAGER">Service Manager (Admin / Full Shop Oversight)</option>
                   <option value="SERVICE_ADVISOR">Service Advisor (Customer Facing / Estimates & Authorizations)</option>
-                  <option value="TECHNICIAN">Technician (Bay Diagnoses, Parts Orders & Assembly)</option>
+                  <option value="TECHNICIAN">Technician (Vehicle Diagnoses, Parts Orders & Assembly)</option>
                   <option value="PARTS_SPECIALIST">Parts Specialist (Inventory, Orders & Courier Tracking)</option>
                   <option value="SALES">Sales (Read-Only / Vehicle Delivery & Status Tracker)</option>
                 </select>

@@ -211,7 +211,7 @@ export const SalesDashboard: React.FC = () => {
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-teal-400 shrink-0" />
             <span>
-              <strong>Read-Only Integrity:</strong> Sales staff can review all vehicle repair data and promised times without modifying bay technician or advisor workflows.
+              <strong>Read-Only Integrity:</strong> Sales staff can review all vehicle repair data and promised times without modifying technician or advisor workflows.
             </span>
           </div>
           <span className="text-[11px] text-slate-400">
