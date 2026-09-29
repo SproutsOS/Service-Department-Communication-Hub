@@ -20,10 +20,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
+import { UrgentNotification } from '../types';
 
 export const Navbar: React.FC = () => {
   const {
     currentUser,
+    activeRoleView,
     users,
     notifications,
     isSoundEnabled,
@@ -78,8 +80,42 @@ export const Navbar: React.FC = () => {
     };
   }, [showNotifMenu]);
 
-  const unreadUrgentCount = notifications.filter(n => !n.read && n.isUrgent).length;
-  const unreadTotal = notifications.filter(n => !n.read).length;
+  const isTechScreen = activeRoleView === 'TECHNICIAN' || currentUser.role === 'TECHNICIAN';
+  const isPartsScreen = activeRoleView === 'PARTS_SPECIALIST' || currentUser.role === 'PARTS_SPECIALIST';
+
+  // Filter notifications so part requests only trigger Urgent Alert on the Parts screen, never on the Tech screen
+  const isNotificationRelevant = (n: UrgentNotification) => {
+    const isPartsRequest = n.type === 'PARTS_UPDATE' || 
+      n.targetRole === 'PARTS_SPECIALIST' || 
+      n.title.toLowerCase().includes('parts request') || 
+      n.title.toLowerCase().includes('part request');
+
+    // On the Tech screen: part requests do NOT need to say Urgent Alert at the top
+    if (isTechScreen && isPartsRequest) {
+      return false;
+    }
+
+    // Direct user targeting
+    if (n.targetUserId && n.targetUserId !== currentUser.id) {
+      return false;
+    }
+
+    // If targeted to a specific role other than the current screen
+    if (n.targetRole) {
+      if (n.targetRole === 'PARTS_SPECIALIST' && !isPartsScreen && currentUser.role !== 'SERVICE_MANAGER' && activeRoleView !== 'SERVICE_MANAGER') {
+        return false;
+      }
+      if (n.targetRole === 'TECHNICIAN' && !isTechScreen && currentUser.role !== 'SERVICE_MANAGER' && activeRoleView !== 'SERVICE_MANAGER') {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const relevantNotifications = notifications.filter(isNotificationRelevant);
+  const unreadUrgentCount = relevantNotifications.filter(n => !n.read && n.isUrgent).length;
+  const unreadTotal = relevantNotifications.filter(n => !n.read).length;
 
   // Real-time capacity calculation (configured for 12-bay shop)
   const TOTAL_SHOP_BAYS = 12;
@@ -231,12 +267,12 @@ export const Navbar: React.FC = () => {
               )}
 
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                {notifications.length === 0 ? (
+                {relevantNotifications.length === 0 ? (
                   <div className="p-6 text-center text-sm text-slate-500">
                     No active alerts
                   </div>
                 ) : (
-                  notifications.map(notif => (
+                  relevantNotifications.map(notif => (
                     <div
                       key={notif.id}
                       onClick={() => handleNotificationClick(notif.roId, notif.id)}
@@ -267,7 +303,7 @@ export const Navbar: React.FC = () => {
               {/* Drawer Footer with prominent Close button */}
               <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
                 <span className="text-[11px] font-medium text-slate-600">
-                  {notifications.length} total alert{notifications.length === 1 ? '' : 's'}
+                  {relevantNotifications.length} total alert{relevantNotifications.length === 1 ? '' : 's'}
                 </span>
                 <button
                   id="urgent-shop-alerts-footer-close-btn"

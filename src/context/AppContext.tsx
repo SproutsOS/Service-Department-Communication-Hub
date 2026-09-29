@@ -880,12 +880,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [newNotif, ...prev.slice(0, 49)]);
     syncNotification(newNotif);
 
-    if (isSoundEnabled) {
-      playNotificationChime(isUrgent);
+    // When a part is requested, alert the Parts screen/specialist, NOT the technician on the tech screen
+    const isPartsRequest = type === 'PARTS_UPDATE' || targetRole === 'PARTS_SPECIALIST' || title.toLowerCase().includes('part request') || title.toLowerCase().includes('parts request');
+    const isTechScreen = activeRoleView === 'TECHNICIAN' || currentUser.role === 'TECHNICIAN';
+
+    if (isPartsRequest && isTechScreen) {
+      // Tech screen does not chime or trigger browser alert for parts requests
+      return;
     }
 
-    if (isUrgent || type === 'STATUS_CHANGE') {
-      requestBrowserNotification(`[${ro.id}] ${title}`, message, isUrgent);
+    const isTargetedToOtherRole = targetRole && targetRole !== activeRoleView && targetRole !== currentUser.role && currentUser.role !== 'SERVICE_MANAGER';
+    const isTargetedToOtherUser = targetUserId && targetUserId !== currentUser.id;
+
+    if (!isTargetedToOtherRole && !isTargetedToOtherUser) {
+      if (isSoundEnabled) {
+        playNotificationChime(isUrgent);
+      }
+
+      if (isUrgent || type === 'STATUS_CHANGE') {
+        requestBrowserNotification(`[${ro.id}] ${title}`, message, isUrgent);
+      }
     }
   };
 
@@ -1311,7 +1325,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         partsToAdd.length === 1 ? `Parts Requested: ${firstPart.description}` : `${partsToAdd.length} Parts Requested`,
         `Submitted by ${currentUser.name}`,
         true,
-        'PARTS_UPDATE'
+        'PARTS_UPDATE',
+        'PARTS_SPECIALIST'
       );
     }
   };
