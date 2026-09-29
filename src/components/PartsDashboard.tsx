@@ -235,15 +235,20 @@ export const PartsDashboard: React.FC = () => {
     return '';
   }, [currentSelectedRO]);
 
-  // All active repair orders that have technician-requested parts or are waiting on parts
+  // Track ROs whose parts have been added to the repair order in this session
+  const [addedRoIds, setAddedRoIds] = useState<Set<string>>(new Set());
+
+  // All active repair orders that have technician-requested parts or are waiting on parts,
+  // plus any recently processed in this session so the user sees the "Added to Repair Order" confirmation.
   const rosWithPendingTechRequests = useMemo(() => {
     return repairOrders.filter(ro => 
       ro.status !== 'COMPLETED' && ro.status !== 'CLOSED' && (
         ro.parts?.some(isTechRequestedPart) ||
-        ro.status === 'WAITING_PARTS'
+        ro.status === 'WAITING_PARTS' ||
+        addedRoIds.has(ro.id)
       )
     );
-  }, [repairOrders]);
+  }, [repairOrders, addedRoIds]);
 
   // Quick fulfillment draft state for technician-requested parts (Part Number, Price, etc.)
   const [reqDrafts, setReqDrafts] = useState<Record<string, {
@@ -410,6 +415,14 @@ export const PartsDashboard: React.FC = () => {
 
     setIsAddPartModalOpen(false);
     showToast(`⚡ Ordered and priced ${count} technician-requested parts for RO #${roId}!`);
+  };
+
+  const handleAddPartsToROFromCard = (roId: string) => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return;
+
+    handleFulfillAllRequestedParts(roId);
+    setAddedRoIds(prev => new Set(prev).add(roId));
   };
 
   const handleImportRequestedParts = () => {
@@ -875,6 +888,7 @@ export const PartsDashboard: React.FC = () => {
     }
 
     setIsAddPartModalOpen(false);
+    setAddedRoIds(prev => new Set(prev).add(selectedTargetRoId));
     showToast(`✓ Processed ${processedCount} part${processedCount === 1 ? '' : 's'} (${formatStatusLabel(effectiveStatus)}) on RO #${selectedTargetRoId}!`);
     setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }]);
     setPartNotes('');
@@ -989,7 +1003,10 @@ export const PartsDashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
             {rosWithPendingTechRequests.map(ro => {
               const requestedParts = [...ro.parts.filter(isTechRequestedPart)].sort((a, b) => getPartLineOrder(a) - getPartLineOrder(b));
-              const techNotes = requestedParts.find(p => p.notes)?.notes || ro.quote?.techNotes || '';
+              const isROAdded = addedRoIds.has(ro.id) || (
+                requestedParts.length > 0 && 
+                requestedParts.every(p => p.status !== 'REQUESTED' && p.status !== 'NEEDED' && p.status !== 'QUOTE_ONLY')
+              );
 
               return (
                 <div 
@@ -1041,16 +1058,6 @@ export const PartsDashboard: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Tech Notes if present */}
-                  {techNotes && (
-                    <div className="text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-slate-800">
-                      <span className="font-extrabold text-amber-900 uppercase text-[10px] tracking-wider block mb-0.5">
-                        Technician Notes:
-                      </span>
-                      <span className="italic">"{techNotes}"</span>
-                    </div>
-                  )}
-
                   {/* Requested Parts List with Direct Part # & Price Inputs */}
                   <div className="space-y-1.5">
                     <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
@@ -1084,9 +1091,11 @@ export const PartsDashboard: React.FC = () => {
                             <div 
                               key={rp.id || idx} 
                               className={`p-2.5 rounded-xl border text-xs space-y-2 transition-colors shadow-2xs ${
-                                isSent
-                                  ? 'bg-emerald-50/30 border-emerald-300'
-                                  : isROApproved ? 'bg-emerald-50/20 border-emerald-300' : isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
+                                isROAdded
+                                  ? 'bg-emerald-50/40 border-emerald-300'
+                                  : isSent
+                                    ? 'bg-emerald-50/30 border-emerald-300'
+                                    : isROApproved ? 'bg-emerald-50/20 border-emerald-300' : isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
                               }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-1">
@@ -1105,15 +1114,17 @@ export const PartsDashboard: React.FC = () => {
                                   </span>
                                 </div>
                                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
-                                  isSent
+                                  isROAdded
                                     ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold'
-                                    : isROApproved
+                                    : isSent
                                       ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold'
-                                      : isQuoteOnly 
-                                        ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
-                                        : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
+                                      : isROApproved
+                                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold'
+                                        : isQuoteOnly 
+                                          ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
+                                          : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
                                 }`}>
-                                  {isSent ? 'SENT TO ESTIMATE' : isROApproved ? 'APPROVED - ORDER NOW' : isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
+                                  {isROAdded ? 'ADDED TO REPAIR ORDER' : isSent ? 'SENT TO ESTIMATE' : isROApproved ? 'APPROVED - ORDER NOW' : isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
                                 </span>
                               </div>
 
@@ -1130,7 +1141,7 @@ export const PartsDashboard: React.FC = () => {
                                   <input
                                     type="text"
                                     placeholder="Enter Part # (e.g. 68052369AA)"
-                                    disabled={isSent}
+                                    disabled={isSent || isROAdded}
                                     value={draft.partNumber}
                                     onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
                                     className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
@@ -1144,7 +1155,7 @@ export const PartsDashboard: React.FC = () => {
                                     step="0.01"
                                     min="0"
                                     placeholder="0.00"
-                                    disabled={isSent}
+                                    disabled={isSent || isROAdded}
                                     value={draft.price}
                                     onChange={(e) => updateReqDraft(rp.id, 'price', e.target.value)}
                                     onBlur={(e) => {
@@ -1160,7 +1171,7 @@ export const PartsDashboard: React.FC = () => {
                                 <div className="w-36 sm:w-44 shrink-0">
                                   <ArrivalTimeFrameDropdown
                                     size="sm"
-                                    disabled={isSent}
+                                    disabled={isSent || isROAdded}
                                     value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
                                     onChange={({ timeFrameId, status, estimatedArrival }) => {
                                       updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
@@ -1193,17 +1204,7 @@ export const PartsDashboard: React.FC = () => {
                                         <span>Send to Estimate</span>
                                       </button>
                                     )
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleFulfillSingleRequestedPart(ro.id, rp)}
-                                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer flex items-center gap-1.5 border border-emerald-700 transition-colors"
-                                      title="Place order for this repair order item"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                      <span>Order Part</span>
-                                    </button>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
@@ -1228,14 +1229,40 @@ export const PartsDashboard: React.FC = () => {
                       <span>View Full RO</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => openAddPartModalForRO(ro.id, true)}
-                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer border border-blue-700 flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Parts to Repair Order</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openAddPartModalForRO(ro.id, true)}
+                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Add additional or custom parts"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Add Lines</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAddPartsToROFromCard(ro.id)}
+                        disabled={isROAdded}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 border ${
+                          isROAdded
+                            ? 'bg-emerald-600 text-white border-emerald-700 cursor-default shadow-none'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700 cursor-pointer active:scale-95'
+                        }`}
+                      >
+                        {isROAdded ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Added to Repair Order</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Parts to Repair Order</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                 </div>
@@ -3079,10 +3106,23 @@ export const PartsDashboard: React.FC = () => {
 
                   <button
                     type="submit"
-                    className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors cursor-pointer border border-blue-700 flex items-center gap-1.5"
+                    className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors cursor-pointer border flex items-center gap-1.5 ${
+                      addedRoIds.has(selectedTargetRoId)
+                        ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-700'
+                        : 'bg-blue-600 hover:bg-blue-700 border-blue-700'
+                    }`}
                   >
-                    <Package className="w-3.5 h-3.5" />
-                    <span>Confirm & Add to RO</span>
+                    {addedRoIds.has(selectedTargetRoId) ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Added to Repair Order</span>
+                      </>
+                    ) : (
+                      <>
+                        <Package className="w-3.5 h-3.5" />
+                        <span>Add Parts to Repair Order</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
