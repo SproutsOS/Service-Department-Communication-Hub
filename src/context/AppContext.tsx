@@ -152,6 +152,15 @@ interface AppContextType {
   deleteVehiclePhoto: (roId: string, photoId: string) => boolean;
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
+  triggerNotification: (
+    ro: RepairOrder,
+    title: string,
+    message: string,
+    isUrgent: boolean,
+    type: UrgentNotification['type'],
+    targetRole?: UserRole,
+    targetUserId?: string
+  ) => void;
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
   addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string) => boolean;
@@ -850,7 +859,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     title: string,
     message: string,
     isUrgent: boolean,
-    type: UrgentNotification['type']
+    type: UrgentNotification['type'],
+    targetRole?: UserRole,
+    targetUserId?: string
   ) => {
     const newNotif: UrgentNotification = {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
@@ -862,6 +873,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isUrgent,
       type,
       read: false,
+      targetRole,
+      targetUserId,
     };
 
     setNotifications(prev => [newNotif, ...prev.slice(0, 49)]);
@@ -2972,6 +2985,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'STATUS_CHANGE'
     );
 
+    if (status === 'APPROVED') {
+      // 1. Role Alert for Parts Specialist / Parts Counter
+      triggerNotification(
+        updatedRO,
+        `🚨 Parts Action: Quote Approved for RO #${targetRO.id}`,
+        `Customer authorized repairs ($${updatedQuote.grandTotal.toFixed(2)}). Please place parts orders now.`,
+        true,
+        'PARTS_UPDATE',
+        'PARTS_SPECIALIST'
+      );
+
+      // 2. Role Alert for Technician
+      triggerNotification(
+        updatedRO,
+        `🔧 Repairs Authorized: RO #${targetRO.id}`,
+        `Customer approved repair estimate ($${updatedQuote.grandTotal.toFixed(2)}). Parts are being ordered, proceed with repairs.`,
+        true,
+        'STATUS_CHANGE',
+        'TECHNICIAN',
+        targetRO.techId
+      );
+    }
+
     return true;
   };
 
@@ -3744,6 +3780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createRepairOrder,
         markNotificationRead,
         markAllNotificationsRead,
+        triggerNotification,
         deleteRepairOrder,
         updateRepairOrderDetails,
         addRepairOrderConcern,

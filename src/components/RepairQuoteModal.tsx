@@ -65,6 +65,8 @@ export const RepairQuoteModal: React.FC = () => {
     saveRepairQuote, 
     updateQuoteStatus, 
     currentUser,
+    users,
+    sendShopChatMessage,
     activeRoleView,
     shopName,
     updateTechCauseAndCorrection
@@ -834,14 +836,66 @@ export const RepairQuoteModal: React.FC = () => {
   // Advisor / Manager approval or decline
   const handleApproveQuote = () => {
     const formattedTotal = (Number(grandTotal) || 0).toFixed(2);
-    if (window.confirm(`Authorize repair quote for ${activeQuoteRO.customerName} totaling $${formattedTotal}?`)) {
-      updateQuoteStatus(activeQuoteRO.id, 'APPROVED');
-      setSaveSuccessMsg('Quote authorized and repair order approved!');
-      setTimeout(() => {
-        setSaveSuccessMsg(null);
-        closeQuoteModal();
-      }, 1500);
+    if (!window.confirm(`Authorize and approve repair quote for ${activeQuoteRO.customerName} totaling $${formattedTotal}?\n\nThis will:\n1. Update repair order status to APPROVED\n2. Broadcast an urgent alert to ShopChat\n3. Notify Parts to order parts immediately\n4. Alert the assigned Technician that repairs are authorized`)) {
+      return;
     }
+
+    // 1. Save latest quote labor and parts before approving
+    handleSave(false);
+
+    // 2. Update quote and repair order status to APPROVED (automatically rolls parts into RO)
+    updateQuoteStatus(activeQuoteRO.id, 'APPROVED');
+
+    // 3. Trigger urgent broadcast in ShopChat
+    const vehicleDesc = activeQuoteRO.vehicle 
+      ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` 
+      : 'Vehicle';
+    const techName = activeQuoteRO.techName || 'Assigned Tech';
+    const partsCount = partsItems.length;
+
+    sendShopChatMessage(
+      `🚨 [QUOTE APPROVED] RO #${activeQuoteRO.id} - ${activeQuoteRO.customerName} (${vehicleDesc}). Total: $${formattedTotal} (${partsCount} parts item${partsCount === 1 ? '' : 's'}). Parts Counter: Please place parts orders immediately. Tech (${techName}): Customer authorized repairs!`,
+      undefined, // General ShopChat broadcast
+      activeQuoteRO.id,
+      true // Urgent
+    );
+
+    // 4. Send targeted alert to Parts role (all parts specialists)
+    const partsUsers = users.filter(u => u.role === 'PARTS_SPECIALIST');
+    partsUsers.forEach(pu => {
+      sendShopChatMessage(
+        `📦 [PARTS ACTION REQUIRED] Customer authorized Quote for RO #${activeQuoteRO.id} ($${formattedTotal}). Please review and place parts order now.`,
+        pu.id,
+        activeQuoteRO.id,
+        true
+      );
+    });
+
+    // 5. Send targeted alert to Technician role
+    if (activeQuoteRO.techId) {
+      sendShopChatMessage(
+        `🔧 [REPAIR AUTHORIZED] Quote approved for RO #${activeQuoteRO.id} ($${formattedTotal}). Customer authorized repairs. Work is approved to proceed!`,
+        activeQuoteRO.techId,
+        activeQuoteRO.id,
+        true
+      );
+    } else {
+      const techUsers = users.filter(u => u.role === 'TECHNICIAN');
+      techUsers.forEach(tu => {
+        sendShopChatMessage(
+          `🔧 [REPAIR AUTHORIZED] Quote approved for RO #${activeQuoteRO.id} ($${formattedTotal}). Work is approved to proceed!`,
+          tu.id,
+          activeQuoteRO.id,
+          true
+        );
+      });
+    }
+
+    setSaveSuccessMsg('Quote authorized and repair order approved! Urgent notifications sent to ShopChat, Parts Counter, and Technician.');
+    setTimeout(() => {
+      setSaveSuccessMsg(null);
+      closeQuoteModal();
+    }, 1800);
   };
 
   const handleConfirmDecline = () => {
@@ -971,6 +1025,19 @@ export const RepairQuoteModal: React.FC = () => {
                 </span>
               )}
             </div>
+
+            {isAdvisorOrManager && quoteStatus !== 'APPROVED' && (
+              <button
+                id="header-approve-quote-btn"
+                type="button"
+                onClick={handleApproveQuote}
+                title="Authorize and approve this repair quote"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>Approve Quote</span>
+              </button>
+            )}
 
             {!isTech && (
               <button
@@ -2087,7 +2154,7 @@ export const RepairQuoteModal: React.FC = () => {
 
           <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto justify-end">
             {/* If Advisor/Manager, allow one-click authorization or decline */}
-            {isAdvisorOrManager && quoteStatus === 'SUBMITTED' && (
+            {isAdvisorOrManager && quoteStatus !== 'APPROVED' && (
               <>
                 <button
                   id="decline-quote-btn"
@@ -2103,10 +2170,10 @@ export const RepairQuoteModal: React.FC = () => {
                   id="authorize-quote-btn"
                   type="button"
                   onClick={handleApproveQuote}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-2 shadow-md shadow-emerald-600/20 hover:scale-102 active:scale-98"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Authorize & Approve ($ {(Number(grandTotal) || 0).toFixed(2)})</span>
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Approve Quote ($ {(Number(grandTotal) || 0).toFixed(2)})</span>
                 </button>
               </>
             )}
