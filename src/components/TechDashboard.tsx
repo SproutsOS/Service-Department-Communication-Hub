@@ -763,6 +763,12 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         <div className="space-y-1.5">
                           {lineParts.map((part) => {
                             const etaBadge = formatEtaBadge(part.estimatedArrival);
+                            const isROApproved = Boolean(
+                              ro.status === 'APPROVED' || 
+                              ro.quote?.status === 'APPROVED' || 
+                              ro.quote?.approvedAt || 
+                              ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
+                            );
                             return (
                               <div 
                                 key={part.id} 
@@ -778,48 +784,54 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                                       Qty: {part.quantity}
                                     </span>
                                     {/* Order Now / Quote Only switchable toggle */}
-                                    <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-300 shrink-0">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          updatePartItem(ro.id, part.id, {
-                                            requestType: 'ORDER_NOW',
-                                            status: part.status === 'QUOTE_ONLY' ? 'REQUESTED' : part.status,
-                                            estimatedArrival: part.estimatedArrival === 'Price Quote Needed' ? 'Pending Parts Counter' : part.estimatedArrival,
-                                          });
-                                        }}
-                                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                          (part.requestType === 'ORDER_NOW' || (!part.requestType && part.status !== 'QUOTE_ONLY'))
-                                            ? 'bg-blue-600 text-white shadow-2xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                                        }`}
-                                        title="Change to Order Now"
-                                      >
-                                        <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
-                                        <span>Order Now</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          updatePartItem(ro.id, part.id, {
-                                            requestType: 'QUOTE_ONLY',
-                                            status: 'QUOTE_ONLY',
-                                            estimatedArrival: 'Price Quote Needed',
-                                          });
-                                        }}
-                                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                          (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
-                                            ? 'bg-purple-600 text-white shadow-2xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                                        }`}
-                                        title="Change to Quote Only"
-                                      >
-                                        <Calculator className="w-2.5 h-2.5 shrink-0" />
-                                        <span>Quote Only</span>
-                                      </button>
-                                    </div>
+                                    {isROApproved ? (
+                                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                        Approved
+                                      </span>
+                                    ) : (
+                                      <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-300 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            updatePartItem(ro.id, part.id, {
+                                              requestType: 'ORDER_NOW',
+                                              status: part.status === 'QUOTE_ONLY' ? 'REQUESTED' : part.status,
+                                              estimatedArrival: part.estimatedArrival === 'Price Quote Needed' ? 'Pending Parts Counter' : part.estimatedArrival,
+                                            });
+                                          }}
+                                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                            (part.requestType === 'ORDER_NOW' || (!part.requestType && part.status !== 'QUOTE_ONLY'))
+                                              ? 'bg-blue-600 text-white shadow-2xs'
+                                              : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                                          }`}
+                                          title="Change to Order Now"
+                                        >
+                                          <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
+                                          <span>Order Now</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            updatePartItem(ro.id, part.id, {
+                                              requestType: 'QUOTE_ONLY',
+                                              status: 'QUOTE_ONLY',
+                                              estimatedArrival: 'Price Quote Needed',
+                                            });
+                                          }}
+                                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                            (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
+                                              ? 'bg-purple-600 text-white shadow-2xs'
+                                              : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                                          }`}
+                                          title="Change to Quote Only"
+                                        >
+                                          <Calculator className="w-2.5 h-2.5 shrink-0" />
+                                          <span>Quote Only</span>
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                   {part.notes && !part.notes.startsWith('For Line') && (
                                     <p className="text-[11px] text-slate-500 mt-0.5 italic">{part.notes}</p>
@@ -829,13 +841,19 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
                                     part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
                                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : isROApproved && (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
                                       : part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY'
                                       ? 'bg-purple-100 text-purple-800 border-purple-300 font-extrabold'
                                       : part.status === 'REQUESTED'
                                       ? 'bg-blue-100 text-blue-800 border-blue-300'
                                       : 'bg-amber-100 text-amber-800 border-amber-300'
                                   }`}>
-                                    {part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY' ? 'Quote Only' : part.status.replace(/_/g, ' ')}
+                                    {isROApproved && (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
+                                      ? 'Approved (Order Now)'
+                                      : part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY'
+                                      ? 'Quote Only'
+                                      : part.status.replace(/_/g, ' ')}
                                   </span>
                                   {part.estimatedArrival && part.status !== 'ISSUED_TO_TECH' && (
                                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${

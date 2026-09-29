@@ -263,6 +263,70 @@ export function getPayTypeRate(payType?: string): number {
  * Passes through the Repair Order intact without stripping or dropping customer concerns.
  */
 export function cleanRO3700<T>(ro: T): T {
+  if (!ro || typeof ro !== 'object') return ro;
+  const anyRO = ro as any;
+  const isApproved = Boolean(
+    anyRO.status === 'APPROVED' ||
+    anyRO.quote?.status === 'APPROVED' ||
+    anyRO.quote?.approvedAt ||
+    ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(anyRO.status)
+  );
+
+  if (!isApproved) return ro;
+
+  let needsUpdate = false;
+  let updatedParts = Array.isArray(anyRO.parts) ? [...anyRO.parts] : [];
+
+  // If repair order is approved, quote-only parts should be ordered
+  updatedParts = updatedParts.map(p => {
+    if (p && (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')) {
+      needsUpdate = true;
+      return {
+        ...p,
+        status: 'ORDERED',
+        requestType: 'ORDER_NOW',
+        orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
+        estimatedArrival: p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate')
+          ? p.estimatedArrival
+          : 'Daily Order (Arriving ~5:00 PM)',
+      };
+    }
+    return p;
+  });
+
+  // If quote contains partsItems not yet in ro.parts, include them as ordered parts
+  if (anyRO.quote?.partsItems && Array.isArray(anyRO.quote.partsItems) && anyRO.quote.partsItems.length > 0) {
+    anyRO.quote.partsItems.forEach((qp: any, idx: number) => {
+      const exists = updatedParts.some((p: any) => 
+        (qp.sourcePartId && p.id === qp.sourcePartId) ||
+        (qp.partNumber && p.partNumber && p.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
+        (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
+      );
+      if (!exists) {
+        needsUpdate = true;
+        updatedParts.push({
+          id: qp.sourcePartId || `qpart_approved_${idx}_${Date.now()}`,
+          partNumber: qp.partNumber || 'TBD',
+          description: qp.description || 'Quoted Part',
+          quantity: qp.quantity || 1,
+          price: qp.unitPrice,
+          status: 'ORDERED',
+          requestType: 'ORDER_NOW',
+          orderedAt: anyRO.quote.approvedAt || new Date().toISOString(),
+          estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
+          roLineNumber: qp.roLineNumber || 1,
+        });
+      }
+    });
+  }
+
+  if (needsUpdate) {
+    return {
+      ...anyRO,
+      parts: updatedParts,
+    };
+  }
+
   return ro;
 }
 

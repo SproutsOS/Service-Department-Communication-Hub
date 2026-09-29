@@ -16,6 +16,7 @@ import { RepairOrder, User as AppUser } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
 import { formatDurationSince, formatDateTime, formatEtaBadge, getDiagnosticStatusDetails, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
+import { useApp } from '../context/AppContext';
 
 interface ROLineRowProps {
   ro: RepairOrder;
@@ -32,6 +33,7 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
   showCadence = true,
   onOpenFollowUp
 }) => {
+  const { setSelectedRO } = useApp();
   const ro = cleanRO3700(rawRO);
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
   const isCompleted = isROCompleted(ro);
@@ -46,12 +48,21 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
   const etaBadge = activePart ? formatEtaBadge(activePart.estimatedArrival) : null;
   const pendingTechRecs = ro.recommendations ? ro.recommendations.filter(r => r.status === 'PENDING').length : 0;
 
-  const hasQuotedParts = Boolean(
+  const isApproved = Boolean(
+    ro.status === 'APPROVED' ||
+    ro.quote?.status === 'APPROVED' ||
+    ro.quote?.approvedAt ||
+    ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
+  );
+
+  const hasQuotedParts = !isApproved && Boolean(
     (ro.quote?.partsItems && ro.quote.partsItems.length > 0) ||
     ro.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')
   );
   const hasOrderedParts = Boolean(
-    ro.parts.some(p => p.status !== 'QUOTE_ONLY' && (p.requestType === 'ORDER_NOW' || ['ORDERED', 'DAILY_ORDER', 'IN_STOCK', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'LOCAL_PURCHASE'].includes(p.status)))
+    isApproved
+      ? (ro.parts.length > 0 || (ro.quote?.partsItems && ro.quote.partsItems.length > 0))
+      : ro.parts.some(p => p.status !== 'QUOTE_ONLY' && (p.requestType === 'ORDER_NOW' || ['ORDERED', 'DAILY_ORDER', 'IN_STOCK', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'LOCAL_PURCHASE'].includes(p.status)))
   );
 
   return (
@@ -182,18 +193,34 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400">
                   Parts on Estimate
                 </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRO(ro, 'PARTS');
+                  }}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400 hover:bg-purple-200 transition-colors cursor-pointer"
+                  title="Click to view parts ordered & ETA"
+                >
                   Parts Ordered (ETA)
-                </span>
+                </button>
               </div>
             ) : hasQuotedParts ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400">
                 Parts on Estimate
               </span>
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedRO(ro, 'PARTS');
+                }}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400 hover:bg-purple-200 transition-colors cursor-pointer"
+                title="Click to view parts ordered & ETA"
+              >
                 Parts Ordered (ETA)
-              </span>
+              </button>
             )
           ) : (
             <>
@@ -203,9 +230,17 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
                 </span>
               )}
               {!isCompleted && hasOrderedParts && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-50 text-purple-800 border-purple-300">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRO(ro, 'PARTS');
+                  }}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-50 text-purple-800 border-purple-300 hover:bg-purple-100 transition-colors cursor-pointer"
+                  title="Click to view parts ordered & ETA"
+                >
                   Parts Ordered (ETA)
-                </span>
+                </button>
               )}
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
                 {statusInfo.label}

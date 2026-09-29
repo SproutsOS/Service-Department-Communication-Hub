@@ -1113,9 +1113,9 @@ export const RODetailModal: React.FC = () => {
             }`}
           >
             <Package className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'PARTS' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>Parts ETA</span>
+            <span>Parts Ordered (ETA)</span>
             {selectedRO.parts.length > 0 && (
-              <span className="bg-orange-100 text-orange-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+              <span className="bg-purple-100 text-purple-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
                 {selectedRO.parts.length}
               </span>
             )}
@@ -2008,311 +2008,38 @@ export const RODetailModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 3: PARTS ORDERED & TRACKED WITH ESTIMATED ARRIVAL */}
+          {/* TAB 3: PARTS ORDERED & ETA */}
           {activeTab === 'PARTS' && (
             <div className="space-y-4">
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    Parts Ordered & Tracking Status
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Live delivery ETAs and parts staging directly on this repair order
-                  </p>
+              <div className="flex items-center justify-between pb-3 border-b-2 border-slate-200">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-purple-100 rounded-lg border-2 border-purple-300 text-purple-700">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                      Parts Ordered (ETA)
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Live delivery arrival times for parts ordered on this repair order
+                    </p>
+                  </div>
                 </div>
-
-                {canOrderParts && (
-                  <button
-                    id="add-part-toggle-btn"
-                    onClick={() => setShowAddPart(!showAddPart)}
-                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer border-2 border-blue-700"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Order New Part</span>
-                  </button>
+                {selectedRO.parts.length > 0 && (
+                  <span className="text-xs font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
+                    {selectedRO.parts.length} {selectedRO.parts.length === 1 ? 'Part Ordered' : 'Parts Ordered'}
+                  </span>
                 )}
               </div>
 
-              {/* Add Part Form */}
-              {canOrderParts && showAddPart && (
-                <form 
-                  onSubmit={handleAddPartSubmit}
-                  className="p-4 bg-slate-50 rounded-xl border-2 border-slate-400 space-y-3 animate-in fade-in duration-100 shadow-sm"
-                >
-                  <h5 className="text-xs font-bold text-slate-900">Add / Order Parts</h5>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Number *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. ML3Z-8C419-A"
-                        value={partNumber}
-                        onChange={e => setPartNumber(e.target.value)}
-                        required
-                        className="w-full text-xs font-mono font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 uppercase"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Part Description *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Auxiliary Coolant Pump"
-                        value={partDescription}
-                        onChange={e => setPartDescription(e.target.value)}
-                        required
-                        className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Supplier / Vendor *</label>
-                        {!isModalAddingCustomVendor && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsModalAddingCustomVendor(true);
-                              setModalCustomVendorInput('');
-                            }}
-                            className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
-                          >
-                            + Add Custom
-                          </button>
-                        )}
-                      </div>
-
-                      {!isModalAddingCustomVendor ? (
-                        <select
-                          value={partVendor}
-                          onChange={e => {
-                            if (e.target.value === '__ADD_NEW__') {
-                              setIsModalAddingCustomVendor(true);
-                              setModalCustomVendorInput('');
-                            } else {
-                              setPartVendor(e.target.value);
-                            }
-                          }}
-                          className="w-full text-xs font-bold px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800"
-                        >
-                          {modalVendors.map(v => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                          <option value="__ADD_NEW__">+ Add Other Vendor...</option>
-                        </select>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            placeholder="Vendor name..."
-                            value={modalCustomVendorInput}
-                            onChange={e => setModalCustomVendorInput(e.target.value)}
-                            autoFocus
-                            className="flex-1 text-xs font-bold px-2.5 py-1.5 bg-white border-2 border-blue-500 rounded-lg focus:outline-none uppercase text-slate-800"
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const trimmed = modalCustomVendorInput.trim().toUpperCase();
-                                if (trimmed) {
-                                  if (!modalVendors.includes(trimmed)) setModalVendors(prev => [...prev, trimmed]);
-                                  setPartVendor(trimmed);
-                                  setIsModalAddingCustomVendor(false);
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const trimmed = modalCustomVendorInput.trim().toUpperCase();
-                              if (trimmed) {
-                                if (!modalVendors.includes(trimmed)) setModalVendors(prev => [...prev, trimmed]);
-                                setPartVendor(trimmed);
-                                setIsModalAddingCustomVendor(false);
-                              }
-                            }}
-                            className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
-                          >
-                            Add
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsModalAddingCustomVendor(false)}
-                            className="px-2 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">Expectation of Part Arrival / Time Frame *</label>
-                        {canChangePartStatus && !isModalAddingCustomStatus && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsModalAddingCustomStatus(true);
-                              setModalCustomStatusInput('');
-                            }}
-                            className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
-                          >
-                            + Custom Status Name
-                          </button>
-                        )}
-                      </div>
-
-                      {canChangePartStatus ? (
-                        !isModalAddingCustomStatus ? (
-                          <div className="space-y-1">
-                            <ArrivalTimeFrameDropdown
-                              value={partTimeFrameId || partInitialStatus}
-                              onChange={({ timeFrameId, status, estimatedArrival }) => {
-                                setPartTimeFrameId(timeFrameId);
-                                setPartInitialStatus(status);
-                                setPartEstimatedArrival(estimatedArrival);
-                              }}
-                            />
-                            {partEstimatedArrival && (
-                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-200">
-                                <Clock className="w-3 h-3 text-blue-600 shrink-0" />
-                                <span>Calculated Arrival: {formatEtaBadge(partEstimatedArrival).text}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              placeholder="e.g. TIRE WAREHOUSE..."
-                              value={modalCustomStatusInput}
-                              onChange={e => setModalCustomStatusInput(e.target.value)}
-                              autoFocus
-                              className="flex-1 text-xs font-bold px-2.5 py-1.5 bg-white border-2 border-blue-500 rounded-lg focus:outline-none uppercase text-slate-800"
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  const trimmed = modalCustomStatusInput.trim().toUpperCase();
-                                  if (trimmed) {
-                                    const cleanId = trimmed.replace(/\s+/g, '_');
-                                    if (!modalStatuses.some(s => s.id === cleanId)) {
-                                      setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
-                                    }
-                                    setPartInitialStatus(cleanId as PartStatus);
-                                    setIsModalAddingCustomStatus(false);
-                                  }
-                                }
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const trimmed = modalCustomStatusInput.trim().toUpperCase();
-                                if (trimmed) {
-                                  const cleanId = trimmed.replace(/\s+/g, '_');
-                                  if (!modalStatuses.some(s => s.id === cleanId)) {
-                                    setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
-                                  }
-                                  setPartInitialStatus(cleanId as PartStatus);
-                                  setIsModalAddingCustomStatus(false);
-                                }
-                              }}
-                              className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
-                            >
-                              Add
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsModalAddingCustomStatus(false)}
-                              className="px-2 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )
-                      ) : (
-                        <div className="flex items-center justify-between px-3 py-2 bg-slate-100 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-700">
-                          <span className="flex items-center gap-1.5">
-                            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>REQUESTED (Pending Parts Classification)</span>
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-semibold uppercase">Parts Mgr Auth Required</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Price</label>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="0.00"
-                          value={partPrice}
-                          onChange={e => setPartPrice(e.target.value)}
-                          onBlur={e => {
-                            const val = e.target.value.trim();
-                            if (val && !isNaN(Number(val))) {
-                              setPartPrice(Number(val).toFixed(2));
-                            }
-                          }}
-                          className="w-full text-xs pl-6 pr-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    {partInitialStatus !== 'IN_STOCK' && (
-                      <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block mb-1">Specific Arrival Time (Optional)</label>
-                        <input
-                          type="time"
-                          value={partEtaTime}
-                          onChange={e => {
-                            setPartEtaTime(e.target.value);
-                            if (partEstimatedArrival && !isNaN(new Date(partEstimatedArrival).getTime())) {
-                              const [h, m] = e.target.value.split(':').map(Number);
-                              const d = new Date(partEstimatedArrival);
-                              d.setHours(h, m, 0, 0);
-                              setPartEstimatedArrival(d.toISOString());
-                            }
-                          }}
-                          className="w-full text-xs px-3 py-2 bg-white border-2 border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-800 font-medium"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddPart(false)}
-                      className="px-3 py-1.5 border-2 border-slate-400 text-xs font-semibold rounded-lg hover:bg-slate-100 cursor-pointer text-slate-700"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm cursor-pointer border-2 border-blue-700"
-                    >
-                      Confirm Order & Notify Tech
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Parts List */}
               {selectedRO.parts.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
-                  <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs text-slate-500 font-medium">No parts currently ordered for this repair order.</p>
+                <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-slate-300">
+                  <Package className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                  <h5 className="text-sm font-bold text-slate-800">No Parts Ordered</h5>
+                  <p className="text-xs text-slate-500 mt-1">There are no parts ordered for this repair order yet.</p>
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {[...selectedRO.parts].sort((a, b) => {
                     const lineA = a.roLineNumber || (a.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(a.notes.match(/For Line (\d+)/i)![1]) : 999);
                     const lineB = b.roLineNumber || (b.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(b.notes.match(/For Line (\d+)/i)![1]) : 999);
@@ -2320,178 +2047,73 @@ export const RODetailModal: React.FC = () => {
                   }).map(part => {
                     const etaBadge = formatEtaBadge(part.estimatedArrival);
                     const lineNum = part.roLineNumber || (part.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(part.notes.match(/For Line (\d+)/i)![1]) : undefined);
+                    const etaDisplay = part.estimatedArrival ? (
+                      !isNaN(new Date(part.estimatedArrival).getTime())
+                        ? `${new Date(part.estimatedArrival).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${formatTimeOnly(new Date(part.estimatedArrival))}`
+                        : part.estimatedArrival
+                    ) : 'Pending ETA';
+
                     return (
                       <div 
                         key={part.id}
-                        className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-sm space-y-2"
+                        className="p-4 bg-white rounded-xl border-2 border-slate-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-purple-400 transition-colors"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {lineNum && (
-                                <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
-                                  Line {lineNum}
-                                </span>
-                              )}
-                              <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                #{part.partNumber}
+                        {/* Part that was ordered */}
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {lineNum && (
+                              <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                                Line {lineNum}
                               </span>
-                              <span className="text-xs font-bold text-slate-800">
-                                {part.description} (Qty: {part.quantity})
-                              </span>
-                              {part.price !== undefined && (
-                                <span className="text-xs font-semibold text-slate-600">
-                                  • Price: {formatCurrency(part.price)}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-500 mt-1">
-                              Vendor: <strong>{part.vendor}</strong> {part.trackingNumber ? `• Tracking: ${part.trackingNumber}` : ''}
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                              part.status === 'IN_STOCK' || part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
-                                ? 'bg-green-100 text-green-700 border-green-200'
-                                : part.status === 'VOR_UPGRADE'
-                                ? 'bg-rose-100 text-rose-700 border-rose-200 font-black'
-                                : part.status === 'SPECIAL_ORDER' || part.status === 'SPECIAL_ORDER_1_5_DAYS'
-                                ? 'bg-amber-100 text-amber-700 border-amber-200'
-                                : part.status === 'IN_TRANSIT'
-                                ? 'bg-orange-100 text-orange-700 border-orange-200'
-                                : 'bg-blue-100 text-blue-700 border-blue-200'
-                            }`}>
-                              {part.status === 'SPECIAL_ORDER' || part.status === 'SPECIAL_ORDER_1_5_DAYS'
-                                ? 'SPECIAL ORDER 1-5 DAYS'
-                                : part.status.replace(/_/g, ' ')}
-                            </span>
-                            {part.status !== 'IN_STOCK' && part.status !== 'ISSUED_TO_TECH' && part.estimatedArrival && (
-                              <div className="mt-1">
-                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                                  etaBadge.pastDue
-                                    ? 'bg-red-100 text-red-700 border border-red-200'
-                                    : 'bg-orange-100 text-orange-700 border border-orange-200'
-                                }`}>
-                                  {etaBadge.text}
-                                </span>
-                              </div>
                             )}
+                            <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                              #{part.partNumber}
+                            </span>
+                            {part.quantity > 1 && (
+                              <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                                Qty: {part.quantity}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-base font-black text-slate-900">
+                            {part.description}
                           </div>
                         </div>
 
-                        {/* Part Status Transition Actions */}
-                        {canChangePartStatus ? (
-                          <div className="pt-2 border-t border-slate-100 space-y-2 text-xs">
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <span className="text-[11px] text-slate-400 font-medium">Quick Update Status:</span>
-                              <div className="flex gap-1.5 flex-wrap">
-                                {(['IN_STOCK', 'LOCAL_PURCHASE', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'] as PartStatus[])
-                                  .concat(
-                                    modalStatuses
-                                      .filter(s => !['IN_STOCK', 'LOCAL_PURCHASE', 'DAILY_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'RECEIVED', 'ISSUED_TO_TECH'].includes(s.id))
-                                      .map(s => s.id)
-                                  )
-                                  .map(st => (
-                                    <button
-                                      key={st}
-                                      type="button"
-                                      onClick={() => updatePartStatus(selectedRO.id, part.id, st)}
-                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer ${
-                                        part.status === st
-                                          ? 'bg-slate-900 text-white shadow-xs'
-                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                      }`}
-                                    >
-                                      {st === 'ISSUED_TO_TECH' ? 'Issued to Tech' : st === 'SPECIAL_ORDER_1_5_DAYS' ? 'Special Order 1-5 Days' : st.replace(/_/g, ' ')}
-                                    </button>
-                                  ))}
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (customStatusEditingPartId === part.id) {
-                                      setCustomStatusEditingPartId(null);
-                                    } else {
-                                      setCustomStatusEditingPartId(part.id);
-                                      setPartQuickCustomStatusInput('');
-                                    }
-                                  }}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 cursor-pointer"
-                                >
-                                  + Custom Status
-                                </button>
+                        {/* What the ETA is */}
+                        <div className="shrink-0 flex items-center sm:text-right">
+                          <div className={`px-3.5 py-2 rounded-lg border-2 flex items-center gap-2.5 ${
+                            etaBadge.pastDue 
+                              ? 'bg-red-50 border-red-400 text-red-950'
+                              : etaBadge.urgent
+                              ? 'bg-amber-50 border-amber-400 text-amber-950'
+                              : 'bg-purple-50 border-purple-400 text-purple-950'
+                          }`}>
+                            <Clock className={`w-4 h-4 shrink-0 ${
+                              etaBadge.pastDue ? 'text-red-600' : etaBadge.urgent ? 'text-amber-600' : 'text-purple-600'
+                            }`} />
+                            <div>
+                              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                ETA
                               </div>
-                            </div>
-
-                            {customStatusEditingPartId === part.id && (
-                              <div className="flex items-center gap-1.5 p-2 bg-blue-50/50 rounded-lg border border-blue-200 animate-in fade-in duration-100">
-                                <input
-                                  type="text"
-                                  placeholder="Enter custom status (e.g. TIRE WAREHOUSE, CORE RETURN)..."
-                                  value={partQuickCustomStatusInput}
-                                  onChange={e => setPartQuickCustomStatusInput(e.target.value)}
-                                  autoFocus
-                                  className="flex-1 text-xs font-bold px-2.5 py-1 bg-white border border-blue-400 rounded-md focus:outline-none uppercase text-slate-800"
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
-                                      if (trimmed) {
-                                        const cleanId = trimmed.replace(/\s+/g, '_');
-                                        if (!modalStatuses.some(s => s.id === cleanId)) {
-                                          setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
-                                        }
-                                        updatePartStatus(selectedRO.id, part.id, cleanId);
-                                        setCustomStatusEditingPartId(null);
-                                      }
-                                    }
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const trimmed = partQuickCustomStatusInput.trim().toUpperCase();
-                                    if (trimmed) {
-                                      const cleanId = trimmed.replace(/\s+/g, '_');
-                                      if (!modalStatuses.some(s => s.id === cleanId)) {
-                                        setModalStatuses(prev => [...prev, { id: cleanId, label: trimmed }]);
-                                      }
-                                      updatePartStatus(selectedRO.id, part.id, cleanId);
-                                      setCustomStatusEditingPartId(null);
-                                    }
-                                  }}
-                                  className="px-2.5 py-1 bg-blue-600 text-white rounded-md text-xs font-bold hover:bg-blue-700 cursor-pointer"
-                                >
-                                  Set Status
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setCustomStatusEditingPartId(null)}
-                                  className="px-2 py-1 bg-slate-200 text-slate-700 rounded-md text-xs font-bold hover:bg-slate-300 cursor-pointer"
-                                >
-                                  Cancel
-                                </button>
+                              <div className="text-xs sm:text-sm font-black text-slate-900">
+                                {etaDisplay}
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span>Status updates (In Stock, Daily Order, Special Order 1-5 Days, VOR) restricted to Service Manager & Parts Manager</span>
+                              {etaBadge.text && etaBadge.text !== etaDisplay && (
+                                <div className={`text-[10px] font-bold ${
+                                  etaBadge.pastDue ? 'text-red-600' : etaBadge.urgent ? 'text-amber-700' : 'text-purple-700'
+                                }`}>
+                                  {etaBadge.text}
+                                </div>
+                              )}
                             </div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                              Advisor Screen (Read-Only)
-                            </span>
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-
             </div>
           )}
 

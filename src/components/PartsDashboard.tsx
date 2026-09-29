@@ -1042,7 +1042,13 @@ export const PartsDashboard: React.FC = () => {
                       {requestedParts.length > 0 ? (
                         requestedParts.map((rp, idx) => {
                           const draft = getReqDraft(rp);
-                          const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                          const isROApproved = Boolean(
+                            ro.status === 'APPROVED' || 
+                            ro.quote?.status === 'APPROVED' || 
+                            ro.quote?.approvedAt || 
+                            ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
+                          );
+                          const isQuoteOnly = !isROApproved && (rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY');
                           const isSent = isQuoteOnly && isPartSentToEstimate(rp);
                           const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
                           const concernDesc = lineNum && ro.concerns && ro.concerns[lineNum - 1] 
@@ -1055,7 +1061,7 @@ export const PartsDashboard: React.FC = () => {
                               className={`p-2.5 rounded-xl border text-xs space-y-2 transition-colors shadow-2xs ${
                                 isSent
                                   ? 'bg-emerald-50/30 border-emerald-300'
-                                  : isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
+                                  : isROApproved ? 'bg-emerald-50/20 border-emerald-300' : isQuoteOnly ? 'bg-purple-50/40 border-purple-200 hover:border-purple-400' : 'bg-slate-50 border-slate-200 hover:border-amber-400'
                               }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-1">
@@ -1076,11 +1082,13 @@ export const PartsDashboard: React.FC = () => {
                                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
                                   isSent
                                     ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold'
-                                    : isQuoteOnly 
-                                      ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
-                                      : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
+                                    : isROApproved
+                                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold'
+                                      : isQuoteOnly 
+                                        ? 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold' 
+                                        : 'bg-amber-100 text-amber-900 border-amber-200 animate-pulse font-extrabold'
                                 }`}>
-                                  {isSent ? 'SENT TO ESTIMATE' : isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
+                                  {isSent ? 'SENT TO ESTIMATE' : isROApproved ? 'APPROVED - ORDER NOW' : isQuoteOnly ? 'QUOTE ONLY' : 'ORDER NOW'}
                                 </span>
                               </div>
 
@@ -2675,7 +2683,13 @@ export const PartsDashboard: React.FC = () => {
                       <div className="grid grid-cols-1 gap-2.5">
                         {requestedPartsForSelectedRO.map((rp, idx) => {
                           const draft = getReqDraft(rp);
-                          const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                          const isROApproved = Boolean(
+                            currentSelectedRO?.status === 'APPROVED' || 
+                            currentSelectedRO?.quote?.status === 'APPROVED' || 
+                            currentSelectedRO?.quote?.approvedAt || 
+                            ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(currentSelectedRO?.status || '')
+                          );
+                          const isQuoteOnly = !isROApproved && (rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY');
                           const isSent = isQuoteOnly && isPartSentToEstimate(rp);
                           const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
                           const concernDesc = lineNum && currentSelectedRO?.concerns && currentSelectedRO.concerns[lineNum - 1] 
@@ -2688,7 +2702,7 @@ export const PartsDashboard: React.FC = () => {
                               className={`p-3.5 rounded-xl border-2 shadow-2xs space-y-2.5 transition-all ${
                                 isSent 
                                   ? 'bg-emerald-50/20 border-emerald-300'
-                                  : isQuoteOnly ? 'bg-purple-50/30 border-purple-300' : 'bg-white border-amber-300'
+                                  : isROApproved ? 'bg-emerald-50/20 border-emerald-300' : isQuoteOnly ? 'bg-purple-50/30 border-purple-300' : 'bg-white border-amber-300'
                               }`}
                             >
                               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -2706,11 +2720,13 @@ export const PartsDashboard: React.FC = () => {
                                     <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                                       isSent
                                         ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                        : isQuoteOnly
-                                          ? 'bg-purple-100 text-purple-900 border-purple-300'
-                                          : 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : isROApproved
+                                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                          : isQuoteOnly
+                                            ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                            : 'bg-amber-100 text-amber-900 border-amber-300'
                                     }`}>
-                                      {isSent ? 'Sent to Estimate' : isQuoteOnly ? 'Quote Only' : 'Order Now'}
+                                      {isSent ? 'Sent to Estimate' : isROApproved ? 'Approved - Order Now' : isQuoteOnly ? 'Quote Only' : 'Order Now'}
                                     </span>
                                   </div>
                                 </div>

@@ -77,7 +77,7 @@ interface AppContextType {
   
   // Actions
   setCurrentUser: (user: User) => void;
-  setSelectedRO: (ro: RepairOrder | null) => void;
+  setSelectedRO: (ro: RepairOrder | null, tab?: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS') => void;
   openROWithTab: (ro: RepairOrder, tab?: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS') => void;
   selectedROModalTab: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null;
   setSelectedROModalTab: (tab: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null) => void;
@@ -783,9 +783,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const activeWarrantyPrintRO = repairOrders.find(ro => ro.id === warrantyPrintROId) || null;
 
-  const setSelectedRO = (ro: RepairOrder | null) => {
+  const setSelectedRO = (ro: RepairOrder | null, tab?: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS') => {
     setSelectedROId(ro ? ro.id : null);
-    if (!ro) {
+    if (tab) {
+      setSelectedROModalTab(tab);
+    } else if (!ro) {
       setSelectedROModalTab(null);
     }
   };
@@ -928,9 +930,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: notes || `Status changed to ${newStatus.replace(/_/g, ' ')} by ${currentUser.name}`,
     };
 
+    const isApprovedStatus = newStatus === 'APPROVED';
+    let updatedQuote = targetRO.quote;
+    if (isApprovedStatus && updatedQuote && updatedQuote.status !== 'APPROVED') {
+      updatedQuote = {
+        ...updatedQuote,
+        status: 'APPROVED',
+        approvedAt: updatedQuote.approvedAt || now,
+        approvedBy: updatedQuote.approvedBy || currentUser.name,
+        updatedAt: now,
+      };
+    }
+
+    let updatedParts = targetRO.parts;
+    if (isApprovedStatus) {
+      updatedParts = targetRO.parts.map(p => {
+        if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
+          return {
+            ...p,
+            status: 'ORDERED' as PartStatus,
+            requestType: 'ORDER_NOW' as const,
+            orderedAt: p.orderedAt || now,
+            estimatedArrival: p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate')
+              ? p.estimatedArrival
+              : 'Daily Order (Arriving ~5:00 PM)',
+          };
+        }
+        return p;
+      });
+
+      if (targetRO.quote?.partsItems) {
+        targetRO.quote.partsItems.forEach((qp, idx) => {
+          const alreadyExists = updatedParts.some(p => 
+            (qp.sourcePartId && p.id === qp.sourcePartId) || 
+            (qp.partNumber && p.partNumber && p.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
+            (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
+          );
+          if (!alreadyExists) {
+            updatedParts.push({
+              id: qp.sourcePartId || `qpart_approved_${Date.now()}_${idx}`,
+              roId: targetRO.id,
+              vendor: 'OEM / Parts Counter',
+              partNumber: qp.partNumber || 'TBD',
+              description: qp.description || 'Quoted Part',
+              quantity: qp.quantity || 1,
+              price: qp.unitPrice,
+              status: 'ORDERED',
+              requestType: 'ORDER_NOW',
+              orderedAt: now,
+              estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
+              roLineNumber: qp.roLineNumber || 1,
+            });
+          }
+        });
+      }
+    }
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: newStatus,
+      parts: updatedParts,
+      quote: updatedQuote,
       waitingDiagnosisAt,
       diagnosisStartedAt,
       completedAt,
@@ -2840,20 +2900,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : `${currentUser.name} marked repair quote as declined${reason ? `: ${reason}` : ''}`,
     };
 
-    const updatedParts = status === 'APPROVED'
+    let updatedParts = status === 'APPROVED'
       ? targetRO.parts.map(p => {
           if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
             return {
               ...p,
               status: 'ORDERED' as PartStatus,
               requestType: 'ORDER_NOW' as const,
-              orderedAt: now,
-              estimatedArrival: p.estimatedArrival && !p.estimatedArrival.includes('Quote') ? p.estimatedArrival : 'Daily Order (Arriving ~5:00 PM)',
+              orderedAt: p.orderedAt || now,
+              estimatedArrival: p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate')
+                ? p.estimatedArrival
+                : 'Daily Order (Arriving ~5:00 PM)',
             };
           }
           return p;
         })
       : targetRO.parts;
+
+    // Merge any quote partsItems that were not yet in ro.parts
+    if (status === 'APPROVED' && targetRO.quote?.partsItems) {
+      targetRO.quote.partsItems.forEach((qp, idx) => {
+        const alreadyExists = updatedParts.some(p => 
+          (qp.sourcePartId && p.id === qp.sourcePartId) || 
+          (qp.partNumber && p.partNumber && p.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
+          (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
+        );
+        if (!alreadyExists) {
+          updatedParts.push({
+            id: qp.sourcePartId || `qpart_approved_${Date.now()}_${idx}`,
+            roId: targetRO.id,
+            vendor: 'OEM / Parts Counter',
+            partNumber: qp.partNumber || 'TBD',
+            description: qp.description || 'Quoted Part',
+            quantity: qp.quantity || 1,
+            price: qp.unitPrice,
+            status: 'ORDERED',
+            requestType: 'ORDER_NOW',
+            orderedAt: now,
+            estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
+            roLineNumber: qp.roLineNumber || 1,
+          });
+        }
+      });
+    }
 
     const updatedRO: RepairOrder = {
       ...targetRO,
