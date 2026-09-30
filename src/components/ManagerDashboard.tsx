@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BarChart3, 
   Users, 
@@ -15,6 +15,7 @@ import {
   ListFilter, 
   Check, 
   Calendar, 
+  CalendarDays,
   Award,
   Calculator,
   ShieldCheck,
@@ -27,12 +28,22 @@ import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince } from '../utils/formatters';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { ManagerStaffCalendar } from './ManagerStaffCalendar';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
-  const { repairOrders, users, setSelectedRO, setIsNewROModalOpen, startDiagnosis, setIsTimeCardCalculatorOpen } = useApp();
+  const { 
+    repairOrders, 
+    users, 
+    setSelectedRO, 
+    setIsNewROModalOpen, 
+    startDiagnosis, 
+    setIsTimeCardCalculatorOpen,
+    staffLeaveEntries,
+    setIsStaffCalendarOpen
+  } = useApp();
 
-  const [viewSection, setViewSection] = useState<'FLOOR' | 'CALL_SHEET'>('FLOOR');
+  const [viewSection, setViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'STAFF_CALENDAR'>('FLOOR');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
@@ -40,6 +51,20 @@ export const ManagerDashboard: React.FC = () => {
   const [advisorFilter, setAdvisorFilter] = useState<string>('ALL');
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARDS'>('TABLE');
+
+  // Today string YYYY-MM-DD
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  // Today's absences (Leave early, out sick, vacation, etc.)
+  const todayAbsences = useMemo(() => {
+    return (staffLeaveEntries || []).filter(e => todayStr >= e.startDate && todayStr <= e.endDate);
+  }, [staffLeaveEntries, todayStr]);
 
   // Technicians & Service Writers
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
@@ -153,6 +178,23 @@ export const ManagerDashboard: React.FC = () => {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setViewSection('STAFF_CALENDAR')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewSection === 'STAFF_CALENDAR'
+                  ? 'bg-white text-purple-700 shadow-2xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5 text-purple-600" />
+              <span>Staff Calendar</span>
+              {todayAbsences.length > 0 && (
+                <span className="bg-amber-400 text-slate-950 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {todayAbsences.length}
+                </span>
+              )}
+            </button>
           </div>
 
           <button
@@ -212,11 +254,53 @@ export const ManagerDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Today's Staff Attendance Banner for Service Manager */}
+      {viewSection === 'FLOOR' && todayAbsences.length > 0 && (
+        <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-amber-50 border border-purple-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CalendarDays className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                <span>Today's Staff Attendance: {todayAbsences.length} Member{todayAbsences.length > 1 ? 's' : ''} Out or Left Early</span>
+                <span className="text-slate-300">•</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {todayAbsences.map(e => (
+                    <span 
+                      key={e.id}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-white border border-purple-200 text-slate-800 shadow-2xs"
+                    >
+                      <span>{e.leaveType === 'LEFT_EARLY' ? '⏰' : e.leaveType === 'SICK' ? '🤒' : e.leaveType === 'VACATION' ? '🌴' : '📋'}</span>
+                      <span className="font-extrabold">{e.userName}</span>
+                      <span className="text-slate-500 font-medium">({e.timeDetails || (e.leaveType === 'LEFT_EARLY' ? 'Left Early' : e.leaveType === 'SICK' ? 'Out Sick' : 'Vacation')})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                Keep shop job dispatch and technician workload aligned with today's staff coverage.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewSection('STAFF_CALENDAR')}
+            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-2xs flex items-center gap-1.5"
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>Open Staff Calendar</span>
+          </button>
+        </div>
+      )}
+
       {viewSection === 'CALL_SHEET' ? (
         <CustomerCallSheetWidget 
           onSelectRO={setSelectedRO}
           onOpenFollowUpModal={setSelectedFollowUpRO}
         />
+      ) : viewSection === 'STAFF_CALENDAR' ? (
+        <ManagerStaffCalendar />
       ) : (
         <>
 

@@ -19,6 +19,7 @@ import { CustomerDirectoryModal } from './components/CustomerDirectoryModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { DraggableShopChatButton } from './components/DraggableShopChatButton';
+import { ManagerStaffCalendar } from './components/ManagerStaffCalendar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -57,19 +58,22 @@ const MainContent: React.FC = () => {
     isAuthenticated,
     lockWorkstation,
     activeRoleView,
-    setActiveRoleView
+    setActiveRoleView,
+    isStaffCalendarOpen,
+    setIsStaffCalendarOpen
   } = useApp();
   
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
   const isManager = currentUser.role === 'SERVICE_MANAGER';
 
-  // Auto-close staff management & time card calculator if a non-manager is active
+  // Auto-close staff management, calendar, & time card calculator if a non-manager is active
   React.useEffect(() => {
     if (!isManager) {
       if (isStaffManagementOpen) setIsStaffManagementOpen(false);
       if (isTimeCardCalculatorOpen) setIsTimeCardCalculatorOpen(false);
+      if (isStaffCalendarOpen) setIsStaffCalendarOpen(false);
     }
-  }, [isManager, isStaffManagementOpen, isTimeCardCalculatorOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen]);
+  }, [isManager, isStaffManagementOpen, isTimeCardCalculatorOpen, isStaffCalendarOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen, setIsStaffCalendarOpen]);
 
   // Authentication Gate: Render ONLY the Login Screen until authorized staff credentials/PIN are entered
   if (!isAuthenticated) {
@@ -576,6 +580,11 @@ const MainContent: React.FC = () => {
       <WarrantyPrintModal />
       <CustomerDirectoryModal />
       <UrgentToastStack />
+
+      {/* Service Manager Staff Attendance & Out-of-Office Calendar Modal (Manager Only) */}
+      {isStaffCalendarOpen && isManager && (
+        <ManagerStaffCalendar asModal onClose={() => setIsStaffCalendarOpen(false)} />
+      )}
 
       {/* Draggable Floating Quick Chat Launcher (hold left mouse button and drag to reposition anywhere) */}
       <DraggableShopChatButton

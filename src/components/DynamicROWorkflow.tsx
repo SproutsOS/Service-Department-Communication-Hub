@@ -966,13 +966,13 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       )
     },
 
-    // 3. Requested Items on this RO
+    // 3. 21-Point Inspection & Recommended Services
     {
       key: 'section-recommendations',
       naturalOrder: 3,
-      title: 'Step 3: Requested Items on this RO',
+      title: 'Step 3: 21-Point Inspection & Recommended Services',
       isComplete: !ro.recommendations || ro.recommendations.length === 0 || !ro.recommendations.some(r => r.status === 'PENDING'),
-      completeBadgeText: 'Requested Items Reviewed',
+      completeBadgeText: '21-Point Inspection & Lines Reviewed',
       render: (isPromoted: boolean) => (
         <div className={`rounded-xl transition-all ${
           isPromoted ? 'ring-2 ring-red-400 bg-red-50/20 p-1' : ''

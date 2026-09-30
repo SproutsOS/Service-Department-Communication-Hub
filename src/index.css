@@ -117,8 +117,9 @@ textarea.border-red-500 {
     border: 1.5px solid #000000 !important;
   }
 
-  /* Support for printable warranty document */
-  #printable-warranty-document {
+  /* Support for printable warranty and inspection documents */
+  #printable-warranty-document,
+  #printable-inspection-document {
     display: block !important;
     visibility: visible !important;
     position: absolute !important;
@@ -128,14 +129,20 @@ textarea.border-red-500 {
     margin: 0 !important;
     padding: 0.35in !important;
     background: #ffffff !important;
-    color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
     z-index: 99999 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
 
-  #printable-warranty-document * {
+  #printable-warranty-document *,
+  #printable-inspection-document * {
     visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
 }
 

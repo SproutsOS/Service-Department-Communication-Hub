@@ -76,6 +76,8 @@ export interface ShopSettings {
   isSetupCompleted: boolean;
   cleanSlateInitialized?: boolean;
   seededDemoData?: boolean;
+  inspectionChecklist?: any;
+  staffLeaveEntries?: any[];
   updatedAt?: string;
 }
 

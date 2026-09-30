@@ -200,6 +200,7 @@ export interface RepairOrder {
   postRepairFollowUpNotes?: string; // Notes taken during the 3-day post-repair check
   quote?: RepairQuote;
   timePunches?: WarrantyLaborTimePunch[];
+  inspection?: InspectionSheet; // 21-Point Multi-Point Inspection Sheet & Tech Findings
   isTaxExempt?: boolean; // Customer tax exemption status (0% sales tax vs default 7%)
   taxExemptNumber?: string; // Optional tax exempt resale or state certificate number
   vehiclePhotos?: VehiclePhoto[]; // Photos of vehicle (walkaround, damage, odometer, tech findings)
@@ -299,6 +300,13 @@ export interface RecommendedService {
   category: 'AIR_FILTER' | 'CABIN_FILTER' | 'TIRES' | 'SCHEDULED_MAINT' | 'BRAKES' | 'BATTERY' | 'WIPERS' | 'OTHER';
   urgency: 'SAFETY' | 'RECOMMENDED';
   notes?: string;
+  cause?: string;
+  correction?: string;
+  laborHours?: number;
+  payType?: ConcernPayType;
+  techId?: string;
+  techName?: string;
+  inspectionItemId?: string;
   status: RecommendedServiceStatus;
   requestedByTechId: string;
   requestedByTechName: string;
@@ -351,5 +359,71 @@ export interface Customer {
   totalVisits: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// ==========================================
+// 21-Point Multi-Point Inspection (MPI) Types
+// ==========================================
+
+export type InspectionItemStatus = 'PASSED' | 'FUTURE_ATTENTION' | 'IMMEDIATE_ATTENTION' | 'NOT_APPLICABLE';
+
+export type InspectionCategory = 'UNDER_HOOD' | 'BRAKES_SUSPENSION' | 'TIRES_WHEELS' | 'UNDERBODY_EXTERIOR';
+
+export interface InspectionChecklistItem {
+  id: string;
+  name: string;
+  category: InspectionCategory;
+  order: number;
+  isEnabled?: boolean; // Defaults to true; managers can toggle off
+  hasMeasurement?: boolean;
+  measurementUnit?: 'mm' | '32nds' | 'psi' | 'V' | 'CCA' | '%';
+  measurementLabel?: string;
+  defaultRecommendationName?: string;
+  quickChips?: string[];
+}
+
+export interface InspectionResultItem {
+  itemId: string;
+  name: string;
+  category: InspectionCategory;
+  status: InspectionItemStatus;
+  measurementValue?: string; // e.g. "4", "3", "35", "12.6"
+  notes?: string;
+  cause?: string;
+  correction?: string;
+  laborHours?: number;
+  recommendationId?: string; // Links to RecommendedService in ro.recommendations
+}
+
+export interface InspectionSheet {
+  id: string;
+  roId: string;
+  completedAt?: string;
+  completedByTechId?: string;
+  completedByTechName?: string;
+  items: Record<string, InspectionResultItem>;
+  overallNotes?: string;
+}
+
+// ==========================================
+// Service Manager Staff Attendance & Calendar Types
+// ==========================================
+
+export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL';
+
+export interface StaffLeaveEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  employeeNumber?: string;
+  leaveType: StaffLeaveType;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  timeDetails?: string; // e.g. "Left early at 1:30 PM", "Doctor Appt"
+  notes?: string;
+  createdAt: string;
+  createdByManagerId: string;
+  createdByManagerName: string;
 }
 

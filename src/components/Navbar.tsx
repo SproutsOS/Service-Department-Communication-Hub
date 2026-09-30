@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Wrench, 
   Bell, 
@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   Lock,
   MessageSquare,
-  X
+  X,
+  CalendarDays
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -51,7 +52,21 @@ export const Navbar: React.FC = () => {
     markNotificationRead,
     lockWorkstation,
     markAllNotificationsRead,
+    staffLeaveEntries,
+    setIsStaffCalendarOpen,
   } = useApp();
+
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const todayAbsencesCount = useMemo(() => {
+    return (staffLeaveEntries || []).filter(e => todayStr >= e.startDate && todayStr <= e.endDate).length;
+  }, [staffLeaveEntries, todayStr]);
 
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -384,17 +399,34 @@ export const Navbar: React.FC = () => {
           <span>Customer Search</span>
         </button>
 
-        {/* Staff & Employee Directory Button (Service Manager Only) */}
+        {/* Staff Directory & Calendar Buttons (Service Manager Only) */}
         {currentUser.role === 'SERVICE_MANAGER' && (
-          <button
-            id="navbar-team-btn"
-            onClick={() => setIsStaffManagementOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer"
-            title="Manage Dealership Staff & Job Roles"
-          >
-            <Users className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden md:inline">Staff ({users.length})</span>
-          </button>
+          <>
+            <button
+              id="navbar-team-btn"
+              onClick={() => setIsStaffManagementOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer"
+              title="Manage Dealership Staff & Job Roles"
+            >
+              <Users className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">Staff ({users.length})</span>
+            </button>
+
+            <button
+              id="navbar-staff-calendar-btn"
+              onClick={() => setIsStaffCalendarOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white border border-purple-700/70 transition-colors cursor-pointer shadow-xs"
+              title="Service Manager Staff Attendance Calendar (Track Vacation, Sick, Left Early)"
+            >
+              <CalendarDays className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden md:inline">Calendar</span>
+              {todayAbsencesCount > 0 && (
+                <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.2 rounded-full leading-none">
+                  {todayAbsencesCount}
+                </span>
+              )}
+            </button>
+          </>
         )}
 
         {/* Active User Badge */}

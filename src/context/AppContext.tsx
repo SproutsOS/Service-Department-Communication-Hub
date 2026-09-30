@@ -20,8 +20,15 @@ import {
   WarrantyOperationType,
   ConcernPayType,
   Customer,
-  VehiclePhoto
+  VehiclePhoto,
+  InspectionChecklistItem,
+  InspectionResultItem,
+  InspectionSheet,
+  StaffLeaveEntry,
+  StaffLeaveType
 } from '../types';
+import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
+import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -208,19 +215,42 @@ interface AppContextType {
   unreadCountBySender: Record<string, number>;
   markShopMessagesAsRead: (messageIds: string[]) => void;
 
-  // Tech Additional Recommendations
+  // Tech Additional Recommendations & MPI Findings
   addRecommendedService: (roId: string, item: {
     serviceName: string;
     category?: RecommendedService['category'];
     urgency: 'SAFETY' | 'RECOMMENDED';
     notes?: string;
+    cause?: string;
+    correction?: string;
+    laborHours?: number;
+    payType?: ConcernPayType;
+    inspectionItemId?: string;
   }) => boolean;
+  updateRecommendedService: (
+    roId: string,
+    recId: string,
+    updates: Partial<RecommendedService>
+  ) => boolean;
+  deleteRecommendedService: (roId: string, recId: string) => boolean;
   updateRecommendedServiceStatus: (
     roId: string, 
     recId: string, 
     status: 'APPROVED' | 'DECLINED', 
     declinedReason?: string
   ) => boolean;
+
+  // 21-Point Multi-Point Inspection (MPI) System & Manager Customization
+  inspectionChecklist: InspectionChecklistItem[];
+  updateInspectionChecklist: (items: InspectionChecklistItem[]) => void;
+  resetInspectionChecklistToDefaults: () => void;
+  setInspectionItemResult: (
+    roId: string, 
+    itemId: string, 
+    itemResult: Partial<InspectionResultItem>
+  ) => void;
+  passAllInspectionItems: (roId: string) => void;
+  resetROInspection: (roId: string) => void;
 
   // Repair Quote Workflow (Initiated by Technician)
   activeQuoteRO: RepairOrder | null;
@@ -253,6 +283,14 @@ interface AppContextType {
   activeWarrantyPrintRO: RepairOrder | null;
   openWarrantyPrintModal: (roId: string) => void;
   closeWarrantyPrintModal: () => void;
+
+  // Service Manager Staff Attendance & Calendar (Service Manager Only)
+  staffLeaveEntries: StaffLeaveEntry[];
+  addStaffLeaveEntry: (entry: Omit<StaffLeaveEntry, 'id' | 'createdAt' | 'createdByManagerId' | 'createdByManagerName'>) => boolean;
+  updateStaffLeaveEntry: (id: string, updates: Partial<StaffLeaveEntry>) => boolean;
+  deleteStaffLeaveEntry: (id: string) => boolean;
+  isStaffCalendarOpen: boolean;
+  setIsStaffCalendarOpen: (open: boolean) => void;
 }
 
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
@@ -264,6 +302,8 @@ const STORAGE_KEY_SETUP_DONE = 'precision_auto_setup_completed_v6_clean';
 const STORAGE_KEY_WIPE_PERFORMED = 'precision_auto_wipe_performed_v6_clean';
 const STORAGE_KEY_SESSION_AUTH = 'dealership_session_authenticated_v1';
 const STORAGE_KEY_CUSTOMERS = 'the_hub_customers_cloud_cache_v1';
+const STORAGE_KEY_INSPECTION_CHECKLIST = 'precision_auto_inspection_checklist_v1';
+const STORAGE_KEY_STAFF_LEAVE = 'dealership_staff_leave_calendar_v1';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -446,6 +486,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
   const [isTimeCardCalculatorOpen, setIsTimeCardCalculatorOpen] = useState(false);
   const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
+
+  // 21-Point MPI Checklist (Configurable by Service Manager)
+  const [inspectionChecklist, setInspectionChecklist] = useState<InspectionChecklistItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_INSPECTION_CHECKLIST);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_INSPECTION_CHECKLIST;
+  });
+
+  // Service Manager Staff Attendance & Calendar (Service Manager Only)
+  const [staffLeaveEntries, setStaffLeaveEntries] = useState<StaffLeaveEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_STAFF_LEAVE);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return getInitialStaffLeaveEntries();
+  });
+  const [isStaffCalendarOpen, setIsStaffCalendarOpen] = useState(false);
+
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
   const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
   const [readShopMessageIds, setReadShopMessageIds] = useState<Set<string>>(() => {
@@ -672,6 +740,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (cloudSettings.isSetupCompleted) {
             setIsSetupWizardOpen(false);
           }
+        }
+        if (Array.isArray(cloudSettings.staffLeaveEntries)) {
+          setStaffLeaveEntries(cloudSettings.staffLeaveEntries);
+          try {
+            localStorage.setItem(STORAGE_KEY_STAFF_LEAVE, JSON.stringify(cloudSettings.staffLeaveEntries));
+          } catch {}
         }
       }
     });
@@ -2603,6 +2677,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     category?: RecommendedService['category'];
     urgency: 'SAFETY' | 'RECOMMENDED';
     notes?: string;
+    cause?: string;
+    correction?: string;
+    laborHours?: number;
+    payType?: ConcernPayType;
+    inspectionItemId?: string;
   }): boolean => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return false;
@@ -2610,28 +2689,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const trimmedName = item.serviceName.trim();
     if (!trimmedName) return false;
 
-    const newRec: RecommendedService = {
-      id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      roId,
-      serviceName: trimmedName,
-      category: item.category || 'OTHER',
-      urgency: item.urgency,
-      notes: item.notes?.trim() || undefined,
-      status: 'PENDING',
-      requestedByTechId: currentUser.id,
-      requestedByTechName: currentUser.name,
-      requestedAt: new Date().toISOString(),
-    };
-
-    const existingRecs = targetRO.recommendations || [];
-    const updatedRecs = [...existingRecs, newRec];
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      recommendations: updatedRecs,
-    };
+    let syncedRO: RepairOrder | null = null;
+    let createdRec: RecommendedService | null = null;
 
     setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
+
+      const newRec: RecommendedService = {
+        id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        roId,
+        serviceName: trimmedName,
+        category: item.category || 'OTHER',
+        urgency: item.urgency,
+        notes: item.notes?.trim() || undefined,
+        cause: item.cause?.trim() || undefined,
+        correction: item.correction?.trim() || undefined,
+        laborHours: item.laborHours !== undefined ? Number(item.laborHours) : undefined,
+        payType: item.payType || 'CUSTOMER_PAY',
+        techId: currentUser.id,
+        techName: currentUser.name,
+        inspectionItemId: item.inspectionItemId,
+        status: 'PENDING',
+        requestedByTechId: currentUser.id,
+        requestedByTechName: currentUser.name,
+        requestedAt: new Date().toISOString(),
+      };
+
+      const existingRecs = targetRO.recommendations || [];
+      const updatedRecs = [...existingRecs, newRec];
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        recommendations: updatedRecs,
+      };
+
+      createdRec = newRec;
+      syncedRO = updatedRO;
+
       const updated = prev.map(r => r.id === roId ? updatedRO : r);
       try {
         localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
@@ -2641,17 +2736,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    syncRepairOrder(updatedRO);
+    if (syncedRO && createdRec) {
+      syncRepairOrder(syncedRO);
+      triggerNotification(
+        syncedRO,
+        `Tech Rec: ${(createdRec as RecommendedService).serviceName}`,
+        `Tech ${currentUser.name} requested "${(createdRec as RecommendedService).serviceName}" (${(createdRec as RecommendedService).urgency === 'SAFETY' ? 'Immediate Safety Concern' : 'Recommended Maintenance'}). Advisor authorization needed.`,
+        (createdRec as RecommendedService).urgency === 'SAFETY',
+        'RECOMMENDED_SERVICE'
+      );
+      return true;
+    }
 
-    triggerNotification(
-      updatedRO,
-      `Tech Rec: ${newRec.serviceName}`,
-      `Tech ${currentUser.name} requested "${newRec.serviceName}" (${newRec.urgency === 'SAFETY' ? 'Immediate Safety Concern' : 'Recommended Maintenance'}). Advisor authorization needed.`,
-      newRec.urgency === 'SAFETY',
-      'RECOMMENDED_SERVICE'
-    );
+    return false;
+  };
 
-    return true;
+  // Update existing recommended service (labor hours, cause, correction, pay type, notes, etc.)
+  const updateRecommendedService = (
+    roId: string, 
+    recId: string, 
+    updates: Partial<RecommendedService>
+  ): boolean => {
+    let syncedRO: RepairOrder | null = null;
+
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO || !targetRO.recommendations) return prev;
+
+      const updatedRecs = targetRO.recommendations.map(rec => {
+        if (rec.id !== recId) return rec;
+        return {
+          ...rec,
+          ...updates,
+        };
+      });
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        recommendations: updatedRecs,
+      };
+
+      syncedRO = updatedRO;
+
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (syncedRO) {
+      syncRepairOrder(syncedRO);
+      return true;
+    }
+    return false;
+  };
+
+  // Delete a recommended service from RO
+  const deleteRecommendedService = (roId: string, recId: string): boolean => {
+    let syncedRO: RepairOrder | null = null;
+
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO || !targetRO.recommendations) return prev;
+
+      const updatedRecs = targetRO.recommendations.filter(rec => rec.id !== recId);
+
+      // Also clean up any inspection items that referenced this recommendationId
+      let updatedInspection = targetRO.inspection;
+      if (targetRO.inspection && targetRO.inspection.items) {
+        const newItems = { ...targetRO.inspection.items };
+        let changed = false;
+        Object.keys(newItems).forEach(k => {
+          if (newItems[k].recommendationId === recId) {
+            newItems[k] = {
+              ...newItems[k],
+              recommendationId: undefined,
+            };
+            changed = true;
+          }
+        });
+        if (changed) {
+          updatedInspection = {
+            ...targetRO.inspection,
+            items: newItems,
+          };
+        }
+      }
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        inspection: updatedInspection,
+        recommendations: updatedRecs,
+      };
+
+      syncedRO = updatedRO;
+
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (syncedRO) {
+      syncRepairOrder(syncedRO);
+      return true;
+    }
+    return false;
   };
 
   // Service Advisor & Manager: Review & Update Tech Recommended Service (Approve or Decline)
@@ -2716,6 +2912,286 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return true;
   };
+
+  // 21-Point Multi-Point Inspection (MPI) Actions
+  const updateInspectionChecklist = useCallback((items: InspectionChecklistItem[]) => {
+    setInspectionChecklist(items);
+    try {
+      localStorage.setItem(STORAGE_KEY_INSPECTION_CHECKLIST, JSON.stringify(items));
+    } catch {
+      // ignore
+    }
+    syncShopSettings({ inspectionChecklist: items });
+  }, []);
+
+  const resetInspectionChecklistToDefaults = useCallback(() => {
+    setInspectionChecklist(DEFAULT_INSPECTION_CHECKLIST);
+    try {
+      localStorage.setItem(STORAGE_KEY_INSPECTION_CHECKLIST, JSON.stringify(DEFAULT_INSPECTION_CHECKLIST));
+    } catch {
+      // ignore
+    }
+    syncShopSettings({ inspectionChecklist: DEFAULT_INSPECTION_CHECKLIST });
+  }, []);
+
+  const setInspectionItemResult = useCallback((
+    roId: string, 
+    itemId: string, 
+    itemResult: Partial<InspectionResultItem>
+  ) => {
+    let syncedRO: RepairOrder | null = null;
+
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
+
+      const currentSheet: InspectionSheet = targetRO.inspection || {
+        id: `insp_${roId}_${Date.now()}`,
+        roId,
+        items: {},
+      };
+
+      const checklistItem = inspectionChecklist.find(i => i.id === itemId);
+      const existingItem = currentSheet.items[itemId] || {
+        itemId,
+        name: checklistItem?.name || itemId,
+        category: checklistItem?.category || 'UNDER_HOOD',
+        status: 'PASSED',
+      };
+
+      const updatedItem: InspectionResultItem = {
+        ...existingItem,
+        ...itemResult,
+      };
+
+      const updatedSheet: InspectionSheet = {
+        ...currentSheet,
+        items: {
+          ...currentSheet.items,
+          [itemId]: updatedItem,
+        },
+        completedByTechId: currentUser.id,
+        completedByTechName: currentUser.name,
+        completedAt: new Date().toISOString(),
+      };
+
+      // If status is changed to PASSED or NOT_APPLICABLE, remove any auto-generated recommendation line for this inspection item
+      let updatedRecommendations = targetRO.recommendations ? [...targetRO.recommendations] : [];
+      if (updatedItem.status === 'PASSED' || updatedItem.status === 'NOT_APPLICABLE') {
+        updatedRecommendations = updatedRecommendations.filter(r => {
+          if (r.inspectionItemId && r.inspectionItemId === itemId) return false;
+          if (updatedItem.recommendationId && r.id === updatedItem.recommendationId) return false;
+          return true;
+        });
+        updatedItem.recommendationId = undefined;
+      } else if (
+        updatedItem.status === 'IMMEDIATE_ATTENTION' || updatedItem.status === 'FUTURE_ATTENTION'
+      ) {
+        const urgency = updatedItem.status === 'IMMEDIATE_ATTENTION' ? 'SAFETY' : 'RECOMMENDED';
+        const existingRecIdx = updatedRecommendations.findIndex(r => 
+          (r.inspectionItemId && r.inspectionItemId === itemId) || 
+          (updatedItem.recommendationId && r.id === updatedItem.recommendationId) ||
+          r.serviceName.toLowerCase() === (checklistItem?.defaultRecommendationName || updatedItem.name).toLowerCase()
+        );
+        const recName = checklistItem?.defaultRecommendationName || updatedItem.name;
+        const defaultCause = updatedItem.status === 'IMMEDIATE_ATTENTION'
+          ? `${updatedItem.name} inspected: Immediate safety concern / mechanical failure identified.`
+          : `${updatedItem.name} inspected: Future maintenance / attention recommended.`;
+
+        const recNotes = [
+          updatedItem.cause ? `Cause: ${updatedItem.cause}` : '',
+          updatedItem.correction ? `Correction: ${updatedItem.correction}` : '',
+          updatedItem.notes ? `Notes: ${updatedItem.notes}` : '',
+          updatedItem.measurementValue ? `Measurement: ${updatedItem.measurementValue}` : '',
+        ].filter(Boolean).join(' | ');
+
+        if (existingRecIdx >= 0) {
+          updatedRecommendations[existingRecIdx] = {
+            ...updatedRecommendations[existingRecIdx],
+            serviceName: updatedRecommendations[existingRecIdx].serviceName || recName,
+            urgency,
+            notes: recNotes || updatedRecommendations[existingRecIdx].notes,
+            inspectionItemId: itemId,
+          };
+          updatedItem.recommendationId = updatedRecommendations[existingRecIdx].id;
+        } else {
+          const newRecId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          updatedRecommendations.push({
+            id: newRecId,
+            roId,
+            serviceName: recName,
+            category: updatedItem.category === 'TIRES_WHEELS' ? 'TIRES' : updatedItem.category === 'BRAKES_SUSPENSION' ? 'BRAKES' : 'OTHER',
+            urgency,
+            notes: recNotes || undefined,
+            cause: defaultCause,
+            correction: `Perform ${recName}`,
+            laborHours: updatedItem.category === 'TIRES_WHEELS' ? 1.0 : updatedItem.category === 'BRAKES_SUSPENSION' ? 2.0 : 0.5,
+            payType: 'CUSTOMER_PAY',
+            inspectionItemId: itemId,
+            status: 'PENDING',
+            requestedByTechId: currentUser.id,
+            requestedByTechName: currentUser.name,
+            requestedAt: new Date().toISOString(),
+          });
+          updatedItem.recommendationId = newRecId;
+        }
+      }
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        inspection: updatedSheet,
+        recommendations: updatedRecommendations,
+      };
+
+      syncedRO = updatedRO;
+
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (syncedRO) {
+      syncRepairOrder(syncedRO);
+    }
+  }, [inspectionChecklist, currentUser]);
+
+  const passAllInspectionItems = useCallback((roId: string) => {
+    let syncedRO: RepairOrder | null = null;
+
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
+
+      const currentSheet: InspectionSheet = targetRO.inspection || {
+        id: `insp_${roId}_${Date.now()}`,
+        roId,
+        items: {},
+      };
+
+      const newItems: Record<string, InspectionResultItem> = { ...currentSheet.items };
+      inspectionChecklist.filter(i => i.isEnabled !== false).forEach(item => {
+        if (!newItems[item.id] || (newItems[item.id].status !== 'IMMEDIATE_ATTENTION' && newItems[item.id].status !== 'FUTURE_ATTENTION')) {
+          newItems[item.id] = {
+            itemId: item.id,
+            name: item.name,
+            category: item.category,
+            status: 'PASSED',
+            measurementValue: newItems[item.id]?.measurementValue,
+            notes: newItems[item.id]?.notes,
+          };
+        }
+      });
+
+      const updatedSheet: InspectionSheet = {
+        ...currentSheet,
+        items: newItems,
+        completedByTechId: currentUser.id,
+        completedByTechName: currentUser.name,
+        completedAt: new Date().toISOString(),
+      };
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        inspection: updatedSheet,
+      };
+
+      syncedRO = updatedRO;
+
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (syncedRO) {
+      syncRepairOrder(syncedRO);
+    }
+  }, [inspectionChecklist, currentUser]);
+
+  const resetROInspection = useCallback((roId: string) => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return;
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      inspection: undefined,
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+  }, [repairOrders]);
+
+  // Service Manager Staff Attendance & Calendar Actions (Manager Only)
+  const addStaffLeaveEntry = useCallback((entryData: Omit<StaffLeaveEntry, 'id' | 'createdAt' | 'createdByManagerId' | 'createdByManagerName'>): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER') {
+      console.warn('[StaffCalendar] Only Service Manager can add leave records');
+      return false;
+    }
+    const newEntry: StaffLeaveEntry = {
+      ...entryData,
+      id: `leave_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      createdByManagerId: currentUser.id,
+      createdByManagerName: currentUser.name,
+    };
+    setStaffLeaveEntries(prev => {
+      const updated = [newEntry, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_STAFF_LEAVE, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      syncShopSettings({ staffLeaveEntries: updated });
+      return updated;
+    });
+    return true;
+  }, [currentUser]);
+
+  const updateStaffLeaveEntry = useCallback((id: string, updates: Partial<StaffLeaveEntry>): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER') return false;
+    setStaffLeaveEntries(prev => {
+      const updated = prev.map(e => e.id === id ? { ...e, ...updates } : e);
+      try {
+        localStorage.setItem(STORAGE_KEY_STAFF_LEAVE, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      syncShopSettings({ staffLeaveEntries: updated });
+      return updated;
+    });
+    return true;
+  }, [currentUser]);
+
+  const deleteStaffLeaveEntry = useCallback((id: string): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER') return false;
+    setStaffLeaveEntries(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_STAFF_LEAVE, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      syncShopSettings({ staffLeaveEntries: updated });
+      return updated;
+    });
+    return true;
+  }, [currentUser]);
 
   // Technician Repair Quote Workflow
   const saveRepairQuote = (
@@ -3824,7 +4300,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unreadCountBySender,
         markShopMessagesAsRead,
         addRecommendedService,
+        updateRecommendedService,
+        deleteRecommendedService,
         updateRecommendedServiceStatus,
+        inspectionChecklist,
+        updateInspectionChecklist,
+        resetInspectionChecklistToDefaults,
+        setInspectionItemResult,
+        passAllInspectionItems,
+        resetROInspection,
         activeQuoteRO,
         openQuoteModal,
         closeQuoteModal,
@@ -3841,6 +4325,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         closeWarrantyPrintModal,
         activeRoleView,
         setActiveRoleView,
+        staffLeaveEntries,
+        addStaffLeaveEntry,
+        updateStaffLeaveEntry,
+        deleteStaffLeaveEntry,
+        isStaffCalendarOpen,
+        setIsStaffCalendarOpen,
       }}
     >
       {children}

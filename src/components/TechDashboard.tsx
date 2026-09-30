@@ -1176,7 +1176,7 @@ interface RequestedPartLine {
   requestType?: 'ORDER_NOW' | 'QUOTE_ONLY';
 }
 
-const TechPartsRequestModal: React.FC<TechPartsRequestModalProps> = ({ ro, lineIndex, lineText, onClose }) => {
+export const TechPartsRequestModal: React.FC<TechPartsRequestModalProps> = ({ ro, lineIndex, lineText, onClose }) => {
   const { addMultiplePartOrders, updateROStatus } = useApp();
   const [requestType, setRequestType] = useState<'ORDER_NOW' | 'QUOTE_ONLY'>('ORDER_NOW');
   const [partsList, setPartsList] = useState<RequestedPartLine[]>([
@@ -2010,8 +2010,14 @@ export const TechDashboard: React.FC = () => {
                 {/* Official Warranty Labor Time Clock & Multi-Punch Tracking */}
                 <WarrantyTimeClockSection ro={ro} />
 
-                {/* Technician Additional Recommended Services (MPI Upsells / Filter / Tires / Scheduled Maint) */}
-                <TechRecommendationsSection ro={ro} />
+                {/* Technician Additional Recommended Services (21-Point Inspection & MPI Findings) */}
+                <TechRecommendationsSection 
+                  ro={ro} 
+                  onRequestParts={(lineIdx, lineTxt) => {
+                    setPartsModalRO(ro);
+                    setPartsModalLine({ index: lineIdx, text: lineTxt });
+                  }}
+                />
 
                 {/* Card Footer: Technician Station Details & Advisor Direct Communication */}
                 <div 
