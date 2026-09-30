@@ -5,6 +5,7 @@ import {
   DollarSign, 
   User, 
   CheckCircle2, 
+  XCircle,
   Clock, 
   AlertTriangle, 
   ChevronRight, 
@@ -16,15 +17,18 @@ import {
   Check,
   X
 } from 'lucide-react';
-import { RepairOrder, User as AppUser, ConcernPayType } from '../types';
+import { RepairOrder, User as AppUser, ConcernPayType, LineApprovalStatus } from '../types';
+import { useApp } from '../context/AppContext';
 import { cleanRO3700 } from '../utils/formatters';
 import { LinePartsSection } from './LinePartsSection';
+import { LinePhotoSection } from './LinePhotoSection';
 
 interface ROLineBreakdownProps {
   ro: RepairOrder;
   users: AppUser[];
   onAssignTech?: (concernIndex: number, techId?: string, techName?: string) => void;
   onUpdatePayType?: (concernIndex: number, payType: ConcernPayType) => void;
+  onUpdateLineStatus?: (concernIndex: number, status: LineApprovalStatus) => void;
   onAddConcern?: (concernText: string, payType: ConcernPayType, techId?: string, techName?: string) => void;
   onOpenQuote?: (roId: string) => void;
   canEdit?: boolean;
@@ -35,10 +39,12 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
   users,
   onAssignTech,
   onUpdatePayType,
+  onUpdateLineStatus,
   onAddConcern,
   onOpenQuote,
   canEdit = false
 }) => {
+  const { updateConcernStatus } = useApp();
   const ro = cleanRO3700(rawRO);
   const [isAddingLine, setIsAddingLine] = useState(false);
   const [newConcernText, setNewConcernText] = useState('');
@@ -48,6 +54,16 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
   const concerns = ro.concerns && ro.concerns.length > 0 
     ? ro.concerns 
     : [ro.primaryConcern || 'General Inspection'];
+
+  const handleLineStatusToggle = (idx: number, targetStatus: LineApprovalStatus) => {
+    const current = ro.concernStatuses?.[idx] || (ro.quote?.lineStatuses?.[idx + 1]) || 'PENDING';
+    const nextStatus = current === targetStatus ? 'PENDING' : targetStatus;
+    if (onUpdateLineStatus) {
+      onUpdateLineStatus(idx, nextStatus);
+    } else if (updateConcernStatus) {
+      updateConcernStatus(ro.id, idx, nextStatus);
+    }
+  };
 
   const technicians = users.filter(u => u.role === 'TECHNICIAN' && !u.isDeactivated);
 
@@ -215,6 +231,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
       <div className="space-y-3">
         {concerns.map((concernText, idx) => {
           const lineNum = idx + 1;
+          const lineStatus: LineApprovalStatus = ro.concernStatuses?.[idx] || (ro.quote?.lineStatuses?.[lineNum]) || 'PENDING';
           const payType: ConcernPayType = ro.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
           const assignedTechId = ro.concernTechIds?.[idx] || ro.techId;
           const assignedTechName = ro.concernTechNames?.[idx] || (assignedTechId ? users.find(u => u.id === assignedTechId)?.name : ro.techName) || 'Unassigned';
@@ -223,17 +240,35 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
           return (
             <div 
               key={idx}
-              className="bg-white rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all p-4 space-y-3"
+              className={`rounded-xl border transition-all p-4 space-y-3 ${
+                lineStatus === 'DECLINED' 
+                  ? 'bg-rose-50/25 border-rose-300 shadow-2xs' 
+                  : lineStatus === 'APPROVED' 
+                  ? 'bg-white border-emerald-300 shadow-2xs' 
+                  : 'bg-white border-slate-200 shadow-2xs hover:border-slate-300'
+              }`}
             >
-              {/* Header: Line Number, Pay Type, Assigned Tech */}
+              {/* Header: Line Number, Status, Pay Type, Assigned Tech, Approve/Declined Buttons */}
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
                     Line {lineNum}
                   </span>
                   {idx === 0 && (
                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                       Primary Concern
+                    </span>
+                  )}
+                  {lineStatus === 'APPROVED' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                      <span>Approved</span>
+                    </span>
+                  )}
+                  {lineStatus === 'DECLINED' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
+                      <XCircle className="w-3 h-3 text-rose-700" />
+                      <span>Declined</span>
                     </span>
                   )}
                 </div>
@@ -321,6 +356,36 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {/* Approve / Declined Action Buttons */}
+                  <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-300 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => handleLineStatusToggle(idx, 'APPROVED')}
+                      className={`px-2.5 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                        lineStatus === 'APPROVED'
+                          ? 'bg-emerald-600 text-white shadow-2xs ring-1 ring-emerald-500'
+                          : 'text-slate-700 hover:text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                      title={lineStatus === 'APPROVED' ? 'Line is Approved (Click to reset)' : 'Approve this line'}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Approve</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLineStatusToggle(idx, 'DECLINED')}
+                      className={`px-2.5 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                        lineStatus === 'DECLINED'
+                          ? 'bg-rose-600 text-white shadow-2xs ring-1 ring-rose-500'
+                          : 'text-slate-700 hover:text-rose-700 hover:bg-rose-50'
+                      }`}
+                      title={lineStatus === 'DECLINED' ? 'Line is Declined (Click to reset)' : 'Decline this line'}
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>Declined</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -360,7 +425,16 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
               {/* 4. Integrated Parts for this Line (Part Name, Price, Qty, Availability) */}
               <LinePartsSection ro={ro} lineNum={lineNum} />
 
-              {/* 5. Line Quote Breakdown & Total */}
+              {/* 5. Line Evidence & Inspection Photos */}
+              <LinePhotoSection 
+                roId={ro.id} 
+                roLineNumber={lineNum} 
+                concernIndex={idx} 
+                photos={ro.linePhotos} 
+                lineTitle={concernText} 
+              />
+
+              {/* 6. Line Quote Breakdown & Total */}
               {(() => {
                 const lineLaborItems = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
                 const linePartsItems = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lineNum);
@@ -395,7 +469,16 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-                      <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
+                      {lineStatus === 'DECLINED' && (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300">
+                          Declined
+                        </span>
+                      )}
+                      <span className={`text-xs font-black font-mono px-2.5 py-1 rounded-md border shadow-2xs ${
+                        lineStatus === 'DECLINED' 
+                          ? 'bg-rose-50 text-rose-900 line-through border-rose-300' 
+                          : 'text-indigo-950 bg-white border-indigo-300'
+                      }`}>
                         Line {lineNum} Total: ${lineTotal.toFixed(2)}
                       </span>
                     </div>
@@ -437,6 +520,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           {concerns.map((_, i) => {
             const lNum = i + 1;
+            const lStatus = ro.concernStatuses?.[i] || ro.quote?.lineStatuses?.[lNum] || 'PENDING';
             const lLabor = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lNum).reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
             const lQuoteParts = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.subtotal) || (Number(p.unitPrice || 0) * Number(p.quantity || 1))), 0);
             const lROParts = (ro.parts || []).filter(p => (p.roLineNumber || 1) === lNum).reduce((acc, p) => acc + (Number(p.price || 0) * Number(p.quantity || 1)), 0);
@@ -444,9 +528,17 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
             const lTotal = lLabor + lParts;
 
             return (
-              <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between">
-                <span className="font-semibold text-slate-300 text-[11px]">Line {lNum}:</span>
-                <span className="font-mono font-bold text-white">${lTotal.toFixed(2)}</span>
+              <div key={i} className={`p-2 rounded-lg border flex items-center justify-between ${
+                lStatus === 'DECLINED' ? 'bg-rose-950/40 border-rose-500/40' : 'bg-white/5 border-white/10'
+              }`}>
+                <span className="font-semibold text-slate-300 text-[11px] flex items-center gap-1">
+                  Line {lNum}:
+                  {lStatus === 'DECLINED' && <span className="text-[9px] text-rose-300 uppercase font-black">(Declined)</span>}
+                  {lStatus === 'APPROVED' && <span className="text-[9px] text-emerald-400 font-black">✓</span>}
+                </span>
+                <span className={`font-mono font-bold ${lStatus === 'DECLINED' ? 'text-rose-300 line-through' : 'text-white'}`}>
+                  ${lTotal.toFixed(2)}
+                </span>
               </div>
             );
           })}
@@ -462,6 +554,9 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
             )}
             {(ro.quote?.taxAmount || 0) > 0 && (
               <span>Sales Tax: <strong className="font-mono text-white">${(ro.quote?.taxAmount || 0).toFixed(2)}</strong></span>
+            )}
+            {(ro.quote?.totalDeclinedAmount || 0) > 0 && (
+              <span className="text-rose-300 font-bold">Declined Total: <strong className="font-mono text-rose-300">-${(ro.quote?.totalDeclinedAmount || 0).toFixed(2)}</strong></span>
             )}
           </div>
           <div className="flex items-center gap-2">

@@ -181,6 +181,7 @@ export interface RepairOrder {
   correction?: string; // Repair performed: corrective action taken by technician
   concernCauses?: string[]; // Line-by-line diagnostic findings (Line 1, Line 2, etc.)
   concernCorrections?: string[]; // Line-by-line repair corrections (Line 1, Line 2, etc.)
+  concernStatuses?: LineApprovalStatus[]; // Line-by-line customer approval status (Line 1, Line 2, etc.)
   parts: PartItem[];
   messages: Message[];
   recommendations?: RecommendedService[]; // Tech additional requested items (air filter, tires, cabin air, scheduled maint, etc.)
@@ -204,6 +205,20 @@ export interface RepairOrder {
   isTaxExempt?: boolean; // Customer tax exemption status (0% sales tax vs default 7%)
   taxExemptNumber?: string; // Optional tax exempt resale or state certificate number
   vehiclePhotos?: VehiclePhoto[]; // Photos of vehicle (walkaround, damage, odometer, tech findings)
+  linePhotos?: LinePhoto[]; // Photos attached to specific concern lines (Line 1, Line 2, etc.)
+}
+
+export interface LinePhoto {
+  id: string;
+  dataUrl: string; // Compressed high clarity JPEG
+  thumbnailUrl?: string;
+  caption?: string; // e.g. "Oil pan leak", "Brake rotor groove"
+  roLineNumber: number; // 1-indexed (e.g. 1 for Line 1)
+  concernIndex: number; // 0-indexed (e.g. 0 for Line 1)
+  uploadedAt: string; // ISO string
+  uploadedBy: string; // User ID
+  uploadedByName: string; // Name of staff who uploaded
+  fileSizeBytes?: number;
 }
 
 export interface VehiclePhoto {
@@ -234,6 +249,7 @@ export interface WarrantyLaborTimePunch {
 }
 
 export type QuoteStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'DECLINED';
+export type LineApprovalStatus = 'PENDING' | 'APPROVED' | 'DECLINED';
 
 export interface LaborLineItem {
   id: string;
@@ -248,6 +264,7 @@ export interface LaborLineItem {
   concernText?: string; // Mirrors RO customer concern
   correctionText?: string; // Mirrors RO technician correction
   addedByAdvisor?: boolean; // True if added as an extra line by the Service Advisor
+  status?: LineApprovalStatus; // Line-specific customer decision
 }
 
 export interface QuotePartItem {
@@ -259,6 +276,7 @@ export interface QuotePartItem {
   subtotal: number;
   sourcePartId?: string;
   roLineNumber?: number; // 1-based concern line number (e.g., 1 for Line 1, 2 for Line 2)
+  status?: LineApprovalStatus; // Line-specific customer decision
 }
 
 export interface RepairQuote {
@@ -274,6 +292,10 @@ export interface RepairQuote {
   defaultLaborRate: number;
   payType?: ConcernPayType;
   shopSuppliesFee: number;
+  applyShopSupplies?: boolean; // Controls whether shop supplies are charged (defaults to true)
+  lineStatuses?: Record<number, LineApprovalStatus>; // Line 1, Line 2... approval decisions
+  totalApprovedAmount?: number;
+  totalDeclinedAmount?: number;
   taxRate: number;
   taxAmount: number;
   isTaxExempt?: boolean;

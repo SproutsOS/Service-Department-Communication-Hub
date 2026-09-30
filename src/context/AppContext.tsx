@@ -21,11 +21,13 @@ import {
   ConcernPayType,
   Customer,
   VehiclePhoto,
+  LinePhoto,
   InspectionChecklistItem,
   InspectionResultItem,
   InspectionSheet,
   StaffLeaveEntry,
-  StaffLeaveType
+  StaffLeaveType,
+  LineApprovalStatus
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
@@ -157,6 +159,9 @@ interface AppContextType {
   toggleCustomerTaxExempt: (roId: string, taxExemptNumber?: string) => boolean;
   addVehiclePhoto: (roId: string, photo: VehiclePhoto) => boolean;
   deleteVehiclePhoto: (roId: string, photoId: string) => boolean;
+  addLinePhoto: (roId: string, photo: LinePhoto) => boolean;
+  deleteLinePhoto: (roId: string, photoId: string) => boolean;
+  updateLinePhotoCaption: (roId: string, photoId: string, caption: string) => boolean;
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
   triggerNotification: (
@@ -174,6 +179,7 @@ interface AppContextType {
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean; concernCauses?: string[]; concernCorrections?: string[] }) => boolean;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
   updateConcernTech: (roId: string, concernIndex: number, techId: string, techName?: string) => boolean;
+  updateConcernStatus: (roId: string, concernIndex: number, status: LineApprovalStatus) => boolean;
   logCustomerContact: (
     roId: string, 
     contactData: {
@@ -2287,6 +2293,110 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Line-Specific Concern Photos Management (Take photo on each line, attach & view)
+  const addLinePhoto = (roId: string, photo: LinePhoto): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const currentPhotos = targetRO.linePhotos || [];
+    const updatedPhotos = [photo, ...currentPhotos];
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      linePhotos: updatedPhotos,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist-${Date.now()}`,
+          status: targetRO.status,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: new Date().toISOString(),
+          notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) attached photo to Line ${photo.roLineNumber}${photo.caption ? `: "${photo.caption}"` : ''}.`,
+        }
+      ]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
+  const deleteLinePhoto = (roId: string, photoId: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const currentPhotos = targetRO.linePhotos || [];
+    const removedPhoto = currentPhotos.find(p => p.id === photoId);
+    const updatedPhotos = currentPhotos.filter(p => p.id !== photoId);
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      linePhotos: updatedPhotos,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist-${Date.now()}`,
+          status: targetRO.status,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: new Date().toISOString(),
+          notes: `${currentUser.name} removed photo from Line ${removedPhoto?.roLineNumber || ''}.`,
+        }
+      ]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
+  const updateLinePhotoCaption = (roId: string, photoId: string, caption: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const currentPhotos = targetRO.linePhotos || [];
+    const updatedPhotos = currentPhotos.map(p => p.id === photoId ? { ...p, caption } : p);
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      linePhotos: updatedPhotos,
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+    return true;
+  };
+
   // Technician & Staff: Update Cause & Correction for diagnostic & repair documentation
   const updateTechCauseAndCorrection = (
     roId: string, 
@@ -2457,7 +2567,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const totalLaborHours = Number(allItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
             const totalLaborCost = Number(allItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
             const totalPartsCost = ro.quote.totalPartsCost || 0;
-            const shopSuppliesFee = ro.quote.shopSuppliesFee || 0;
+            const shouldApplySupplies = ro.quote.applyShopSupplies !== false;
+            const fivePercent = totalLaborCost * 0.05;
+            const shopSuppliesFee = shouldApplySupplies
+              ? Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : (ro.quote.shopSuppliesFee && ro.quote.shopSuppliesFee > 0 ? Math.min(ro.quote.shopSuppliesFee, 35) : 25)).toFixed(2))
+              : 0;
             const isExempt = ro.isTaxExempt || ro.quote.isTaxExempt;
             const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
             const taxableAmount = totalLaborCost + totalPartsCost;
@@ -2466,6 +2580,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             nextQuote = {
               ...ro.quote,
+              applyShopSupplies: shouldApplySupplies,
+              shopSuppliesFee,
               laborItems: allItems,
               totalLaborHours,
               totalLaborCost,
@@ -2490,13 +2606,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 concernText: c,
                 correctionText: '',
                 addedByAdvisor: false,
+                status: 'PENDING'
               };
             });
             const totalLaborHours = Number(mirroredItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
             const totalLaborCost = Number(mirroredItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
             const isExempt = ro.isTaxExempt || false;
             const taxRate = isExempt ? 0 : 0.07;
-            const grandTotal = totalLaborCost;
+            const fivePercent = totalLaborCost * 0.05;
+            const calcSupplies = Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : 25).toFixed(2));
+            const grandTotal = Number((totalLaborCost + calcSupplies).toFixed(2));
 
             nextQuote = {
               id: `quote_${Date.now()}`,
@@ -2507,7 +2626,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               totalLaborHours,
               totalLaborCost,
               totalPartsCost: 0,
-              shopSuppliesFee: 0,
+              applyShopSupplies: true,
+              shopSuppliesFee: calcSupplies,
               isTaxExempt: isExempt,
               taxRate,
               taxAmount: 0,
@@ -2667,6 +2787,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNotifications(prev => [notif, ...prev.slice(0, 49)]);
         syncNotification(notif);
       }
+    }
+    return true;
+  };
+
+  // Update Customer Approval Decision (APPROVED or DECLINED) for a specific line item
+  const updateConcernStatus = (roId: string, concernIndex: number, status: LineApprovalStatus): boolean => {
+    let updatedRO: RepairOrder | null = null;
+    const lineNum = concernIndex + 1;
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const concernCount = Math.max(ro.concerns?.length || 1, concernIndex + 1);
+
+          const currentStatuses: LineApprovalStatus[] = ro.concernStatuses && ro.concernStatuses.length >= concernCount
+            ? [...ro.concernStatuses]
+            : Array.from({ length: concernCount }, (_, i) => ro.concernStatuses?.[i] || 'PENDING');
+
+          currentStatuses[concernIndex] = status;
+
+          // Update quote lineStatuses and item status if quote exists
+          let nextQuote = ro.quote;
+          if (nextQuote) {
+            const nextLineStatuses = { ...(nextQuote.lineStatuses || {}), [lineNum]: status };
+            const nextLabor = (nextQuote.laborItems || []).map(item => {
+              if ((item.roLineNumber || 1) === lineNum) {
+                return { ...item, status };
+              }
+              return item;
+            });
+            const nextParts = (nextQuote.partsItems || []).map(item => {
+              if ((item.roLineNumber || 1) === lineNum) {
+                return { ...item, status };
+              }
+              return item;
+            });
+
+            // Calculate approved vs declined totals
+            const totalApprovedLabor = nextLabor
+              .filter(l => (nextLineStatuses[l.roLineNumber || 1] || 'PENDING') !== 'DECLINED')
+              .reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0);
+            const totalApprovedParts = nextParts
+              .filter(p => (nextLineStatuses[p.roLineNumber || 1] || 'PENDING') !== 'DECLINED')
+              .reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+
+            const totalDeclinedLabor = nextLabor
+              .filter(l => (nextLineStatuses[l.roLineNumber || 1] || 'PENDING') === 'DECLINED')
+              .reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0);
+            const totalDeclinedParts = nextParts
+              .filter(p => (nextLineStatuses[p.roLineNumber || 1] || 'PENDING') === 'DECLINED')
+              .reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+
+            nextQuote = {
+              ...nextQuote,
+              lineStatuses: nextLineStatuses,
+              laborItems: nextLabor,
+              partsItems: nextParts,
+              totalApprovedAmount: Number((totalApprovedLabor + totalApprovedParts).toFixed(2)),
+              totalDeclinedAmount: Number((totalDeclinedLabor + totalDeclinedParts).toFixed(2)),
+              updatedAt: new Date().toISOString()
+            };
+          }
+
+          const updatedItem: RepairOrder = {
+            ...ro,
+            concernStatuses: currentStatuses,
+            quote: nextQuote
+          };
+          updatedRO = updatedItem;
+          return updatedItem;
+        }
+        return ro;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (updatedRO) {
+      syncRepairOrder(updatedRO);
     }
     return true;
   };
@@ -3211,12 +3414,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const finalTaxRate = isExempt ? 0 : (quote.taxRate !== undefined ? quote.taxRate : 0.07);
     const taxableAmount = (Number(quote.totalLaborCost) || 0) + (Number(quote.totalPartsCost) || 0);
     const finalTaxAmount = isExempt ? 0 : Number((taxableAmount * finalTaxRate).toFixed(2));
-    const finalSupplies = quote.shopSuppliesFee ? Math.min(Number(quote.shopSuppliesFee) || 0, 35) : 0;
+    
+    // Automatically charge Shop Supplies unless explicitly unchecked (applyShopSupplies === false)
+    const shouldApplySupplies = quote.applyShopSupplies !== false;
+    let finalSupplies = 0;
+    if (shouldApplySupplies) {
+      if (quote.shopSuppliesFee && Number(quote.shopSuppliesFee) > 0) {
+        finalSupplies = Math.min(Number(quote.shopSuppliesFee), 35);
+      } else {
+        const labor = Number(quote.totalLaborCost) || 0;
+        finalSupplies = Number((labor > 0 ? Math.min(Math.max(labor * 0.05, 15), 35) : 25).toFixed(2));
+      }
+    }
     const finalGrandTotal = Number(((quote.totalLaborCost || 0) + (quote.totalPartsCost || 0) + finalSupplies + finalTaxAmount).toFixed(2));
+
+    // Calculate approved vs declined totals if lines have been reviewed
+    let totalApproved = 0;
+    let totalDeclined = 0;
+    if (quote.lineStatuses) {
+      (quote.laborItems || []).forEach(l => {
+        const lNum = l.roLineNumber || 1;
+        const st = quote.lineStatuses?.[lNum] || 'PENDING';
+        if (st === 'DECLINED') {
+          totalDeclined += Number(l.subtotal) || 0;
+        } else {
+          totalApproved += Number(l.subtotal) || 0;
+        }
+      });
+      (quote.partsItems || []).forEach(p => {
+        const pNum = p.roLineNumber || 1;
+        const st = quote.lineStatuses?.[pNum] || 'PENDING';
+        const pSub = Number(p.subtotal) || ((Number(p.unitPrice) || 0) * (Number(p.quantity) || 1));
+        if (st === 'DECLINED') {
+          totalDeclined += pSub;
+        } else {
+          totalApproved += pSub;
+        }
+      });
+    }
 
     const nextQuote: RepairQuote = {
       ...quote,
+      applyShopSupplies: shouldApplySupplies,
       shopSuppliesFee: finalSupplies,
+      totalApprovedAmount: totalApproved > 0 ? Number(totalApproved.toFixed(2)) : undefined,
+      totalDeclinedAmount: totalDeclined > 0 ? Number(totalDeclined.toFixed(2)) : undefined,
       isTaxExempt: isExempt,
       taxRate: finalTaxRate,
       taxAmount: finalTaxAmount,
@@ -3225,6 +3467,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: now,
       submittedAt: submitToAdvisor ? (quote.submittedAt || now) : quote.submittedAt,
     };
+
+    // Sync lineStatuses to RO concernStatuses
+    let nextConcernStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : [];
+    if (quote.lineStatuses) {
+      Object.entries(quote.lineStatuses).forEach(([lineStr, st]) => {
+        const idx = parseInt(lineStr, 10) - 1;
+        if (idx >= 0) {
+          while (nextConcernStatuses.length <= idx) {
+            nextConcernStatuses.push('PENDING');
+          }
+          nextConcernStatuses[idx] = st;
+        }
+      });
+    }
 
     const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : targetRO.status;
 
@@ -3259,6 +3515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: nextROStatus,
+      concernStatuses: nextConcernStatuses.length > 0 ? nextConcernStatuses : targetRO.concernStatuses,
       quote: nextQuote,
       history: newHistory,
     };
@@ -4278,9 +4535,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleCustomerTaxExempt,
         addVehiclePhoto,
         deleteVehiclePhoto,
+        addLinePhoto,
+        deleteLinePhoto,
+        updateLinePhotoCaption,
         updateTechCauseAndCorrection,
         updateConcernPayType,
         updateConcernTech,
+        updateConcernStatus,
         logCustomerContact,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,

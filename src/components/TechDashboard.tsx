@@ -38,6 +38,7 @@ import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDura
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 import { LinePartsSection } from './LinePartsSection';
+import { LinePhotoSection } from './LinePhotoSection';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
@@ -945,6 +946,15 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
 
                   {/* Integrated Line Parts: Part Name, Price, Qty, Availability */}
                   <LinePartsSection ro={ro} lineNum={idx + 1} />
+
+                  {/* Line Evidence & Inspection Photos (Take Photo on each line) */}
+                  <LinePhotoSection 
+                    roId={ro.id} 
+                    roLineNumber={idx + 1} 
+                    concernIndex={idx} 
+                    photos={ro.linePhotos} 
+                    lineTitle={concernText} 
+                  />
                 </div>
               );
             })}

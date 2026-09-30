@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   CheckCircle2, 
+  XCircle,
   Clock, 
   Wrench, 
   Calculator, 
@@ -25,12 +26,14 @@ import {
   Receipt,
   X
 } from 'lucide-react';
-import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome } from '../types';
+import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome, LineApprovalStatus } from '../types';
+import { useApp } from '../context/AppContext';
 import { formatTimeOnly, formatDurationSince, formatRelativeTime, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, formatContactOutcome } from '../utils/cadenceUtils';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { TicketFlowStepper } from './TicketFlowStepper';
 import { LinePartsSection } from './LinePartsSection';
+import { LinePhotoSection } from './LinePhotoSection';
 
 export type NextActionId = 
   | 'ASSIGN_TECH'
@@ -92,6 +95,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   addRepairOrderConcern,
   isTechScreen = false
 }) => {
+  const { updateConcernStatus } = useApp();
   const ro = cleanRO3700(rawRO);
   const [smartWorkflowOrder, setSmartWorkflowOrder] = useState<boolean>(true);
   const [quickTechCause, setQuickTechCause] = useState<string>(ro.cause || '');
@@ -691,21 +695,40 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                   const linePartsCount = linePartsItems.length > 0 ? linePartsItems.length : lineROParts.length;
                   const lineTotal = lineLaborCost + linePartsCost;
                   const hasLineQuote = lineLaborItems.length > 0 || linePartsItems.length > 0 || lineROParts.length > 0;
+                  const lineStatus: LineApprovalStatus = ro.concernStatuses?.[idx] || (ro.quote?.lineStatuses?.[lineNum]) || 'PENDING';
 
                   return (
                     <div 
                       key={idx}
-                      className="bg-white rounded-xl border-2 border-slate-300 shadow-2xs hover:border-slate-400 transition-all p-4 space-y-3.5"
+                      className={`rounded-xl border-2 transition-all p-4 space-y-3.5 ${
+                        lineStatus === 'DECLINED' 
+                          ? 'bg-rose-50/20 border-rose-300 shadow-2xs' 
+                          : lineStatus === 'APPROVED'
+                          ? 'bg-white border-emerald-300 shadow-2xs'
+                          : 'bg-white border-slate-300 shadow-2xs hover:border-slate-400'
+                      }`}
                     >
-                      {/* Line Header: Line Number, Pay Type, Tech Assignment, Edit button */}
+                      {/* Line Header: Line Number, Status, Pay Type, Tech Assignment, Approve/Declined Buttons */}
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
                             Line {lineNum}
                           </span>
                           {idx === 0 && (
                             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                               Primary Concern
+                            </span>
+                          )}
+                          {lineStatus === 'APPROVED' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                              <span>Approved</span>
+                            </span>
+                          )}
+                          {lineStatus === 'DECLINED' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
+                              <XCircle className="w-3 h-3 text-rose-700" />
+                              <span>Declined</span>
                             </span>
                           )}
                         </div>
@@ -771,6 +794,44 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                             ) : (
                               <span className="font-bold text-slate-800 text-[11px]">{currentTechName}</span>
                             )}
+                          </div>
+
+                          {/* Approve / Declined Action Buttons */}
+                          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-300 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = lineStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
+                                if (updateConcernStatus) updateConcernStatus(ro.id, idx, next);
+                                triggerActionNotice(next === 'APPROVED' ? `✓ Line ${lineNum} marked as Approved` : `Line ${lineNum} reset to Pending`);
+                              }}
+                              className={`px-2.5 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                                lineStatus === 'APPROVED'
+                                  ? 'bg-emerald-600 text-white shadow-2xs ring-1 ring-emerald-500'
+                                  : 'text-slate-700 hover:text-emerald-700 hover:bg-emerald-50'
+                              }`}
+                              title={lineStatus === 'APPROVED' ? 'Line is Approved (Click to reset)' : 'Approve this line'}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approve</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = lineStatus === 'DECLINED' ? 'PENDING' : 'DECLINED';
+                                if (updateConcernStatus) updateConcernStatus(ro.id, idx, next);
+                                triggerActionNotice(next === 'DECLINED' ? `✕ Line ${lineNum} marked as Declined` : `Line ${lineNum} reset to Pending`);
+                              }}
+                              className={`px-2.5 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                                lineStatus === 'DECLINED'
+                                  ? 'bg-rose-600 text-white shadow-2xs ring-1 ring-rose-500'
+                                  : 'text-slate-700 hover:text-rose-700 hover:bg-rose-50'
+                              }`}
+                              title={lineStatus === 'DECLINED' ? 'Line is Declined (Click to reset)' : 'Decline this line'}
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Declined</span>
+                            </button>
                           </div>
 
                           {/* Edit Cause & Correction for this line */}
@@ -869,7 +930,16 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                       {/* 4. Integrated Parts for Line {lineNum} (Part Name, Price, Qty, Availability) */}
                       <LinePartsSection ro={ro} lineNum={lineNum} />
 
-                      {/* 5. Line Quote Breakdown & Subtotal */}
+                      {/* 5. Line Evidence & Inspection Photos (Take Photo on each line) */}
+                      <LinePhotoSection 
+                        roId={ro.id} 
+                        roLineNumber={lineNum} 
+                        concernIndex={idx} 
+                        photos={ro.linePhotos} 
+                        lineTitle={concern} 
+                      />
+
+                      {/* 6. Line Quote Breakdown & Subtotal */}
                       <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
                         <div className="flex items-center gap-2 flex-wrap text-xs">
                           <Calculator className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
