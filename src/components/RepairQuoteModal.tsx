@@ -1602,12 +1602,45 @@ export const RepairQuoteModal: React.FC = () => {
                                   <span className="font-mono">${linePartsSubtotal.toFixed(2)}</span>
                                 </div>
                                 <div className="space-y-1">
-                                  {partsForThisLine.map(p => (
-                                    <div key={p.id} className="flex items-center justify-between text-[11px] text-slate-900 font-medium bg-white px-2 py-0.5 rounded border border-amber-200">
-                                      <span>{p.quantity}x {p.description} {p.partNumber ? `(#${p.partNumber})` : ''}</span>
-                                      <span className="font-mono font-bold">${(Number(p.subtotal) || 0).toFixed(2)}</span>
-                                    </div>
-                                  ))}
+                                  {partsForThisLine.map(p => {
+                                    const roPart = cleanRO.parts?.find(rp => rp.id === p.sourcePartId || rp.partNumber === p.partNumber || rp.description.toLowerCase() === p.description.toLowerCase());
+                                    const availability = roPart ? (roPart.status === 'IN_STOCK' ? 'In Stock' : roPart.estimatedArrival || roPart.status.replace(/_/g, ' ')) : 'Quoted on Estimate';
+                                    const isQuoteOnly = roPart?.status === 'QUOTE_ONLY' || roPart?.requestType === 'QUOTE_ONLY';
+
+                                    return (
+                                      <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-900 font-medium bg-white p-1.5 rounded border border-amber-200 gap-1.5 shadow-2xs">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-extrabold text-slate-950">{p.description}</span>
+                                          {p.partNumber && (
+                                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
+                                              #{p.partNumber}
+                                            </span>
+                                          )}
+                                          <span className="text-slate-400">•</span>
+                                          <span className="text-slate-700 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                            Qty: {p.quantity}
+                                          </span>
+                                          <span className="text-slate-400">•</span>
+                                          <span className="font-mono font-bold text-emerald-800">
+                                            ${(Number(p.unitPrice) || 0).toFixed(2)} ea
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          {isQuoteOnly && (
+                                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-300">
+                                              Quote Only
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">
+                                            Avail: {availability}
+                                          </span>
+                                          <span className="font-mono font-black text-slate-950 text-xs">
+                                            ${(Number(p.subtotal) || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}

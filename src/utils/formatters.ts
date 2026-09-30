@@ -361,3 +361,102 @@ export function parseLineIndexedField(text: string | undefined, lineCount: numbe
   result[0] = raw;
   return result;
 }
+
+export interface PartAvailabilityBadgeInfo {
+  text: string;
+  badgeClass: string;
+  statusLabel: string;
+}
+
+/**
+ * Returns formatted availability, ETA, and styling for a part item.
+ */
+export function getPartAvailabilityInfo(part: { status?: string; requestType?: string; estimatedArrival?: string }): PartAvailabilityBadgeInfo {
+  const etaBadge = formatEtaBadge(part?.estimatedArrival);
+  const status = (part?.status || '').toUpperCase();
+  const requestType = (part?.requestType || '').toUpperCase();
+  const isQuoteOnly = status === 'QUOTE_ONLY' || requestType === 'QUOTE_ONLY';
+
+  if (status === 'IN_STOCK') {
+    return {
+      text: 'In Stock',
+      statusLabel: 'In Stock',
+      badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold',
+    };
+  }
+  if (status === 'RECEIVED' || status === 'ISSUED_TO_TECH') {
+    const lbl = status === 'ISSUED_TO_TECH' ? 'Issued to Tech' : 'Received at Shop';
+    return {
+      text: lbl,
+      statusLabel: lbl,
+      badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold',
+    };
+  }
+  if (isQuoteOnly) {
+    return {
+      text: 'Quote Only',
+      statusLabel: 'Quote Only',
+      badgeClass: 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold',
+    };
+  }
+  if (status === 'BACKORDERED') {
+    return {
+      text: `Backordered (${etaBadge.text})`,
+      statusLabel: 'Backordered',
+      badgeClass: 'bg-rose-100 text-rose-900 border-rose-300 font-bold',
+    };
+  }
+  if (status === 'SPECIAL_ORDER' || status === 'SPECIAL_ORDER_1_5_DAYS') {
+    return {
+      text: `Special Order (${etaBadge.text})`,
+      statusLabel: 'Special Order',
+      badgeClass: 'bg-orange-100 text-orange-900 border-orange-300 font-bold',
+    };
+  }
+  if (status === 'DAILY_ORDER' || status === 'ORDERED' || status === 'IN_TRANSIT') {
+    return {
+      text: `Daily Order (${etaBadge.text})`,
+      statusLabel: 'Daily Order',
+      badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
+    };
+  }
+  if (status === 'LOCAL_PURCHASE') {
+    return {
+      text: `Local Purchase (${etaBadge.text})`,
+      statusLabel: 'Local Purchase',
+      badgeClass: 'bg-blue-100 text-blue-900 border-blue-300 font-bold',
+    };
+  }
+  if (status === 'REQUESTED' || status === 'NEEDED') {
+    return {
+      text: 'Requested (Pending Sourcing)',
+      statusLabel: 'Requested',
+      badgeClass: 'bg-blue-100 text-blue-900 border-blue-300 font-bold',
+    };
+  }
+  return {
+    text: etaBadge.text || 'Pending ETA',
+    statusLabel: status || 'Pending',
+    badgeClass: 'bg-slate-100 text-slate-800 border-slate-300 font-bold',
+  };
+}
+
+/**
+ * Filter all parts that belong to a specific 1-indexed RO line number.
+ */
+export function getLinePartsList(parts: any[] | undefined, lineNum: number, totalConcernsCount: number = 1): any[] {
+  if (!parts || !Array.isArray(parts)) return [];
+  return parts.filter(p => {
+    if (p.roLineNumber !== undefined && p.roLineNumber !== null) {
+      return Number(p.roLineNumber) === lineNum;
+    }
+    const match = p.notes?.match(/For Line (\d+)/i) || p.notes?.match(/Line (\d+)/i);
+    if (match && parseInt(match[1], 10) === lineNum) {
+      return true;
+    }
+    if (lineNum === 1 && totalConcernsCount <= 1) {
+      return true;
+    }
+    return false;
+  });
+}

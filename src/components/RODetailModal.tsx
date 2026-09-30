@@ -52,6 +52,7 @@ import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 import { VehiclePhotoManager } from './VehiclePhotoManager';
 import { ROLineBreakdown } from './ROLineBreakdown';
+import { LinePartsSection } from './LinePartsSection';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 import { decodeVin } from '../utils/vinDecoder';
 import { DynamicROWorkflow } from './DynamicROWorkflow';
@@ -1606,7 +1607,10 @@ export const RODetailModal: React.FC = () => {
                               />
                             </div>
 
-                            {/* 4. Line Quote Breakdown & Subtotal */}
+                            {/* 4. Integrated Parts for Line {idx + 1} (Part Name, Price, Qty, Availability) */}
+                            <LinePartsSection ro={selectedRO} lineNum={idx + 1} />
+
+                            {/* 5. Line Quote Breakdown & Subtotal */}
                             {(() => {
                               const lineNum = idx + 1;
                               const lineLaborItems = (selectedRO.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);

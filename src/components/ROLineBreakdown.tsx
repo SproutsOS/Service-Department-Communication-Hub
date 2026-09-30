@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { RepairOrder, User as AppUser, ConcernPayType } from '../types';
 import { cleanRO3700 } from '../utils/formatters';
+import { LinePartsSection } from './LinePartsSection';
 
 interface ROLineBreakdownProps {
   ro: RepairOrder;
@@ -356,7 +357,10 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 </p>
               </div>
 
-              {/* 4. Line Quote Breakdown & Total */}
+              {/* 4. Integrated Parts for this Line (Part Name, Price, Qty, Availability) */}
+              <LinePartsSection ro={ro} lineNum={lineNum} />
+
+              {/* 5. Line Quote Breakdown & Total */}
               {(() => {
                 const lineLaborItems = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
                 const linePartsItems = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lineNum);

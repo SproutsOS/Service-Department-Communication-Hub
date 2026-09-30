@@ -1081,11 +1081,17 @@ export const PartsDashboard: React.FC = () => {
                           const concernDesc = lineNum && ro.concerns && ro.concerns[lineNum - 1] 
                             ? ro.concerns[lineNum - 1] 
                             : (lineNum === 1 ? ro.primaryConcern : undefined);
+                          const causeDesc = lineNum && ro.concernCauses && ro.concernCauses[lineNum - 1]
+                            ? ro.concernCauses[lineNum - 1]
+                            : (lineNum === 1 ? ro.cause : undefined);
+                          const correctionDesc = lineNum && ro.concernCorrections && ro.concernCorrections[lineNum - 1]
+                            ? ro.concernCorrections[lineNum - 1]
+                            : (lineNum === 1 ? ro.correction : undefined);
 
                           return (
                             <div 
                               key={rp.id || idx} 
-                              className={`p-2.5 rounded-xl border text-xs space-y-2 transition-colors shadow-2xs ${
+                              className={`p-3 rounded-xl border text-xs space-y-2.5 transition-colors shadow-2xs ${
                                 isROAdded
                                   ? 'bg-emerald-50/40 border-emerald-300'
                                   : isSent
@@ -1093,7 +1099,7 @@ export const PartsDashboard: React.FC = () => {
                                     : isROApproved 
                                       ? 'bg-emerald-50/20 border-emerald-300' 
                                       : isQuoteOnly 
-                                        ? 'bg-purple-50/50 border-purple-300 hover:border-purple-400' 
+                                        ? 'bg-purple-50/60 border-purple-300 hover:border-purple-400 ring-1 ring-purple-200' 
                                         : 'bg-slate-50 border-slate-200 hover:border-amber-400'
                               }`}
                             >
@@ -1103,7 +1109,11 @@ export const PartsDashboard: React.FC = () => {
                                     {idx + 1}
                                   </span>
                                   {lineNum && (
-                                    <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200 shrink-0">
+                                    <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded border shrink-0 ${
+                                      isQuoteOnly 
+                                        ? 'bg-purple-100 text-purple-900 border-purple-300' 
+                                        : 'bg-blue-100 text-blue-900 border-blue-200'
+                                    }`}>
                                       Line {lineNum}
                                     </span>
                                   )}
@@ -1144,7 +1154,7 @@ export const PartsDashboard: React.FC = () => {
 
                                   {/* Primary Line Status Pill: Shows QUOTE ONLY prominently */}
                                   {isQuoteOnly ? (
-                                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border bg-purple-100 text-purple-900 border-purple-300 shadow-2xs flex items-center gap-1 shrink-0">
+                                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border-2 bg-purple-100 text-purple-900 border-purple-400 shadow-2xs flex items-center gap-1 shrink-0 animate-pulse">
                                       <span>💬</span>
                                       <span>QUOTE ONLY</span>
                                     </span>
@@ -1171,14 +1181,60 @@ export const PartsDashboard: React.FC = () => {
                                 </div>
                               </div>
 
-                              {concernDesc && (
-                                <div className="text-[11px] text-slate-700 bg-white/80 p-1.5 rounded border border-slate-200 font-medium truncate">
-                                  <strong className="text-slate-900 font-bold uppercase text-[9px] mr-1">Line {lineNum} Concern:</strong>
-                                  <span>{concernDesc}</span>
+                              {/* Quote Only High-Visibility Guidance Notice on Screen */}
+                              {isQuoteOnly && (
+                                <div className="flex items-center justify-between gap-2 bg-purple-100/90 text-purple-950 px-2.5 py-1 rounded-lg border border-purple-300 text-xs font-bold">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] font-black uppercase bg-purple-700 text-white px-2 py-0.5 rounded shadow-2xs">
+                                      QUOTE ONLY
+                                    </span>
+                                    <span className="text-purple-900 font-semibold text-[11px]">
+                                      Tech requested price quote only — not ordering yet.
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-[11px] font-black text-purple-950 shrink-0">
+                                    <span>Action: Click</span>
+                                    <span className="bg-purple-700 text-white px-2 py-0.5 rounded text-[10px] uppercase font-black tracking-wide">
+                                      Add to Quote
+                                    </span>
+                                  </div>
                                 </div>
                               )}
 
-                              {/* Direct Part # & Price Inputs - Zero redundant typing! */}
+                              {/* 3Cs for this line: Concern, Cause, and Correction */}
+                              {(concernDesc || causeDesc || correctionDesc) && (
+                                <div className="text-[11px] bg-white/95 p-2 rounded-lg border border-slate-200/90 space-y-1 shadow-2xs">
+                                  {concernDesc && (
+                                    <div className="text-slate-900 leading-snug">
+                                      <strong className="text-blue-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1">
+                                        <span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">1</span>
+                                        Line {lineNum || 1} Concern:
+                                      </strong>
+                                      <span className="font-semibold">{concernDesc}</span>
+                                    </div>
+                                  )}
+                                  {causeDesc && (
+                                    <div className="text-amber-950 leading-snug font-mono">
+                                      <strong className="text-amber-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
+                                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">2</span>
+                                        Cause:
+                                      </strong>
+                                      <span>{causeDesc}</span>
+                                    </div>
+                                  )}
+                                  {correctionDesc && (
+                                    <div className="text-emerald-950 leading-snug font-mono">
+                                      <strong className="text-emerald-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
+                                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">3</span>
+                                        Correction:
+                                      </strong>
+                                      <span>{correctionDesc}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Direct Part #, Price, Qty, and Availability Inputs on the Line */}
                               <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-slate-200/60">
                                 <div className="flex-1 min-w-[120px]">
                                   <input
@@ -1188,6 +1244,7 @@ export const PartsDashboard: React.FC = () => {
                                     value={draft.partNumber}
                                     onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
                                     className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
+                                    title="Part Number"
                                   />
                                 </div>
 
@@ -1208,6 +1265,7 @@ export const PartsDashboard: React.FC = () => {
                                       }
                                     }}
                                     className="w-full pl-5 pr-2 py-1 text-xs font-bold bg-white border border-emerald-400 focus:border-emerald-600 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
+                                    title="Quoted Part Unit Price"
                                   />
                                 </div>
 
@@ -1240,7 +1298,7 @@ export const PartsDashboard: React.FC = () => {
                                       <button
                                         type="button"
                                         onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
-                                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-black shadow-sm cursor-pointer flex items-center gap-1.5 border border-purple-700 transition-all"
+                                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-black shadow-sm cursor-pointer flex items-center gap-1.5 border border-purple-700 transition-all hover:ring-2 hover:ring-purple-300"
                                         title="Add Quoted Part & Price directly to Main Quote"
                                       >
                                         <Calculator className="w-3.5 h-3.5" />
@@ -2758,16 +2816,25 @@ export const PartsDashboard: React.FC = () => {
                   const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
                   const isSent = isQuoteOnly && isPartSentToEstimate(rp);
                   const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
+                  const concernDesc = lineNum && currentSelectedRO?.concerns && currentSelectedRO.concerns[lineNum - 1]
+                    ? currentSelectedRO.concerns[lineNum - 1]
+                    : (lineNum === 1 ? currentSelectedRO?.primaryConcern : undefined);
+                  const causeDesc = lineNum && currentSelectedRO?.concernCauses && currentSelectedRO.concernCauses[lineNum - 1]
+                    ? currentSelectedRO.concernCauses[lineNum - 1]
+                    : (lineNum === 1 ? currentSelectedRO?.cause : undefined);
+                  const correctionDesc = lineNum && currentSelectedRO?.concernCorrections && currentSelectedRO.concernCorrections[lineNum - 1]
+                    ? currentSelectedRO.concernCorrections[lineNum - 1]
+                    : (lineNum === 1 ? currentSelectedRO?.correction : undefined);
                   const lineTotal = draft.price && !isNaN(Number(draft.price)) ? (Number(draft.price) * (draft.quantity || 1)).toFixed(2) : '0.00';
 
                   return (
                     <div 
                       key={rp.id || idx} 
-                      className={`p-3 rounded-xl border transition-all space-y-2 ${
+                      className={`p-3 rounded-xl border transition-all space-y-2.5 ${
                         isSent 
                           ? 'bg-purple-50/40 border-purple-300' 
                           : isQuoteOnly 
-                            ? 'bg-purple-50/50 border-purple-300' 
+                            ? 'bg-purple-50/60 border-purple-300 hover:border-purple-400 ring-1 ring-purple-200' 
                             : 'bg-amber-50/30 border-amber-200'
                       }`}
                     >
@@ -2781,7 +2848,11 @@ export const PartsDashboard: React.FC = () => {
                             {rp.description || rp.name}
                           </span>
                           {lineNum && (
-                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                            <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded border shrink-0 ${
+                              isQuoteOnly 
+                                ? 'bg-purple-100 text-purple-900 border-purple-300' 
+                                : 'bg-blue-100 text-blue-900 border-blue-200'
+                            }`}>
                               Line {lineNum}
                             </span>
                           )}
@@ -2817,7 +2888,7 @@ export const PartsDashboard: React.FC = () => {
                           )}
 
                           {isQuoteOnly ? (
-                            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border bg-purple-100 text-purple-900 border-purple-300 shadow-2xs flex items-center gap-1">
+                            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border-2 bg-purple-100 text-purple-900 border-purple-400 shadow-2xs flex items-center gap-1 animate-pulse">
                               <span>💬</span>
                               <span>QUOTE ONLY</span>
                             </span>
@@ -2842,7 +2913,7 @@ export const PartsDashboard: React.FC = () => {
                             <button
                               type="button"
                               disabled
-                              className="text-[11px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-not-allowed select-none"
+                              className="text-[11px] font-black text-emerald-800 bg-emerald-50 border-2 border-emerald-400 px-3 py-1 rounded-lg flex items-center gap-1 cursor-not-allowed select-none shadow-2xs"
                             >
                               <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                               <span>Added to Quote</span>
@@ -2851,7 +2922,7 @@ export const PartsDashboard: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleSaveQuotePriceOnly(currentSelectedRO.id, rp)}
-                              className="text-[11px] font-black text-white bg-purple-600 hover:bg-purple-700 border border-purple-700 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                              className="text-[11px] font-black text-white bg-purple-600 hover:bg-purple-700 border border-purple-700 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 hover:ring-2 hover:ring-purple-300"
                               title="Add quoted price directly to main customer quote"
                             >
                               <Calculator className="w-3.5 h-3.5" />
@@ -2860,6 +2931,59 @@ export const PartsDashboard: React.FC = () => {
                           )
                         )}
                       </div>
+
+                      {/* Quote Only Notice for this line */}
+                      {isQuoteOnly && (
+                        <div className="flex items-center justify-between gap-2 bg-purple-100/90 text-purple-950 px-2.5 py-1 rounded-lg border border-purple-300 text-xs font-bold">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black uppercase bg-purple-700 text-white px-2 py-0.5 rounded shadow-2xs">
+                              QUOTE ONLY
+                            </span>
+                            <span className="text-purple-900 font-semibold text-[11px]">
+                              Pricing estimate requested by technician.
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] font-black text-purple-950 shrink-0">
+                            <span>Action: Click</span>
+                            <span className="bg-purple-700 text-white px-2 py-0.5 rounded text-[10px] uppercase font-black tracking-wide">
+                              Add to Quote
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 3Cs for this line: Concern, Cause, and Correction */}
+                      {(concernDesc || causeDesc || correctionDesc) && (
+                        <div className="text-[11px] bg-white/95 p-2 rounded-lg border border-slate-200/90 space-y-1 shadow-2xs">
+                          {concernDesc && (
+                            <div className="text-slate-900 leading-snug">
+                              <strong className="text-blue-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1">
+                                <span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">1</span>
+                                Line {lineNum || 1} Concern:
+                              </strong>
+                              <span className="font-semibold">{concernDesc}</span>
+                            </div>
+                          )}
+                          {causeDesc && (
+                            <div className="text-amber-950 leading-snug font-mono">
+                              <strong className="text-amber-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
+                                <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">2</span>
+                                Cause:
+                              </strong>
+                              <span>{causeDesc}</span>
+                            </div>
+                          )}
+                          {correctionDesc && (
+                            <div className="text-emerald-950 leading-snug font-mono">
+                              <strong className="text-emerald-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
+                                <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">3</span>
+                                Correction:
+                              </strong>
+                              <span>{correctionDesc}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Input Row */}
                       <div className="grid grid-cols-12 gap-2 items-center">

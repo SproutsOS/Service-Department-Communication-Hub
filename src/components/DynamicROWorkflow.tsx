@@ -30,6 +30,7 @@ import { formatTimeOnly, formatDurationSince, formatRelativeTime, cleanRO3700 } 
 import { getContactCadenceStatus, formatContactOutcome } from '../utils/cadenceUtils';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { TicketFlowStepper } from './TicketFlowStepper';
+import { LinePartsSection } from './LinePartsSection';
 
 export type NextActionId = 
   | 'ASSIGN_TECH'
@@ -865,7 +866,10 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                         </div>
                       )}
 
-                      {/* 4. Line Quote Breakdown & Subtotal */}
+                      {/* 4. Integrated Parts for Line {lineNum} (Part Name, Price, Qty, Availability) */}
+                      <LinePartsSection ro={ro} lineNum={lineNum} />
+
+                      {/* 5. Line Quote Breakdown & Subtotal */}
                       <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
                         <div className="flex items-center gap-2 flex-wrap text-xs">
                           <Calculator className="w-3.5 h-3.5 text-indigo-600 shrink-0" />

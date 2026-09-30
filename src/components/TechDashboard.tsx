@@ -37,6 +37,7 @@ import { ROStatus, RepairOrder, ConcernPayType } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField } from '../utils/formatters';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
+import { LinePartsSection } from './LinePartsSection';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
@@ -941,6 +942,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
+
+                  {/* Integrated Line Parts: Part Name, Price, Qty, Availability */}
+                  <LinePartsSection ro={ro} lineNum={idx + 1} />
                 </div>
               );
             })}
