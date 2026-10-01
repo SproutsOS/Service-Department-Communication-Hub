@@ -321,6 +321,22 @@ export const PartsDashboard: React.FC = () => {
     });
   };
 
+  const handleAddDirectAdditionalPart = (roId: string, lineNumber: number) => {
+    addPartOrder(roId, {
+      partNumber: '',
+      description: `Additional Part for Line ${lineNumber}`,
+      quantity: 1,
+      price: undefined,
+      vendor: vendors[0] || '',
+      status: 'QUOTE_ONLY',
+      requestType: 'QUOTE_ONLY',
+      estimatedArrival: 'Price Quoted for Main Estimate',
+      roLineNumber: lineNumber,
+      sentToEstimate: true,
+    });
+    showToast(`✓ Added additional part line to Line ${lineNumber}!`);
+  };
+
   const handleAddPartToSpecificLine = (roId: string, lineNumber: number) => {
     setInlineAddLineState({
       roId,
@@ -1278,6 +1294,17 @@ export const PartsDashboard: React.FC = () => {
                                             📦 Order Now
                                           </span>
                                         )}
+
+                                        {/* Additional Parts Needed Button (Right of Quote Only / Part Description) */}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddDirectAdditionalPart(ro.id, lineNum)}
+                                          className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:text-blue-900 border border-blue-300 hover:border-blue-400 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                                          title={`Add another part line to Line ${lineNum}`}
+                                        >
+                                          <Plus className="w-3.5 h-3.5 text-blue-600" />
+                                          <span>Additional Parts Needed</span>
+                                        </button>
                                       </div>
 
                                       <div className="flex items-center gap-1.5">
@@ -1678,18 +1705,6 @@ export const PartsDashboard: React.FC = () => {
           <p className="text-xs text-slate-500 mt-0.5">
             Requisition parts, source local stock, monitor orders, and issue items directly to technicians.
           </p>
-        </div>
-
-        {/* Primary Action Button */}
-        <div className="flex items-center gap-2">
-          <button
-            id="parts-add-part-btn"
-            onClick={() => openAddPartModalForRO()}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all hover:shadow-md cursor-pointer border border-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Direct Part Entry</span>
-          </button>
         </div>
       </div>
 
