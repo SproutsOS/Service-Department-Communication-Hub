@@ -78,6 +78,8 @@ interface AppContextType {
   isStaffManagementOpen: boolean;
   isTimeCardCalculatorOpen: boolean;
   isCustomerDirectoryOpen: boolean;
+  managerViewSection: 'FLOOR' | 'CALL_SHEET';
+  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET') => void;
   prefilledCustomerForNewRO: Customer | null;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
@@ -519,6 +521,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return getInitialStaffLeaveEntries();
   });
   const [isStaffCalendarOpen, setIsStaffCalendarOpen] = useState(false);
+  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET'>('FLOOR');
 
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
   const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
@@ -1111,13 +1114,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
 
-    triggerNotification(
-      updatedRO,
-      `Status: ${newStatus.replace(/_/g, ' ')}`,
-      `${currentUser.name} (${currentUser.title}) updated status. ${notes ? `Note: "${notes}"` : ''}`,
-      isNowUrgent,
-      'STATUS_CHANGE'
-    );
+    if (newStatus === 'APPROVED') {
+      // Specifically target Service Manager, Parts Specialists, and the assigned Tech on this RO only
+      triggerNotification(
+        updatedRO,
+        `📋 RO Approved: #${targetRO.id}`,
+        `${currentUser.name} approved repairs for ${targetRO.customerName}.`,
+        true,
+        'STATUS_CHANGE',
+        'SERVICE_MANAGER'
+      );
+      triggerNotification(
+        updatedRO,
+        `🚨 Parts Action: RO Approved #${targetRO.id}`,
+        `Customer authorized repairs. Please verify and place parts orders now.`,
+        true,
+        'PARTS_UPDATE',
+        'PARTS_SPECIALIST'
+      );
+      if (targetRO.techId) {
+        triggerNotification(
+          updatedRO,
+          `🔧 Repairs Authorized: RO #${targetRO.id}`,
+          `Customer approved repairs. Work is authorized to proceed.`,
+          true,
+          'STATUS_CHANGE',
+          'TECHNICIAN',
+          targetRO.techId
+        );
+      }
+    } else {
+      triggerNotification(
+        updatedRO,
+        `Status: ${newStatus.replace(/_/g, ' ')}`,
+        `${currentUser.name} (${currentUser.title}) updated status. ${notes ? `Note: "${notes}"` : ''}`,
+        isNowUrgent,
+        'STATUS_CHANGE'
+      );
+    }
   };
 
   // Quick Action: Begin diagnosis
@@ -3725,16 +3759,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     syncRepairOrder(updatedRO);
 
-    triggerNotification(
-      updatedRO,
-      `Quote ${status === 'APPROVED' ? 'Approved' : 'Declined'}: RO #${targetRO.id}`,
-      `${currentUser.name} marked quote as ${status}${reason ? ` (${reason})` : ''}.`,
-      status === 'APPROVED',
-      'STATUS_CHANGE'
-    );
-
     if (status === 'APPROVED') {
-      // 1. Role Alert for Parts Specialist / Parts Counter
+      // 1. Service Manager
+      triggerNotification(
+        updatedRO,
+        `📋 Quote Approved: RO #${targetRO.id}`,
+        `${currentUser.name} authorized repair quote ($${updatedQuote.grandTotal.toFixed(2)}) for ${targetRO.customerName}.`,
+        true,
+        'STATUS_CHANGE',
+        'SERVICE_MANAGER'
+      );
+
+      // 2. Role Alert for Parts Specialist / Parts Counter
       triggerNotification(
         updatedRO,
         `🚨 Parts Action: Quote Approved for RO #${targetRO.id}`,
@@ -3744,15 +3780,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'PARTS_SPECIALIST'
       );
 
-      // 2. Role Alert for Technician
+      // 3. Role Alert strictly for the Assigned Technician on this RO
+      if (targetRO.techId) {
+        triggerNotification(
+          updatedRO,
+          `🔧 Repairs Authorized: RO #${targetRO.id}`,
+          `Customer approved repair estimate ($${updatedQuote.grandTotal.toFixed(2)}). Parts are being ordered, proceed with repairs.`,
+          true,
+          'STATUS_CHANGE',
+          'TECHNICIAN',
+          targetRO.techId
+        );
+      }
+    } else {
       triggerNotification(
         updatedRO,
-        `🔧 Repairs Authorized: RO #${targetRO.id}`,
-        `Customer approved repair estimate ($${updatedQuote.grandTotal.toFixed(2)}). Parts are being ordered, proceed with repairs.`,
-        true,
-        'STATUS_CHANGE',
-        'TECHNICIAN',
-        targetRO.techId
+        `Quote Declined: RO #${targetRO.id}`,
+        `${currentUser.name} marked quote as declined${reason ? ` (${reason})` : ''}.`,
+        false,
+        'STATUS_CHANGE'
       );
     }
 
@@ -4488,6 +4534,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isStaffManagementOpen,
         isTimeCardCalculatorOpen,
         isCustomerDirectoryOpen,
+        managerViewSection,
+        setManagerViewSection,
         prefilledCustomerForNewRO,
         isSoundEnabled,
         pushPermission,

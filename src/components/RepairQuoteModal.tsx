@@ -928,7 +928,7 @@ export const RepairQuoteModal: React.FC = () => {
   // Advisor / Manager approval or decline
   const handleApproveQuote = () => {
     const formattedTotal = (Number(grandTotal) || 0).toFixed(2);
-    if (!window.confirm(`Authorize and approve repair quote for ${activeQuoteRO.customerName} totaling $${formattedTotal}?\n\nThis will:\n1. Update repair order status to APPROVED\n2. Broadcast an urgent alert to ShopChat\n3. Notify Parts to order parts immediately\n4. Alert the assigned Technician that repairs are authorized`)) {
+    if (!window.confirm(`Authorize and approve repair quote for ${activeQuoteRO.customerName} totaling $${formattedTotal}?\n\nThis will:\n1. Update repair order status to APPROVED\n2. Notify assigned Technician that repairs are authorized\n3. Notify Service Manager\n4. Notify Parts Counter to order parts immediately`)) {
       return;
     }
 
@@ -938,22 +938,23 @@ export const RepairQuoteModal: React.FC = () => {
     // 2. Update quote and repair order status to APPROVED (automatically rolls parts into RO)
     updateQuoteStatus(activeQuoteRO.id, 'APPROVED');
 
-    // 3. Trigger urgent broadcast in ShopChat
     const vehicleDesc = activeQuoteRO.vehicle 
       ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` 
       : 'Vehicle';
-    const techName = activeQuoteRO.techName || 'Assigned Tech';
-    const partsCount = partsItems.length;
 
-    sendShopChatMessage(
-      `🚨 [QUOTE APPROVED] RO #${activeQuoteRO.id} - ${activeQuoteRO.customerName} (${vehicleDesc}). Total: $${formattedTotal} (${partsCount} parts item${partsCount === 1 ? '' : 's'}). Parts Counter: Please place parts orders immediately. Tech (${techName}): Customer authorized repairs!`,
-      undefined, // General ShopChat broadcast
-      activeQuoteRO.id,
-      true // Urgent
-    );
+    // 3. Send targeted ShopChat alert to Service Manager(s)
+    const managerUsers = users.filter(u => u.role === 'SERVICE_MANAGER' && u.id !== currentUser.id);
+    managerUsers.forEach(mu => {
+      sendShopChatMessage(
+        `📋 [RO APPROVED] RO #${activeQuoteRO.id} (${activeQuoteRO.customerName} - ${vehicleDesc}) approved for $${formattedTotal}. Parts counter and assigned tech notified.`,
+        mu.id,
+        activeQuoteRO.id,
+        true
+      );
+    });
 
-    // 4. Send targeted alert to Parts role (all parts specialists)
-    const partsUsers = users.filter(u => u.role === 'PARTS_SPECIALIST');
+    // 4. Send targeted ShopChat alert to Parts Specialists
+    const partsUsers = users.filter(u => u.role === 'PARTS_SPECIALIST' && u.id !== currentUser.id);
     partsUsers.forEach(pu => {
       sendShopChatMessage(
         `📦 [PARTS ACTION REQUIRED] Customer authorized Quote for RO #${activeQuoteRO.id} ($${formattedTotal}). Please review and place parts order now.`,
@@ -963,27 +964,17 @@ export const RepairQuoteModal: React.FC = () => {
       );
     });
 
-    // 5. Send targeted alert to Technician role
-    if (activeQuoteRO.techId) {
+    // 5. Send targeted ShopChat alert strictly to the Technician assigned to THIS repair order
+    if (activeQuoteRO.techId && activeQuoteRO.techId !== currentUser.id) {
       sendShopChatMessage(
         `🔧 [REPAIR AUTHORIZED] Quote approved for RO #${activeQuoteRO.id} ($${formattedTotal}). Customer authorized repairs. Work is approved to proceed!`,
         activeQuoteRO.techId,
         activeQuoteRO.id,
         true
       );
-    } else {
-      const techUsers = users.filter(u => u.role === 'TECHNICIAN');
-      techUsers.forEach(tu => {
-        sendShopChatMessage(
-          `🔧 [REPAIR AUTHORIZED] Quote approved for RO #${activeQuoteRO.id} ($${formattedTotal}). Work is approved to proceed!`,
-          tu.id,
-          activeQuoteRO.id,
-          true
-        );
-      });
     }
 
-    setSaveSuccessMsg('Quote authorized and repair order approved! Urgent notifications sent to ShopChat, Parts Counter, and Technician.');
+    setSaveSuccessMsg('Quote authorized and repair order approved! Targeted notifications sent to the assigned Technician, Service Manager, and Parts Counter.');
     setTimeout(() => {
       setSaveSuccessMsg(null);
       closeQuoteModal();

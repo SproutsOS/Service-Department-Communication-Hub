@@ -11,7 +11,6 @@ import {
   Calendar, 
   Send,
   Truck,
-  Award,
   Check,
   ChevronDown,
   ChevronUp,
@@ -1637,10 +1636,6 @@ export const TechDashboard: React.FC = () => {
                     {currentUser.employeeNumber}
                   </span>
                 )}
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
-                  <Award className="w-3 h-3 text-blue-400" />
-                  <span>{currentUser.certificationLevel || 'Technician'}</span>
-                </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5 font-medium">
                 {currentUser.title}

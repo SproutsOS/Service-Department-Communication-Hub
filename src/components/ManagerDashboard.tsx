@@ -28,7 +28,6 @@ import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince } from '../utils/formatters';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
-import { ManagerStaffCalendar } from './ManagerStaffCalendar';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
@@ -38,12 +37,12 @@ export const ManagerDashboard: React.FC = () => {
     setSelectedRO, 
     setIsNewROModalOpen, 
     startDiagnosis, 
-    setIsTimeCardCalculatorOpen,
     staffLeaveEntries,
-    setIsStaffCalendarOpen
+    setIsStaffCalendarOpen,
+    managerViewSection: viewSection,
+    setManagerViewSection: setViewSection
   } = useApp();
 
-  const [viewSection, setViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'STAFF_CALENDAR'>('FLOOR');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
@@ -141,9 +140,6 @@ export const ManagerDashboard: React.FC = () => {
           <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
             Master Dashboard
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 font-medium">
-            Centralized communications, live assignments, technician real-time status & parts ETA
-          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -159,7 +155,7 @@ export const ManagerDashboard: React.FC = () => {
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Floor Board</span>
+              <span>Shop Tracker</span>
             </button>
             <button
               type="button"
@@ -178,34 +174,7 @@ export const ManagerDashboard: React.FC = () => {
                 </span>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => setViewSection('STAFF_CALENDAR')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewSection === 'STAFF_CALENDAR'
-                  ? 'bg-white text-purple-700 shadow-2xs font-black'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <CalendarDays className="w-3.5 h-3.5 text-purple-600" />
-              <span>Staff Calendar</span>
-              {todayAbsences.length > 0 && (
-                <span className="bg-amber-400 text-slate-950 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                  {todayAbsences.length}
-                </span>
-              )}
-            </button>
           </div>
-
-          <button
-            id="open-time-card-calculator-btn"
-            onClick={() => setIsTimeCardCalculatorOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-3 py-2 rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-            title="Open 7-Day Time Card Calculator"
-          >
-            <Calculator className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Time Card Calc</span>
-          </button>
 
           <button
             id="create-new-ro-btn-mgr"
@@ -285,7 +254,7 @@ export const ManagerDashboard: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => setViewSection('STAFF_CALENDAR')}
+            onClick={() => setIsStaffCalendarOpen(true)}
             className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-2xs flex items-center gap-1.5"
           >
             <CalendarDays className="w-3.5 h-3.5" />
@@ -299,8 +268,6 @@ export const ManagerDashboard: React.FC = () => {
           onSelectRO={setSelectedRO}
           onOpenFollowUpModal={setSelectedFollowUpRO}
         />
-      ) : viewSection === 'STAFF_CALENDAR' ? (
-        <ManagerStaffCalendar />
       ) : (
         <>
 

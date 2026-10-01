@@ -11,7 +11,6 @@ import {
   Calendar, 
   Lock,
   ChevronRight,
-  Shield,
   Phone,
   Sparkles,
   ArrowUpDown
@@ -204,19 +203,6 @@ export const SalesDashboard: React.FC = () => {
               {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'SC'}
             </div>
           </div>
-        </div>
-
-        {/* Read-Only Notice Bar */}
-        <div className="mt-4 pt-4 border-t border-slate-700/80 flex items-center justify-between text-xs text-slate-400 flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-teal-400 shrink-0" />
-            <span>
-              <strong>Read-Only Integrity:</strong> Sales staff can review all vehicle repair data and promised times without modifying technician or advisor workflows.
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-400">
-            {shopName || 'Dealership Service'} Real-Time Sync
-          </span>
         </div>
       </div>
 

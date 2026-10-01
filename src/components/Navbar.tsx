@@ -15,7 +15,6 @@ import {
   Cloud,
   CheckCircle2,
   Lock,
-  MessageSquare,
   X,
   CalendarDays
 } from 'lucide-react';
@@ -34,12 +33,6 @@ export const Navbar: React.FC = () => {
     toggleSound,
     setIsLoginModalOpen,
     setIsStaffManagementOpen,
-    isChatBoxOpen,
-    setIsChatBoxOpen,
-    openShopChat,
-    unreadShopCount,
-    latestUnreadShopMessage,
-    shopMessages,
     shopName,
     isCloudSynced,
     customers,
@@ -334,46 +327,6 @@ export const Navbar: React.FC = () => {
           )}
         </div>
 
-        {/* Shop Team Chat Box Launcher */}
-        <button
-          id="navbar-shop-chat-btn"
-          onClick={() => {
-            if (isChatBoxOpen) {
-              setIsChatBoxOpen(false);
-            } else {
-              openShopChat();
-            }
-          }}
-          className={`relative p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
-            isChatBoxOpen 
-              ? 'bg-blue-600 text-white shadow-xs' 
-              : unreadShopCount > 0
-              ? 'bg-slate-800 text-white ring-2 ring-blue-400/80 shadow-md'
-              : 'bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white'
-          }`}
-          title={
-            latestUnreadShopMessage
-              ? `New message from ${latestUnreadShopMessage.senderName}: "${latestUnreadShopMessage.content}" - Click to open chat`
-              : 'Open Shop Team Chat'
-          }
-        >
-          <MessageSquare className={`w-4 h-4 ${unreadShopCount > 0 ? 'text-amber-300 animate-bounce' : ''}`} />
-          <span className="text-xs font-semibold flex items-center gap-1.5">
-            <span className="hidden sm:inline">Shop Chat</span>
-            {unreadShopCount > 0 && latestUnreadShopMessage && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-200 bg-amber-950/90 border border-amber-500/60 px-2 py-0.5 rounded-full max-w-[180px] truncate shadow-2xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
-                <span className="truncate">From: {latestUnreadShopMessage.senderName}</span>
-              </span>
-            )}
-          </span>
-          {unreadShopCount > 0 && (
-            <span className="flex h-4 min-w-[18px] px-1 items-center justify-center rounded-full text-[10px] font-extrabold text-white bg-red-600 shadow-sm animate-pulse">
-              {unreadShopCount}
-            </span>
-          )}
-        </button>
-
         {/* Audio Chime Toggle */}
         <button
           id="sound-chime-toggle-btn"
@@ -399,34 +352,17 @@ export const Navbar: React.FC = () => {
           <span>Customer Search</span>
         </button>
 
-        {/* Staff Directory & Calendar Buttons (Service Manager Only) */}
+        {/* Staff Directory Button (Service Manager Only) */}
         {currentUser.role === 'SERVICE_MANAGER' && (
-          <>
-            <button
-              id="navbar-team-btn"
-              onClick={() => setIsStaffManagementOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer"
-              title="Manage Dealership Staff & Job Roles"
-            >
-              <Users className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden md:inline">Staff ({users.length})</span>
-            </button>
-
-            <button
-              id="navbar-staff-calendar-btn"
-              onClick={() => setIsStaffCalendarOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white border border-purple-700/70 transition-colors cursor-pointer shadow-xs"
-              title="Service Manager Staff Attendance Calendar (Track Vacation, Sick, Left Early)"
-            >
-              <CalendarDays className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden md:inline">Calendar</span>
-              {todayAbsencesCount > 0 && (
-                <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.2 rounded-full leading-none">
-                  {todayAbsencesCount}
-                </span>
-              )}
-            </button>
-          </>
+          <button
+            id="navbar-team-btn"
+            onClick={() => setIsStaffManagementOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer"
+            title="Manage Dealership Staff & Job Roles"
+          >
+            <Users className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden md:inline">Staff ({users.length})</span>
+          </button>
         )}
 
         {/* Active User Badge */}

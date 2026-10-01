@@ -35,7 +35,10 @@ import {
   Eye, 
   Lock, 
   MessageSquare,
-  Calculator
+  Calculator,
+  CalendarDays,
+  PhoneCall,
+  PlusCircle
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -60,7 +63,10 @@ const MainContent: React.FC = () => {
     activeRoleView,
     setActiveRoleView,
     isStaffCalendarOpen,
-    setIsStaffCalendarOpen
+    setIsStaffCalendarOpen,
+    setIsNewROModalOpen,
+    managerViewSection,
+    setManagerViewSection
   } = useApp();
   
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
@@ -121,11 +127,14 @@ const MainContent: React.FC = () => {
         
         {/* Left Sidebar Navigation - Only shown for Managers with multi-workstation oversight */}
         {isManager && (
-          <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-700 p-4 flex-col shrink-0">
-            <nav className="space-y-1 mb-6">
-              <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
-                Workstation Views (Manager Access)
-              </div>
+          <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-700 flex-col shrink-0 h-full overflow-hidden">
+            
+            {/* Scrollable Navigation Area (Workstation Views + Dealership Staff & Tools) */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/40">
+              <nav className="space-y-1 mb-4">
+                <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
+                  Workstation Views (Manager Access)
+                </div>
 
             {/* Manager View: Has full oversight of all department boards */}
             {isManager ? (
@@ -206,14 +215,70 @@ const MainContent: React.FC = () => {
                   <div className="text-[10px] text-slate-400 font-bold uppercase px-3 mb-2 tracking-widest">
                     Dealership Staff & Tools
                   </div>
+
+                  {/* 1. Shop Tracker */}
+                  <button
+                    id="sidebar-shop-tracker-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsStaffCalendarOpen(false);
+                      setActiveRoleView('SERVICE_MANAGER');
+                      setManagerViewSection('FLOOR');
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'FLOOR'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Live Shop Tracker Board"
+                  >
+                    <LayoutDashboard className="w-4 h-4 shrink-0 text-blue-400" />
+                    <span className="text-sm font-medium">Shop Tracker</span>
+                  </button>
+
+                  {/* 2. Daily Call Log (directly under Shop Tracker) */}
+                  <button
+                    id="sidebar-daily-call-log-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsStaffCalendarOpen(false);
+                      setActiveRoleView('SERVICE_MANAGER');
+                      setManagerViewSection('CALL_SHEET');
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'CALL_SHEET'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Daily Customer Call Log & Scheduled Follow-ups"
+                  >
+                    <PhoneCall className="w-4 h-4 shrink-0 text-blue-400" />
+                    <span className="text-sm font-medium">Daily Call Log</span>
+                  </button>
+
+                  {/* 3. Create New RO (under Daily Call Log) */}
+                  <button
+                    id="sidebar-create-new-ro-btn"
+                    onClick={() => setIsNewROModalOpen(true)}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 shadow-xs font-bold"
+                    title="Create New Repair Order"
+                  >
+                    <PlusCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span className="text-sm font-medium">+ Create New RO</span>
+                  </button>
+
+                  {/* 4. Employee Roster */}
                   <button
                     id="sidebar-staff-management-btn"
                     onClick={() => {
                       setIsTimeCardCalculatorOpen(false);
+                      setIsStaffCalendarOpen(false);
                       setIsStaffManagementOpen(true);
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
-                      isStaffManagementOpen && !isTimeCardCalculatorOpen
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -227,15 +292,16 @@ const MainContent: React.FC = () => {
                     </span>
                   </button>
 
-                  {/* Time Card Punch Calculator - Exclusive to Service Manager */}
+                  {/* 5. Time Card Punch Calculator - Exclusive to Service Manager */}
                   <button
                     id="sidebar-time-card-calculator-btn"
                     onClick={() => {
                       setIsStaffManagementOpen(false);
+                      setIsStaffCalendarOpen(false);
                       setIsTimeCardCalculatorOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isTimeCardCalculatorOpen
+                      isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isStaffManagementOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -247,6 +313,30 @@ const MainContent: React.FC = () => {
                     </div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700/50 uppercase tracking-wider">
                       Military
+                    </span>
+                  </button>
+
+                  {/* 6. Staff Attendance & Out-of-Office Calendar */}
+                  <button
+                    id="sidebar-staff-calendar-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsStaffCalendarOpen(true);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Staff Attendance & Out-of-Office Calendar (Track Vacation, Sick, Left Early)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <CalendarDays className="w-4 h-4 shrink-0 text-purple-400" />
+                      <span className="text-sm font-medium">Staff Calendar</span>
+                    </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-700/50 uppercase tracking-wider">
+                      Leave/PTO
                     </span>
                   </button>
                 </div>
@@ -322,9 +412,12 @@ const MainContent: React.FC = () => {
               </div>
             )}
           </nav>
+        </div>
 
+        {/* Pinned Bottom Footer Area (Active User & Lock Workstation) */}
+        <div className="p-3 pt-2 border-t border-slate-800 shrink-0 bg-slate-900/95 space-y-2">
           {/* Perspective Indicator & Lock Button */}
-          <div className="px-3 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700/80 mb-3">
+          <div className="px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-700/80">
             <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
               Active User
             </div>
@@ -340,7 +433,7 @@ const MainContent: React.FC = () => {
           <button
             id="sidebar-lock-workstation-btn"
             onClick={lockWorkstation}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 text-xs font-bold transition-colors cursor-pointer mb-4"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 text-xs font-bold transition-colors cursor-pointer"
             title="Lock Workstation & Return to Sign-In Screen"
           >
             <div className="flex items-center gap-2">
@@ -351,26 +444,9 @@ const MainContent: React.FC = () => {
               Sign Out
             </span>
           </button>
-
-          {/* Shop Load Status Widget (Professional Polish) */}
-          <div className="mt-auto p-4 bg-slate-800 rounded-xl border border-slate-700">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5 font-medium">
-              <span>Shop Load Status</span>
-              <span className="text-[10px] text-slate-400 font-medium">Capacity</span>
-            </div>
-            <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-green-500 h-full transition-all duration-300"
-                style={{ width: `${efficiency}%` }}
-              ></div>
-            </div>
-            <div className="flex justify-between mt-2">
-              <span className="text-[10px] text-slate-400 uppercase">{efficiency}% Efficiency</span>
-              <span className="text-[10px] text-green-400 uppercase font-bold">Active</span>
-            </div>
-          </div>
-        </aside>
-      )}
+        </div>
+      </aside>
+    )}
 
         {/* Center Main Dashboard Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -445,6 +521,20 @@ const MainContent: React.FC = () => {
                   <Calculator className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Military Time Card</span>
                 </button>
+                <button
+                  id="mobile-staff-calendar-btn"
+                  onClick={() => {
+                    setIsStaffManagementOpen(false);
+                    setIsTimeCardCalculatorOpen(false);
+                    setIsStaffCalendarOpen(true);
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                    isStaffCalendarOpen ? 'bg-purple-600 text-white' : 'text-slate-400'
+                  }`}
+                >
+                  <CalendarDays className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Staff Calendar</span>
+                </button>
               </>
             ) : (
               <div className="flex items-center gap-2 text-xs text-white font-medium px-2">
@@ -475,6 +565,15 @@ const MainContent: React.FC = () => {
             {isTimeCardCalculatorOpen ? (
               isManager ? (
                 <div>
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setIsTimeCardCalculatorOpen(false)}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                  </div>
                   <TimeCardCalculator onBackToDashboard={() => setIsTimeCardCalculatorOpen(false)} />
                 </div>
               ) : (
@@ -486,6 +585,35 @@ const MainContent: React.FC = () => {
                   </p>
                   <button
                     onClick={() => setIsTimeCardCalculatorOpen(false)}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
+                  >
+                    Return to My Workspace
+                  </button>
+                </div>
+              )
+            ) : isStaffCalendarOpen ? (
+              isManager ? (
+                <div>
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setIsStaffCalendarOpen(false)}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                  </div>
+                  <ManagerStaffCalendar />
+                </div>
+              ) : (
+                <div className="p-8 bg-white rounded-2xl border border-red-200 text-center max-w-lg mx-auto shadow-sm my-auto">
+                  <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-slate-900">Restricted Space</h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Staff Attendance & Leave Calendar is restricted to the Service Manager. Your account ({currentUser.name}) is authorized for the {currentUser.title || currentUser.role} space only.
+                  </p>
+                  <button
+                    onClick={() => setIsStaffCalendarOpen(false)}
                     className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
                   >
                     Return to My Workspace
@@ -580,11 +708,6 @@ const MainContent: React.FC = () => {
       <WarrantyPrintModal />
       <CustomerDirectoryModal />
       <UrgentToastStack />
-
-      {/* Service Manager Staff Attendance & Out-of-Office Calendar Modal (Manager Only) */}
-      {isStaffCalendarOpen && isManager && (
-        <ManagerStaffCalendar asModal onClose={() => setIsStaffCalendarOpen(false)} />
-      )}
 
       {/* Draggable Floating Quick Chat Launcher (hold left mouse button and drag to reposition anywhere) */}
       <DraggableShopChatButton

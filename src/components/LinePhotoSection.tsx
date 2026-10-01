@@ -11,7 +11,8 @@ import {
   ChevronRight, 
   Check, 
   Edit2, 
-  Maximize2 
+  Maximize2,
+  AlertTriangle
 } from 'lucide-react';
 import { LinePhoto } from '../types';
 import { useApp } from '../context/AppContext';
@@ -44,6 +45,7 @@ export const LinePhotoSection: React.FC<LinePhotoSectionProps> = ({
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [captionInput, setCaptionInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [photoToDelete, setPhotoToDelete] = useState<LinePhoto | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,14 +108,14 @@ export const LinePhotoSection: React.FC<LinePhotoSectionProps> = ({
     setIsEditingCaption(false);
   };
 
-  const handleDeleteCurrent = () => {
-    if (!currentPreviewPhoto) return;
-    if (window.confirm(`Delete this photo from Line ${roLineNumber}?`)) {
-      deleteLinePhoto(roId, currentPreviewPhoto.id);
-      if (previewIndex !== null && previewIndex >= linePhotos.length - 1) {
-        setPreviewIndex(linePhotos.length - 2 >= 0 ? linePhotos.length - 2 : null);
-      }
+  const handleConfirmDelete = (photo: LinePhoto) => {
+    deleteLinePhoto(roId, photo.id);
+    setPhotoToDelete(null);
+    if (previewIndex !== null && previewIndex >= linePhotos.length - 1) {
+      setPreviewIndex(linePhotos.length - 2 >= 0 ? linePhotos.length - 2 : null);
     }
+    setFeedback(`✓ Photo removed from Line ${roLineNumber}`);
+    setTimeout(() => setFeedback(null), 3500);
   };
 
   return (
@@ -149,7 +151,7 @@ export const LinePhotoSection: React.FC<LinePhotoSectionProps> = ({
             </span>
           )}
           {feedback && (
-            <span className="text-[10px] font-bold text-emerald-600 animate-fade-in">
+            <span className="text-[10px] font-bold text-emerald-600 animate-fade-in bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
               {feedback}
             </span>
           )}
@@ -193,25 +195,49 @@ export const LinePhotoSection: React.FC<LinePhotoSectionProps> = ({
           {linePhotos.map((photo, pIdx) => (
             <div
               key={photo.id}
-              onClick={() => {
-                setPreviewIndex(pIdx);
-                setCaptionInput(photo.caption || '');
-                setIsEditingCaption(false);
-              }}
-              className="group relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg border-2 border-slate-300 overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-sm transition-all"
+              className="group relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg border-2 border-slate-300 overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-sm transition-all bg-slate-900"
               title={photo.caption || `Click to view Line ${roLineNumber} photo full-screen`}
             >
               <img
                 src={photo.thumbnailUrl || photo.dataUrl}
                 alt={photo.caption || `Line ${roLineNumber} Photo`}
+                onClick={() => {
+                  setPreviewIndex(pIdx);
+                  setCaptionInput(photo.caption || '');
+                  setIsEditingCaption(false);
+                }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
               />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div 
+                onClick={() => {
+                  setPreviewIndex(pIdx);
+                  setCaptionInput(photo.caption || '');
+                  setIsEditingCaption(false);
+                }}
+                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none"
+              >
                 <Eye className="w-4 h-4 text-white drop-shadow" />
               </div>
-              <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] font-bold px-1 py-0.5 truncate text-center">
+
+              {/* Line Index Number */}
+              <div className="absolute bottom-0 inset-x-0 bg-black/70 text-white text-[8px] font-bold px-1 py-0.5 truncate text-center pointer-events-none">
                 #{pIdx + 1}
               </div>
+
+              {/* Quick Remove Photo Button (Top-Right of Thumbnail) */}
+              {canDeletePhoto && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPhotoToDelete(photo);
+                  }}
+                  className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white opacity-90 group-hover:opacity-100 shadow-md transition-all cursor-pointer z-10"
+                  title="Remove this photo (wrong vehicle or part)"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
             </div>
           ))}
 
@@ -235,6 +261,64 @@ export const LinePhotoSection: React.FC<LinePhotoSectionProps> = ({
               Tap "Take Photo" to document finding
             </span>
           )}
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Photo Removal (Wrong Vehicle / Part) */}
+      {photoToDelete && (
+        <div 
+          className="fixed inset-0 z-70 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setPhotoToDelete(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-md w-full p-5 border border-slate-200 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Remove Photo from Line #{roLineNumber}?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  If this picture was taken of the <strong>wrong vehicle</strong> or <strong>wrong part</strong>, removing it will permanently detach it from this line.
+                </p>
+              </div>
+            </div>
+
+            {/* Thumbnail Preview in confirmation */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+              <img 
+                src={photoToDelete.thumbnailUrl || photoToDelete.dataUrl} 
+                alt="Photo to delete" 
+                className="w-14 h-14 object-cover rounded-lg border border-slate-300 shrink-0"
+              />
+              <div className="text-xs text-slate-700 min-w-0 flex-1">
+                <p className="font-bold truncate">{photoToDelete.caption || `Line ${roLineNumber} Photo`}</p>
+                <p className="text-[10px] text-slate-400">Captured by {photoToDelete.uploadedByName || 'Staff'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPhotoToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancel / Keep Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDelete(photoToDelete)}
+                className="px-4 py-2 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Remove Photo</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -263,11 +347,12 @@ export const LinePhotoSection: React.FC<LinePhotoSectionProps> = ({
                 {canDeletePhoto && (
                   <button
                     type="button"
-                    onClick={handleDeleteCurrent}
-                    className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
-                    title="Delete this photo"
+                    onClick={() => setPhotoToDelete(currentPreviewPhoto)}
+                    className="px-2.5 py-1.5 bg-rose-950/70 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-800/80 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                    title="Remove this photo from Line (wrong vehicle or part)"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Photo</span>
                   </button>
                 )}
                 <button
