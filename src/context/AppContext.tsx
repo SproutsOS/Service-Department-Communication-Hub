@@ -1393,6 +1393,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               unitPrice: partPrice > 0 ? partPrice : nextPartsItems[matchIdx].unitPrice,
               subtotal: (newPart.quantity || nextPartsItems[matchIdx].quantity || 1) * (partPrice > 0 ? partPrice : (Number(nextPartsItems[matchIdx].unitPrice) || 0)),
               sourcePartId: newPart.id,
+              roLineNumber: newPart.roLineNumber || nextPartsItems[matchIdx].roLineNumber,
             };
           } else {
             nextPartsItems.push({
@@ -1401,8 +1402,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               partNumber: newPart.partNumber,
               quantity: newPart.quantity || 1,
               unitPrice: partPrice > 0 ? partPrice : ('' as any),
-              subtotal: (newPart.quantity || 1) * partPrice,
+              subtotal: (newPart.quantity || 1) * (partPrice > 0 ? partPrice : 0),
               sourcePartId: newPart.id,
+              roLineNumber: newPart.roLineNumber,
             });
           }
         }
@@ -1442,7 +1444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedROToSync,
         partsToAdd.length === 1 ? `Parts Requested: ${firstPart.description}` : `${partsToAdd.length} Parts Requested`,
         `Submitted by ${currentUser.name}`,
-        true,
+        false,
         'PARTS_UPDATE',
         'PARTS_SPECIALIST'
       );
@@ -1601,10 +1603,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const existingQuoteParts = mergedQuote.partsItems || [];
       const matchIdx = existingQuoteParts.findIndex(qp => qp.sourcePartId === partId || (updates.partNumber && qp.partNumber === updates.partNumber));
       let nextPartsItems = [...existingQuoteParts];
-      const partPrice = (updates.price !== undefined && Number(updates.price) > 0) ? Number(updates.price) : undefined;
+      const partPrice = (updates.price !== undefined && !isNaN(Number(updates.price))) ? Number(Number(updates.price).toFixed(2)) : undefined;
+      const targetPart = targetRO.parts.find(p => p.id === partId);
+      const effectiveLineNumber = updates.roLineNumber || targetPart?.roLineNumber;
+
       if (matchIdx >= 0) {
         const cur = nextPartsItems[matchIdx];
-        const newUnitPrice = partPrice !== undefined ? partPrice : cur.unitPrice;
+        const newUnitPrice = partPrice !== undefined ? partPrice : (cur.unitPrice || 0);
         const newQty = updates.quantity !== undefined ? updates.quantity : (cur.quantity || 1);
         nextPartsItems[matchIdx] = {
           ...cur,
@@ -1614,16 +1619,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           unitPrice: newUnitPrice,
           subtotal: Number((newQty * (Number(newUnitPrice) || 0)).toFixed(2)),
           sourcePartId: partId,
+          roLineNumber: effectiveLineNumber || cur.roLineNumber,
         };
-      } else if (partDesc) {
+      } else if (partDesc || updates.partNumber) {
         nextPartsItems.push({
           id: `qpart_${Date.now()}_${partId}`,
-          description: partDesc,
+          description: partDesc || `Part ${updates.partNumber || ''}`,
           partNumber: updates.partNumber || '',
           quantity: updates.quantity || 1,
-          unitPrice: (partPrice && partPrice > 0) ? partPrice : ('' as any),
+          unitPrice: (partPrice !== undefined) ? partPrice : ('' as any),
           subtotal: Number(((updates.quantity || 1) * (partPrice || 0)).toFixed(2)),
           sourcePartId: partId,
+          roLineNumber: effectiveLineNumber,
         });
       }
       const totalPartsCost = Number(nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));

@@ -5,8 +5,16 @@ import { useApp } from '../context/AppContext';
 export const UrgentToastStack: React.FC = () => {
   const { notifications, markNotificationRead, setSelectedRO, repairOrders } = useApp();
 
-  // Show only unread urgent notifications (max 2 at a time)
-  const activeToasts = notifications.filter(n => !n.read && n.isUrgent).slice(0, 2);
+  // Show only unread urgent notifications, excluding parts requests completely
+  const activeToasts = notifications.filter(n => {
+    if (n.read || !n.isUrgent) return false;
+    const isParts = n.type === 'PARTS_UPDATE' || 
+                    n.targetRole === 'PARTS_SPECIALIST' || 
+                    n.title.toLowerCase().includes('part') || 
+                    n.message.toLowerCase().includes('part');
+    if (isParts) return false;
+    return true;
+  }).slice(0, 2);
 
   if (activeToasts.length === 0) return null;
 

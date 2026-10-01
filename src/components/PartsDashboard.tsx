@@ -39,13 +39,26 @@ import { formatEtaBadge, formatDateTime, formatPrice, formatCurrency } from '../
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { computeEtaAndStatus } from '../utils/partArrivalOptions';
 
-const INITIAL_VENDORS = [
-  'STELLANTIS',
-  'OREILLY',
-  'AUTOZONE',
-  'HOLLANDS',
-  'RICKS PRO TRUCK'
-];
+const getSavedVendorsFromStorage = (): string[] => {
+  try {
+    const raw = localStorage.getItem('parts_saved_sources');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // fallback
+  }
+  return [];
+};
+
+const saveVendorsToStorage = (list: string[]) => {
+  try {
+    localStorage.setItem('parts_saved_sources', JSON.stringify(list));
+  } catch {
+    // fallback
+  }
+};
 
 const INITIAL_PART_STATUS_OPTIONS = [
   { id: 'IN_STOCK', label: 'IN STOCK' },
@@ -87,10 +100,17 @@ export const PartsDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<PartStatus | 'ALL'>('ALL');
   const [roStatusFilter, setRoStatusFilter] = useState<string>('ALL');
 
-  // Vendor list with custom additions
-  const [vendors, setVendors] = useState<string[]>(INITIAL_VENDORS);
+  // User-defined source/vendor list (persisted to storage for future use)
+  const [vendors, setVendors] = useState<string[]>(getSavedVendorsFromStorage);
+  const [isManageVendorsModalOpen, setIsManageVendorsModalOpen] = useState(false);
+  const [newVendorInputModal, setNewVendorInputModal] = useState('');
   const [isAddingCustomVendor, setIsAddingCustomVendor] = useState(false);
   const [customVendorInput, setCustomVendorInput] = useState('');
+
+  // Persist vendors to localStorage whenever updated
+  useEffect(() => {
+    saveVendorsToStorage(vendors);
+  }, [vendors]);
 
   // Status list with custom additions
   const [customStatuses, setCustomStatuses] = useState<string[]>([]);
@@ -111,7 +131,7 @@ export const PartsDashboard: React.FC = () => {
   }>>([
     { id: 'pline_1', partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }
   ]);
-  const [partVendor, setPartVendor] = useState<string>(INITIAL_VENDORS[0]);
+  const [partVendor, setPartVendor] = useState<string>(() => getSavedVendorsFromStorage()[0] || '');
   const [partStatus, setPartStatus] = useState<PartStatus>('IN_STOCK');
   const [partTimeFrameId, setPartTimeFrameId] = useState<string>('TODAY_5PM');
   const [partEstimatedArrival, setPartEstimatedArrival] = useState<string>('');
@@ -261,6 +281,86 @@ export const PartsDashboard: React.FC = () => {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [sentToEstimatePartIds, setSentToEstimatePartIds] = useState<Set<string>>(new Set());
 
+  // Inline state for adding an additional part directly to a specific RO line
+  const [inlineAddLineState, setInlineAddLineState] = useState<{
+    roId: string;
+    lineNumber: number;
+    partNumber: string;
+    description: string;
+    quantity: number;
+    price: string;
+    vendor: string;
+    timeFrameId: string;
+  } | null>(null);
+
+  // Live update part fields (price, timeframe, vendor, partNumber, etc.) with instant quote sync
+  const handleUpdatePartField = (roId: string, part: PartItem, field: string, value: any) => {
+    updateReqDraft(part.id, field, value);
+
+    const existingDraft = reqDrafts[part.id] || getReqDraft(part);
+    const currentDraft = {
+      ...existingDraft,
+      [field]: value
+    };
+
+    const cleanPn = currentDraft.partNumber?.trim().toUpperCase() || part.partNumber || 'TBD';
+    const priceVal = (currentDraft.price !== '' && !isNaN(parseFloat(currentDraft.price))) ? parseFloat(currentDraft.price) : undefined;
+    const qty = Math.max(1, Number(currentDraft.quantity) || part.quantity || 1);
+    const effectiveVendor = currentDraft.vendor || part.vendor || vendors[0] || '';
+    const effectiveStatus = currentDraft.status || part.status;
+    const effectiveEta = currentDraft.estimatedArrival || part.estimatedArrival;
+
+    updatePartItem(roId, part.id, {
+      partNumber: cleanPn,
+      price: priceVal,
+      quantity: qty,
+      vendor: effectiveVendor,
+      status: effectiveStatus,
+      estimatedArrival: effectiveEta,
+      roLineNumber: part.roLineNumber,
+    });
+  };
+
+  const handleAddPartToSpecificLine = (roId: string, lineNumber: number) => {
+    setInlineAddLineState({
+      roId,
+      lineNumber,
+      partNumber: '',
+      description: '',
+      quantity: 1,
+      price: '',
+      vendor: vendors[0] || '',
+      timeFrameId: 'TODAY_5PM',
+    });
+  };
+
+  const handleSaveInlineLinePart = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inlineAddLineState) return;
+    const { roId, lineNumber, partNumber, description, quantity, price, vendor, timeFrameId } = inlineAddLineState;
+    const cleanPn = partNumber.trim().toUpperCase() || 'TBD';
+    const cleanDesc = description.trim() || `Part for Line ${lineNumber}`;
+    const priceVal = (price !== '' && !isNaN(parseFloat(price))) ? parseFloat(price) : undefined;
+    const qty = Math.max(1, Number(quantity) || 1);
+    const tfCalc = computeEtaAndStatus(timeFrameId);
+
+    addPartOrder(roId, {
+      partNumber: cleanPn,
+      description: cleanDesc,
+      quantity: qty,
+      price: priceVal,
+      vendor: vendor || vendors[0] || '',
+      status: 'QUOTE_ONLY',
+      requestType: 'QUOTE_ONLY',
+      estimatedArrival: tfCalc.estimatedArrival || 'Price Quoted for Main Estimate',
+      roLineNumber: lineNumber,
+      sentToEstimate: true,
+    });
+
+    setInlineAddLineState(null);
+    showToast(`✓ Added "${cleanDesc}" (Part #${cleanPn}) to Line ${lineNumber} & Quote!`);
+  };
+
   // Helper to determine if a quote-only part has been sent to estimate
   const isPartSentToEstimate = (part: PartItem): boolean => {
     return Boolean(
@@ -279,7 +379,7 @@ export const PartsDashboard: React.FC = () => {
       price: formatPrice(part.price),
       quantity: Math.max(1, part.quantity || 1),
       status: (part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' ? 'DAILY_ORDER' : part.status) as PartStatus,
-      vendor: part.vendor && part.vendor !== 'TBD' ? part.vendor : (vendors[0] || INITIAL_VENDORS[0]),
+      vendor: part.vendor && part.vendor !== 'TBD' ? part.vendor : (vendors[0] || ''),
       timeFrameId: part.status === 'IN_STOCK' ? 'IN_STOCK' : 'TODAY_5PM',
       estimatedArrival: part.estimatedArrival || '',
     };
@@ -292,7 +392,7 @@ export const PartsDashboard: React.FC = () => {
         price: '',
         quantity: 1,
         status: 'DAILY_ORDER',
-        vendor: vendors[0] || INITIAL_VENDORS[0],
+        vendor: vendors[0] || '',
         timeFrameId: 'TODAY_5PM',
         estimatedArrival: '',
       };
@@ -723,7 +823,7 @@ export const PartsDashboard: React.FC = () => {
         price: formatPrice(rp.price),
         quantity: Math.max(1, rp.quantity || 1),
         status: rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'DAILY_ORDER',
-        vendor: rp.vendor && rp.vendor !== 'TBD' ? rp.vendor : (vendors[0] || INITIAL_VENDORS[0]),
+        vendor: rp.vendor && rp.vendor !== 'TBD' ? rp.vendor : (vendors[0] || ''),
       };
     });
     setReqDrafts(prev => ({ ...prev, ...initialDrafts }));
@@ -738,7 +838,7 @@ export const PartsDashboard: React.FC = () => {
       setPartStatus('IN_STOCK');
     }
 
-    setPartVendor(vendors[0] || INITIAL_VENDORS[0]);
+    setPartVendor(vendors[0] || '');
     setPartEtaTime('17:00');
     setPartTracking('');
     setPartNotes('');
@@ -990,390 +1090,574 @@ export const PartsDashboard: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-amber-900 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300">
+              <button
+                type="button"
+                onClick={() => setIsManageVendorsModalOpen(true)}
+                className="text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                title="Manage saved part suppliers / vendors list"
+              >
+                <Store className="w-3.5 h-3.5 text-blue-600" />
+                <span>Manage Sources ({vendors.length})</span>
+              </button>
+              <span className="text-[11px] font-bold text-amber-900 bg-amber-100 px-2.5 py-1.5 rounded-lg border border-amber-300">
                 ⚡ Ready for Parts Counter Sourcing
               </span>
             </div>
           </div>
 
-          {/* Cards for each vehicle needing parts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+          {/* Cards for each vehicle needing parts - Full width layout across screen */}
+          <div className="grid grid-cols-1 gap-4 w-full">
             {rosWithPendingTechRequests.map(ro => {
-              const requestedParts = [...ro.parts.filter(isTechRequestedPart)].sort((a, b) => getPartLineOrder(a) - getPartLineOrder(b));
-              const isROAdded = addedRoIds.has(ro.id) || (
-                requestedParts.length > 0 && 
-                requestedParts.every(p => p.status !== 'REQUESTED' && p.status !== 'NEEDED' && p.status !== 'QUOTE_ONLY')
+              const allROParts = ro.parts || [];
+              const totalConcernLines = Math.max(
+                ro.concerns?.length || 1,
+                ...allROParts.map(p => p.roLineNumber || 1)
               );
+              const lineNumbers = Array.from({ length: totalConcernLines }, (_, i) => i + 1);
 
               return (
                 <div 
                   key={ro.id}
-                  className="bg-white rounded-xl border-2 border-amber-400 hover:border-amber-600 p-4 shadow-xs space-y-3 transition-all"
+                  className="bg-white rounded-xl border-2 border-amber-400 hover:border-amber-600 p-4 sm:p-5 shadow-xs space-y-4 transition-all w-full"
                 >
-                  {/* Top row */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-sm font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  {/* Top Header Row */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-mono text-sm font-black text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
                           RO #{ro.id}
                         </span>
-                        <span className="font-extrabold text-sm text-slate-900">
+                        <span className="font-extrabold text-base text-slate-900">
                           {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
                         </span>
                         {ro.vehicle.licensePlate && (
-                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
-                            {ro.vehicle.licensePlate}
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
+                            Tag: {ro.vehicle.licensePlate}
+                          </span>
+                        )}
+                        {ro.vehicle.mileage && (
+                          <span className="text-xs text-slate-500 font-medium">
+                            ({ro.vehicle.mileage.toLocaleString()} mi)
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-600 mt-1 flex items-center gap-2 flex-wrap">
-                        <span>Customer: <strong className="text-slate-800">{ro.customerName}</strong></span>
+
+                      <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+                        <span>Customer: <strong className="text-slate-900">{ro.customerName}</strong> ({ro.customerPhone})</span>
                         <span>•</span>
-                        <span className="text-amber-800 font-bold">Tech: {ro.techName || 'Unassigned'}</span>
+                        <span className="text-amber-900 font-bold">Tech: {ro.techName || 'Unassigned'}</span>
+                        <span>•</span>
+                        <span className="text-slate-700">Advisor: <strong>{ro.advisorName}</strong></span>
                       </div>
                     </div>
 
-                    {/* Dark Copy VIN */}
-                    <button
-                      onClick={() => copyVin(ro.vehicle.vin, ro.id)}
-                      className="px-2.5 py-1 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-bold border border-slate-800 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs shrink-0"
-                      title="Copy VIN for parts catalog"
-                    >
-                      {copiedVinId === ro.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-300 text-[11px]">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-blue-400" />
-                          <span className="text-[11px]">Copy VIN</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Dark Copy VIN Button */}
+                      <button
+                        type="button"
+                        onClick={() => copyVin(ro.vehicle.vin, ro.id)}
+                        className="px-3 py-1.5 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-bold border border-slate-800 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs shrink-0"
+                        title="Copy VIN for parts catalog"
+                      >
+                        {copiedVinId === ro.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-300 text-xs">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="text-xs">Copy VIN</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRO(ro)}
+                        className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                        <span>View Full RO</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Requested Parts List with Direct Part # & Price Inputs */}
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Items Requested by Technician ({requestedParts.length}):</span>
-                      </span>
-                      <span className="text-amber-800 bg-amber-100 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border border-amber-300">
-                        Add Part # & Price to Fulfill / Quote
-                      </span>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      {requestedParts.length > 0 ? (
-                        requestedParts.map((rp, idx) => {
-                          const draft = getReqDraft(rp);
-                          const isROApproved = Boolean(
-                            ro.status === 'APPROVED' || 
-                            ro.quote?.status === 'APPROVED' || 
-                            ro.quote?.approvedAt || 
-                            ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
-                          );
-                          const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
-                          const isSent = isQuoteOnly && isPartSentToEstimate(rp);
-                          const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
-                          const concernDesc = lineNum && ro.concerns && ro.concerns[lineNum - 1] 
-                            ? ro.concerns[lineNum - 1] 
-                            : (lineNum === 1 ? ro.primaryConcern : undefined);
-                          const causeDesc = lineNum && ro.concernCauses && ro.concernCauses[lineNum - 1]
-                            ? ro.concernCauses[lineNum - 1]
-                            : (lineNum === 1 ? ro.cause : undefined);
-                          const correctionDesc = lineNum && ro.concernCorrections && ro.concernCorrections[lineNum - 1]
-                            ? ro.concernCorrections[lineNum - 1]
-                            : (lineNum === 1 ? ro.correction : undefined);
+                  {/* Lines Breakdown & Parts Management */}
+                  <div className="space-y-4">
+                    {lineNumbers.map(lineNum => {
+                      const concernDesc = ro.concerns && ro.concerns[lineNum - 1] 
+                        ? ro.concerns[lineNum - 1] 
+                        : (lineNum === 1 ? (ro.primaryConcern || 'Diagnostic & Repair') : undefined);
+                      const causeDesc = ro.concernCauses && ro.concernCauses[lineNum - 1]
+                        ? ro.concernCauses[lineNum - 1]
+                        : (lineNum === 1 ? ro.cause : undefined);
+                      const correctionDesc = ro.concernCorrections && ro.concernCorrections[lineNum - 1]
+                        ? ro.concernCorrections[lineNum - 1]
+                        : (lineNum === 1 ? ro.correction : undefined);
 
-                          return (
-                            <div 
-                              key={rp.id || idx} 
-                              className={`p-3 rounded-xl border text-xs space-y-2.5 transition-colors shadow-2xs ${
-                                isROAdded
-                                  ? 'bg-emerald-50/40 border-emerald-300'
-                                  : isSent
-                                    ? 'bg-purple-50/40 border-purple-300'
-                                    : isROApproved 
-                                      ? 'bg-emerald-50/20 border-emerald-300' 
-                                      : isQuoteOnly 
-                                        ? 'bg-purple-50/60 border-purple-300 hover:border-purple-400 ring-1 ring-purple-200' 
-                                        : 'bg-slate-50 border-slate-200 hover:border-amber-400'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between flex-wrap gap-1.5">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-950 font-black text-[10px] flex items-center justify-center shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                  {lineNum && (
-                                    <span className={`font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded border shrink-0 ${
-                                      isQuoteOnly 
-                                        ? 'bg-purple-100 text-purple-900 border-purple-300' 
-                                        : 'bg-blue-100 text-blue-900 border-blue-200'
-                                    }`}>
-                                      Line {lineNum}
-                                    </span>
-                                  )}
-                                  <span className="font-extrabold text-slate-900">{rp.description || rp.name}</span>
-                                  <span className="text-[11px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">
-                                    Qty: {rp.quantity || 1}
-                                  </span>
-                                </div>
+                      const lineParts = allROParts.filter(p => {
+                        const pLine = p.roLineNumber || (p.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(p.notes.match(/For Line (\d+)/i)![1]) : 1);
+                        return pLine === lineNum;
+                      });
 
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {/* Quick Toggle: Quote Only vs Order Now */}
-                                  <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100 text-[10px] shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        updatePartItem(ro.id, rp.id, { status: 'QUOTE_ONLY', requestType: 'QUOTE_ONLY' });
-                                      }}
-                                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
-                                        isQuoteOnly ? 'bg-purple-600 text-white shadow-2xs font-black' : 'text-slate-600 hover:text-slate-900'
-                                      }`}
-                                      title="Mark this line as Quote Only (Pricing estimate for customer approval)"
-                                    >
-                                      Quote Only
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        updatePartItem(ro.id, rp.id, { status: 'REQUESTED', requestType: 'ORDER_NOW' });
-                                      }}
-                                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
-                                        !isQuoteOnly ? 'bg-amber-600 text-white shadow-2xs font-black' : 'text-slate-600 hover:text-slate-900'
-                                      }`}
-                                      title="Mark this line as Order Now (Order immediately without quote hold)"
-                                    >
-                                      Order Now
-                                    </button>
-                                  </div>
+                      const isInlineAddingToThisLine = inlineAddLineState?.roId === ro.id && inlineAddLineState?.lineNumber === lineNum;
 
-                                  {/* Primary Line Status Pill: Shows QUOTE ONLY prominently */}
-                                  {isQuoteOnly ? (
-                                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border-2 bg-purple-100 text-purple-900 border-purple-400 shadow-2xs flex items-center gap-1 shrink-0 animate-pulse">
-                                      <span>💬</span>
-                                      <span>QUOTE ONLY</span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border bg-amber-100 text-amber-900 border-amber-300 shadow-2xs flex items-center gap-1 shrink-0">
-                                      <span>📦</span>
-                                      <span>ORDER NOW</span>
-                                    </span>
-                                  )}
-
-                                  {isSent && (
-                                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-900 border-emerald-300 shadow-2xs flex items-center gap-1 shrink-0">
-                                      <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-                                      <span>ADDED TO QUOTE</span>
-                                    </span>
-                                  )}
-
-                                  {isROAdded && !isSent && (
-                                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-900 border-emerald-300 shadow-2xs flex items-center gap-1 shrink-0">
-                                      <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-                                      <span>ADDED TO RO</span>
-                                    </span>
-                                  )}
-                                </div>
+                      return (
+                        <div 
+                          key={`ro_${ro.id}_line_${lineNum}`}
+                          className="bg-slate-50/80 rounded-xl border border-slate-300 p-3.5 space-y-3"
+                        >
+                          {/* Line Header with 3Cs and Add Part to Line Button */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-300">
+                                  Line {lineNum}
+                                </span>
+                                <span className="font-bold text-xs text-slate-900">
+                                  {concernDesc || `Concern Line ${lineNum}`}
+                                </span>
                               </div>
 
-                              {/* Quote Only High-Visibility Guidance Notice on Screen */}
-                              {isQuoteOnly && (
-                                <div className="flex items-center justify-between gap-2 bg-purple-100/90 text-purple-950 px-2.5 py-1 rounded-lg border border-purple-300 text-xs font-bold">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[10px] font-black uppercase bg-purple-700 text-white px-2 py-0.5 rounded shadow-2xs">
-                                      QUOTE ONLY
-                                    </span>
-                                    <span className="text-purple-900 font-semibold text-[11px]">
-                                      Tech requested price quote only — not ordering yet.
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1 text-[11px] font-black text-purple-950 shrink-0">
-                                    <span>Action: Click</span>
-                                    <span className="bg-purple-700 text-white px-2 py-0.5 rounded text-[10px] uppercase font-black tracking-wide">
-                                      Add to Quote
-                                    </span>
-                                  </div>
+                              {(causeDesc || correctionDesc) && (
+                                <div className="text-[11px] text-slate-600 flex items-center gap-3 flex-wrap">
+                                  {causeDesc && <span>Cause: <strong className="text-amber-900 font-mono">{causeDesc}</strong></span>}
+                                  {correctionDesc && <span>Correction: <strong className="text-emerald-900 font-mono">{correctionDesc}</strong></span>}
                                 </div>
                               )}
+                            </div>
 
-                              {/* 3Cs for this line: Concern, Cause, and Correction */}
-                              {(concernDesc || causeDesc || correctionDesc) && (
-                                <div className="text-[11px] bg-white/95 p-2 rounded-lg border border-slate-200/90 space-y-1 shadow-2xs">
-                                  {concernDesc && (
-                                    <div className="text-slate-900 leading-snug">
-                                      <strong className="text-blue-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1">
-                                        <span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">1</span>
-                                        Line {lineNum || 1} Concern:
-                                      </strong>
-                                      <span className="font-semibold">{concernDesc}</span>
-                                    </div>
-                                  )}
-                                  {causeDesc && (
-                                    <div className="text-amber-950 leading-snug font-mono">
-                                      <strong className="text-amber-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
-                                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">2</span>
-                                        Cause:
-                                      </strong>
-                                      <span>{causeDesc}</span>
-                                    </div>
-                                  )}
-                                  {correctionDesc && (
-                                    <div className="text-emerald-950 leading-snug font-mono">
-                                      <strong className="text-emerald-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
-                                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">3</span>
-                                        Correction:
-                                      </strong>
-                                      <span>{correctionDesc}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                            <button
+                              type="button"
+                              onClick={() => handleAddPartToSpecificLine(ro.id, lineNum)}
+                              className="px-2.5 py-1 text-xs font-bold text-blue-700 hover:text-white bg-blue-50 hover:bg-blue-600 rounded-lg border border-blue-300 hover:border-blue-600 transition-colors cursor-pointer flex items-center gap-1 shrink-0 self-start sm:self-center"
+                              title={`Add a supplementary or required part to Line ${lineNum}`}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>+ Add Part to Line {lineNum}</span>
+                            </button>
+                          </div>
 
-                              {/* Direct Part #, Price, Qty, and Availability Inputs on the Line */}
-                              <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-slate-200/60">
-                                <div className="flex-1 min-w-[120px]">
+                          {/* Parts on this Line */}
+                          {lineParts.length > 0 ? (
+                            <div className="space-y-2.5">
+                              {lineParts.map((rp, pIdx) => {
+                                const draft = getReqDraft(rp);
+                                const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
+                                const isSent = isQuoteOnly && isPartSentToEstimate(rp);
+
+                                return (
+                                  <div 
+                                    key={rp.id || pIdx}
+                                    className={`p-3 rounded-xl border text-xs space-y-2 bg-white shadow-2xs transition-all ${
+                                      isSent
+                                        ? 'border-purple-300 bg-purple-50/20'
+                                        : 'border-slate-300 hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {/* Part Title and Status Pills */}
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                          {pIdx + 1}
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={rp.description || rp.name || ''}
+                                          onChange={e => handleUpdatePartField(ro.id, rp, 'description', e.target.value)}
+                                          placeholder="Part Description"
+                                          className="font-bold text-xs text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white px-1 py-0.5 rounded focus:outline-none min-w-[140px]"
+                                        />
+                                        {isQuoteOnly ? (
+                                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border bg-purple-100 text-purple-900 border-purple-400 shadow-2xs">
+                                            💬 Quote Only
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border bg-amber-100 text-amber-900 border-amber-300 shadow-2xs">
+                                            📦 Order Now
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        {/* Toggle Quote Only / Order Now */}
+                                        <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100 text-[10px]">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdatePartField(ro.id, rp, 'status', 'QUOTE_ONLY')}
+                                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                              isQuoteOnly ? 'bg-purple-600 text-white shadow-2xs font-black' : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                          >
+                                            Quote Only
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdatePartField(ro.id, rp, 'status', 'DAILY_ORDER')}
+                                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                              !isQuoteOnly ? 'bg-amber-600 text-white shadow-2xs font-black' : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                          >
+                                            Order Now
+                                          </button>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (window.confirm(`Delete part "${rp.description}" from Line ${lineNum}?`)) {
+                                              deletePartItem(ro.id, rp.id);
+                                              showToast(`Removed "${rp.description}" from Line ${lineNum}`);
+                                            }
+                                          }}
+                                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                          title="Delete part from line"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Editable Inputs: Part #, Where Part is Coming From (Dropdown), Qty, Unit Price ($), Delivery Timeframe, Quote Action */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1.5 border-t border-slate-200/80 items-center">
+                                      
+                                      {/* Part # Input */}
+                                      <div className="sm:col-span-3">
+                                        <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                                          Part Number
+                                        </label>
+                                        <input
+                                          type="text"
+                                          placeholder="Enter Part #"
+                                          value={draft.partNumber}
+                                          onChange={(e) => handleUpdatePartField(ro.id, rp, 'partNumber', e.target.value.toUpperCase())}
+                                          className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 shadow-2xs"
+                                        />
+                                      </div>
+
+                                      {/* Part Source / Where Part is Coming From (Custom Saved Sourcing Dropdown) */}
+                                      <div className="sm:col-span-3">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                                            Part Source
+                                          </label>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const customV = prompt('Enter custom vendor / supplier name to save:');
+                                              if (customV && customV.trim()) {
+                                                const clean = customV.trim().toUpperCase();
+                                                if (!vendors.includes(clean)) {
+                                                  setVendors(prev => [...prev, clean]);
+                                                }
+                                                handleUpdatePartField(ro.id, rp, 'vendor', clean);
+                                                showToast(`✓ Saved "${clean}" for future use!`);
+                                              }
+                                            }}
+                                            className="text-[9px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                                            title="Add new vendor / source to keep for future use"
+                                          >
+                                            <Plus className="w-2.5 h-2.5" />
+                                            <span>Add Source</span>
+                                          </button>
+                                        </div>
+                                        <select
+                                          value={draft.vendor || rp.vendor || ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === '__ADD_NEW_VENDOR__') {
+                                              const customV = prompt('Enter custom vendor or supplier name:');
+                                              if (customV && customV.trim()) {
+                                                const clean = customV.trim().toUpperCase();
+                                                if (!vendors.includes(clean)) {
+                                                  setVendors(prev => [...prev, clean]);
+                                                }
+                                                handleUpdatePartField(ro.id, rp, 'vendor', clean);
+                                                showToast(`✓ Saved "${clean}" for future use!`);
+                                              }
+                                            } else {
+                                              handleUpdatePartField(ro.id, rp, 'vendor', val);
+                                            }
+                                          }}
+                                          className="w-full px-2 py-1 text-xs font-bold bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-800 shadow-2xs"
+                                        >
+                                          <option value="">{vendors.length === 0 ? '-- No Sources Saved (+ Add)' : '-- Select Source --'}</option>
+                                          {(draft.vendor || rp.vendor) && !vendors.includes(draft.vendor || rp.vendor) && (
+                                            <option value={draft.vendor || rp.vendor}>{draft.vendor || rp.vendor}</option>
+                                          )}
+                                          {vendors.map(v => (
+                                            <option key={v} value={v}>{v}</option>
+                                          ))}
+                                          <option value="__ADD_NEW_VENDOR__">+ Add Custom Source...</option>
+                                        </select>
+                                      </div>
+
+                                      {/* Qty Input */}
+                                      <div className="sm:col-span-1">
+                                        <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                                          Qty
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={draft.quantity}
+                                          onChange={(e) => handleUpdatePartField(ro.id, rp, 'quantity', parseInt(e.target.value) || 1)}
+                                          className="w-full px-2 py-1 text-xs font-bold text-center bg-white border border-slate-300 rounded-lg text-slate-900 shadow-2xs"
+                                        />
+                                      </div>
+
+                                      {/* Price ($) Input - Always editable & syncs to quote */}
+                                      <div className="sm:col-span-2">
+                                        <label className="block text-[9px] font-bold uppercase tracking-wider text-emerald-800 mb-0.5">
+                                          Price ($)
+                                        </label>
+                                        <div className="relative">
+                                          <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-xs text-slate-400 font-bold">$</span>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="0.00"
+                                            value={draft.price}
+                                            onChange={(e) => handleUpdatePartField(ro.id, rp, 'price', e.target.value)}
+                                            onBlur={(e) => {
+                                              const val = e.target.value.trim();
+                                              if (val && !isNaN(Number(val))) {
+                                                handleUpdatePartField(ro.id, rp, 'price', Number(val).toFixed(2));
+                                              }
+                                            }}
+                                            className="w-full pl-5 pr-2 py-1 text-xs font-bold bg-white border border-emerald-400 focus:border-emerald-600 rounded-lg focus:ring-1 focus:ring-emerald-500 text-slate-900 shadow-2xs"
+                                            title="Price - editable anytime, syncs with customer quote"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {/* Part ETA Dropdown - Always editable */}
+                                      <div className="sm:col-span-2">
+                                        <label className="block text-[9px] font-bold uppercase tracking-wider text-blue-800 mb-0.5">
+                                          Part ETA
+                                        </label>
+                                        <ArrivalTimeFrameDropdown
+                                          size="sm"
+                                          value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
+                                          onChange={({ timeFrameId, status, estimatedArrival }) => {
+                                            updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
+                                            updateReqDraft(rp.id, 'status', status);
+                                            updateReqDraft(rp.id, 'estimatedArrival', estimatedArrival);
+                                            handleUpdatePartField(ro.id, rp, 'status', status);
+                                          }}
+                                        />
+                                      </div>
+
+                                      {/* Action / Quote Sync Button */}
+                                      <div className="sm:col-span-1 flex items-end justify-end">
+                                        {isSent ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
+                                            className="w-full py-1 px-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-black border border-emerald-300 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                            title="Click to re-sync price/vendor to Quote"
+                                          >
+                                            <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
+                                            <span>Quoted</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
+                                            className="w-full py-1 px-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold border border-purple-700 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                            title="Add quoted part & price to customer estimate"
+                                          >
+                                            <Calculator className="w-3 h-3" />
+                                            <span>+ Quote</span>
+                                          </button>
+                                        )}
+                                      </div>
+
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-500 italic flex items-center justify-between">
+                              <span>No parts assigned to Line {lineNum} yet.</span>
+                              <button
+                                type="button"
+                                onClick={() => handleAddPartToSpecificLine(ro.id, lineNum)}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                              >
+                                + Add part to this line
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Inline Form: Add Supplementary / Extra Part to this specific Line */}
+                          {isInlineAddingToThisLine && (
+                            <form 
+                              onSubmit={handleSaveInlineLinePart}
+                              className="p-3 bg-blue-50/80 border-2 border-blue-400 rounded-xl space-y-2.5 animate-in fade-in zoom-in-95 duration-100 shadow-xs"
+                            >
+                              <div className="flex items-center justify-between pb-1 border-b border-blue-200">
+                                <span className="text-xs font-extrabold text-blue-900 flex items-center gap-1.5">
+                                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Add Supplementary Part to Line {lineNum}</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setInlineAddLineState(null)}
+                                  className="text-xs font-bold text-slate-500 hover:text-slate-800 p-0.5 rounded cursor-pointer"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                                <div className="sm:col-span-3">
+                                  <label className="block text-[9px] font-bold uppercase text-slate-600 mb-0.5">
+                                    Part Number
+                                  </label>
                                   <input
                                     type="text"
-                                    placeholder="Enter Part # (e.g. 68052369AA)"
-                                    disabled={isSent || isROAdded}
-                                    value={draft.partNumber}
-                                    onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
-                                    className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
-                                    title="Part Number"
+                                    placeholder="e.g. 68052369AA"
+                                    value={inlineAddLineState.partNumber}
+                                    onChange={e => setInlineAddLineState(prev => prev ? ({ ...prev, partNumber: e.target.value.toUpperCase() }) : null)}
+                                    className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-300 focus:border-blue-500 rounded-lg text-slate-900 shadow-2xs"
+                                    autoFocus
                                   />
                                 </div>
 
-                                <div className="w-20 relative shrink-0">
-                                  <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-xs text-slate-400 font-bold">$</span>
+                                <div className="sm:col-span-3">
+                                  <label className="block text-[9px] font-bold uppercase text-slate-600 mb-0.5">
+                                    Description <span className="text-red-500">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Brake Rotor, Hardware Kit, Sensor"
+                                    value={inlineAddLineState.description}
+                                    onChange={e => setInlineAddLineState(prev => prev ? ({ ...prev, description: e.target.value }) : null)}
+                                    required
+                                    className="w-full px-2.5 py-1 text-xs font-bold bg-white border border-blue-300 focus:border-blue-500 rounded-lg text-slate-900 shadow-2xs"
+                                  />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <label className="block text-[9px] font-bold uppercase text-slate-600">
+                                      Part Source
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const customV = prompt('Enter custom vendor/source name:');
+                                        if (customV && customV.trim()) {
+                                          const clean = customV.trim().toUpperCase();
+                                          if (!vendors.includes(clean)) {
+                                            setVendors(prev => [...prev, clean]);
+                                          }
+                                          setInlineAddLineState(prev => prev ? ({ ...prev, vendor: clean }) : null);
+                                          showToast(`✓ Saved "${clean}" for future use!`);
+                                        }
+                                      }}
+                                      className="text-[9px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                      <Plus className="w-2.5 h-2.5" />
+                                      <span>Add</span>
+                                    </button>
+                                  </div>
+                                  <select
+                                    value={inlineAddLineState.vendor || ''}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      if (val === '__ADD_NEW__') {
+                                        const customV = prompt('Enter custom vendor/source name:');
+                                        if (customV && customV.trim()) {
+                                          const clean = customV.trim().toUpperCase();
+                                          if (!vendors.includes(clean)) {
+                                            setVendors(prev => [...prev, clean]);
+                                          }
+                                          setInlineAddLineState(prev => prev ? ({ ...prev, vendor: clean }) : null);
+                                          showToast(`✓ Saved "${clean}" for future use!`);
+                                        }
+                                      } else {
+                                        setInlineAddLineState(prev => prev ? ({ ...prev, vendor: val }) : null);
+                                      }
+                                    }}
+                                    className="w-full px-2 py-1 text-xs font-bold bg-white border border-blue-300 rounded-lg text-slate-800 shadow-2xs"
+                                  >
+                                    <option value="">{vendors.length === 0 ? '-- No Sources Saved --' : '-- Select Source --'}</option>
+                                    {vendors.map(v => (
+                                      <option key={v} value={v}>{v}</option>
+                                    ))}
+                                    <option value="__ADD_NEW__">+ Add Custom Source...</option>
+                                  </select>
+                                </div>
+
+                                <div className="sm:col-span-1">
+                                  <label className="block text-[9px] font-bold uppercase text-slate-600 mb-0.5">
+                                    Qty
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={inlineAddLineState.quantity}
+                                    onChange={e => setInlineAddLineState(prev => prev ? ({ ...prev, quantity: parseInt(e.target.value) || 1 }) : null)}
+                                    className="w-full px-2 py-1 text-xs font-bold text-center bg-white border border-blue-300 rounded-lg text-slate-900 shadow-2xs"
+                                  />
+                                </div>
+
+                                <div className="sm:col-span-1">
+                                  <label className="block text-[9px] font-bold uppercase text-emerald-800 mb-0.5">
+                                    Price ($)
+                                  </label>
                                   <input
                                     type="number"
                                     step="0.01"
                                     min="0"
                                     placeholder="0.00"
-                                    disabled={isSent || isROAdded}
-                                    value={draft.price}
-                                    onChange={(e) => updateReqDraft(rp.id, 'price', e.target.value)}
-                                    onBlur={(e) => {
-                                      const val = e.target.value.trim();
-                                      if (val && !isNaN(Number(val))) {
-                                        updateReqDraft(rp.id, 'price', Number(val).toFixed(2));
-                                      }
-                                    }}
-                                    className="w-full pl-5 pr-2 py-1 text-xs font-bold bg-white border border-emerald-400 focus:border-emerald-600 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-400 text-slate-900 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-300 disabled:cursor-not-allowed"
-                                    title="Quoted Part Unit Price"
+                                    value={inlineAddLineState.price}
+                                    onChange={e => setInlineAddLineState(prev => prev ? ({ ...prev, price: e.target.value }) : null)}
+                                    className="w-full px-2 py-1 text-xs font-bold bg-white border border-emerald-400 rounded-lg text-slate-900 shadow-2xs"
                                   />
                                 </div>
 
-                                <div className="w-36 sm:w-44 shrink-0">
+                                <div className="sm:col-span-2">
+                                  <label className="block text-[9px] font-bold uppercase text-blue-800 mb-0.5">
+                                    Part ETA
+                                  </label>
                                   <ArrivalTimeFrameDropdown
                                     size="sm"
-                                    disabled={isSent || isROAdded}
-                                    value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
-                                    onChange={({ timeFrameId, status, estimatedArrival }) => {
-                                      updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
-                                      updateReqDraft(rp.id, 'status', status);
-                                      updateReqDraft(rp.id, 'estimatedArrival', estimatedArrival);
+                                    value={inlineAddLineState.timeFrameId || 'TODAY_5PM'}
+                                    onChange={({ timeFrameId }) => {
+                                      setInlineAddLineState(prev => prev ? ({ ...prev, timeFrameId }) : null);
                                     }}
                                   />
                                 </div>
 
-                                <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                  {isQuoteOnly ? (
-                                    isSent ? (
-                                      <button
-                                        type="button"
-                                        disabled
-                                        className="px-3.5 py-1.5 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-black shadow-none flex items-center gap-1.5 border-2 border-emerald-400 cursor-not-allowed select-none"
-                                        title="Price and part already added to Main Quote"
-                                      >
-                                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                                        <span>Added to Quote</span>
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
-                                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-black shadow-sm cursor-pointer flex items-center gap-1.5 border border-purple-700 transition-all hover:ring-2 hover:ring-purple-300"
-                                        title="Add Quoted Part & Price directly to Main Quote"
-                                      >
-                                        <Calculator className="w-3.5 h-3.5" />
-                                        <span>Add to Quote</span>
-                                      </button>
-                                    )
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveQuotePriceOnly(ro.id, rp)}
-                                      className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 hover:text-purple-950 rounded-lg text-xs font-bold shadow-2xs cursor-pointer flex items-center gap-1.5 border border-purple-200 transition-colors"
-                                      title="Add this part to Customer Quote / Estimate"
-                                    >
-                                      <Calculator className="w-3.5 h-3.5 text-purple-600" />
-                                      <span>Add to Quote</span>
-                                    </button>
-                                  )}
+                                <div className="sm:col-span-1 flex items-center gap-1 pt-3.5">
+                                  <button
+                                    type="submit"
+                                    className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer shadow-xs"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setInlineAddLineState(null)}
+                                    className="px-1.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 italic">
-                          RO is marked Waiting on Parts — Technician finished diagnosis.
+                            </form>
+                          )}
+
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRO(ro)}
-                      className="px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                      <span>View Full RO</span>
-                    </button>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openAddPartModalForRO(ro.id, true)}
-                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer flex items-center gap-1"
-                        title="Add additional or custom parts"
-                      >
-                        <Plus className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Add Lines</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleAddPartsToROFromCard(ro.id)}
-                        disabled={isROAdded}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 border ${
-                          isROAdded
-                            ? 'bg-emerald-600 text-white border-emerald-700 cursor-default shadow-none'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700 cursor-pointer active:scale-95'
-                        }`}
-                      >
-                        {isROAdded ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Added to Repair Order</span>
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Add Parts to Repair Order</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                      );
+                    })}
                   </div>
 
                 </div>
@@ -1404,7 +1688,7 @@ export const PartsDashboard: React.FC = () => {
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all hover:shadow-md cursor-pointer border border-blue-700"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Parts to Repair Order</span>
+            <span>+ Direct Part Entry</span>
           </button>
         </div>
       </div>
@@ -2587,7 +2871,7 @@ export const PartsDashboard: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm sm:text-base font-bold">Add Parts to Repair Order</h3>
+                    <h3 className="text-sm sm:text-base font-bold">Direct Parts Order & Line Entry</h3>
                     {currentSelectedRO && (
                       <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[10px] font-extrabold rounded-full">
                         RO #{currentSelectedRO.id}
@@ -2994,11 +3278,10 @@ export const PartsDashboard: React.FC = () => {
                           <input
                             type="text"
                             placeholder="e.g. 68052369AA"
-                            disabled={isSent}
                             value={draft.partNumber}
                             onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
-                            className="w-full px-2.5 py-1.5 text-xs font-mono font-bold uppercase bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
-                            autoFocus={idx === 0 && !isSent}
+                            className="w-full px-2.5 py-1.5 text-xs font-mono font-bold uppercase bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-900"
+                            autoFocus={idx === 0}
                           />
                         </div>
 
@@ -3013,7 +3296,6 @@ export const PartsDashboard: React.FC = () => {
                               step="0.01"
                               min="0"
                               placeholder="0.00"
-                              disabled={isSent}
                               value={draft.price}
                               onChange={(e) => updateReqDraft(rp.id, 'price', e.target.value)}
                               onBlur={(e) => {
@@ -3022,7 +3304,7 @@ export const PartsDashboard: React.FC = () => {
                                   updateReqDraft(rp.id, 'price', Number(val).toFixed(2));
                                 }
                               }}
-                              className="w-full pl-6 pr-2 py-1.5 text-xs font-bold bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                              className="w-full pl-6 pr-2 py-1.5 text-xs font-bold bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-900"
                             />
                           </div>
                         </div>
@@ -3035,10 +3317,9 @@ export const PartsDashboard: React.FC = () => {
                             type="number"
                             min="1"
                             max="99"
-                            disabled={isSent}
                             value={draft.quantity}
                             onChange={(e) => updateReqDraft(rp.id, 'quantity', parseInt(e.target.value) || 1)}
-                            className="w-full px-2 py-1.5 text-xs font-bold border border-slate-300 rounded-lg text-center bg-white disabled:bg-slate-100"
+                            className="w-full px-2 py-1.5 text-xs font-bold border border-slate-300 rounded-lg text-center bg-white"
                           />
                         </div>
 
@@ -3179,9 +3460,29 @@ export const PartsDashboard: React.FC = () => {
               <div className="pt-3 border-t border-slate-200 space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Supplier / Vendor
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        Part Source
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const customV = prompt('Enter custom vendor or supplier name to save for future use:');
+                          if (customV && customV.trim()) {
+                            const clean = customV.trim().toUpperCase();
+                            if (!vendors.includes(clean)) {
+                              setVendors(prev => [...prev, clean]);
+                            }
+                            setPartVendor(clean);
+                            showToast(`✓ Saved "${clean}" for future use!`);
+                          }
+                        }}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Source</span>
+                      </button>
+                    </div>
                     <select
                       value={partVendor}
                       onChange={e => {
@@ -3194,16 +3495,17 @@ export const PartsDashboard: React.FC = () => {
                       }}
                       className="w-full text-xs font-bold px-3 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 outline-none"
                     >
+                      <option value="">{vendors.length === 0 ? '-- No Sources Saved (+ Add)' : '-- Select Source --'}</option>
                       {vendors.map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
-                      <option value="__ADD_NEW__">+ Add Custom Vendor...</option>
+                      <option value="__ADD_NEW__">+ Add Custom Source...</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Expected Arrival
+                      Part ETA
                     </label>
                     <ArrivalTimeFrameDropdown
                       value={partTimeFrameId || partStatus}
@@ -3332,29 +3634,112 @@ export const PartsDashboard: React.FC = () => {
 
                   <button
                     type="submit"
-                    className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors cursor-pointer border flex items-center gap-1.5 ${
-                      addedRoIds.has(selectedTargetRoId)
-                        ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-700'
-                        : 'bg-blue-600 hover:bg-blue-700 border-blue-700'
-                    }`}
+                    className="px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors cursor-pointer border flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 border-blue-700"
                   >
-                    {addedRoIds.has(selectedTargetRoId) ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span>Added to Repair Order</span>
-                      </>
-                    ) : (
-                      <>
-                        <Package className="w-3.5 h-3.5" />
-                        <span>Add Parts to Repair Order</span>
-                      </>
-                    )}
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Save & Order Parts</span>
                   </button>
                 </div>
               </div>
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* Manage Sources / Vendors Modal */}
+      {isManageVendorsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-300 shadow-2xl max-w-md w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Saved Part Sources / Vendors</h3>
+                  <p className="text-[11px] text-slate-500">Add or remove custom sources kept available for future use</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManageVendorsModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Add New Source Input */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const clean = newVendorInputModal.trim().toUpperCase();
+                if (!clean) return;
+                if (!vendors.includes(clean)) {
+                  setVendors(prev => [...prev, clean]);
+                  showToast(`✓ Added "${clean}" to saved sources!`);
+                }
+                setNewVendorInputModal('');
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                type="text"
+                placeholder="Enter supplier name (e.g. MOPAR, O'REILLY)"
+                value={newVendorInputModal}
+                onChange={e => setNewVendorInputModal(e.target.value)}
+                className="flex-1 px-3 py-2 text-xs font-bold uppercase bg-white border border-slate-300 rounded-xl focus:ring-1 focus:ring-blue-500 outline-none text-slate-900 placeholder:text-slate-400"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </form>
+
+            {/* List of saved vendors */}
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {vendors.length === 0 ? (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 italic">
+                  No custom sources saved yet. Type a vendor name above to add.
+                </div>
+              ) : (
+                vendors.map(v => (
+                  <div
+                    key={v}
+                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors"
+                  >
+                    <span className="text-xs font-bold text-slate-800">{v}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVendors(prev => prev.filter(item => item !== v));
+                        showToast(`Removed "${v}" from saved sources`);
+                      }}
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                      title="Remove from saved list"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsManageVendorsModalOpen(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
