@@ -648,8 +648,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     }
+    // Clear all unread alerts immediately upon opening shop chat
+    if (unreadShopMessages.length > 0) {
+      markShopMessagesAsRead(unreadShopMessages.map(m => m.id));
+    }
     setIsChatBoxOpen(true);
-  }, [unreadShopMessages, currentUser?.id]);
+  }, [unreadShopMessages, currentUser?.id, markShopMessagesAsRead]);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'default'>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
