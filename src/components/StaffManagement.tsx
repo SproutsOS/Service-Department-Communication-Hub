@@ -5,7 +5,6 @@ import {
   UserX,
   ShieldAlert, 
   Edit3, 
-  ShieldCheck, 
   Briefcase, 
   UserCheck, 
   Wrench, 
@@ -15,7 +14,6 @@ import {
   Mail, 
   AlertTriangle, 
   CheckCircle2, 
-  Search, 
   X, 
   Eye, 
   EyeOff, 
@@ -50,7 +48,6 @@ export const StaffManagement: React.FC = () => {
   } = useApp();
 
   const [activeCategory, setActiveCategory] = useState<'ALL' | UserRole>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
   const isManager = currentUser.role === 'SERVICE_MANAGER';
 
   // Modal states
@@ -334,15 +331,6 @@ export const StaffManagement: React.FC = () => {
   // Filtered staff list
   const filteredUsers = users.filter(user => {
     if (activeCategory !== 'ALL' && user.role !== activeCategory) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = user.name.toLowerCase().includes(q);
-      const matchEmpNum = user.employeeNumber ? user.employeeNumber.toLowerCase().includes(q) || `#${user.employeeNumber.toLowerCase()}`.includes(q) : false;
-      const matchEmail = user.email.toLowerCase().includes(q);
-      const matchTitle = user.title.toLowerCase().includes(q);
-      const matchCert = (user.certificationLevel || '').toLowerCase().includes(q);
-      return matchName || matchEmpNum || matchEmail || matchTitle || matchCert;
-    }
     return true;
   });
 
@@ -370,15 +358,15 @@ export const StaffManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Top Banner & Shop Data Reset Bar */}
+      {/* Header Banner */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl font-black text-slate-900 tracking-tight">
                   Staff & Employee Management
                 </h1>
@@ -386,9 +374,6 @@ export const StaffManagement: React.FC = () => {
                   {totalCount} Total Employees
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Add, assign job roles, set login PINs, and remove employees when they leave the shop.
-              </p>
             </div>
           </div>
 
@@ -404,119 +389,80 @@ export const StaffManagement: React.FC = () => {
             </button>
           </div>
         </div>
-
-        {/* Permissions & Security Status Notice */}
-        <div className="mt-4 p-3 rounded-lg flex items-center justify-between gap-3 text-xs border bg-blue-50/60 border-blue-200 text-blue-900">
-          <div className="flex items-start gap-2">
-            <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">
-                Service Manager Administration Active:
-              </span>
-              <span>
-                {' '}You are managing the staff directory with administrative authority to configure employee roles, credentials, and dealership departments.
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Role Category Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        
-        {/* Categories */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          <button
-            onClick={() => setActiveCategory('ALL')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeCategory === 'ALL'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            All Staff ({totalCount})
-          </button>
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        <button
+          onClick={() => setActiveCategory('ALL')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            activeCategory === 'ALL'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          All Staff ({totalCount})
+        </button>
 
-          <button
-            onClick={() => setActiveCategory('SERVICE_MANAGER')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeCategory === 'SERVICE_MANAGER'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50 hover:text-purple-700'
-            }`}
-          >
-            <Briefcase className="w-3.5 h-3.5" />
-            Service Managers ({managerCount})
-          </button>
+        <button
+          onClick={() => setActiveCategory('SERVICE_MANAGER')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            activeCategory === 'SERVICE_MANAGER'
+              ? 'bg-purple-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50 hover:text-purple-700'
+          }`}
+        >
+          <Briefcase className="w-3.5 h-3.5" />
+          Service Managers ({managerCount})
+        </button>
 
-          <button
-            onClick={() => setActiveCategory('SERVICE_ADVISOR')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeCategory === 'SERVICE_ADVISOR'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-700'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            Service Advisors ({advisorCount})
-          </button>
+        <button
+          onClick={() => setActiveCategory('SERVICE_ADVISOR')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            activeCategory === 'SERVICE_ADVISOR'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-700'
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5" />
+          Service Advisors ({advisorCount})
+        </button>
 
-          <button
-            onClick={() => setActiveCategory('TECHNICIAN')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeCategory === 'TECHNICIAN'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
-            }`}
-          >
-            <Wrench className="w-3.5 h-3.5" />
-            Technicians ({techCount})
-          </button>
+        <button
+          onClick={() => setActiveCategory('TECHNICIAN')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            activeCategory === 'TECHNICIAN'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+          }`}
+        >
+          <Wrench className="w-3.5 h-3.5" />
+          Technicians ({techCount})
+        </button>
 
-          <button
-            onClick={() => setActiveCategory('PARTS_SPECIALIST')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeCategory === 'PARTS_SPECIALIST'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-amber-50 hover:text-amber-700'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5" />
-            Parts Specialists ({partsCount})
-          </button>
+        <button
+          onClick={() => setActiveCategory('PARTS_SPECIALIST')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            activeCategory === 'PARTS_SPECIALIST'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-amber-50 hover:text-amber-700'
+          }`}
+        >
+          <Package className="w-3.5 h-3.5" />
+          Parts Specialists ({partsCount})
+        </button>
 
-          <button
-            onClick={() => setActiveCategory('SALES')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeCategory === 'SALES'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-teal-50 hover:text-teal-700'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            Sales ({salesCount})
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="relative w-full sm:w-64 shrink-0">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search employee or role..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
-          />
-        </div>
-      </div>
-
-      {/* Quick Edit Guidance Banner */}
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
-        <Edit3 className="w-4 h-4 text-blue-600 shrink-0" />
-        <span>
-          <strong>Interactive Staff Directory:</strong> Click directly on any employee card below to edit their profile details and role assignments.
-        </span>
+        <button
+          onClick={() => setActiveCategory('SALES')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            activeCategory === 'SALES'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-teal-50 hover:text-teal-700'
+          }`}
+        >
+          <Eye className="w-3.5 h-3.5" />
+          Sales ({salesCount})
+        </button>
       </div>
 
       {/* Staff Grid */}
@@ -526,7 +472,7 @@ export const StaffManagement: React.FC = () => {
             <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <h3 className="text-sm font-bold text-slate-800">No employees found in this category</h3>
             <p className="text-xs text-slate-500 mt-1">
-              {searchQuery ? 'Try changing your search filter.' : 'Click "Add Employee" above to add staff to this job role.'}
+              Click "Add Employee" above to add staff to this job role.
             </p>
             <button
               onClick={handleOpenAdd}
@@ -683,47 +629,47 @@ export const StaffManagement: React.FC = () => {
                 </div>
 
                 {/* Card Footer Actions */}
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
-                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1 group-hover:text-blue-600 transition-colors">
+                <div className="pt-3 mt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1 group-hover:text-blue-600 transition-colors shrink-0">
                     <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                     Auto-saves
                   </span>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     {isSelf ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Active Session</span>
                       </span>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCurrentUser(user);
-                          showFeedback(`Switched active logged-in user to ${user.name}`);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
-                        title={`Switch active user to ${user.name}`}
-                      >
-                        <LogIn className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Switch User</span>
-                      </button>
-                    )}
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentUser(user);
+                            showFeedback(`Switched active logged-in user to ${user.name}`);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                          title={`Switch active user to ${user.name}`}
+                        >
+                          <LogIn className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Switch</span>
+                        </button>
 
-                    {!isSelf && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDirectChat(user.id);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
-                        title={`Send direct message to ${user.name}`}
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Chat</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDirectChat(user.id);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                          title={`Send direct message to ${user.name}`}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Chat</span>
+                        </button>
+                      </>
                     )}
 
                     <button
@@ -732,24 +678,26 @@ export const StaffManagement: React.FC = () => {
                         e.stopPropagation();
                         handleOpenEdit(user);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white group-hover:border-blue-300 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white group-hover:border-blue-300 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
                     >
                       <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Edit Profile</span>
+                      <span>Edit</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setUserToDelete(user);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-colors cursor-pointer"
-                      title="Remove employee from shop"
-                    >
-                      <UserX className="w-3.5 h-3.5 text-red-500" />
-                      <span>Remove</span>
-                    </button>
+                    {!isSelf && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUserToDelete(user);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                        title="Remove employee from shop"
+                      >
+                        <UserX className="w-3.5 h-3.5 text-red-500" />
+                        <span>Remove</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

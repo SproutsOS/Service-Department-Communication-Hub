@@ -143,39 +143,6 @@ export const ManagerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* View Section Toggle */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200">
-            <button
-              type="button"
-              onClick={() => setViewSection('FLOOR')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewSection === 'FLOOR'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Shop Tracker</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewSection('CALL_SHEET')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewSection === 'CALL_SHEET'
-                  ? 'bg-white text-blue-700 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <PhoneCall className="w-3.5 h-3.5 text-blue-600" />
-              <span>Daily Call Log</span>
-              {totalCallsDue > 0 && (
-                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                  {totalCallsDue}
-                </span>
-              )}
-            </button>
-          </div>
-
           <button
             id="create-new-ro-btn-mgr"
             onClick={() => setIsNewROModalOpen(true)}
