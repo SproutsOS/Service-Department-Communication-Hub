@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   PhoneCall,
   LayoutGrid,
-  ListFilter
+  ListFilter,
+  CalendarCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -26,7 +27,15 @@ import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
 
 export const AdvisorDashboard: React.FC = () => {
-  const { currentUser, repairOrders, setSelectedRO, setIsNewROModalOpen, users } = useApp();
+  const { 
+    currentUser, 
+    repairOrders, 
+    setSelectedRO, 
+    setIsNewROModalOpen, 
+    users,
+    appointments,
+    setIsAppointmentCalendarOpen 
+  } = useApp();
   
   const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET'>('BOARD');
   const [displayMode, setDisplayMode] = useState<'CARD' | 'LINE'>('CARD');
@@ -62,6 +71,18 @@ export const AdvisorDashboard: React.FC = () => {
   const totalCallsDue = totalCadenceCallsDue + postRepairDueCount;
 
   // Status counts for this advisor (using active ROs only)
+  const todayStr = React.useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const myTodayAppointments = React.useMemo(() => {
+    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.advisorId === currentUser.id && a.status !== 'CANCELLED');
+  }, [appointments, todayStr, currentUser.id]);
+
   const waitingDiagnosisCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
   const inDiagCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
   const estimateDoneCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
@@ -133,6 +154,22 @@ export const AdvisorDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Appointment Calendar Button */}
+          <button
+            type="button"
+            onClick={() => setIsAppointmentCalendarOpen(true)}
+            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Open Customer Service Appointment Calendar"
+          >
+            <CalendarCheck className="w-4 h-4 text-purple-200" />
+            <span>Appointment Calendar</span>
+            {myTodayAppointments.length > 0 && (
+              <span className="bg-purple-900 text-purple-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-purple-400">
+                {myTodayAppointments.length} Today
+              </span>
+            )}
+          </button>
+
           {/* View Mode Toggle */}
           <div className="bg-slate-100 p-1 rounded-lg flex items-center border-2 border-slate-500">
             <button

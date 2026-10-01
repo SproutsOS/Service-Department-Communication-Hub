@@ -20,6 +20,7 @@ import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { DraggableShopChatButton } from './components/DraggableShopChatButton';
 import { ManagerStaffCalendar } from './components/ManagerStaffCalendar';
+import { AppointmentCalendar } from './components/AppointmentCalendar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -37,6 +38,7 @@ import {
   MessageSquare,
   Calculator,
   CalendarDays,
+  CalendarCheck,
   PhoneCall,
   PlusCircle
 } from 'lucide-react';
@@ -64,6 +66,9 @@ const MainContent: React.FC = () => {
     setActiveRoleView,
     isStaffCalendarOpen,
     setIsStaffCalendarOpen,
+    isAppointmentCalendarOpen,
+    setIsAppointmentCalendarOpen,
+    appointments,
     setIsNewROModalOpen,
     managerViewSection,
     setManagerViewSection
@@ -79,7 +84,22 @@ const MainContent: React.FC = () => {
       if (isTimeCardCalculatorOpen) setIsTimeCardCalculatorOpen(false);
       if (isStaffCalendarOpen) setIsStaffCalendarOpen(false);
     }
-  }, [isManager, isStaffManagementOpen, isTimeCardCalculatorOpen, isStaffCalendarOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen, setIsStaffCalendarOpen]);
+    if (!isManager && currentUser.role !== 'SERVICE_ADVISOR') {
+      if (isAppointmentCalendarOpen) setIsAppointmentCalendarOpen(false);
+    }
+  }, [isManager, currentUser.role, isStaffManagementOpen, isTimeCardCalculatorOpen, isStaffCalendarOpen, isAppointmentCalendarOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen, setIsStaffCalendarOpen, setIsAppointmentCalendarOpen]);
+
+  const todayStr = React.useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const todayAppointmentsCount = React.useMemo(() => {
+    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.status !== 'CANCELLED').length;
+  }, [appointments, todayStr]);
 
   // Authentication Gate: Render ONLY the Login Screen until authorized staff credentials/PIN are entered
   if (!isAuthenticated) {
@@ -223,11 +243,12 @@ const MainContent: React.FC = () => {
                       setIsStaffManagementOpen(false);
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
+                      setIsAppointmentCalendarOpen(false);
                       setActiveRoleView('SERVICE_MANAGER');
                       setManagerViewSection('FLOOR');
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
-                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'FLOOR'
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'FLOOR'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -237,18 +258,19 @@ const MainContent: React.FC = () => {
                     <span className="text-sm font-medium">Shop Tracker</span>
                   </button>
 
-                  {/* 2. Daily Call Log (directly under Shop Tracker) */}
+                  {/* 2. Daily Call Log */}
                   <button
                     id="sidebar-daily-call-log-btn"
                     onClick={() => {
                       setIsStaffManagementOpen(false);
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
+                      setIsAppointmentCalendarOpen(false);
                       setActiveRoleView('SERVICE_MANAGER');
                       setManagerViewSection('CALL_SHEET');
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'CALL_SHEET'
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'CALL_SHEET'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -258,7 +280,34 @@ const MainContent: React.FC = () => {
                     <span className="text-sm font-medium">Daily Call Log</span>
                   </button>
 
-                  {/* 3. Create New RO (under Daily Call Log) */}
+                  {/* 3. Appointment Calendar (Advisors & Service Manager) */}
+                  <button
+                    id="sidebar-appointment-calendar-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsStaffCalendarOpen(false);
+                      setIsAppointmentCalendarOpen(true);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      isAppointmentCalendarOpen && !isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Service Appointment Calendar (Customer Check-Ins, Waiters, Loaners)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <CalendarCheck className="w-4 h-4 shrink-0 text-purple-400" />
+                      <span className="text-sm font-medium">Appointments</span>
+                    </div>
+                    {todayAppointmentsCount > 0 && (
+                      <span className="text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded-full">
+                        {todayAppointmentsCount} Today
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 4. Create New RO */}
                   <button
                     id="sidebar-create-new-ro-btn"
                     onClick={() => setIsNewROModalOpen(true)}
@@ -269,16 +318,17 @@ const MainContent: React.FC = () => {
                     <span className="text-sm font-medium">+ Create New RO</span>
                   </button>
 
-                  {/* 4. Employee Roster */}
+                  {/* 5. Employee Roster */}
                   <button
                     id="sidebar-staff-management-btn"
                     onClick={() => {
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
+                      setIsAppointmentCalendarOpen(false);
                       setIsStaffManagementOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen
+                      isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -292,16 +342,17 @@ const MainContent: React.FC = () => {
                     </span>
                   </button>
 
-                  {/* 5. Time Card Punch Calculator - Exclusive to Service Manager */}
+                  {/* 6. Time Card Punch Calculator - Exclusive to Service Manager */}
                   <button
                     id="sidebar-time-card-calculator-btn"
                     onClick={() => {
                       setIsStaffManagementOpen(false);
                       setIsStaffCalendarOpen(false);
+                      setIsAppointmentCalendarOpen(false);
                       setIsTimeCardCalculatorOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isStaffManagementOpen
+                      isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -316,16 +367,17 @@ const MainContent: React.FC = () => {
                     </span>
                   </button>
 
-                  {/* 6. Staff Attendance & Out-of-Office Calendar */}
+                  {/* 7. Staff Attendance & Out-of-Office Calendar */}
                   <button
                     id="sidebar-staff-calendar-btn"
                     onClick={() => {
                       setIsStaffManagementOpen(false);
                       setIsTimeCardCalculatorOpen(false);
+                      setIsAppointmentCalendarOpen(false);
                       setIsStaffCalendarOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen
+                      isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen
                         ? 'bg-purple-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -378,18 +430,63 @@ const MainContent: React.FC = () => {
                 )}
 
                 {currentUser.role === 'SERVICE_ADVISOR' && (
-                  <button
-                    id="sidebar-advisor-console-btn"
-                    className="w-full flex items-center p-3 rounded-lg text-left bg-blue-600 text-white shadow-xs"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <UserCheck className="w-4 h-4 text-blue-300" />
-                      <div>
-                        <div className="text-sm font-bold leading-tight">Advisor Console</div>
-                        <div className="text-[11px] text-blue-200">Customer Follow-Up & ROs</div>
+                  <div className="space-y-1.5">
+                    {/* 1. Advisor Console (Active ROs) */}
+                    <button
+                      id="sidebar-advisor-console-btn"
+                      onClick={() => {
+                        setIsAppointmentCalendarOpen(false);
+                        setActiveRoleView('SERVICE_ADVISOR');
+                      }}
+                      className={`w-full flex items-center justify-between p-3 rounded-lg text-left transition-colors cursor-pointer ${
+                        !isAppointmentCalendarOpen ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <UserCheck className="w-4 h-4 text-blue-300" />
+                        <div>
+                          <div className="text-sm font-bold leading-tight">Advisor Console</div>
+                          <div className="text-[11px] text-blue-200">Customer Follow-Up & ROs</div>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    {/* 2. Service Appointment Calendar */}
+                    <button
+                      id="sidebar-advisor-appointment-calendar-btn"
+                      onClick={() => {
+                        setIsAppointmentCalendarOpen(true);
+                      }}
+                      className={`w-full flex items-center justify-between p-3 rounded-lg text-left transition-colors cursor-pointer ${
+                        isAppointmentCalendarOpen ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title="Service Appointment Calendar (Customer Check-Ins, Waiters, Loaners)"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <CalendarCheck className="w-4 h-4 text-purple-300" />
+                        <div>
+                          <div className="text-sm font-bold leading-tight">Appointment Calendar</div>
+                          <div className="text-[11px] text-purple-200">Waiters, Drop-Offs & Loaners</div>
+                        </div>
+                      </div>
+                      {todayAppointmentsCount > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-900 text-purple-200 border border-purple-500/50">
+                          {todayAppointmentsCount} Today
+                        </span>
+                      )}
+                    </button>
+
+                    {/* 3. Create New RO */}
+                    <button
+                      id="sidebar-advisor-create-new-ro-btn"
+                      onClick={() => setIsNewROModalOpen(true)}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-lg text-left transition-colors cursor-pointer bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 shadow-xs font-bold text-xs"
+                      title="Create New Repair Order"
+                    >
+                      <PlusCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>+ Create New RO</span>
+                    </button>
+                  </div>
                 )}
 
                 {currentUser.role === 'PARTS_SPECIALIST' && (
@@ -522,10 +619,31 @@ const MainContent: React.FC = () => {
                   <span>Military Time Card</span>
                 </button>
                 <button
+                  id="mobile-appointment-calendar-btn"
+                  onClick={() => {
+                    setIsStaffManagementOpen(false);
+                    setIsTimeCardCalculatorOpen(false);
+                    setIsStaffCalendarOpen(false);
+                    setIsAppointmentCalendarOpen(true);
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                    isAppointmentCalendarOpen ? 'bg-purple-600 text-white' : 'text-slate-400'
+                  }`}
+                >
+                  <CalendarCheck className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Appointments</span>
+                  {todayAppointmentsCount > 0 && (
+                    <span className="text-[10px] bg-purple-950 text-purple-200 px-1.5 py-0.2 rounded-full font-bold">
+                      {todayAppointmentsCount}
+                    </span>
+                  )}
+                </button>
+                <button
                   id="mobile-staff-calendar-btn"
                   onClick={() => {
                     setIsStaffManagementOpen(false);
                     setIsTimeCardCalculatorOpen(false);
+                    setIsAppointmentCalendarOpen(false);
                     setIsStaffCalendarOpen(true);
                   }}
                   className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
@@ -536,13 +654,38 @@ const MainContent: React.FC = () => {
                   <span>Staff Calendar</span>
                 </button>
               </>
+            ) : currentUser.role === 'SERVICE_ADVISOR' ? (
+              <div className="flex items-center gap-2 text-xs text-white font-medium px-2">
+                <button
+                  onClick={() => setIsAppointmentCalendarOpen(false)}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+                    !isAppointmentCalendarOpen ? 'bg-blue-600 text-white' : 'text-slate-400'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Advisor Console</span>
+                </button>
+                <button
+                  onClick={() => setIsAppointmentCalendarOpen(true)}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+                    isAppointmentCalendarOpen ? 'bg-purple-600 text-white' : 'text-slate-400'
+                  }`}
+                >
+                  <CalendarCheck className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Appointments</span>
+                  {todayAppointmentsCount > 0 && (
+                    <span className="text-[10px] bg-purple-950 text-purple-200 px-1.5 py-0.2 rounded-full font-bold">
+                      {todayAppointmentsCount}
+                    </span>
+                  )}
+                </button>
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-white font-medium px-2">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                 <span>
                   {currentUser.role === 'SALES' && 'Sales Portal (Read-Only)'}
                   {currentUser.role === 'TECHNICIAN' && 'Technician Hub'}
-                  {currentUser.role === 'SERVICE_ADVISOR' && 'Advisor Console'}
                   {currentUser.role === 'PARTS_SPECIALIST' && 'Parts & Tracking Hub'}
                 </span>
                 <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-bold">
@@ -562,7 +705,36 @@ const MainContent: React.FC = () => {
 
           {/* Primary Viewport */}
           <main className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col gap-6">
-            {isTimeCardCalculatorOpen ? (
+            {isAppointmentCalendarOpen ? (
+              (isManager || currentUser.role === 'SERVICE_ADVISOR') ? (
+                <div>
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setIsAppointmentCalendarOpen(false)}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                  </div>
+                  <AppointmentCalendar onBackToDashboard={() => setIsAppointmentCalendarOpen(false)} />
+                </div>
+              ) : (
+                <div className="p-8 bg-white rounded-2xl border border-red-200 text-center max-w-lg mx-auto shadow-sm my-auto">
+                  <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-slate-900">Restricted Space</h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    The Service Appointment Calendar is authorized for Service Advisors and the Service Manager. Your account ({currentUser.name}) is authorized for the {currentUser.title || currentUser.role} space only.
+                  </p>
+                  <button
+                    onClick={() => setIsAppointmentCalendarOpen(false)}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
+                  >
+                    Return to My Workspace
+                  </button>
+                </div>
+              )
+            ) : isTimeCardCalculatorOpen ? (
               isManager ? (
                 <div>
                   <div className="mb-4">

@@ -78,6 +78,7 @@ export interface ShopSettings {
   seededDemoData?: boolean;
   inspectionChecklist?: any;
   staffLeaveEntries?: any[];
+  appointments?: any[];
   updatedAt?: string;
 }
 

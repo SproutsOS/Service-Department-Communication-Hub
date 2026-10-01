@@ -449,3 +449,50 @@ export interface StaffLeaveEntry {
   createdByManagerName: string;
 }
 
+// ==========================================
+// Service Appointment Calendar Types (Advisors & Service Manager)
+// ==========================================
+
+export type AppointmentStatus = 
+  | 'SCHEDULED'       // Booked
+  | 'CONFIRMED'       // Customer confirmed
+  | 'ARRIVED'         // Customer arrived at drive
+  | 'CONVERTED_TO_RO' // Active Repair Order created & dispatched
+  | 'COMPLETED'       // Service completed
+  | 'CANCELLED'       // Customer cancelled
+  | 'NO_SHOW';        // Missed appointment
+
+export type TransportationType = 
+  | 'WAITER'    // Customer waiting in lounge
+  | 'DROP_OFF'  // Dropping off for the day
+  | 'LOANER'    // Dealership loaner vehicle provided
+  | 'SHUTTLE';  // Shuttle ride requested
+
+export interface ServiceAppointment {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  vehicleYear: number | string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleVin?: string;
+  vehicleMileage?: number | string;
+  licensePlate?: string;
+  appointmentDate: string; // YYYY-MM-DD
+  appointmentTime: string; // e.g. "08:00 AM", "08:30 AM"
+  durationMinutes: number; // e.g. 30, 45, 60, 90, 120
+  advisorId: string;
+  advisorName: string;
+  preferredTechId?: string;
+  preferredTechName?: string;
+  transportationType: TransportationType;
+  serviceConcerns: string[];
+  notes?: string;
+  status: AppointmentStatus;
+  createdRoId?: string; // Linked Repair Order ID once checked in / converted
+  cancellationReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

@@ -27,10 +27,14 @@ import {
   InspectionSheet,
   StaffLeaveEntry,
   StaffLeaveType,
-  LineApprovalStatus
+  LineApprovalStatus,
+  ServiceAppointment,
+  AppointmentStatus,
+  TransportationType
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
+import { getInitialServiceAppointments } from '../data/defaultAppointments';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
 import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
@@ -299,6 +303,17 @@ interface AppContextType {
   deleteStaffLeaveEntry: (id: string) => boolean;
   isStaffCalendarOpen: boolean;
   setIsStaffCalendarOpen: (open: boolean) => void;
+
+  // Service Appointment Calendar (Service Advisors & Service Manager)
+  appointments: ServiceAppointment[];
+  addAppointment: (data: Omit<ServiceAppointment, 'id' | 'createdAt' | 'updatedAt'>) => ServiceAppointment;
+  updateAppointment: (id: string, updates: Partial<ServiceAppointment>) => boolean;
+  deleteAppointment: (id: string) => boolean;
+  clearAllAppointments: () => void;
+  checkInAppointment: (id: string) => boolean;
+  convertAppointmentToRO: (id: string) => string | null;
+  isAppointmentCalendarOpen: boolean;
+  setIsAppointmentCalendarOpen: (open: boolean) => void;
 }
 
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
@@ -312,6 +327,7 @@ const STORAGE_KEY_SESSION_AUTH = 'dealership_session_authenticated_v1';
 const STORAGE_KEY_CUSTOMERS = 'the_hub_customers_cloud_cache_v1';
 const STORAGE_KEY_INSPECTION_CHECKLIST = 'precision_auto_inspection_checklist_v1';
 const STORAGE_KEY_STAFF_LEAVE = 'dealership_staff_leave_calendar_v1';
+const STORAGE_KEY_APPOINTMENTS = 'dealership_service_appointments_v2_clean';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -522,6 +538,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isStaffCalendarOpen, setIsStaffCalendarOpen] = useState(false);
   const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET'>('FLOOR');
+
+  // Service Appointment Calendar (Service Advisors & Service Manager)
+  const [appointments, setAppointments] = useState<ServiceAppointment[]>(() => {
+    try {
+      localStorage.removeItem('dealership_service_appointments_v1');
+      const cached = localStorage.getItem(STORAGE_KEY_APPOINTMENTS);
+      if (cached !== null) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return getInitialServiceAppointments();
+  });
+  const [isAppointmentCalendarOpen, setIsAppointmentCalendarOpen] = useState(false);
 
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
   const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
@@ -758,6 +788,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setStaffLeaveEntries(cloudSettings.staffLeaveEntries);
           try {
             localStorage.setItem(STORAGE_KEY_STAFF_LEAVE, JSON.stringify(cloudSettings.staffLeaveEntries));
+          } catch {}
+        }
+        if (Array.isArray(cloudSettings.appointments)) {
+          setAppointments(cloudSettings.appointments);
+          try {
+            localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(cloudSettings.appointments));
           } catch {}
         }
       }
@@ -3441,6 +3477,107 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   }, [currentUser]);
 
+  // Service Appointment Actions (Advisors & Service Manager)
+  const addAppointment = useCallback((data: Omit<ServiceAppointment, 'id' | 'createdAt' | 'updatedAt'>): ServiceAppointment => {
+    const newAppt: ServiceAppointment = {
+      ...data,
+      id: `appt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setAppointments(prev => {
+      const updated = [newAppt, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ appointments: updated });
+      return updated;
+    });
+    return newAppt;
+  }, []);
+
+  const updateAppointment = useCallback((id: string, updates: Partial<ServiceAppointment>): boolean => {
+    setAppointments(prev => {
+      const updated = prev.map(a => a.id === id ? { ...a, ...updates, updatedAt: new Date().toISOString() } : a);
+      try {
+        localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ appointments: updated });
+      return updated;
+    });
+    return true;
+  }, []);
+
+  const deleteAppointment = useCallback((id: string): boolean => {
+    setAppointments(prev => {
+      const updated = prev.filter(a => a.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ appointments: updated });
+      return updated;
+    });
+    return true;
+  }, []);
+
+  const clearAllAppointments = useCallback(() => {
+    setAppointments([]);
+    try {
+      localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify([]));
+    } catch {}
+    syncShopSettings({ appointments: [] });
+  }, []);
+
+  const checkInAppointment = useCallback((id: string): boolean => {
+    return updateAppointment(id, { status: 'ARRIVED' });
+  }, [updateAppointment]);
+
+  const convertAppointmentToRO = useCallback((id: string): string | null => {
+    const appt = appointments.find(a => a.id === id);
+    if (!appt) return null;
+
+    // If already converted, open existing RO
+    if (appt.createdRoId) {
+      const existing = repairOrders.find(r => r.id === appt.createdRoId);
+      if (existing) {
+        setSelectedRO(existing);
+        return existing.id;
+      }
+    }
+
+    const effectiveAdvisorId = appt.advisorId || currentUser.id;
+    const effectiveAdvisorName = appt.advisorName || currentUser.name;
+
+    const newRoId = createRepairOrder({
+      customerName: appt.customerName,
+      customerPhone: appt.customerPhone,
+      vehicle: {
+        year: Number(appt.vehicleYear) || 2022,
+        make: appt.vehicleMake,
+        model: appt.vehicleModel,
+        vin: appt.vehicleVin || '',
+        mileage: appt.vehicleMileage ? Number(appt.vehicleMileage) : undefined,
+        licensePlate: appt.licensePlate,
+      },
+      advisorId: effectiveAdvisorId,
+      advisorName: effectiveAdvisorName,
+      primaryConcern: appt.serviceConcerns[0] || 'Scheduled Service Appointment',
+      concerns: appt.serviceConcerns && appt.serviceConcerns.length > 0 ? appt.serviceConcerns : ['Scheduled Service Appointment'],
+      isWaiter: appt.transportationType === 'WAITER',
+      techId: appt.preferredTechId,
+    });
+
+    updateAppointment(id, {
+      status: 'CONVERTED_TO_RO',
+      createdRoId: newRoId,
+    });
+
+    // Auto-select newly created RO so it immediately opens for the user
+    setSelectedROId(newRoId);
+
+    return newRoId;
+  }, [appointments, repairOrders, currentUser, createRepairOrder, setSelectedRO, updateAppointment]);
+
   // Technician Repair Quote Workflow
   const saveRepairQuote = (
     roId: string, 
@@ -4459,6 +4596,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUserState(cleanManager);
     setRepairOrders([]);
     setNotifications([]);
+    setAppointments([]);
     setSelectedROId(null);
     setShopNameState('My Service Department');
     setIsInitialSetupCompleted(false);
@@ -4469,6 +4607,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cleanManager));
       localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEY_SHOP_NAME, 'My Service Department');
       localStorage.setItem(STORAGE_KEY_SETUP_DONE, 'false');
       localStorage.setItem(STORAGE_KEY_WIPE_PERFORMED, 'true');
@@ -4651,6 +4790,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteStaffLeaveEntry,
         isStaffCalendarOpen,
         setIsStaffCalendarOpen,
+        appointments,
+        addAppointment,
+        updateAppointment,
+        deleteAppointment,
+        clearAllAppointments,
+        checkInAppointment,
+        convertAppointmentToRO,
+        isAppointmentCalendarOpen,
+        setIsAppointmentCalendarOpen,
       }}
     >
       {children}

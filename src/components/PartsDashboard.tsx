@@ -34,7 +34,7 @@ import {
   Calculator
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { PartItem, PartStatus, RepairOrder } from '../types';
+import { PartItem, PartStatus, RepairOrder, QuotePartItem, RepairQuote } from '../types';
 import { formatEtaBadge, formatDateTime, formatPrice, formatCurrency } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { computeEtaAndStatus } from '../utils/partArrivalOptions';
@@ -69,7 +69,17 @@ const INITIAL_PART_STATUS_OPTIONS = [
 ];
 
 export const PartsDashboard: React.FC = () => {
-  const { repairOrders, updatePartStatus, addPartOrder, updatePartItem, deletePartItem, setSelectedRO, users } = useApp();
+  const { 
+    repairOrders, 
+    updatePartStatus, 
+    addPartOrder, 
+    updatePartItem, 
+    deletePartItem, 
+    saveRepairQuote,
+    updateROStatus,
+    setSelectedRO, 
+    users 
+  } = useApp();
 
   // Active view: 'RO_LIST' (Access all ROs directly) or 'PARTS_LIST' (Tracked Logistics)
   const [activeTab, setActiveTab] = useState<'RO_LIST' | 'PARTS_LIST'>('RO_LIST');
@@ -252,20 +262,67 @@ export const PartsDashboard: React.FC = () => {
     return '';
   }, [currentSelectedRO]);
 
-  // Track ROs whose parts have been added to the repair order in this session
-  const [addedRoIds, setAddedRoIds] = useState<Set<string>>(new Set());
+  // Track ROs whose parts quote has been submitted to the advisor in this session
+  const [submittedQuoteRoIds, setSubmittedQuoteRoIds] = useState<Set<string>>(new Set());
+  // Track ROs whose approved parts have been ordered with suppliers in this session
+  const [orderedRoIds, setOrderedRoIds] = useState<Set<string>>(new Set());
 
-  // All active repair orders that have technician-requested parts or are waiting on parts,
-  // plus any recently processed in this session so the user sees the "Added to Repair Order" confirmation.
-  const rosWithPendingTechRequests = useMemo(() => {
-    return repairOrders.filter(ro => 
-      ro.status !== 'COMPLETED' && ro.status !== 'CLOSED' && (
-        ro.parts?.some(isTechRequestedPart) ||
-        ro.status === 'WAITING_PARTS' ||
-        addedRoIds.has(ro.id)
-      )
-    );
-  }, [repairOrders, addedRoIds]);
+  // 1. Pending Quoting Queue: Tech-requested parts awaiting parts counter pricing & quote submission
+  const isROInPendingQuoteQueue = (ro: RepairOrder): boolean => {
+    if (ro.status === 'COMPLETED' || ro.status === 'CLOSED') return false;
+    if (submittedQuoteRoIds.has(ro.id)) return false;
+
+    // If quote is already submitted to advisor or approved, it is no longer pending quote
+    if (
+      ro.quote?.status === 'SUBMITTED' || 
+      ro.quote?.status === 'APPROVED' || 
+      ro.status === 'ESTIMATE_DONE' || 
+      ro.status === 'WAITING_FOR_APPROVAL' || 
+      ro.status === 'APPROVED' || 
+      ro.status === 'PARTS_ORDERED' || 
+      ro.status === 'REPAIR_IN_PROGRESS' || 
+      ro.status === 'IN_REPAIR'
+    ) {
+      return false;
+    }
+
+    // Has technician requested parts or is in WAITING_PARTS / GETTING_ESTIMATE status
+    const hasPendingParts = ro.parts?.some(isTechRequestedPart);
+    return Boolean(hasPendingParts || ro.status === 'WAITING_PARTS' || ro.status === 'GETTING_ESTIMATE');
+  };
+
+  const rosPendingPartsQuote = useMemo(() => {
+    return repairOrders.filter(isROInPendingQuoteQueue);
+  }, [repairOrders, submittedQuoteRoIds]);
+
+  // Alias for backward compatibility
+  const rosWithPendingTechRequests = rosPendingPartsQuote;
+
+  // 2. Approved ROs Queue: ROs authorized by customer/advisor that have parts ready to be ordered
+  const isROApprovedReadyToOrder = (ro: RepairOrder): boolean => {
+    if (ro.status === 'COMPLETED' || ro.status === 'CLOSED') return false;
+    if (orderedRoIds.has(ro.id)) return false;
+
+    const isApproved = ro.quote?.status === 'APPROVED' || 
+                       ro.status === 'APPROVED' || 
+                       ro.status === 'REPAIR_IN_PROGRESS' || 
+                       ro.status === 'IN_REPAIR' ||
+                       (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(st => st === 'APPROVED'));
+    
+    if (!isApproved) return false;
+
+    const hasUnorderedParts = (ro.parts || []).some(p => {
+      const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
+      if (lineStatus === 'DECLINED') return false;
+      return p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK';
+    });
+
+    return hasUnorderedParts;
+  };
+
+  const rosApprovedReadyToOrder = useMemo(() => {
+    return repairOrders.filter(isROApprovedReadyToOrder);
+  }, [repairOrders, orderedRoIds]);
 
   // Quick fulfillment draft state for technician-requested parts (Part Number, Price, etc.)
   const [reqDrafts, setReqDrafts] = useState<Record<string, {
@@ -484,6 +541,90 @@ export const PartsDashboard: React.FC = () => {
     showToast(`💬 Quoted "${part.description}": Part #${cleanPn} ($${priceVal !== undefined ? priceVal.toFixed(2) : '0.00'}) added to Quote for RO #${roId}!`);
   };
 
+  // Submit complete parts quote to Service Advisor and remove from active quoting queue
+  const handleSubmitQuoteToAdvisor = (ro: RepairOrder) => {
+    const allROParts = ro.parts || [];
+    const quoteParts: QuotePartItem[] = allROParts.map(p => {
+      const draft = reqDrafts[p.id] || getReqDraft(p);
+      const pr = draft.price !== '' && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : (p.price || 0);
+      const qty = Math.max(1, Number(draft.quantity) || p.quantity || 1);
+      return {
+        id: p.id,
+        sourcePartId: p.id,
+        description: p.description || p.name || 'Part',
+        partNumber: draft.partNumber?.trim().toUpperCase() || p.partNumber || 'TBD',
+        quantity: qty,
+        unitPrice: pr,
+        subtotal: Number((pr * qty).toFixed(2)),
+        roLineNumber: p.roLineNumber || 1,
+        status: 'PENDING',
+      };
+    });
+
+    // Mark parts as sent to estimate
+    allROParts.forEach(p => {
+      const draft = reqDrafts[p.id] || getReqDraft(p);
+      const pr = draft.price !== '' && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : undefined;
+      const cleanPn = draft.partNumber?.trim().toUpperCase() || p.partNumber || 'TBD';
+      updatePartItem(ro.id, p.id, {
+        partNumber: cleanPn,
+        price: pr,
+        quantity: draft.quantity || p.quantity || 1,
+        vendor: draft.vendor || p.vendor || vendors[0] || '',
+        sentToEstimate: true,
+      });
+    });
+
+    const totalPartsCost = quoteParts.reduce((sum, p) => sum + p.subtotal, 0);
+    const existingQuote = ro.quote || {
+      id: `quote_${ro.id}`,
+      roId: ro.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      initiatedByTechId: ro.techId || 'tech',
+      initiatedByTechName: ro.techName || 'Technician',
+      status: 'SUBMITTED',
+      laborItems: [],
+      partsItems: [],
+      defaultLaborRate: 150,
+      shopSuppliesFee: 25,
+      taxRate: 0.0825,
+      taxAmount: 0,
+      totalLaborHours: 0,
+      totalLaborCost: 0,
+      totalPartsCost: 0,
+      grandTotal: 0,
+    };
+
+    const updatedQuote: RepairQuote = {
+      ...existingQuote,
+      partsItems: quoteParts,
+      totalPartsCost: Number(totalPartsCost.toFixed(2)),
+      grandTotal: Number(((existingQuote.totalLaborCost || 0) + totalPartsCost + (existingQuote.shopSuppliesFee || 25)).toFixed(2)),
+      status: 'SUBMITTED',
+      submittedAt: new Date().toISOString(),
+    };
+
+    saveRepairQuote(ro.id, updatedQuote, true);
+    updateROStatus(ro.id, 'ESTIMATE_DONE', 'Parts quote finalized and submitted to Service Advisor.');
+    setSubmittedQuoteRoIds(prev => new Set(prev).add(ro.id));
+    showToast(`✓ Parts quote for RO #${ro.id} submitted to Service Advisor! Removed from quoting queue.`);
+  };
+
+  // Mark all approved parts on an RO as ordered with suppliers, and remove from active order queue
+  const handleMarkAllPartsOrdered = (ro: RepairOrder) => {
+    const allROParts = ro.parts || [];
+    allROParts.forEach(p => {
+      const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
+      if (lineStatus !== 'DECLINED' && p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK') {
+        updatePartStatus(ro.id, p.id, 'ORDERED', p.estimatedArrival || 'Special Order 1-5 Days');
+      }
+    });
+    updateROStatus(ro.id, 'PARTS_ORDERED', 'All approved parts placed on order with suppliers.');
+    setOrderedRoIds(prev => new Set(prev).add(ro.id));
+    showToast(`✓ Parts for RO #${ro.id} marked as ORDERED! Removed from active order screen.`);
+  };
+
   // Batch fulfillment for all technician-requested parts on an RO
   const handleFulfillAllRequestedParts = (roId: string) => {
     const targetRO = repairOrders.find(r => r.id === roId);
@@ -535,7 +676,7 @@ export const PartsDashboard: React.FC = () => {
     if (!targetRO) return;
 
     handleFulfillAllRequestedParts(roId);
-    setAddedRoIds(prev => new Set(prev).add(roId));
+    setSubmittedQuoteRoIds(prev => new Set(prev).add(roId));
   };
 
   const handleImportRequestedParts = () => {
@@ -680,7 +821,10 @@ export const PartsDashboard: React.FC = () => {
 
     return activeROs.filter(ro => {
       // 1. RO Status filter
-      if (roStatusFilter === 'TECH_REQUESTS' && !ro.parts.some(isTechRequestedPart) && ro.status !== 'WAITING_PARTS') return false;
+      if (roStatusFilter === 'TECH_REQUESTS' && !isROInPendingQuoteQueue(ro)) return false;
+      if (roStatusFilter === 'APPROVED_READY_ORDER' && !isROApprovedReadyToOrder(ro)) return false;
+      if (roStatusFilter === 'QUOTED_AWAITING_APPROVAL' && ro.quote?.status !== 'SUBMITTED' && ro.status !== 'ESTIMATE_DONE' && ro.status !== 'WAITING_FOR_APPROVAL' && !submittedQuoteRoIds.has(ro.id)) return false;
+      if (roStatusFilter === 'ORDERED_PARTS' && ro.status !== 'PARTS_ORDERED' && !ro.parts.some(p => p.status === 'ORDERED' || p.status === 'IN_TRANSIT')) return false;
       if (roStatusFilter === 'NEEDS_PARTS' && ro.parts.length > 0) return false;
       if (roStatusFilter === 'HAS_PARTS' && ro.parts.length === 0) return false;
       if (roStatusFilter === 'WAITING_PARTS' && ro.status !== 'WAITING_PARTS') return false;
@@ -1001,7 +1145,7 @@ export const PartsDashboard: React.FC = () => {
     }
 
     setIsAddPartModalOpen(false);
-    setAddedRoIds(prev => new Set(prev).add(selectedTargetRoId));
+    setSubmittedQuoteRoIds(prev => new Set(prev).add(selectedTargetRoId));
     showToast(`✓ Processed ${processedCount} part${processedCount === 1 ? '' : 's'} (${formatStatusLabel(effectiveStatus)}) on RO #${selectedTargetRoId}!`);
     setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }]);
     setPartNotes('');
@@ -1079,8 +1223,198 @@ export const PartsDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TOP OF SCREEN: High-Visibility Action Banner for Technician Parts Requests */}
-      {rosWithPendingTechRequests.length > 0 && (
+      {/* ========================================================================= */}
+      {/* SECTION 1: APPROVED REPAIR ORDERS — READY TO ORDER PARTS                    */}
+      {/* ========================================================================= */}
+      {rosApprovedReadyToOrder.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-500/15 via-blue-500/10 to-emerald-500/15 border-2 border-emerald-500 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-emerald-300">
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-ping absolute inset-0 m-auto" />
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black shadow-xs relative">
+                  <Package className="w-4 h-4" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <span>ACTION REQUIRED: APPROVED REPAIR ORDERS — ORDER PARTS NOW</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[11px] font-black uppercase tracking-wider animate-pulse">
+                      {rosApprovedReadyToOrder.length} Ready to Order
+                    </span>
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-700 font-medium">
+                  The following repair orders have been authorized by the customer. Place orders with suppliers and confirm delivery.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-emerald-900 bg-emerald-100 px-2.5 py-1.5 rounded-lg border border-emerald-300">
+                ⚡ Customer Approved — Place Supplier Orders
+              </span>
+            </div>
+          </div>
+
+          {/* Cards for each approved vehicle needing parts ordered */}
+          <div className="grid grid-cols-1 gap-4 w-full">
+            {rosApprovedReadyToOrder.map(ro => {
+              const allROParts = ro.parts || [];
+              const unorderedParts = allROParts.filter(p => {
+                const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
+                if (lineStatus === 'DECLINED') return false;
+                return p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK';
+              });
+
+              return (
+                <div 
+                  key={`approved_${ro.id}`}
+                  className="bg-white rounded-xl border-2 border-emerald-400 hover:border-emerald-600 p-4 sm:p-5 shadow-xs space-y-4 transition-all w-full"
+                >
+                  {/* Top Header */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-mono text-sm font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
+                          RO #{ro.id}
+                        </span>
+                        <span className="font-extrabold text-base text-slate-900">
+                          {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
+                        </span>
+                        {ro.vehicle.licensePlate && (
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
+                            Tag: {ro.vehicle.licensePlate}
+                          </span>
+                        )}
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black uppercase">
+                          ✓ Authorized for Repair
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+                        <span>Customer: <strong className="text-slate-900">{ro.customerName}</strong> ({ro.customerPhone})</span>
+                        <span>•</span>
+                        <span className="text-amber-900 font-bold">Tech: {ro.techName || 'Unassigned'}</span>
+                        <span>•</span>
+                        <span className="text-slate-700">Advisor: <strong>{ro.advisorName}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => copyVin(ro.vehicle.vin, ro.id)}
+                        className="px-3 py-1.5 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-bold border border-slate-800 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                      >
+                        {copiedVinId === ro.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-300 text-xs">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="text-xs">Copy VIN</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleMarkAllPartsOrdered(ro)}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer transition-all border border-emerald-700"
+                        title="Mark all approved parts as ordered with suppliers"
+                      >
+                        <Truck className="w-4 h-4 text-emerald-200" />
+                        <span>Mark Parts as Ordered ✓</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Parts List for Approved Order */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                      Parts to Order ({unorderedParts.length} items):
+                    </div>
+
+                    <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200 overflow-hidden">
+                      {unorderedParts.map((p) => (
+                        <div key={p.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="font-mono text-xs font-black bg-blue-100 text-blue-900 px-2 py-0.5 rounded border border-blue-200">
+                              Line {p.roLineNumber || 1}
+                            </span>
+                            <span className="font-bold text-xs text-slate-900">
+                              {p.description || p.name}
+                            </span>
+                            {p.partNumber && p.partNumber !== 'TBD' && (
+                              <span className="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-300">
+                                #{p.partNumber}
+                              </span>
+                            )}
+                            <span className="text-xs text-slate-500 font-medium">
+                              Qty: <strong>{p.quantity || 1}</strong>
+                            </span>
+                            {p.vendor && (
+                              <span className="text-xs text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                Source: {p.vendor}
+                              </span>
+                            )}
+                            {p.estimatedArrival && (
+                              <span className="text-xs text-slate-600 font-medium">
+                                ETA: <strong>{p.estimatedArrival}</strong>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {p.price !== undefined && (
+                              <span className="text-xs font-bold text-slate-900">
+                                ${formatPrice(p.price)}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updatePartStatus(ro.id, p.id, 'ORDERED', p.estimatedArrival || 'Special Order 1-5 Days');
+                                showToast(`✓ Part "${p.description}" marked as ORDERED!`);
+                              }}
+                              className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              ✓ Ordered
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bottom Action */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <span className="text-xs text-slate-500 italic">
+                      Clicking "Mark Parts as Ordered" removes this vehicle from the active order queue.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleMarkAllPartsOrdered(ro)}
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      Mark All Parts as Ordered
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION 2: TECHNICIAN PARTS REQUESTS (PENDING QUOTE)                      */}
+      {/* ========================================================================= */}
+      {rosPendingPartsQuote.length > 0 && (
         <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 border-2 border-amber-500 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-amber-300">
             <div className="flex items-center gap-2.5">
@@ -1093,14 +1427,14 @@ export const PartsDashboard: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                    <span>ACTION REQUIRED: TECHNICIAN PARTS REQUESTS</span>
+                    <span>ACTION REQUIRED: TECHNICIAN PARTS REQUESTS (QUOTING)</span>
                     <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[11px] font-black uppercase tracking-wider animate-pulse">
-                      {rosWithPendingTechRequests.length} Vehicle{rosWithPendingTechRequests.length === 1 ? '' : 's'} Waiting
+                      {rosPendingPartsQuote.length} Vehicle{rosPendingPartsQuote.length === 1 ? '' : 's'} Waiting
                     </span>
                   </h2>
                 </div>
                 <p className="text-xs text-slate-700 font-medium">
-                  The following repair orders have parts requested by technicians. Review, price, source, and place orders.
+                  Review and price requested parts, then click "Submit Parts Quote to Advisor" to hand off to the advisor.
                 </p>
               </div>
             </div>
@@ -1123,7 +1457,7 @@ export const PartsDashboard: React.FC = () => {
 
           {/* Cards for each vehicle needing parts - Full width layout across screen */}
           <div className="grid grid-cols-1 gap-4 w-full">
-            {rosWithPendingTechRequests.map(ro => {
+            {rosPendingPartsQuote.map(ro => {
               const allROParts = ro.parts || [];
               const totalConcernLines = Math.max(
                 ro.concerns?.length || 1,
@@ -1186,6 +1520,17 @@ export const PartsDashboard: React.FC = () => {
                             <span className="text-xs">Copy VIN</span>
                           </>
                         )}
+                      </button>
+
+                      {/* Submit Parts Quote to Advisor Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleSubmitQuoteToAdvisor(ro)}
+                        className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Submit parts quote to advisor and hand off for customer approval"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-200" />
+                        <span>Submit Quote to Advisor ✓</span>
                       </button>
 
                       <button
@@ -1687,6 +2032,40 @@ export const PartsDashboard: React.FC = () => {
                     })}
                   </div>
 
+                  {/* Bottom Card Action Bar: Submit Parts Quote to Advisor */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-200 bg-purple-50/40 p-3 rounded-xl">
+                    <div className="text-xs text-slate-700">
+                      <span className="font-medium text-slate-500">Parts Quote Total: </span>
+                      <span className="font-extrabold text-slate-900 text-sm">
+                        ${(() => {
+                          let sum = 0;
+                          allROParts.forEach(p => {
+                            const draft = reqDrafts[p.id] || getReqDraft(p);
+                            const pr = parseFloat(draft.price);
+                            if (!isNaN(pr)) sum += pr * (draft.quantity || p.quantity || 1);
+                            else if (p.price) sum += p.price * (p.quantity || 1);
+                          });
+                          return sum.toFixed(2);
+                        })()}
+                      </span>
+                      <span className="text-slate-500 ml-1.5 text-[11px] font-medium">
+                        ({allROParts.length} parts)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSubmitQuoteToAdvisor(ro)}
+                        className="px-5 py-2 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer transition-all border border-purple-700"
+                        title="Submit parts quote to Service Advisor for customer authorization"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-purple-200" />
+                        <span>Submit Parts Quote to Advisor ✓</span>
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               );
             })}
@@ -1709,7 +2088,7 @@ export const PartsDashboard: React.FC = () => {
       </div>
 
       {/* KPI Metrics with Local Purchase Box */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
         <div 
           onClick={() => { 
             setActiveTab('RO_LIST'); 
@@ -1717,20 +2096,46 @@ export const PartsDashboard: React.FC = () => {
             setShowAllBackgroundROs(true); 
           }}
           className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
-            rosWithPendingTechRequests.length > 0
+            rosPendingPartsQuote.length > 0
               ? 'border-amber-500 bg-amber-50/60 hover:border-amber-600 ring-2 ring-amber-300/40'
               : 'bg-white border-slate-300 hover:border-slate-500'
           }`}
         >
           <div className="text-xs font-black uppercase tracking-wide text-amber-900 flex items-center justify-between gap-1">
-            <span>Tech Requests</span>
-            <AlertTriangle className={`w-4 h-4 shrink-0 ${rosWithPendingTechRequests.length > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
+            <span>Pending Quote</span>
+            <AlertTriangle className={`w-4 h-4 shrink-0 ${rosPendingPartsQuote.length > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
           </div>
           <div className="text-2xl sm:text-3xl font-black text-amber-900 my-2 w-full text-center flex items-center justify-center gap-1.5">
-            <span>{rosWithPendingTechRequests.length}</span>
-            {rosWithPendingTechRequests.length > 0 && (
+            <span>{rosPendingPartsQuote.length}</span>
+            {rosPendingPartsQuote.length > 0 && (
               <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-rose-600 text-white animate-pulse">
                 Action
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div 
+          onClick={() => { 
+            setActiveTab('RO_LIST'); 
+            setRoStatusFilter('APPROVED_READY_ORDER');
+            setShowAllBackgroundROs(true); 
+          }}
+          className={`p-3.5 rounded-xl border-2 shadow-xs transition-colors cursor-pointer flex flex-col justify-between ${
+            rosApprovedReadyToOrder.length > 0
+              ? 'border-emerald-500 bg-emerald-50/60 hover:border-emerald-600 ring-2 ring-emerald-300/40'
+              : 'bg-white border-slate-300 hover:border-slate-500'
+          }`}
+        >
+          <div className="text-xs font-black uppercase tracking-wide text-emerald-900 flex items-center justify-between gap-1">
+            <span>Ready to Order</span>
+            <Package className={`w-4 h-4 shrink-0 ${rosApprovedReadyToOrder.length > 0 ? 'text-emerald-600 animate-pulse' : 'text-slate-400'}`} />
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-900 my-2 w-full text-center flex items-center justify-center gap-1.5">
+            <span>{rosApprovedReadyToOrder.length}</span>
+            {rosApprovedReadyToOrder.length > 0 && (
+              <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-white animate-pulse">
+                Order
               </span>
             )}
           </div>
@@ -1983,7 +2388,10 @@ export const PartsDashboard: React.FC = () => {
                 className="text-xs px-2.5 py-2 border-2 border-slate-500 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold text-slate-800"
               >
                 <option value="ALL">All Shop Statuses ({activeROs.length})</option>
-                <option value="TECH_REQUESTS">⚡ Tech Requested Parts ({rosWithPendingTechRequests.length})</option>
+                <option value="TECH_REQUESTS">⚡ Tech Requests (Pending Quote) ({rosPendingPartsQuote.length})</option>
+                <option value="APPROVED_READY_ORDER">📦 Approved (Ready to Order) ({rosApprovedReadyToOrder.length})</option>
+                <option value="QUOTED_AWAITING_APPROVAL">💬 Quoted (Awaiting Advisor / Approval)</option>
+                <option value="ORDERED_PARTS">🚚 Parts Ordered & Logistics</option>
                 <option value="NEEDS_PARTS">Needs Parts (0 Parts on RO)</option>
                 <option value="HAS_PARTS">Has Parts Attached</option>
                 <option value="WAITING_PARTS">Status: Waiting on Parts</option>

@@ -16,6 +16,7 @@ import {
   Check, 
   Calendar, 
   CalendarDays,
+  CalendarCheck,
   Award,
   Calculator,
   ShieldCheck,
@@ -39,6 +40,8 @@ export const ManagerDashboard: React.FC = () => {
     startDiagnosis, 
     staffLeaveEntries,
     setIsStaffCalendarOpen,
+    appointments,
+    setIsAppointmentCalendarOpen,
     managerViewSection: viewSection,
     setManagerViewSection: setViewSection
   } = useApp();
@@ -59,6 +62,10 @@ export const ManagerDashboard: React.FC = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }, []);
+
+  const todayAppointmentsCount = useMemo(() => {
+    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.status !== 'CANCELLED').length;
+  }, [appointments, todayStr]);
 
   // Today's absences (Leave early, out sick, vacation, etc.)
   const todayAbsences = useMemo(() => {
@@ -143,6 +150,21 @@ export const ManagerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            id="open-appointment-calendar-mgr"
+            onClick={() => setIsAppointmentCalendarOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
+            title="Open Service Appointment Calendar"
+          >
+            <CalendarCheck className="w-4 h-4 text-purple-200" />
+            <span>Appointment Calendar</span>
+            {todayAppointmentsCount > 0 && (
+              <span className="bg-purple-900 text-purple-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-purple-400">
+                {todayAppointmentsCount} Today
+              </span>
+            )}
+          </button>
+
           <button
             id="create-new-ro-btn-mgr"
             onClick={() => setIsNewROModalOpen(true)}

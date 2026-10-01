@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   Lock,
   X,
-  CalendarDays
+  CalendarDays,
+  CalendarCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -47,6 +48,8 @@ export const Navbar: React.FC = () => {
     markAllNotificationsRead,
     staffLeaveEntries,
     setIsStaffCalendarOpen,
+    appointments,
+    setIsAppointmentCalendarOpen,
   } = useApp();
 
   const todayStr = useMemo(() => {
@@ -60,6 +63,10 @@ export const Navbar: React.FC = () => {
   const todayAbsencesCount = useMemo(() => {
     return (staffLeaveEntries || []).filter(e => todayStr >= e.startDate && todayStr <= e.endDate).length;
   }, [staffLeaveEntries, todayStr]);
+
+  const todayAppointmentsCount = useMemo(() => {
+    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.status !== 'CANCELLED').length;
+  }, [appointments, todayStr]);
 
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -351,6 +358,24 @@ export const Navbar: React.FC = () => {
           <Search className="w-4 h-4 text-blue-400" />
           <span>Customer Search</span>
         </button>
+
+        {/* Appointments Calendar Button (Advisors & Service Manager) */}
+        {(currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR') && (
+          <button
+            id="navbar-appointment-calendar-btn"
+            onClick={() => setIsAppointmentCalendarOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white border border-purple-700 shadow-xs"
+            title="Service Appointment Calendar (Customer Check-Ins, Waiters, Loaners)"
+          >
+            <CalendarCheck className="w-4 h-4 text-purple-300" />
+            <span className="hidden sm:inline">Appointments</span>
+            {todayAppointmentsCount > 0 && (
+              <span className="bg-purple-700 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {todayAppointmentsCount}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Staff Directory Button (Service Manager Only) */}
         {currentUser.role === 'SERVICE_MANAGER' && (
