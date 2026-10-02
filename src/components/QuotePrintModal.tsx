@@ -241,24 +241,24 @@ export const QuotePrintModal: React.FC = () => {
               <div className="p-2 bg-blue-600 rounded-lg text-white shadow-xs">
                 <Calculator className="w-5 h-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold tracking-tight">Official Repair Estimate & Quote Preview</h3>
-                  <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 text-xs font-mono font-bold rounded border border-blue-400/40">
+                  <h3 className="text-base font-bold tracking-tight truncate">Repair Estimate Preview</h3>
+                  <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 text-xs font-mono font-bold rounded border border-blue-400/40 shrink-0">
                     RO #{cleanRO.id}
                   </span>
                 </div>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs text-slate-300 truncate">
                   Itemized Parts, Labor Operations, Taxes, and Customer Authorization Record
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handleCopySummary}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer shrink-0"
                 title="Copy formatted text to clipboard"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -271,7 +271,7 @@ export const QuotePrintModal: React.FC = () => {
                   closeQuotePrintModal();
                   openQuoteModal(cleanRO.id);
                 }}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer shrink-0"
                 title="Edit quote lines, rates, or parts"
               >
                 <Edit3 className="w-3.5 h-3.5 text-blue-400" />
@@ -281,17 +281,18 @@ export const QuotePrintModal: React.FC = () => {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer shrink-0"
               >
                 <Printer className="w-4 h-4" />
-                <span>Print Official Quote</span>
+                <span>Print Quote</span>
               </button>
 
               <button
                 type="button"
                 onClick={closeQuotePrintModal}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer ml-1"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer ml-1 shrink-0"
                 aria-label="Close modal"
+                title="Close"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -648,7 +649,7 @@ export const QuotePrintModal: React.FC = () => {
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Print Document (Ctrl+P)</span>
+                <span>Print Quote (Ctrl+P)</span>
               </button>
             </div>
           </div>
