@@ -283,8 +283,9 @@ interface AppContextType {
   clockInToRO: (
     roId: string, 
     notes?: string, 
-    operationType?: WarrantyOperationType
-  ) => { success: boolean; message: string; punch?: WarrantyLaborTimePunch };
+    operationType?: WarrantyOperationType,
+    roLineNumber?: number
+  ) => { success: boolean; message: string; punch?: WarrantyLaborTimePunch; autoClockedOutOf?: string };
   clockOutOfRO: (
     roId: string, 
     punchId?: string, 
@@ -4686,79 +4687,164 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Warranty Labor Time Clock Operations (Multi-punch per ticket)
+  // Warranty Labor Time Clock Operations (Multi-punch per ticket & Tech-Specific Auto Clock-Out)
   const clockInToRO = (
     roId: string, 
     notes?: string, 
-    operationType?: WarrantyOperationType
-  ): { success: boolean; message: string; punch?: WarrantyLaborTimePunch } => {
+    operationType?: WarrantyOperationType,
+    roLineNumber?: number
+  ): { success: boolean; message: string; punch?: WarrantyLaborTimePunch; autoClockedOutOf?: string } => {
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return { success: false, message: 'Repair order not found.' };
 
-    const existingPunches = targetRO.timePunches || [];
-    // Check if the current user is already clocked in to this RO
-    const openPunch = existingPunches.find(p => !p.clockOut && p.techId === currentUser.id);
-    if (openPunch) {
-      return { 
-        success: false, 
-        message: `You are already clocked in to ticket #${targetRO.id} since ${new Date(openPunch.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` 
-      };
+    const now = new Date().toISOString();
+    const nowMs = new Date(now).getTime();
+    const techId = currentUser.id;
+    const techName = currentUser.name;
+
+    // Check if the current technician already has an active clock-in on THIS exact RO & line
+    const currentROActivePunch = (targetRO.timePunches || []).find(p => !p.clockOut && p.techId === techId);
+    if (currentROActivePunch) {
+      if (roLineNumber && currentROActivePunch.roLineNumber === roLineNumber) {
+        return { 
+          success: false, 
+          message: `You are already clocked in on RO #${targetRO.id} (Line ${roLineNumber}) since ${new Date(currentROActivePunch.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` 
+        };
+      } else if (!roLineNumber && !currentROActivePunch.roLineNumber) {
+        return { 
+          success: false, 
+          message: `You are already clocked in to ticket #${targetRO.id} since ${new Date(currentROActivePunch.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` 
+        };
+      }
     }
 
-    const now = new Date().toISOString();
+    let autoClockedOutSummary: string | null = null;
+    const rosToSync: RepairOrder[] = [];
+
     const newPunch: WarrantyLaborTimePunch = {
       id: `punch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      techId: currentUser.id,
-      techName: currentUser.name,
+      techId: techId,
+      techName: techName,
       techEmployeeNumber: currentUser.employeeNumber,
       clockIn: now,
       notes: notes?.trim() || undefined,
       operationType: operationType || (targetRO.status === 'IN_DIAG' ? 'DIAGNOSTIC' : 'REPAIR'),
+      roLineNumber: roLineNumber,
       createdAt: now,
     };
 
-    const updatedPunches = [...existingPunches, newPunch];
-
-    const historyItem: StatusHistory = {
-      id: `hist_${Date.now()}`,
-      status: targetRO.status,
-      updatedBy: currentUser.id,
-      updatedByName: currentUser.name,
-      userRole: currentUser.role,
-      timestamp: now,
-      notes: `[Warranty Clock-In] ${currentUser.name}${currentUser.employeeNumber ? ` (#${currentUser.employeeNumber})` : ''} clocked in for ${newPunch.operationType || 'REPAIR'} work${notes ? `: "${notes}"` : ''}`,
-    };
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      timePunches: updatedPunches,
-      history: [...targetRO.history, historyItem],
-    };
-
     setRepairOrders(prev => {
-      const updated = prev.map(r => r.id === roId ? updatedRO : r);
+      // Step 1: Auto clock-out THIS technician from any other active punch across ALL repair orders
+      const updatedAll = prev.map(ro => {
+        const punches = ro.timePunches ? [...ro.timePunches] : [];
+        const hasOpenPunchForTech = punches.some(p => !p.clockOut && p.techId === techId);
+
+        // Auto clock-out if it's a different RO, or if it's the target RO with an active punch on a different line
+        if (hasOpenPunchForTech && (ro.id !== roId || (ro.id === roId && currentROActivePunch))) {
+          let closedLineNum: number | undefined;
+          const updatedPunches = punches.map(p => {
+            if (!p.clockOut && p.techId === techId) {
+              const inMs = new Date(p.clockIn).getTime();
+              const durationMinutes = Math.max(1, Math.round((nowMs - inMs) / 60000));
+              const hours = (durationMinutes / 60).toFixed(2);
+              closedLineNum = p.roLineNumber;
+              const prevLineStr = p.roLineNumber ? ` Line ${p.roLineNumber}` : '';
+              const targetLineStr = roLineNumber ? ` Line ${roLineNumber}` : '';
+              
+              autoClockedOutSummary = `RO #${ro.id}${prevLineStr} (${durationMinutes}m / ${hours} hrs logged)`;
+
+              return {
+                ...p,
+                clockOut: now,
+                durationMinutes,
+                notes: p.notes 
+                  ? `${p.notes} | [Auto Clock-Out: Switched to RO #${targetRO.id}${targetLineStr}]`
+                  : `[Auto Clock-Out: Switched to RO #${targetRO.id}${targetLineStr}]`
+              };
+            }
+            return p;
+          });
+
+          const prevLineText = closedLineNum ? ` Line ${closedLineNum}` : '';
+          const autoHistoryItem: StatusHistory = {
+            id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            status: ro.status,
+            updatedBy: techId,
+            updatedByName: techName,
+            userRole: currentUser.role,
+            timestamp: now,
+            notes: `[Auto Clock-Out] ${techName} automatically clocked out of RO #${ro.id}${prevLineText} (switched to RO #${targetRO.id}${roLineNumber ? ` Line ${roLineNumber}` : ''}).`,
+          };
+
+          const closedRO: RepairOrder = {
+            ...ro,
+            timePunches: updatedPunches,
+            history: [...ro.history, autoHistoryItem],
+          };
+
+          if (ro.id !== roId) {
+            rosToSync.push(closedRO);
+          }
+          return closedRO;
+        }
+
+        return ro;
+      });
+
+      // Step 2: Now add the new punch to the target RO
+      const currentTargetInUpdated = updatedAll.find(r => r.id === roId) || targetRO;
+      const punchesForTarget = currentTargetInUpdated.timePunches ? [...currentTargetInUpdated.timePunches] : [];
+      punchesForTarget.push(newPunch);
+
+      const targetHistoryItem: StatusHistory = {
+        id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        status: currentTargetInUpdated.status,
+        updatedBy: techId,
+        updatedByName: techName,
+        userRole: currentUser.role,
+        timestamp: now,
+        notes: `[Labor Clock-In] ${techName}${currentUser.employeeNumber ? ` (#${currentUser.employeeNumber})` : ''} clocked in for ${newPunch.operationType || 'REPAIR'} work${roLineNumber ? ` on Line ${roLineNumber}` : ''}${notes ? `: "${notes}"` : ''}${autoClockedOutSummary ? ` (Auto clocked out of ${autoClockedOutSummary})` : ''}`,
+      };
+
+      const finalTargetRO: RepairOrder = {
+        ...currentTargetInUpdated,
+        timePunches: punchesForTarget,
+        history: [...currentTargetInUpdated.history, targetHistoryItem],
+      };
+
+      rosToSync.push(finalTargetRO);
+
+      const finalAll = updatedAll.map(r => r.id === roId ? finalTargetRO : r);
       try {
-        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(finalAll));
       } catch {
         // ignore
       }
-      return updated;
+      return finalAll;
     });
 
-    syncRepairOrder(updatedRO);
+    // Sync all affected ROs to Cloud Firestore
+    rosToSync.forEach(r => syncRepairOrder(r));
+
+    const timeStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const lineLabel = roLineNumber ? ` (Line ${roLineNumber})` : '';
+    const message = autoClockedOutSummary
+      ? `⏱️ Auto clocked out of ${autoClockedOutSummary}. Now clocked in to RO #${targetRO.id}${lineLabel} at ${timeStr}.`
+      : `Clocked in to RO #${targetRO.id}${lineLabel} at ${timeStr}.`;
 
     triggerNotification(
-      updatedRO,
+      targetRO,
       `Tech Clocked In: RO #${targetRO.id}`,
-      `${currentUser.name} clocked in on ticket #${targetRO.id} (${newPunch.operationType || 'REPAIR'}).`,
+      `${techName} clocked in on ticket #${targetRO.id}${lineLabel}.${autoClockedOutSummary ? ` (Auto clocked out of ${autoClockedOutSummary})` : ''}`,
       false,
       'STATUS_CHANGE'
     );
 
     return { 
       success: true, 
-      message: `Clocked in to RO #${targetRO.id} at ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
-      punch: newPunch
+      message,
+      punch: newPunch,
+      autoClockedOutOf: autoClockedOutSummary || undefined
     };
   };
 

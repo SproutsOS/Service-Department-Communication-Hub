@@ -73,6 +73,7 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
   // Quick inputs
   const [clockInNotes, setClockInNotes] = useState('');
   const [clockInOpType, setClockInOpType] = useState<WarrantyOperationType>('REPAIR');
+  const [clockInLineNum, setClockInLineNum] = useState<number | undefined>(undefined);
   const [clockOutNotes, setClockOutNotes] = useState('');
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
@@ -83,6 +84,7 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
   const [manualEndTime, setManualEndTime] = useState('09:30');
   const [manualTechName, setManualTechName] = useState(currentUser.name);
   const [manualOpType, setManualOpType] = useState<WarrantyOperationType>('REPAIR');
+  const [manualLineNum, setManualLineNum] = useState<number | undefined>(undefined);
   const [manualNotes, setManualNotes] = useState('');
 
   // Format seconds to hh:mm:ss
@@ -111,10 +113,10 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
   const totalMinsInt = totalMinutes % 60;
 
   const handleClockIn = () => {
-    const res = clockInToRO(ro.id, clockInNotes, clockInOpType);
+    const res = clockInToRO(ro.id, clockInNotes, clockInOpType, clockInLineNum);
     setActionFeedback(res.message);
     setClockInNotes('');
-    setTimeout(() => setActionFeedback(null), 4000);
+    setTimeout(() => setActionFeedback(null), 5000);
   };
 
   const handleClockOut = () => {
@@ -295,7 +297,31 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <div className="sm:col-span-1">
+                <select
+                  value={clockInLineNum !== undefined ? String(clockInLineNum) : ''}
+                  onChange={(e) => setClockInLineNum(e.target.value ? Number(e.target.value) : undefined)}
+                  className="w-full px-3 py-2 text-xs font-bold border-2 border-slate-400 rounded-lg text-slate-800 bg-white"
+                >
+                  <option value="">General RO Work</option>
+                  {(ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern || 'General Inspection']).map((c, i) => (
+                    <option key={i} value={i + 1}>
+                      Line {i + 1}: {c.slice(0, 30)}
+                    </option>
+                  ))}
+                  {(ro.recommendations || []).map((rec, i) => {
+                    const baseCount = ro.concerns?.length || 1;
+                    const rLine = baseCount + i + 1;
+                    return (
+                      <option key={`rec_${rec.id}`} value={rLine}>
+                        Line {rLine} (Rec): {rec.serviceName.slice(0, 30)}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
               <div className="sm:col-span-1">
                 <select
                   value={clockInOpType}
@@ -315,7 +341,7 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
                   type="text"
                   value={clockInNotes}
                   onChange={(e) => setClockInNotes(e.target.value)}
-                  placeholder="Optional session objective (e.g., Pulling intake manifold to inspect gaskets)..."
+                  placeholder="Optional session objective..."
                   className="w-full px-3 py-2 text-xs border-2 border-slate-400 rounded-lg text-slate-900"
                 />
                 <button
@@ -414,9 +440,16 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
                         )}
                       </td>
                       <td className="py-2 px-2.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300">
-                          {punch.operationType || 'REPAIR'}
-                        </span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300">
+                            {punch.operationType || 'REPAIR'}
+                          </span>
+                          {punch.roLineNumber && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                              Line {punch.roLineNumber}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2 px-2.5 font-mono text-slate-800 whitespace-nowrap">
                         {formatPunchTime(punch.clockIn)}

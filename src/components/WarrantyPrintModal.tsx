@@ -506,9 +506,16 @@ export const WarrantyPrintModal: React.FC = () => {
                               )}
                             </td>
                             <td className="py-2 px-2.5">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-300">
-                                {punch.operationType || 'REPAIR'}
-                              </span>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-300">
+                                  {punch.operationType || 'REPAIR'}
+                                </span>
+                                {punch.roLineNumber && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                    Line {punch.roLineNumber}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-2 px-2.5 font-mono text-slate-800 whitespace-nowrap">
                               {inText}

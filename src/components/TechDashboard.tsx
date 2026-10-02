@@ -31,12 +31,14 @@ import {
   ShoppingCart,
   Gauge,
   Car,
-  History
+  History,
+  Search
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { ROStatus, RepairOrder, ConcernPayType, WarrantyOperationType } from '../types';
-import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField } from '../utils/formatters';
+import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField, sortROsNumerically } from '../utils/formatters';
+import { ROCard } from './ROCard';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
@@ -857,44 +859,54 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       )}
 
                       {/* Clock In / Out Button directly to the right of Line status */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isClockedIn) {
-                            clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${idx + 1}`);
-                          } else {
-                            clockInToRO(
-                              ro.id, 
-                              `Working on Line ${idx + 1}: ${concernText.slice(0, 50)}`, 
-                              payType === 'WARRANTY' ? 'REPAIR' : 'GENERAL'
-                            );
-                          }
-                        }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
-                          isClockedIn
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
-                        }`}
-                        title={
-                          isClockedIn 
-                            ? `Clocked in on RO #${ro.id} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
-                            : `Clock in to start working on RO #${ro.id}`
-                        }
-                      >
-                        {isClockedIn ? (
-                          <>
-                            <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                            <Square className="w-3 h-3 fill-white" />
-                            <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>Clock In</span>
-                          </>
-                        )}
-                      </button>
+                      {(() => {
+                        const isLineClockedIn = isClockedIn && (activePunch?.roLineNumber === idx + 1 || (!activePunch?.roLineNumber && idx === 0));
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isLineClockedIn) {
+                                clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${idx + 1}`);
+                              } else {
+                                clockInToRO(
+                                  ro.id, 
+                                  `Working on Line ${idx + 1}: ${concernText.slice(0, 50)}`, 
+                                  payType === 'WARRANTY' ? 'REPAIR' : 'GENERAL',
+                                  idx + 1
+                                );
+                              }
+                            }}
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
+                              isLineClockedIn
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
+                                : isClockedIn
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700 hover:shadow-xs active:scale-95'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
+                            }`}
+                            title={
+                              isLineClockedIn 
+                                ? `Clocked in on RO #${ro.id} Line ${idx + 1} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
+                                : isClockedIn
+                                ? `Switch punch to RO #${ro.id} Line ${idx + 1} (will auto clock out of current punch)`
+                                : `Clock in to start working on RO #${ro.id} Line ${idx + 1}`
+                            }
+                          >
+                            {isLineClockedIn ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                                <Square className="w-3 h-3 fill-white" />
+                                <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>{isClockedIn ? `Switch to Line ${idx + 1}` : 'Clock In'}</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
 
                       {/* Add Past Punch Button directly to the right of Clock In */}
                       <button
@@ -1379,44 +1391,54 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       )}
 
                       {/* Clock In / Out Button for this recommendation line */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isClockedIn) {
-                            clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${globalLineNum}`);
-                          } else {
-                            clockInToRO(
-                              ro.id, 
-                              `Working on Line ${globalLineNum}: ${rec.serviceName.slice(0, 50)}`, 
-                              recPayType === 'WARRANTY' ? 'REPAIR' : 'GENERAL'
-                            );
-                          }
-                        }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
-                          isClockedIn
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
-                        }`}
-                        title={
-                          isClockedIn 
-                            ? `Clocked in on RO #${ro.id} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
-                            : `Clock in to work on Line ${globalLineNum}`
-                        }
-                      >
-                        {isClockedIn ? (
-                          <>
-                            <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                            <Square className="w-3 h-3 fill-white" />
-                            <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>Clock In</span>
-                          </>
-                        )}
-                      </button>
+                      {(() => {
+                        const isRecLineClockedIn = isClockedIn && (activePunch?.roLineNumber === globalLineNum);
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isRecLineClockedIn) {
+                                clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${globalLineNum}`);
+                              } else {
+                                clockInToRO(
+                                  ro.id, 
+                                  `Working on Line ${globalLineNum}: ${rec.serviceName.slice(0, 50)}`, 
+                                  recPayType === 'WARRANTY' ? 'REPAIR' : 'GENERAL',
+                                  globalLineNum
+                                );
+                              }
+                            }}
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
+                              isRecLineClockedIn
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
+                                : isClockedIn
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700 hover:shadow-xs active:scale-95'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
+                            }`}
+                            title={
+                              isRecLineClockedIn 
+                                ? `Clocked in on RO #${ro.id} Line ${globalLineNum} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
+                                : isClockedIn
+                                ? `Switch punch to Line ${globalLineNum} (will auto clock out of current punch)`
+                                : `Clock in to work on Line ${globalLineNum}`
+                            }
+                          >
+                            {isRecLineClockedIn ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                                <Square className="w-3 h-3 fill-white" />
+                                <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>{isClockedIn ? `Switch to Line ${globalLineNum}` : 'Clock In'}</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
 
                       {/* Add Past Punch Button directly to the right of Clock In */}
                       <button
@@ -2248,6 +2270,7 @@ export const TechDashboard: React.FC = () => {
     currentUser, 
     users,
     repairOrders, 
+    setSelectedRO,
     updateROStatus, 
     startDiagnosis,
     openDirectChat,
@@ -2259,9 +2282,8 @@ export const TechDashboard: React.FC = () => {
   const [partsModalRO, setPartsModalRO] = useState<RepairOrder | null>(null);
   const [partsModalLine, setPartsModalLine] = useState<{ index?: number; text?: string }>({});
   const [testDriveModalRO, setTestDriveModalRO] = useState<RepairOrder | null>(null);
-
-  const canSelectPayType = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
-  const canAssignTech = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
 
   // Filter to this technician's assigned ROs (primary tech or assigned to an individual line)
   const myROs = repairOrders.filter(ro => ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id));
@@ -2279,20 +2301,28 @@ export const TechDashboard: React.FC = () => {
     normalizeROStatus(ro.status) === 'READY_FOR_PICKUP'
   );
 
-  const [activeTab, setActiveTab] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
-
-  const displayList = activeTab === 'ACTIVE' ? activeROs : completedROs;
-
-  const handleQuickStatus = (e: React.MouseEvent, roId: string, newStatus: ROStatus) => {
-    e.stopPropagation();
-    const targetRO = repairOrders.find(r => r.id === roId);
-    if (newStatus === 'REPAIR_COMPLETE' && targetRO && !targetRO.outMileage && !targetRO.vehicle.outMileage) {
-      // Tech clicked "Repair Complete" — prompt for Out Miles if not yet entered!
-      setTestDriveModalRO(targetRO);
-      return;
+  const filterAndSortROs = (list: RepairOrder[]) => {
+    let filtered = list;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = list.filter(ro => {
+        const matchRO = ro.id.toLowerCase().includes(q);
+        const matchCustomer = ro.customerName.toLowerCase().includes(q);
+        const matchPhone = (ro.customerPhone || '').includes(q);
+        const matchVehicle = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`.toLowerCase().includes(q);
+        const matchVin = (ro.vehicle.vin || '').toLowerCase().includes(q);
+        const matchConcern = (ro.concerns || [ro.primaryConcern || '']).some(c => c.toLowerCase().includes(q));
+        const matchParts = (ro.parts || []).some(p => p.partNumber?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
+        const matchAdvisor = (ro.advisorName || '').toLowerCase().includes(q);
+        return matchRO || matchCustomer || matchPhone || matchVehicle || matchVin || matchConcern || matchParts || matchAdvisor;
+      });
     }
-    updateROStatus(roId, newStatus, `1-tap status updated to ${STATUS_CONFIG[newStatus]?.label || newStatus} by ${currentUser.name}`);
+    return sortROsNumerically(filtered);
   };
+
+  const filteredActiveROs = filterAndSortROs(activeROs);
+  const filteredCompletedROs = filterAndSortROs(completedROs);
+  const displayList = activeTab === 'ACTIVE' ? filteredActiveROs : filteredCompletedROs;
 
   return (
     <div className="space-y-6">
@@ -2370,402 +2400,79 @@ export const TechDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setActiveTab('ACTIVE')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-            activeTab === 'ACTIVE' 
-              ? 'bg-blue-600 text-white shadow-xs' 
-              : 'text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Active Repair Orders ({activeROs.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('COMPLETED')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-            activeTab === 'COMPLETED' 
-              ? 'bg-blue-600 text-white shadow-xs' 
-              : 'text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Finished ({completedROs.length})
-        </button>
+      {/* Tab Switcher & Search Bar to the right of Finished */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setActiveTab('ACTIVE')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'ACTIVE' 
+                ? 'bg-blue-600 text-white shadow-xs' 
+                : 'text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Active Repair Orders ({filteredActiveROs.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('COMPLETED')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'COMPLETED' 
+                ? 'bg-blue-600 text-white shadow-xs' 
+                : 'text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Finished ({filteredCompletedROs.length})
+          </button>
+        </div>
+
+        {/* Search Bar directly to the right of Finished */}
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search RO, customer, vehicle, concern..."
+            className="w-full pl-9 pr-8 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+              title="Clear search"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Technician Jobs List with 1-Click Status Controls */}
-      <div className="space-y-4">
-        {displayList.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-            <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-            <h3 className="text-sm font-bold text-slate-800">Your Work Queue is Clear</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              No repair orders currently in this queue. When a Service Advisor assigns work to you, it will show up here immediately with real-time push alerts.
-            </p>
-          </div>
-        ) : (
-          displayList.map(ro => {
-            const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
-
-            return (
-              <div
-                key={ro.id}
-                id={`tech-ro-card-${ro.id}`}
-                className={`bg-white rounded-xl border-2 p-5 shadow-sm space-y-4 ${
-                  ro.isUrgent || ro.isWaiter
-                    ? 'border-red-400 ring-2 ring-red-400/20'
-                    : 'border-slate-400'
-                }`}
-              >
-                {/* Status Updates (Moved above repair order number) */}
-                <div 
-                  onClick={(e) => e.stopPropagation()}
-                  className="pb-3 border-b border-slate-200"
-                >
-                  <div className="text-xs font-bold uppercase text-slate-500 mb-2">
-                    Status Updates:
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'WAITING_DIAGNOSTICS')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'WAITING_DIAGNOSTICS'
-                          ? 'bg-amber-500 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Waiting Diag
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'IN_DIAG')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'IN_DIAG'
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      In Diag
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'ESTIMATE_DONE')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'ESTIMATE_DONE'
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Estimate Done
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'PARTS_IN_TO_TECH')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'PARTS_IN_TO_TECH'
-                          ? 'bg-purple-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Parts In / To Tech
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_IN_PROGRESS')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        normalizeROStatus(ro.status) === 'REPAIR_IN_PROGRESS'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                    >
-                      Repair in Progress
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_COMPLETE')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                        normalizeROStatus(ro.status) === 'REPAIR_COMPLETE'
-                          ? 'bg-teal-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                      title={ro.outMileage ? `Repair complete. Out Miles: ${ro.outMileage} mi` : "Complete repair and enter test drive out miles"}
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Repair Complete</span>
-                      {ro.outMileage && (
-                        <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-teal-800 text-teal-100 font-bold">
-                          {Number(ro.outMileage).toLocaleString()} mi
-                        </span>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTestDriveModalRO(ro);
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-300 transition-colors cursor-pointer flex items-center gap-1.5"
-                      title="Enter Out Miles from test drive"
-                    >
-                      <Gauge className="w-3.5 h-3.5 text-blue-600" />
-                      <span>{ro.outMileage ? `Out: ${Number(ro.outMileage).toLocaleString()} mi` : '+ Out Miles'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickStatus(e, ro.id, 'READY_FOR_PICKUP')}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-black text-white ml-auto cursor-pointer"
-                    >
-                      Ready for Pickup
-                    </button>
-                  </div>
-                </div>
-
-                {/* Header: RO, Customer, Vehicle, Assigned Time */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-base text-blue-600">#{ro.id}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
-                        {statusInfo.label}
-                      </span>
-                      {ro.isUrgent && (
-                        <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 text-red-600" /> HIGH PRIORITY
-                        </span>
-                      )}
-                      {ro.isWaiter && (
-                        <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-red-600" /> WAITER
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-1 text-sm font-semibold text-slate-800">
-                      {ro.customerName} • {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
-                    </div>
-                  </div>
-
-                  <div className="text-left sm:text-right text-xs text-slate-500">
-                    <div className="flex items-center sm:justify-end gap-1 text-slate-700 font-medium">
-                      <Clock className="w-3.5 h-3.5 text-blue-600" />
-                      {calculateDispatchedDuration(ro.dispatchedAt)}
-                    </div>
-                    <div className="mt-1 flex items-center sm:justify-end gap-2.5 flex-wrap">
-                      <span className="text-base sm:text-lg font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs">
-                        Advisor: <span className="text-blue-700 font-black">{ro.advisorName}</span>
-                        {(() => {
-                          const adv = users.find(u => u.id === ro.advisorId || u.name === ro.advisorName);
-                          return adv?.employeeNumber ? (
-                            <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-300">
-                              #{adv.employeeNumber}
-                            </span>
-                          ) : null;
-                        })()}
-                      </span>
-                      {ro.advisorId && ro.advisorId !== currentUser.id && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDirectChat(ro.advisorId);
-                          }}
-                          className="text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl border-2 border-blue-700 inline-flex items-center gap-2 transition-all shadow-md cursor-pointer hover:shadow-lg active:scale-95"
-                          title={`Direct message advisor ${ro.advisorName}`}
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          <span>Chat with {ro.advisorName.split(' ')[0]}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tech Tools: ProDemand Labor Lookup, Copy VIN, Current Miles, Miles Out & Quote Builder */}
-                <div 
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-2.5 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border-2 border-slate-300 flex flex-wrap items-center justify-between gap-2.5 shadow-2xs"
-                >
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <a
-                      href="https://www.prodemand.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-blue-700"
-                      title="Open Pro Demand for OEM flat-rate labor times"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Pro Demand Labor ↗</span>
-                    </a>
-
-                    {ro.vehicle.vin && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(ro.vehicle.vin);
-                          alert(`Copied VIN: ${ro.vehicle.vin}`);
-                        }}
-                        className="px-3 py-1.5 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-mono font-bold border-2 border-slate-700 flex items-center gap-1.5 transition-all active:scale-95 shadow-md cursor-pointer"
-                        title="Copy VIN for Pro Demand"
-                      >
-                        <Copy className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Copy VIN</span>
-                      </button>
-                    )}
-
-                    {/* Current Miles (Miles In) */}
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-800 rounded-lg text-xs font-bold border border-slate-300 shadow-2xs">
-                      <Gauge className="w-3.5 h-3.5 text-slate-600" />
-                      <span className="text-slate-500 font-medium">Current Miles:</span>
-                      <span className="font-extrabold text-slate-900 font-mono">
-                        {ro.vehicle.mileage !== undefined ? `${Number(ro.vehicle.mileage).toLocaleString()} mi` : 'N/A'}
-                      </span>
-                    </div>
-
-                    {/* Box for Miles Out */}
-                    <InlineOutMilesBox ro={ro} />
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {(() => {
-                      const loggedHours = ro.quote?.laborItems 
-                        ? ro.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
-                        : 0;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => openQuoteModal(ro.id)}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border-2 transition-all cursor-pointer shadow-xs ${
-                            loggedHours > 0
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-700'
-                              : 'bg-slate-900 hover:bg-black text-white border-slate-900'
-                          }`}
-                          title="Enter labor time required to do the job"
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>{loggedHours > 0 ? `Total Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Total Labor Time'}</span>
-                        </button>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* Diagnostic Phase Callout: Waiting vs Being Diagnosed */}
-                {ro.status === 'WAITING_DIAGNOSIS' && (
-                  <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs uppercase tracking-wide">
-                        <Clock className="w-4 h-4 text-amber-600" />
-                        <span>Vehicle is Waiting to be Diagnosed</span>
-                      </div>
-                      <div className="text-xs text-amber-800 mt-0.5 font-medium">
-                        Assigned to you • In queue since {formatTimeOnly(ro.waitingDiagnosisAt)} ({formatDurationSince(ro.waitingDiagnosisAt)} wait)
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startDiagnosis(ro.id);
-                      }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg border-2 border-blue-700 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Begin Diagnosis Now</span>
-                    </button>
-                  </div>
-                )}
-
-                {ro.status === 'BEING_DIAGNOSED' && (
-                  <div className="bg-blue-50 border-2 border-blue-400 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs uppercase tracking-wide">
-                        <Wrench className="w-4 h-4 text-blue-600" />
-                        <span>Vehicle is Being Diagnosed</span>
-                      </div>
-                      <div className="text-xs text-blue-800 mt-0.5 font-medium">
-                        Diagnostic testing & scan underway • Started at {formatTimeOnly(ro.diagnosisStartedAt)} ({formatDurationSince(ro.diagnosisStartedAt)} active)
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPartsModalRO(ro);
-                          setPartsModalLine({});
-                        }}
-                        className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2 rounded-lg border-2 border-amber-600 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                        title="Diagnostic finished — request required parts from the Parts Department"
-                      >
-                        <Package className="w-3.5 h-3.5" />
-                        <span>Finish Diag & Request Parts</span>
-                      </button>
-                      <span className="text-[11px] font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full border-2 border-blue-300 uppercase tracking-wider">
-                        Active Inspection
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Technician Diagnosis & Repair Documentation: Cause & Correction */}
-                <TechCauseCorrectionSection 
-                  ro={ro} 
-                  onRequestParts={(lineIdx, lineTxt) => {
-                    setPartsModalRO(ro);
-                    setPartsModalLine({ index: lineIdx, text: lineTxt });
-                  }} 
-                />
-
-                {/* Technician Additional Recommended Services (21-Point Inspection & MPI Findings) */}
-                <TechRecommendationsSection 
-                  ro={ro} 
-                  onRequestParts={(lineIdx, lineTxt) => {
-                    setPartsModalRO(ro);
-                    setPartsModalLine({ index: lineIdx, text: lineTxt });
-                  }}
-                />
-
-                {/* Card Footer: Technician Station Details & Advisor Direct Communication */}
-                <div 
-                  id={`tech-ro-card-footer-${ro.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 -mx-5 -mb-5 px-5 py-3.5 rounded-b-xl bg-slate-50/90"
-                >
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-                      <UserCheck className="w-4 h-4 text-blue-600" />
-                      Advisor: <span className="text-blue-900 font-black">{ro.advisorName}</span>
-                    </span>
-                    {ro.advisorId && ro.advisorId !== currentUser.id && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDirectChat(ro.advisorId);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold border border-blue-700 transition-all cursor-pointer text-xs shadow-xs hover:shadow-sm"
-                        title={`Direct message advisor ${ro.advisorName}`}
-                      >
-                        <MessageSquare className="w-4 h-4 text-white" />
-                        <span>Chat with {ro.advisorName.split(' ')[0]}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            );
-          })
-        )}
-      </div>
+      {/* Small Cards Grid for Each Repair Order (Opens RO on Click) */}
+      {displayList.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+          <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <h3 className="text-sm font-bold text-slate-800">
+            {searchQuery ? 'No Matching Repair Orders Found' : 'Your Work Queue is Clear'}
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            {searchQuery 
+              ? `No repair orders matched your search "${searchQuery}".` 
+              : 'No repair orders currently in this queue. When a Service Advisor assigns work to you, it will show up here immediately.'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {displayList.map(ro => (
+            <ROCard
+              key={ro.id}
+              ro={ro}
+              onClick={() => setSelectedRO(ro)}
+              isMainCard={true}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Technician Parts Request Modal */}
       <TechPartsRequestModal 

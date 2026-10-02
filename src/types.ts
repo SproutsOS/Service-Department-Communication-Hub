@@ -254,6 +254,7 @@ export interface WarrantyLaborTimePunch {
   durationMinutes?: number; // total elapsed minutes
   notes?: string; // e.g. "Pinpoint electrical testing", "Replaced timing belt and tensioner"
   operationType?: WarrantyOperationType;
+  roLineNumber?: number; // 1-indexed RO Line number (e.g. 1 for Line 1, 2 for Line 2)
   manuallyEntered?: boolean;
   createdAt?: string;
 }
