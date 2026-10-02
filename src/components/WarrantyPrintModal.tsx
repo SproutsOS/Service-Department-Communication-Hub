@@ -14,12 +14,17 @@ import {
   Calendar,
   AlertCircle,
   Gauge,
-  CheckCircle2
+  CheckCircle2,
+  MapPin,
+  Phone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WarrantyLaborTimePunch } from '../types';
 import { formatMilitaryDate, formatMilitaryTime, formatMilitaryDateTime } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
+
+const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
+const DEALERSHIP_PHONE = '601-765-2066';
 
 export const WarrantyPrintModal: React.FC = () => {
   const { 
@@ -223,6 +228,16 @@ export const WarrantyPrintModal: React.FC = () => {
                   </div>
                   <div className="text-xs font-bold text-slate-600 tracking-wider uppercase mt-0.5">
                     Warranty Repair & Labor Time Verification Record
+                  </div>
+                  <div className="text-xs font-medium text-slate-700 mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1 font-semibold text-slate-800">
+                      <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>{DEALERSHIP_ADDRESS}</span>
+                    </span>
+                    <span className="flex items-center gap-1 font-semibold text-slate-800">
+                      <Phone className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>Phone: <strong className="font-bold text-slate-950">{DEALERSHIP_PHONE}</strong></span>
+                    </span>
                   </div>
                 </div>
                 <div className="text-right">
@@ -634,6 +649,10 @@ export const WarrantyPrintModal: React.FC = () => {
               </div>
               <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
                 WARRANTY REPAIR & LABOR TIME VERIFICATION RECORD
+              </div>
+              <div className="text-xs text-black font-bold mt-1.5 leading-snug">
+                <div>{DEALERSHIP_ADDRESS}</div>
+                <div className="text-[12px] font-black mt-0.5">Phone: {DEALERSHIP_PHONE}</div>
               </div>
             </div>
             <div className="text-right shrink-0">

@@ -128,15 +128,47 @@ export function subscribeToNotifications(callback: (notifs: UrgentNotification[]
   });
 }
 
-// Subscribe to real-time shop chat messages
+// 24-hour expiration constant for shop chat messages
+export const CHAT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+// Delete specific shop chat messages from Firestore
+export async function deleteShopMessagesFromCloud(messageIds: string[]) {
+  if (!messageIds || messageIds.length === 0) return;
+  try {
+    const promises = messageIds.map(msgId => {
+      const docRef = doc(db, SHOP_MESSAGES_COL, msgId);
+      return deleteDoc(docRef).catch(() => {});
+    });
+    await Promise.all(promises);
+  } catch (err) {
+    console.error('Failed to auto-delete expired shop messages from Firestore:', err);
+  }
+}
+
+// Subscribe to real-time shop chat messages with automatic 24-hour expiration & deletion
 export function subscribeToShopMessages(callback: (messages: ShopChatMessage[]) => void) {
   const colRef = collection(db, SHOP_MESSAGES_COL);
-  const q = query(colRef, orderBy('timestamp', 'asc'), limit(150));
+  const q = query(colRef, orderBy('timestamp', 'asc'), limit(250));
   return onSnapshot(q, (snapshot) => {
     const list: ShopChatMessage[] = [];
+    const expiredIds: string[] = [];
+    const now = Date.now();
+
     snapshot.forEach((docSnap) => {
-      list.push(docSnap.data() as ShopChatMessage);
+      const msg = docSnap.data() as ShopChatMessage;
+      const msgTime = new Date(msg.timestamp).getTime();
+      // If message is older than 24 hours, automatically purge from Firestore
+      if (!isNaN(msgTime) && (now - msgTime) > CHAT_MAX_AGE_MS) {
+        expiredIds.push(msg.id || docSnap.id);
+      } else {
+        list.push(msg);
+      }
     });
+
+    if (expiredIds.length > 0) {
+      deleteShopMessagesFromCloud(expiredIds);
+    }
+
     callback(list);
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, SHOP_MESSAGES_COL);

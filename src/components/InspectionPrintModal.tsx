@@ -17,12 +17,17 @@ import {
   Car, 
   Calendar,
   Layers,
-  Gauge
+  Gauge,
+  MapPin,
+  Phone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RepairOrder, InspectionCategory, InspectionChecklistItem } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { formatMilitaryDate, formatMilitaryDateTime } from '../utils/formatters';
+
+const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
+const DEALERSHIP_PHONE = '601-765-2066';
 
 interface InspectionPrintModalProps {
   ro: RepairOrder | null;
@@ -307,6 +312,16 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                   </div>
                   <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                     Service Department • Multi-Point Inspection & Quality Verification
+                  </div>
+                  <div className="text-xs font-medium text-slate-700 mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1 font-semibold text-slate-800">
+                      <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>{DEALERSHIP_ADDRESS}</span>
+                    </span>
+                    <span className="flex items-center gap-1 font-semibold text-slate-800">
+                      <Phone className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>Phone: <strong className="font-bold text-slate-950">{DEALERSHIP_PHONE}</strong></span>
+                    </span>
                   </div>
                 </div>
 
@@ -597,6 +612,10 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
               </div>
               <div className="text-xs font-black text-black uppercase tracking-wider mt-0.5">
                 SERVICE DEPARTMENT • 21-POINT MULTI-POINT INSPECTION & QUALITY REPORT
+              </div>
+              <div className="text-xs text-black font-bold mt-1.5 leading-snug">
+                <div>{DEALERSHIP_ADDRESS}</div>
+                <div className="text-[12px] font-black mt-0.5">Phone: {DEALERSHIP_PHONE}</div>
               </div>
             </div>
 

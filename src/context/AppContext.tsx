@@ -48,6 +48,8 @@ import {
   subscribeToShopMessages,
   subscribeToCustomers,
   saveShopMessage,
+  deleteShopMessagesFromCloud,
+  CHAT_MAX_AGE_MS,
   markShopMessagesReadInCloud,
   markShopChatNotificationsReadInCloud,
   syncRepairOrder,
@@ -230,6 +232,7 @@ interface AppContextType {
   latestUnreadShopMessage: ShopChatMessage | null;
   unreadCountBySender: Record<string, number>;
   markShopMessagesAsRead: (messageIds: string[]) => void;
+  deleteShopMessage: (messageId: string) => void;
 
   // Tech Additional Recommendations & MPI Findings
   addRecommendedService: (roId: string, item: {
@@ -825,6 +828,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return map;
   }, [unreadShopMessages]);
+
+  const deleteShopMessage = useCallback((messageId: string) => {
+    if (!messageId) return;
+    setShopMessages(prev => prev.filter(m => m.id !== messageId));
+    deleteShopMessagesFromCloud([messageId]);
+    setReadShopMessageIds(prev => {
+      if (!prev.has(messageId)) return prev;
+      const next = new Set(prev);
+      next.delete(messageId);
+      try {
+        localStorage.setItem(`shop_chat_read_ids_${currentUser.id}`, JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, [currentUser?.id]);
+
+  // Automatically delete any chat message that is over 24 hours old from Firestore and local state
+  useEffect(() => {
+    const purgeExpiredChatMessages = () => {
+      const now = Date.now();
+      setShopMessages(prev => {
+        const expiredIds: string[] = [];
+        const freshMessages = prev.filter(m => {
+          const t = new Date(m.timestamp).getTime();
+          if (!isNaN(t) && (now - t) > CHAT_MAX_AGE_MS) {
+            expiredIds.push(m.id);
+            return false;
+          }
+          return true;
+        });
+
+        if (expiredIds.length > 0) {
+          deleteShopMessagesFromCloud(expiredIds);
+          setReadShopMessageIds(rPrev => {
+            const next = new Set(rPrev);
+            expiredIds.forEach(id => next.delete(id));
+            try {
+              localStorage.setItem(`shop_chat_read_ids_${currentUser.id}`, JSON.stringify(Array.from(next)));
+            } catch {}
+            return next;
+          });
+        }
+
+        return expiredIds.length > 0 ? freshMessages : prev;
+      });
+
+      // Also clean up any lingering SHOP_CHAT notifications older than 24 hours
+      setNotifications(prev => {
+        const expiredNotifIds: string[] = [];
+        const fresh = prev.filter(n => {
+          if (n.type === 'SHOP_CHAT') {
+            const t = new Date(n.timestamp).getTime();
+            if (!isNaN(t) && (now - t) > CHAT_MAX_AGE_MS) {
+              expiredNotifIds.push(n.id);
+              return false;
+            }
+          }
+          return true;
+        });
+        if (expiredNotifIds.length > 0) {
+          try {
+            localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(fresh));
+          } catch {}
+        }
+        return fresh;
+      });
+    };
+
+    purgeExpiredChatMessages();
+    const intervalId = setInterval(purgeExpiredChatMessages, 60000);
+    return () => clearInterval(intervalId);
+  }, [currentUser?.id]);
 
   const openShopChat = useCallback((targetRecipientId?: string) => {
     if (targetRecipientId) {
@@ -5123,6 +5198,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         latestUnreadShopMessage,
         unreadCountBySender,
         markShopMessagesAsRead,
+        deleteShopMessage,
         addRecommendedService,
         updateRecommendedService,
         deleteRecommendedService,

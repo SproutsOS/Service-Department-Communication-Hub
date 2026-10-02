@@ -14,7 +14,9 @@ import {
   Users,
   Paperclip,
   ChevronRight,
-  Bell
+  Bell,
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { UserRole, User as UserType } from '../types';
 import { formatRelativeTime, formatMilitaryTime } from '../utils/formatters';
@@ -76,7 +78,8 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
     unreadShopCount,
     latestUnreadShopMessage,
     unreadCountBySender,
-    markShopMessagesAsRead
+    markShopMessagesAsRead,
+    deleteShopMessage
   } = useApp();
 
   const [inputText, setInputText] = useState('');
@@ -96,16 +99,23 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
 
   const isGeneralChannel = !selectedChatRecipientId || selectedChatRecipientId === 'ALL';
 
-  // Filter messages for current view
+  // Filter messages for current view (strictly auto-purge & hide anything over 24 hours old)
   // 1-on-1: messages between currentUser and activeRecipient
   // General: messages where recipientId is undefined or 'ALL'
   const visibleMessages = useMemo(() => {
+    const now = Date.now();
+    const cutoff = 24 * 60 * 60 * 1000;
+    const freshMessages = shopMessages.filter(m => {
+      const t = new Date(m.timestamp).getTime();
+      return !isNaN(t) && (now - t) <= cutoff;
+    });
+
     if (isGeneralChannel) {
-      return shopMessages.filter(m => !m.recipientId || m.recipientId === 'ALL');
+      return freshMessages.filter(m => !m.recipientId || m.recipientId === 'ALL');
     }
     if (!activeRecipient) return [];
     
-    return shopMessages.filter(m => 
+    return freshMessages.filter(m => 
       (m.senderId === currentUser.id && m.recipientId === activeRecipient.id) ||
       (m.senderId === activeRecipient.id && m.recipientId === currentUser.id)
     );
@@ -306,12 +316,16 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
             </div>
 
             {!isMinimized && (
-              <div className="text-[11px] text-slate-400 truncate">
+              <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
                 {isGeneralChannel ? (
                   <span>Broadcast channel • {users.length} team members</span>
                 ) : (
-                  <span>{activeRecipient?.title || activeRecipient?.role.replace(/_/g, ' ')} • Direct 1-on-1 Chat</span>
+                  <span>{activeRecipient?.title || activeRecipient?.role.replace(/_/g, ' ')} • Direct 1-on-1</span>
                 )}
+                <span className="text-[10px] text-slate-300 font-medium bg-slate-800/90 px-1.5 py-0.2 rounded border border-slate-700 flex items-center gap-1 shrink-0">
+                  <Clock className="w-2.5 h-2.5 text-amber-400" />
+                  Auto-cleans &gt;24h
+                </span>
               </div>
             )}
           </div>
@@ -536,6 +550,16 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
                       <span className="text-[10px] text-slate-400">
                         {msgTime}
                       </span>
+                      {(isMe || currentUser.role === 'SERVICE_MANAGER') && (
+                        <button
+                          type="button"
+                          onClick={() => deleteShopMessage(msg.id)}
+                          className="opacity-60 hover:opacity-100 p-0.5 text-slate-400 hover:text-red-600 transition-opacity cursor-pointer ml-1"
+                          title="Delete message"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Message Bubble */}
