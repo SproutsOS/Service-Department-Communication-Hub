@@ -29,6 +29,8 @@ interface ROCardProps {
   compact?: boolean;
   onOpenFollowUp?: (ro: RepairOrder) => void;
   hideCauseCorrection?: boolean;
+  className?: string;
+  isMainCard?: boolean;
 }
 
 export const ROCard: React.FC<ROCardProps> = ({ 
@@ -36,11 +38,13 @@ export const ROCard: React.FC<ROCardProps> = ({
   onClick, 
   compact = false, 
   onOpenFollowUp,
-  hideCauseCorrection = false
+  hideCauseCorrection = false,
+  className = '',
+  isMainCard = false
 }) => {
   const ro = cleanRO3700(rawRO);
   const { users, currentUser, setSelectedRO, hasROChange, roChangeAlerts } = useApp();
-  const hasChangeAlert = hasROChange ? hasROChange(ro.id) : false;
+  const hasChangeAlert = hasROChange ? hasROChange(ro.id, ro) : false;
   const changeAlert = roChangeAlerts ? roChangeAlerts[ro.id] : undefined;
   const shouldHideCauseCorrection = hideCauseCorrection || currentUser?.role === 'SERVICE_ADVISOR';
   const isCompleted = isROCompleted(ro);
@@ -89,7 +93,9 @@ export const ROCard: React.FC<ROCardProps> = ({
           : isCompleted && postRepair?.isDueToday
           ? 'border-amber-500 ring-2 ring-amber-400/40 shadow-xs'
           : 'border-slate-800 hover:border-black shadow-xs'
-      } ${compact ? 'p-2' : 'p-2.5 sm:p-3'}`}
+      } ${compact ? 'p-2' : isMainCard ? 'p-3 sm:p-3.5' : 'p-2.5 sm:p-3'} ${
+        isMainCard ? 'w-full sm:min-w-[365px]' : ''
+      } ${className}`}
     >
       {/* 3-Day Post-Repair Customer Follow-Up Banner */}
       {isCompleted && postRepair?.needsCall && (

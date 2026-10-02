@@ -128,111 +128,113 @@ export const Navbar: React.FC = () => {
       {/* Right Action Tools */}
       <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
 
-        {/* Red Bell Icon for RO Changes (to the left of Shop Load) */}
-        <div ref={roChangesRef} className="relative">
-          <button
-            id="navbar-ro-changes-bell-btn"
-            type="button"
-            onClick={() => setShowROChangesMenu(prev => !prev)}
-            className={`relative p-2 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
-              unreadROChangesCount > 0
-                ? 'bg-red-600/25 hover:bg-red-600/35 text-red-500 border-2 border-red-500 ring-2 ring-red-400/40 shadow-sm'
-                : 'bg-slate-900/90 hover:bg-slate-700/80 text-red-400/70 hover:text-red-400 border border-slate-700/80'
-            }`}
-            title={
-              unreadROChangesCount > 0
-                ? `${unreadROChangesCount} RO update${unreadROChangesCount > 1 ? 's' : ''} on Service Advisor - Click to view ROs`
-                : 'Service Advisor RO Updates (Click to view recently updated ROs)'
-            }
-          >
-            <Bell className={`w-4 h-4 text-red-500 fill-red-500 ${unreadROChangesCount > 0 ? 'animate-bounce' : ''}`} />
-            {unreadROChangesCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full text-[10px] font-black text-white bg-red-600 ring-2 ring-slate-800 animate-pulse">
-                {unreadROChangesCount}
-              </span>
-            )}
-          </button>
-
-          {/* RO Changes Dropdown Menu listing RO numbers */}
-          {showROChangesMenu && (
-            <div
-              id="ro-changes-dropdown-menu"
-              className="absolute right-0 sm:left-0 sm:right-auto top-full mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border-2 border-slate-300 z-50 animate-in fade-in zoom-in-95 duration-100 text-slate-900 overflow-hidden"
+        {/* Red Bell Icon for RO Changes - Only for Service Advisor assigned to that ticket */}
+        {(currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER') && (
+          <div ref={roChangesRef} className="relative">
+            <button
+              id="navbar-ro-changes-bell-btn"
+              type="button"
+              onClick={() => setShowROChangesMenu(prev => !prev)}
+              className={`relative p-2 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
+                unreadROChangesCount > 0
+                  ? 'bg-red-600/25 hover:bg-red-600/35 text-red-500 border-2 border-red-500 ring-2 ring-red-400/40 shadow-sm'
+                  : 'bg-slate-900/90 hover:bg-slate-700/80 text-red-400/70 hover:text-red-400 border border-slate-700/80'
+              }`}
+              title={
+                unreadROChangesCount > 0
+                  ? `${unreadROChangesCount} RO update${unreadROChangesCount > 1 ? 's' : ''} on your assigned tickets - Click to view ROs`
+                  : 'Service Advisor RO Updates (Alerts when changes are made on your assigned tickets)'
+              }
             >
-              <div className="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                    <Bell className="w-3.5 h-3.5 fill-red-600" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-sm text-slate-900">RO Updates & Changes</span>
-                    <p className="text-[10px] text-slate-500">Service Advisor RO Activity</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {unreadROChangesCount > 0 && (
-                    <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full uppercase shrink-0">
-                      {unreadROChangesCount} New
-                    </span>
-                  )}
-                  {unreadROChangesCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearAllROChangeAlerts();
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                </div>
-              </div>
+              <Bell className={`w-4 h-4 text-red-500 fill-red-500 ${unreadROChangesCount > 0 ? 'animate-bounce' : ''}`} />
+              {unreadROChangesCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full text-[10px] font-black text-white bg-red-600 ring-2 ring-slate-800 animate-pulse">
+                  {unreadROChangesCount}
+                </span>
+              )}
+            </button>
 
-              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                {roChangeAlertsList.length === 0 ? (
-                  <div className="p-6 text-center text-slate-500">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                    <p className="text-xs font-bold text-slate-700">No Pending RO Changes</p>
-                    <p className="text-[11px] text-slate-400 mt-1 max-w-[240px] mx-auto">
-                      When a change or update is made on a repair order, the RO number will be listed here with a red alert.
-                    </p>
+            {/* RO Changes Dropdown Menu listing RO numbers */}
+            {showROChangesMenu && (
+              <div
+                id="ro-changes-dropdown-menu"
+                className="absolute right-0 sm:left-0 sm:right-auto top-full mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border-2 border-slate-300 z-50 animate-in fade-in zoom-in-95 duration-100 text-slate-900 overflow-hidden"
+              >
+                <div className="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                      <Bell className="w-3.5 h-3.5 fill-red-600" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm text-slate-900">My RO Updates</span>
+                      <p className="text-[10px] text-slate-500">Changes on your assigned tickets</p>
+                    </div>
                   </div>
-                ) : (
-                  roChangeAlertsList.map(alert => (
-                    <button
-                      key={alert.roId}
-                      type="button"
-                      onClick={() => handleROChangeClick(alert.roId)}
-                      className="w-full text-left p-3 hover:bg-blue-50/70 transition-colors flex items-start gap-3 group cursor-pointer border-l-4 border-red-500"
-                    >
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-600 shrink-0 mt-1.5 animate-pulse" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono font-black text-sm text-blue-600 group-hover:text-blue-800">
-                            RO #{alert.roNumber}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            {formatRelativeTime(alert.changedAt)}
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-slate-900 truncate mt-0.5">
-                          {alert.changeSummary}
-                        </p>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                          {alert.customerName} • {alert.vehicleDesc}
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-bold text-blue-600 group-hover:underline shrink-0 mt-1 flex items-center gap-0.5">
-                        Open RO →
+                  <div className="flex items-center gap-1.5">
+                    {unreadROChangesCount > 0 && (
+                      <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full uppercase shrink-0">
+                        {unreadROChangesCount} New
                       </span>
-                    </button>
-                  ))
-                )}
+                    )}
+                    {unreadROChangesCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearAllROChangeAlerts();
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  {roChangeAlertsList.length === 0 ? (
+                    <div className="p-6 text-center text-slate-500">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                      <p className="text-xs font-bold text-slate-700">No Pending RO Changes</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[240px] mx-auto">
+                        When changes or updates are made to repair orders assigned to you, they will appear here with a red alert.
+                      </p>
+                    </div>
+                  ) : (
+                    roChangeAlertsList.map(alert => (
+                      <button
+                        key={alert.roId}
+                        type="button"
+                        onClick={() => handleROChangeClick(alert.roId)}
+                        className="w-full text-left p-3 hover:bg-blue-50/70 transition-colors flex items-start gap-3 group cursor-pointer border-l-4 border-red-500"
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-600 shrink-0 mt-1.5 animate-pulse" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono font-black text-sm text-blue-600 group-hover:text-blue-800">
+                              RO #{alert.roNumber}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {formatRelativeTime(alert.changedAt)}
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                            {alert.changeSummary}
+                          </p>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                            {alert.customerName} • {alert.vehicleDesc}
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-bold text-blue-600 group-hover:underline shrink-0 mt-1 flex items-center gap-0.5">
+                          Open RO →
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Audio Chime Toggle */}
         <button

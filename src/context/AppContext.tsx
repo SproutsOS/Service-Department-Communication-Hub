@@ -331,7 +331,7 @@ interface AppContextType {
   roChangeAlerts: Record<string, ROChangeAlert>;
   roChangeAlertsList: ROChangeAlert[];
   unreadROChangesCount: number;
-  hasROChange: (roId: string) => boolean;
+  hasROChange: (roId: string, roObj?: RepairOrder) => boolean;
   clearROChangeAlert: (roId: string) => void;
   clearAllROChangeAlerts: () => void;
   recordROChange: (roId: string, changeSummary: string) => void;
@@ -608,6 +608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const vehDesc = target?.vehicle ? `${target.vehicle.year} ${target.vehicle.make} ${target.vehicle.model}` : 'Vehicle';
       const st = target ? target.status : 'CREATED';
       const advId = target?.advisorId;
+      const advName = target?.advisorName;
 
       const newAlert: ROChangeAlert = {
         roId,
@@ -618,6 +619,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         changedAt: now,
         changeSummary: changeSummary || 'RO updated',
         advisorId: advId,
+        advisorName: advName,
       };
 
       setRoChangeAlerts(alertPrev => {
@@ -651,10 +653,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, []);
 
-  const hasROChange = useCallback((roId: string) => {
-    return Boolean(roChangeAlerts[roId]);
-  }, [roChangeAlerts]);
-
   // Active Workstation / Role View state (Managers can inspect any workstation; other roles locked to their role)
   const [viewOverride, setViewOverride] = useState<UserRole | null>(null);
   const activeRoleView: UserRole = currentUser.role === 'SERVICE_MANAGER' ? (viewOverride || 'SERVICE_MANAGER') : currentUser.role;
@@ -667,15 +665,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setViewOverride(null);
   }, [currentUser.id, currentUser.role]);
 
+  const hasROChange = useCallback((roId: string, roObj?: RepairOrder) => {
+    const alert = roChangeAlerts[roId];
+    if (!alert) return false;
+
+    // Red Bell is strictly for the Service Advisor that has that ticket assigned
+    const targetRO = roObj || repairOrders.find(r => r.id === roId);
+    const assignedAdvisorId = targetRO?.advisorId || alert.advisorId;
+    const assignedAdvisorName = targetRO?.advisorName || alert.advisorName;
+
+    // If current user is a Service Advisor: only show if THIS advisor is assigned to this ticket
+    if (currentUser.role === 'SERVICE_ADVISOR') {
+      const idMatch = assignedAdvisorId ? assignedAdvisorId === currentUser.id : false;
+      const nameMatch = assignedAdvisorName ? assignedAdvisorName.toLowerCase().trim() === currentUser.name.toLowerCase().trim() : false;
+      return idMatch || nameMatch;
+    }
+
+    // If current user is a Service Manager:
+    if (currentUser.role === 'SERVICE_MANAGER') {
+      const idMatch = assignedAdvisorId ? assignedAdvisorId === currentUser.id : false;
+      const nameMatch = assignedAdvisorName ? assignedAdvisorName.toLowerCase().trim() === currentUser.name.toLowerCase().trim() : false;
+      if (idMatch || nameMatch) return true;
+      if (activeRoleView === 'SERVICE_ADVISOR') {
+        return Boolean(alert);
+      }
+      return false;
+    }
+
+    // Technicians, Parts Specialists, Sales, etc. NEVER see the red bell icon
+    return false;
+  }, [roChangeAlerts, repairOrders, currentUser.id, currentUser.name, currentUser.role, activeRoleView]);
+
   const roChangeAlertsList = useMemo(() => {
     const list = Object.values(roChangeAlerts);
-    // If advisor is logged in or manager switched to advisor view, filter to their ROs (or unassigned), else show all
-    const isAdvisorScreen = currentUser.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR';
-    const filtered = isAdvisorScreen
-      ? list.filter(a => !a.advisorId || a.advisorId === currentUser.id)
-      : list;
-    return filtered.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
-  }, [roChangeAlerts, currentUser.id, currentUser.role, activeRoleView]);
+    
+    // Non-advisors / non-managers do not receive the Service Advisor RO change alerts
+    if (currentUser.role !== 'SERVICE_ADVISOR' && currentUser.role !== 'SERVICE_MANAGER') {
+      return [];
+    }
+
+    // For a Service Advisor: strictly filter to tickets assigned to THIS service advisor
+    if (currentUser.role === 'SERVICE_ADVISOR') {
+      const filtered = list.filter(a => {
+        const targetRO = repairOrders.find(r => r.id === a.roId);
+        const advId = targetRO?.advisorId || a.advisorId;
+        const advName = targetRO?.advisorName || a.advisorName;
+        const idMatch = advId ? advId === currentUser.id : false;
+        const nameMatch = advName ? advName.toLowerCase().trim() === currentUser.name.toLowerCase().trim() : false;
+        return idMatch || nameMatch;
+      });
+      return filtered.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+    }
+
+    // For Service Manager:
+    if (currentUser.role === 'SERVICE_MANAGER') {
+      if (activeRoleView === 'SERVICE_ADVISOR') {
+        return list.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+      }
+      const filtered = list.filter(a => {
+        const targetRO = repairOrders.find(r => r.id === a.roId);
+        const advId = targetRO?.advisorId || a.advisorId;
+        const advName = targetRO?.advisorName || a.advisorName;
+        const idMatch = advId ? advId === currentUser.id : false;
+        const nameMatch = advName ? advName.toLowerCase().trim() === currentUser.name.toLowerCase().trim() : false;
+        return idMatch || nameMatch;
+      });
+      return filtered.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+    }
+
+    return [];
+  }, [roChangeAlerts, repairOrders, currentUser.id, currentUser.name, currentUser.role, activeRoleView]);
 
   const unreadROChangesCount = roChangeAlertsList.length;
 

@@ -373,6 +373,7 @@ export interface ROChangeAlert {
   changedAt: string;
   changeSummary: string;
   advisorId?: string;
+  advisorName?: string;
 }
 
 export interface UrgentNotification {

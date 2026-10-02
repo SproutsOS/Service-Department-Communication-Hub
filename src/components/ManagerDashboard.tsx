@@ -52,7 +52,24 @@ export const ManagerDashboard: React.FC = () => {
   const [techFilter, setTechFilter] = useState<string>('ALL');
   const [advisorFilter, setAdvisorFilter] = useState<string>('ALL');
   const [urgentOnly, setUrgentOnly] = useState(false);
-  const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARDS'>('TABLE');
+  const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARDS'>(() => {
+    try {
+      const saved = localStorage.getItem('manager_display_mode');
+      if (saved === 'TABLE' || saved === 'CARDS') return saved;
+    } catch {
+      // ignore
+    }
+    return 'CARDS';
+  });
+
+  const handleSetDisplayMode = (mode: 'TABLE' | 'CARDS') => {
+    setDisplayMode(mode);
+    try {
+      localStorage.setItem('manager_display_mode', mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Today string YYYY-MM-DD
   const todayStr = useMemo(() => {
@@ -704,7 +721,7 @@ export const ManagerDashboard: React.FC = () => {
             {/* View Switcher (Table vs Cards) */}
             <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white">
               <button
-                onClick={() => setDisplayMode('TABLE')}
+                onClick={() => handleSetDisplayMode('TABLE')}
                 className={`p-1.5 transition-colors ${
                   displayMode === 'TABLE' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
                 }`}
@@ -713,7 +730,7 @@ export const ManagerDashboard: React.FC = () => {
                 <ListFilter className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setDisplayMode('CARDS')}
+                onClick={() => handleSetDisplayMode('CARDS')}
                 className={`p-1.5 transition-colors ${
                   displayMode === 'CARDS' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
                 }`}
@@ -919,13 +936,14 @@ export const ManagerDashboard: React.FC = () => {
             </table>
           </div>
         ) : (
-          /* Display: Cards Grid View */
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          /* Display: Cards Grid View (Main RO Cards ~1/2" wider) */
+          <div className="p-3.5 sm:p-4.5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-4.5">
             {filteredROs.map(ro => (
               <ROCard 
                 key={ro.id} 
                 ro={ro} 
                 onClick={() => setSelectedRO(ro)} 
+                isMainCard={true}
               />
             ))}
           </div>
