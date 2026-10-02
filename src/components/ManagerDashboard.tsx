@@ -26,7 +26,7 @@ import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
 import { ROStatus, RepairOrder } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince } from '../utils/formatters';
+import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince, sortROsNumerically } from '../utils/formatters';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
@@ -120,8 +120,8 @@ export const ManagerDashboard: React.FC = () => {
       .map(p => ({ ...p, roId: ro.id, customerName: ro.customerName, techName: ro.techName }))
   );
 
-  // Filter ROs
-  const filteredROs = repairOrders.filter(ro => {
+  // Filter & Sort ROs in numerical order
+  const filteredROs = sortROsNumerically(repairOrders.filter(ro => {
     if (urgentOnly && !ro.isUrgent) return false;
     if (statusFilter === 'CALLS_DUE') {
       const cadence = getContactCadenceStatus(ro);
@@ -153,7 +153,7 @@ export const ManagerDashboard: React.FC = () => {
     }
 
     return true;
-  });
+  }));
 
   return (
     <div className="space-y-6">

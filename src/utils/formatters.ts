@@ -463,3 +463,34 @@ export function getLinePartsList(parts: any[] | undefined, lineNum: number, tota
     return false;
   });
 }
+
+/**
+ * Extract numeric digits from an RO ID string (e.g., "RO-10488" -> 10488, "10489" -> 10489)
+ */
+export function extractRONumber(id: string): number {
+  if (!id) return 0;
+  const match = id.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
+
+/**
+ * Compare two items with an `id` or `roNumber` property in numerical order.
+ */
+export function compareROsNumerically(a: { id?: string; roNumber?: string }, b: { id?: string; roNumber?: string }): number {
+  const idA = a.id || a.roNumber || '';
+  const idB = b.id || b.roNumber || '';
+  const numA = extractRONumber(idA);
+  const numB = extractRONumber(idB);
+  if (numA !== numB && numA > 0 && numB > 0) {
+    return numA - numB;
+  }
+  return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/**
+ * Sorts an array of Repair Orders (or items with id) in ascending numerical order.
+ */
+export function sortROsNumerically<T extends { id?: string; roNumber?: string }>(ros: T[]): T[] {
+  return [...ros].sort(compareROsNumerically);
+}
+

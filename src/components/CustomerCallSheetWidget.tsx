@@ -18,7 +18,7 @@ import { RepairOrder } from '../types';
 import { useApp } from '../context/AppContext';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus, formatContactOutcome } from '../utils/cadenceUtils';
 import { STATUS_CONFIG } from '../data/mockData';
-import { formatEtaBadge } from '../utils/formatters';
+import { formatEtaBadge, compareROsNumerically } from '../utils/formatters';
 
 interface CustomerCallSheetWidgetProps {
   onSelectRO: (ro: RepairOrder) => void;
@@ -125,13 +125,16 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
     return true;
   });
 
-  // Sort: Overdue first, then due today, then post-repair due, then rest
+  // Sort: Overdue first, then due today, then post-repair due, then rest (and within same priority, numerical order by RO #)
   filteredItems.sort((a, b) => {
     if (a.cadence.isOverdue && !b.cadence.isOverdue) return -1;
     if (!a.cadence.isOverdue && b.cadence.isOverdue) return 1;
     if (a.cadence.isDueToday && !b.cadence.isDueToday) return -1;
     if (!a.cadence.isDueToday && b.cadence.isDueToday) return 1;
-    return b.cadence.daysSinceLastContact - a.cadence.daysSinceLastContact;
+    if (a.cadence.daysSinceLastContact !== b.cadence.daysSinceLastContact) {
+      return b.cadence.daysSinceLastContact - a.cadence.daysSinceLastContact;
+    }
+    return compareROsNumerically(a.ro, b.ro);
   });
 
   return (

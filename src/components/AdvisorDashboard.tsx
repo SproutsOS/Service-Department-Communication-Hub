@@ -25,6 +25,7 @@ import { normalizeROStatus } from '../data/mockData';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
+import { sortROsNumerically } from '../utils/formatters';
 
 export const AdvisorDashboard: React.FC = () => {
   const { 
@@ -44,8 +45,8 @@ export const AdvisorDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
 
-  // Strictly filter by this advisor's ROs to prevent clutter
-  const myROs = repairOrders.filter(ro => ro.advisorId === currentUser.id);
+  // Strictly filter by this advisor's ROs to prevent clutter (sorted in numerical order)
+  const myROs = sortROsNumerically(repairOrders.filter(ro => ro.advisorId === currentUser.id));
 
   // Separate Active repair orders vs Completed repair orders (keeps active screen completely uncluttered)
   const myActiveROs = myROs.filter(ro => !isROCompleted(ro));
@@ -93,8 +94,8 @@ export const AdvisorDashboard: React.FC = () => {
   const readyPickupCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
   const completedCount = myCompletedROs.length;
 
-  // Filtered list
-  const displayROs = myROs.filter(ro => {
+  // Filtered list (sorted in numerical order)
+  const displayROs = sortROsNumerically(myROs.filter(ro => {
     const isCompleted = isROCompleted(ro);
 
     if (activeTab === 'ALL') {
@@ -132,7 +133,7 @@ export const AdvisorDashboard: React.FC = () => {
     }
 
     return true;
-  });
+  }));
 
   return (
     <div className="space-y-3 sm:space-y-3.5">
