@@ -349,16 +349,32 @@ export const ROCard: React.FC<ROCardProps> = ({
             : [ro.primaryConcern || 'General Inspection'];
           return (
             <div className="text-xs text-slate-700 mt-1 space-y-1">
-              {cardConcerns.map((c, idx) => (
-                <div key={idx} className="flex items-start gap-1.5 leading-snug">
-                  <span className="font-mono text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 shrink-0">
-                    L{idx + 1}
-                  </span>
-                  <span className="font-semibold text-slate-900 line-clamp-2">
-                    {c}
-                  </span>
-                </div>
-              ))}
+              {cardConcerns.map((c, idx) => {
+                const payType = ro.concernPayTypes?.[idx] || ro.quote?.payType;
+                return (
+                  <div key={idx} className="flex items-start gap-1.5 leading-snug">
+                    <span className="font-mono text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 shrink-0">
+                      L{idx + 1}
+                    </span>
+                    {payType && (
+                      <span className={`text-[9px] font-bold px-1 py-0.2 rounded shrink-0 ${
+                        payType === 'WARRANTY' 
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                          : payType === 'INTERNAL' 
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                          : payType === 'EXTENDED_WARRANTY'
+                          ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      }`}>
+                        {payType === 'WARRANTY' ? 'Warranty' : payType === 'INTERNAL' ? 'Internal' : payType === 'EXTENDED_WARRANTY' ? 'Ext Wty' : 'CP'}
+                      </span>
+                    )}
+                    <span className="font-semibold text-slate-900 line-clamp-2">
+                      {c}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           );
         })()}

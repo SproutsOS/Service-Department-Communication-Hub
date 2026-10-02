@@ -499,7 +499,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                               {rec.urgency === 'SAFETY' ? '⚠️ Immediate Safety' : '🛡️ Recommended'}
                             </span>
                             <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
-                              {rec.payType === 'WARRANTY' ? 'Warranty' : rec.payType === 'INTERNAL' ? 'Internal' : 'Customer Pay'}
+                              {rec.payType === 'WARRANTY' ? 'Warranty' : rec.payType === 'INTERNAL' ? 'Internal' : rec.payType === 'EXTENDED_WARRANTY' ? 'Extended Warranty' : 'Customer Pay'}
                             </span>
                           </div>
 

@@ -2117,7 +2117,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let newId: string;
     const cleanRoInput = data.roNumber?.trim().toUpperCase();
     if (cleanRoInput) {
-      newId = cleanRoInput;
+      const exists = repairOrders.some(r => r.id.toUpperCase() === cleanRoInput);
+      newId = exists ? `${cleanRoInput}-${Date.now().toString().slice(-4)}` : cleanRoInput;
     } else {
       const maxRoNum = repairOrders.reduce((max, ro) => {
         const match = ro.id.match(/\d+/);

@@ -812,6 +812,21 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           >
                             Internal
                           </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateConcernPayType(ro.id, idx, 'EXTENDED_WARRANTY');
+                            }}
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
+                              payType === 'EXTENDED_WARRANTY'
+                                ? 'bg-teal-600 text-white border-teal-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title="Extended Warranty"
+                          >
+                            Extended Warranty
+                          </button>
                         </div>
                       ) : (
                         <span className={`text-xs font-bold px-3 py-1 rounded-md border shadow-2xs ${
@@ -819,9 +834,11 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
                             : payType === 'WARRANTY'
                             ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                            : payType === 'INTERNAL'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-teal-50 text-teal-700 border-teal-200'
                         }`}>
-                          {payType === 'CUSTOMER_PAY' ? 'Customer Pay' : payType === 'WARRANTY' ? 'Warranty' : 'Internal'}
+                          {payType === 'CUSTOMER_PAY' ? 'Customer Pay' : payType === 'WARRANTY' ? 'Warranty' : payType === 'INTERNAL' ? 'Internal' : 'Extended Warranty'}
                         </span>
                       )}
 
@@ -1310,6 +1327,17 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           >
                             Internal
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'EXTENDED_WARRANTY' })}
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
+                              recPayType === 'EXTENDED_WARRANTY'
+                                ? 'bg-teal-600 text-white border-teal-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            Extended Warranty
+                          </button>
                         </div>
                       ) : (
                         <span className={`text-xs font-bold px-3 py-1 rounded-md border shadow-2xs ${
@@ -1317,9 +1345,11 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
                             : recPayType === 'WARRANTY'
                             ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                            : recPayType === 'INTERNAL'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-teal-50 text-teal-700 border-teal-200'
                         }`}>
-                          {recPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : recPayType === 'WARRANTY' ? 'Warranty' : 'Internal'}
+                          {recPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : recPayType === 'WARRANTY' ? 'Warranty' : recPayType === 'INTERNAL' ? 'Internal' : 'Extended Warranty'}
                         </span>
                       )}
 
@@ -1638,6 +1668,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       <option value="CUSTOMER_PAY">Customer Pay</option>
                       <option value="WARRANTY">Warranty</option>
                       <option value="INTERNAL">Internal</option>
+                      <option value="EXTENDED_WARRANTY">Extended Warranty</option>
                     </select>
                   </div>
 

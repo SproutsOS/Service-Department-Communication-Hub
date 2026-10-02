@@ -154,7 +154,7 @@ export interface CustomerContactRecord {
   nextScheduledContactDate?: string;
 }
 
-export type ConcernPayType = 'CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL';
+export type ConcernPayType = 'CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL' | 'EXTENDED_WARRANTY';
 
 export interface RepairOrder {
   id: string; // e.g. "RO-8821"
@@ -176,7 +176,7 @@ export interface RepairOrder {
   promisedTime?: string;
   primaryConcern: string;
   concerns?: string[]; // Multiple customer complaints / line items
-  concernPayTypes?: ConcernPayType[]; // Pay type for each customer complaint line item ('CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL')
+  concernPayTypes?: ConcernPayType[]; // Pay type for each customer complaint line item ('CUSTOMER_PAY' | 'WARRANTY' | 'INTERNAL' | 'EXTENDED_WARRANTY')
   concernTechIds?: (string | undefined)[]; // Assigned technician ID for each complaint / line item
   concernTechNames?: (string | undefined)[]; // Assigned technician name for each complaint / line item
   diagnosticNotes?: string;

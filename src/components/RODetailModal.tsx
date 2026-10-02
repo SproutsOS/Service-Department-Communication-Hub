@@ -1555,6 +1555,18 @@ export const RODetailModal: React.FC = () => {
                                     >
                                       Internal
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditPayTypeChange(idx, 'EXTENDED_WARRANTY')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                        currentPayType === 'EXTENDED_WARRANTY'
+                                          ? 'bg-teal-600 text-white border-teal-700 shadow-xs'
+                                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                      }`}
+                                      title="Mark as Extended Warranty"
+                                    >
+                                      Extended Warranty
+                                    </button>
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-300">
@@ -1564,9 +1576,11 @@ export const RODetailModal: React.FC = () => {
                                         ? 'bg-blue-100 text-blue-800 border border-blue-200'
                                         : currentPayType === 'WARRANTY'
                                         ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                        : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                        : currentPayType === 'INTERNAL'
+                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                        : 'bg-teal-100 text-teal-800 border border-teal-200'
                                     }`}>
-                                      {currentPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : currentPayType === 'WARRANTY' ? 'Warranty' : 'Internal'}
+                                      {currentPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : currentPayType === 'WARRANTY' ? 'Warranty' : currentPayType === 'INTERNAL' ? 'Internal' : 'Extended Warranty'}
                                     </span>
                                   </div>
                                 )}

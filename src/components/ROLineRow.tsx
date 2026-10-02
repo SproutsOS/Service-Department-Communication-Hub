@@ -154,9 +154,11 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
                             ? 'bg-amber-100 text-amber-800' 
                             : payType === 'INTERNAL' 
                             ? 'bg-purple-100 text-purple-800' 
+                            : payType === 'EXTENDED_WARRANTY'
+                            ? 'bg-teal-100 text-teal-800'
                             : 'bg-blue-50 text-blue-700'
                         }`}>
-                          {payType === 'WARRANTY' ? 'Warranty' : payType === 'INTERNAL' ? 'Internal' : 'CP'}
+                          {payType === 'WARRANTY' ? 'Warranty' : payType === 'INTERNAL' ? 'Internal' : payType === 'EXTENDED_WARRANTY' ? 'Ext Wty' : 'CP'}
                         </span>
                       )}
                     </div>

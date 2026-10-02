@@ -120,11 +120,26 @@ export const NewROModal: React.FC = () => {
     }
   }, [isNewROModalOpen, currentUser.id, currentUser.role, users, prefilledCustomerForNewRO]);
 
-  // Duplicate RO check
+  // Duplicate / Previously Used RO check
   const cleanedRoNumber = roNumber.trim().toUpperCase();
-  const isDuplicateRo = Boolean(
-    cleanedRoNumber && repairOrders.some(ro => ro.id.toUpperCase() === cleanedRoNumber)
-  );
+  const existingUsedRO = useMemo(() => {
+    if (!cleanedRoNumber) return null;
+    const cleanNum = cleanedRoNumber.replace(/[^A-Z0-9]/g, '');
+    const cleanDigits = cleanedRoNumber.replace(/\D/g, '');
+
+    return repairOrders.find(ro => {
+      const roIdUpper = ro.id.trim().toUpperCase();
+      const roNum = roIdUpper.replace(/[^A-Z0-9]/g, '');
+      const roDigits = roIdUpper.replace(/\D/g, '');
+
+      if (roIdUpper === cleanedRoNumber) return true;
+      if (cleanNum && roNum === cleanNum) return true;
+      if (cleanDigits && roDigits && cleanDigits.length >= 3 && cleanDigits === roDigits) return true;
+      return false;
+    }) || null;
+  }, [cleanedRoNumber, repairOrders]);
+
+  const isDuplicateRo = Boolean(existingUsedRO);
 
   // Cloud customer search matches
   const matchedCustomers = useMemo(() => {
@@ -378,6 +393,10 @@ export const NewROModal: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDuplicateRo && existingUsedRO) {
+      alert(`⚠️ Alert: Repair Order #${existingUsedRO.id} has already been used before for ${existingUsedRO.customerName} (${existingUsedRO.vehicle.year} ${existingUsedRO.vehicle.make} ${existingUsedRO.vehicle.model}). Please enter a unique RO number.`);
+      return;
+    }
     if (!customerName.trim() || !hasValidConcern || isDuplicateRo) return;
 
     const resolvedAdvisorId = (currentUser.role === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_MANAGER')
@@ -494,11 +513,54 @@ export const NewROModal: React.FC = () => {
                     }`}
                   />
                 </div>
-                {isDuplicateRo ? (
-                  <p className="text-[11px] text-red-600 font-semibold mt-1.5 flex items-center gap-1 bg-red-50 p-1.5 rounded-md border-2 border-red-300">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    Repair Order #{cleanedRoNumber} already exists in the system. Please enter a unique RO number.
-                  </p>
+                {isDuplicateRo && existingUsedRO ? (
+                  <div className="mt-2 p-3 bg-red-50 border-2 border-red-400 rounded-lg text-xs space-y-1.5 shadow-xs animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 font-black text-red-950">
+                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                        <span>ALERT: Repair Order #{existingUsedRO.id} has already been used before!</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNewROModalOpen(false);
+                          setSelectedRO(existingUsedRO);
+                        }}
+                        className="px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-900 rounded font-bold text-[11px] transition-colors cursor-pointer border border-red-300"
+                        title="Open and view the existing repair order"
+                      >
+                        View Existing RO →
+                      </button>
+                    </div>
+
+                    <div className="text-[11px] text-red-900/90 grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-0.5 pt-1 border-t border-red-200">
+                      <div>
+                        <span className="font-bold text-red-950">Customer:</span> {existingUsedRO.customerName}
+                      </div>
+                      <div>
+                        <span className="font-bold text-red-950">Vehicle:</span> {existingUsedRO.vehicle.year} {existingUsedRO.vehicle.make} {existingUsedRO.vehicle.model}
+                      </div>
+                      <div>
+                        <span className="font-bold text-red-950">Date:</span> {new Date(existingUsedRO.createdAt).toLocaleDateString()}
+                      </div>
+                      <div>
+                        <span className="font-bold text-red-950">Status:</span> {existingUsedRO.status.replace(/_/g, ' ')}
+                      </div>
+                    </div>
+
+                    {nextSuggestedRoNumber && (
+                      <div className="pt-1 flex items-center justify-between text-[11px] text-red-900 border-t border-red-200/70">
+                        <span>Need the next available number?</span>
+                        <button
+                          type="button"
+                          onClick={() => setRoNumber(nextSuggestedRoNumber)}
+                          className="font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                        >
+                          Use {nextSuggestedRoNumber}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <p className="text-[10px] text-slate-500 mt-1">
                     Enter your shop or DMS repair order number.
@@ -894,6 +956,18 @@ export const NewROModal: React.FC = () => {
                             title="Mark as Internal"
                           >
                             Internal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePayTypeChange(idx, 'EXTENDED_WARRANTY')}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              currentPayType === 'EXTENDED_WARRANTY'
+                                ? 'bg-teal-600 text-white border-teal-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                            }`}
+                            title="Mark as Extended Warranty"
+                          >
+                            Extended Warranty
                           </button>
                         </div>
 

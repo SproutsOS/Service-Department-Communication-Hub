@@ -246,16 +246,19 @@ export function formatCurrency(val?: number | string | null, fallback = '$0.00')
  * - Customer Pay: $165.00/hr
  * - Warranty: $121.78/hr
  * - Internal: $135.00/hr
+ * - Extended Warranty: $165.00/hr
  */
 export const PAY_TYPE_RATES = {
   CUSTOMER_PAY: 165.00,
   WARRANTY: 121.78,
   INTERNAL: 135.00,
+  EXTENDED_WARRANTY: 165.00,
 } as const;
 
 export function getPayTypeRate(payType?: string): number {
   if (payType === 'WARRANTY') return 121.78;
   if (payType === 'INTERNAL') return 135.00;
+  if (payType === 'EXTENDED_WARRANTY') return 165.00;
   return 165.00; // Customer Pay default
 }
 

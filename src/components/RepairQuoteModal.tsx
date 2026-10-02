@@ -1280,6 +1280,17 @@ export const RepairQuoteModal: React.FC = () => {
                     >
                       Internal ($135.00)
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetQuotePayType('EXTENDED_WARRANTY')}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        quotePayType === 'EXTENDED_WARRANTY'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-900 hover:text-black hover:bg-slate-300'
+                      }`}
+                    >
+                      Extended Warranty ($165.00)
+                    </button>
                   </div>
                 </div>
 
@@ -1325,7 +1336,7 @@ export const RepairQuoteModal: React.FC = () => {
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-[11px] font-black text-slate-950 uppercase">Rate Tier:</span>
                 <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-900 border border-blue-300">
-                  {quotePayType === 'CUSTOMER_PAY' ? 'Customer Pay ($165.00/hr)' : quotePayType === 'WARRANTY' ? 'Warranty ($121.78/hr)' : 'Internal ($135.00/hr)'}
+                  {quotePayType === 'CUSTOMER_PAY' ? 'Customer Pay ($165.00/hr)' : quotePayType === 'WARRANTY' ? 'Warranty ($121.78/hr)' : quotePayType === 'INTERNAL' ? 'Internal ($135.00/hr)' : 'Extended Warranty ($165.00/hr)'}
                 </span>
               </div>
             )}
@@ -1637,6 +1648,7 @@ export const RepairQuoteModal: React.FC = () => {
                                 <option value="CUSTOMER_PAY">Customer Pay ($165.00)</option>
                                 <option value="WARRANTY">Warranty ($121.78)</option>
                                 <option value="INTERNAL">Internal ($135.00)</option>
+                                <option value="EXTENDED_WARRANTY">Extended Warranty ($165.00)</option>
                               </select>
                             </div>
 

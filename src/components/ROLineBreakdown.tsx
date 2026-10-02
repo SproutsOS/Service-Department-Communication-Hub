@@ -184,6 +184,17 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 >
                   Internal
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setNewPayType('EXTENDED_WARRANTY')}
+                  className={`flex-1 py-1 text-xs font-bold rounded cursor-pointer transition-colors ${
+                    newPayType === 'EXTENDED_WARRANTY'
+                      ? 'bg-teal-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Extended Warranty
+                </button>
               </div>
             </div>
 
@@ -311,6 +322,17 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                         >
                           Internal
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => onUpdatePayType(idx, 'EXTENDED_WARRANTY')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                            payType === 'EXTENDED_WARRANTY' 
+                              ? 'bg-teal-600 text-white shadow-2xs' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Extended Warranty
+                        </button>
                       </div>
                     ) : (
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
@@ -318,10 +340,12 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                           ? 'bg-amber-50 text-amber-900 border-amber-300'
                           : payType === 'INTERNAL'
                           ? 'bg-purple-50 text-purple-900 border-purple-300'
+                          : payType === 'EXTENDED_WARRANTY'
+                          ? 'bg-teal-50 text-teal-900 border-teal-300'
                           : 'bg-blue-50 text-blue-900 border-blue-300'
                       }`}>
-                        {payType === 'WARRANTY' ? <ShieldCheck className="w-3 h-3 text-amber-600" /> : payType === 'INTERNAL' ? <Building2 className="w-3 h-3 text-purple-600" /> : <Receipt className="w-3 h-3 text-blue-600" />}
-                        <span>{payType === 'CUSTOMER_PAY' ? 'Customer Pay' : payType === 'WARRANTY' ? 'Warranty' : 'Internal'}</span>
+                        {payType === 'WARRANTY' ? <ShieldCheck className="w-3 h-3 text-amber-600" /> : payType === 'INTERNAL' ? <Building2 className="w-3 h-3 text-purple-600" /> : payType === 'EXTENDED_WARRANTY' ? <ShieldCheck className="w-3 h-3 text-teal-600" /> : <Receipt className="w-3 h-3 text-blue-600" />}
+                        <span>{payType === 'CUSTOMER_PAY' ? 'Customer Pay' : payType === 'WARRANTY' ? 'Warranty' : payType === 'INTERNAL' ? 'Internal' : 'Extended Warranty'}</span>
                       </span>
                     )}
                   </div>
