@@ -10,7 +10,8 @@ import {
   writeBatch,
   query,
   orderBy,
-  limit
+  limit,
+  arrayUnion
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer } from '../types';
@@ -162,6 +163,48 @@ export async function saveShopMessage(msg: ShopChatMessage) {
   const docRef = doc(db, SHOP_MESSAGES_COL, msg.id);
   const cleanData = sanitizeForFirestore(msg);
   await setDoc(docRef, cleanData);
+}
+
+// Mark shop chat messages as read by a specific user in Firestore
+export async function markShopMessagesReadInCloud(messageIds: string[], userId: string) {
+  if (!messageIds || messageIds.length === 0 || !userId) return;
+  try {
+    const promises = messageIds.map(msgId => {
+      const docRef = doc(db, SHOP_MESSAGES_COL, msgId);
+      return setDoc(docRef, {
+        readBy: arrayUnion(userId)
+      }, { merge: true }).catch(() => {
+        // If document does not exist or network glitch, ignore
+      });
+    });
+
+    // Also persist read status to user's profile doc in Firestore so any login/device immediately knows
+    const userDocRef = doc(db, USERS_COL, userId);
+    promises.push(
+      setDoc(userDocRef, {
+        lastReadChatTimestamp: new Date().toISOString(),
+        readShopMessageIds: arrayUnion(...messageIds)
+      }, { merge: true }).catch(() => {})
+    );
+
+    await Promise.all(promises);
+  } catch (err) {
+    console.error('Failed to sync shop message read status to Firestore:', err);
+  }
+}
+
+// Mark all shop chat notifications as read in cloud for a user
+export async function markShopChatNotificationsReadInCloud(notifIds: string[]) {
+  if (!notifIds || notifIds.length === 0) return;
+  try {
+    const promises = notifIds.map(notifId => {
+      const docRef = doc(db, NOTIFICATIONS_COL, notifId);
+      return setDoc(docRef, { read: true }, { merge: true }).catch(() => {});
+    });
+    await Promise.all(promises);
+  } catch (err) {
+    console.error('Failed to mark shop chat notifications read in cloud:', err);
+  }
 }
 
 // Subscribe to real-time shop settings

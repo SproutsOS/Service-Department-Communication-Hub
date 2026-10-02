@@ -14,7 +14,8 @@ import {
   PhoneCall,
   Sparkles,
   CheckCircle,
-  Camera
+  Camera,
+  Bell
 } from 'lucide-react';
 import { RepairOrder, ROStatus } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
@@ -38,7 +39,9 @@ export const ROCard: React.FC<ROCardProps> = ({
   hideCauseCorrection = false
 }) => {
   const ro = cleanRO3700(rawRO);
-  const { users, currentUser, setSelectedRO } = useApp();
+  const { users, currentUser, setSelectedRO, hasROChange, roChangeAlerts } = useApp();
+  const hasChangeAlert = hasROChange ? hasROChange(ro.id) : false;
+  const changeAlert = roChangeAlerts ? roChangeAlerts[ro.id] : undefined;
   const shouldHideCauseCorrection = hideCauseCorrection || currentUser?.role === 'SERVICE_ADVISOR';
   const isCompleted = isROCompleted(ro);
   const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
@@ -261,6 +264,17 @@ export const ROCard: React.FC<ROCardProps> = ({
                 {statusInfo.label}
               </span>
             </>
+          )}
+
+          {/* Red Bell Icon for RO Changes */}
+          {hasChangeAlert && (
+            <span
+              id={`ro-change-bell-${ro.id}`}
+              className="inline-flex items-center justify-center p-1 rounded-full bg-red-100 text-red-600 ring-2 ring-red-500 animate-bounce shadow-xs ml-1 shrink-0"
+              title={`RO #${ro.id} has new updates: ${changeAlert?.changeSummary || 'Recent change'} - Click to review`}
+            >
+              <Bell className="w-3.5 h-3.5 fill-red-600 text-red-600" />
+            </span>
           )}
         </div>
       </div>

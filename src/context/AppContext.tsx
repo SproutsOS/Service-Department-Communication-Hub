@@ -30,14 +30,15 @@ import {
   LineApprovalStatus,
   ServiceAppointment,
   AppointmentStatus,
-  TransportationType
+  TransportationType,
+  ROChangeAlert
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
 import { getInitialServiceAppointments } from '../data/defaultAppointments';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
-import { INITIAL_USERS, INITIAL_REPAIR_ORDERS } from '../data/mockData';
+import { INITIAL_USERS, INITIAL_REPAIR_ORDERS, STATUS_CONFIG } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
   subscribeToRepairOrders,
@@ -47,6 +48,8 @@ import {
   subscribeToShopMessages,
   subscribeToCustomers,
   saveShopMessage,
+  markShopMessagesReadInCloud,
+  markShopChatNotificationsReadInCloud,
   syncRepairOrder,
   deleteRepairOrderDoc,
   syncUser,
@@ -320,8 +323,18 @@ interface AppContextType {
   convertAppointmentToRO: (id: string) => string | null;
   isAppointmentCalendarOpen: boolean;
   setIsAppointmentCalendarOpen: (open: boolean) => void;
+
+  // RO Change Alerts & Red Bell Notifications
+  roChangeAlerts: Record<string, ROChangeAlert>;
+  roChangeAlertsList: ROChangeAlert[];
+  unreadROChangesCount: number;
+  hasROChange: (roId: string) => boolean;
+  clearROChangeAlert: (roId: string) => void;
+  clearAllROChangeAlerts: () => void;
+  recordROChange: (roId: string, changeSummary: string) => void;
 }
 
+const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
 const STORAGE_KEY_USER = 'precision_auto_active_user_v6_clean';
 const STORAGE_KEY_USERS = 'precision_auto_users_v6_clean';
@@ -567,6 +580,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isAppointmentCalendarOpen, setIsAppointmentCalendarOpen] = useState(false);
 
+  // RO Change Alerts & Red Bell Notifications
+  const [roChangeAlerts, setRoChangeAlerts] = useState<Record<string, ROChangeAlert>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_RO_CHANGES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+
+  const recordROChange = useCallback((roId: string, changeSummary: string) => {
+    const now = new Date().toISOString();
+    setRepairOrders(currentROs => {
+      const target = currentROs.find(r => r.id === roId);
+      const roNum = target ? target.id : roId;
+      const custName = target ? target.customerName : 'Customer';
+      const vehDesc = target?.vehicle ? `${target.vehicle.year} ${target.vehicle.make} ${target.vehicle.model}` : 'Vehicle';
+      const st = target ? target.status : 'CREATED';
+      const advId = target?.advisorId;
+
+      const newAlert: ROChangeAlert = {
+        roId,
+        roNumber: roNum,
+        customerName: custName,
+        vehicleDesc: vehDesc,
+        status: st,
+        changedAt: now,
+        changeSummary: changeSummary || 'RO updated',
+        advisorId: advId,
+      };
+
+      setRoChangeAlerts(alertPrev => {
+        const next = { ...alertPrev, [roId]: newAlert };
+        try {
+          localStorage.setItem(STORAGE_KEY_RO_CHANGES, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      return currentROs;
+    });
+  }, []);
+
+  const clearROChangeAlert = useCallback((roId: string) => {
+    setRoChangeAlerts(prev => {
+      if (!prev[roId]) return prev;
+      const next = { ...prev };
+      delete next[roId];
+      try {
+        localStorage.setItem(STORAGE_KEY_RO_CHANGES, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const clearAllROChangeAlerts = useCallback(() => {
+    setRoChangeAlerts({});
+    try {
+      localStorage.setItem(STORAGE_KEY_RO_CHANGES, JSON.stringify({}));
+    } catch {}
+  }, []);
+
+  const hasROChange = useCallback((roId: string) => {
+    return Boolean(roChangeAlerts[roId]);
+  }, [roChangeAlerts]);
+
+  // Active Workstation / Role View state (Managers can inspect any workstation; other roles locked to their role)
+  const [viewOverride, setViewOverride] = useState<UserRole | null>(null);
+  const activeRoleView: UserRole = currentUser.role === 'SERVICE_MANAGER' ? (viewOverride || 'SERVICE_MANAGER') : currentUser.role;
+  const setActiveRoleView = useCallback((role: UserRole | null) => {
+    setViewOverride(role);
+  }, []);
+
+  // When currentUser changes, reset role view override
+  useEffect(() => {
+    setViewOverride(null);
+  }, [currentUser.id, currentUser.role]);
+
+  const roChangeAlertsList = useMemo(() => {
+    const list = Object.values(roChangeAlerts);
+    // If advisor is logged in or manager switched to advisor view, filter to their ROs (or unassigned), else show all
+    const isAdvisorScreen = currentUser.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR';
+    const filtered = isAdvisorScreen
+      ? list.filter(a => !a.advisorId || a.advisorId === currentUser.id)
+      : list;
+    return filtered.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+  }, [roChangeAlerts, currentUser.id, currentUser.role, activeRoleView]);
+
+  const unreadROChangesCount = roChangeAlertsList.length;
+
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string>('ALL');
   const [shopMessages, setShopMessages] = useState<ShopChatMessage[]>([]);
   const [readShopMessageIds, setReadShopMessageIds] = useState<Set<string>>(() => {
@@ -593,41 +702,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUserRef.current = currentUser;
   }, [currentUser]);
 
-  // Active Workstation / Role View state (Managers can inspect any workstation; other roles locked to their role)
-  const [viewOverride, setViewOverride] = useState<UserRole | null>(null);
-  const activeRoleView: UserRole = currentUser.role === 'SERVICE_MANAGER' ? (viewOverride || 'SERVICE_MANAGER') : currentUser.role;
-  const setActiveRoleView = useCallback((role: UserRole | null) => {
-    setViewOverride(role);
-  }, []);
-
-  // When currentUser changes, reset role view override
-  useEffect(() => {
-    setViewOverride(null);
-  }, [currentUser.id, currentUser.role]);
-
-  // When currentUser changes, reload their read message IDs
+  // When currentUser changes or shopMessages update, reload read message IDs & merge with cloud readBy & user record
   useEffect(() => {
     if (!currentUser?.id) return;
     try {
       const savedRead = localStorage.getItem(`shop_chat_read_ids_${currentUser.id}`);
+      let readSet = new Set<string>();
       if (savedRead) {
         const arr = JSON.parse(savedRead);
         if (Array.isArray(arr)) {
-          setReadShopMessageIds(new Set(arr));
-          return;
+          readSet = new Set(arr);
         }
       }
+      // Also merge any messages already marked readBy currentUser in cloud
+      shopMessages.forEach(m => {
+        if (Array.isArray(m.readBy) && m.readBy.includes(currentUser.id)) {
+          readSet.add(m.id);
+        }
+      });
+      // Also merge user doc fields from Firestore
+      if (Array.isArray(currentUser.readShopMessageIds)) {
+        currentUser.readShopMessageIds.forEach(id => readSet.add(id));
+      }
+      if (currentUser.lastReadChatTimestamp) {
+        const cutoff = new Date(currentUser.lastReadChatTimestamp).getTime();
+        shopMessages.forEach(m => {
+          if (new Date(m.timestamp).getTime() <= cutoff) {
+            readSet.add(m.id);
+          }
+        });
+      }
+      setReadShopMessageIds(readSet);
+      localStorage.setItem(`shop_chat_read_ids_${currentUser.id}`, JSON.stringify(Array.from(readSet)));
     } catch {
       // ignore
     }
-    setReadShopMessageIds(new Set<string>());
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.lastReadChatTimestamp, shopMessages]);
 
   const markShopMessagesAsRead = useCallback((messageIds: string[]) => {
     if (!messageIds || messageIds.length === 0 || !currentUser?.id) return;
-    setReadShopMessageIds(prev => {
+
+    // 1. Sync read state to Firestore cloud (both message docs and user profile doc)
+    markShopMessagesReadInCloud(messageIds, currentUser.id);
+
+    // 2. Mark any related UrgentNotifications of type SHOP_CHAT as read in memory and cloud
+    const shopChatNotifIds: string[] = [];
+    setNotifications(prev => {
       let changed = false;
+      const updated = prev.map(n => {
+        if (n.type === 'SHOP_CHAT' && !n.read) {
+          changed = true;
+          shopChatNotifIds.push(n.id);
+          return { ...n, read: true };
+        }
+        return n;
+      });
+      if (changed) {
+        try {
+          localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(updated));
+        } catch {}
+      }
+      return changed ? updated : prev;
+    });
+
+    if (shopChatNotifIds.length > 0) {
+      markShopChatNotificationsReadInCloud(shopChatNotifIds);
+    }
+
+    // 3. Update local read IDs state and localStorage
+    setReadShopMessageIds(prev => {
       const next = new Set(prev);
+      let changed = false;
       for (const id of messageIds) {
         if (!next.has(id)) {
           next.add(id);
@@ -649,11 +794,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Unread messages intended for currentUser (not sent by currentUser)
   const unreadShopMessages = useMemo(() => {
     if (!currentUser || !currentUser.id) return [];
+    const cutoff = currentUser.lastReadChatTimestamp ? new Date(currentUser.lastReadChatTimestamp).getTime() : 0;
     return shopMessages.filter(m => {
       if (m.senderId === currentUser.id) return false;
       const isForMe = !m.recipientId || m.recipientId === 'ALL' || m.recipientId === currentUser.id;
       if (!isForMe) return false;
-      return !readShopMessageIds.has(m.id);
+      const isReadLocally = readShopMessageIds.has(m.id);
+      const isReadInCloud = Array.isArray(m.readBy) && m.readBy.includes(currentUser.id);
+      const isReadInUserDoc = Array.isArray(currentUser.readShopMessageIds) && currentUser.readShopMessageIds.includes(m.id);
+      const isBeforeCutoff = cutoff > 0 && new Date(m.timestamp).getTime() <= cutoff;
+      return !isReadLocally && !isReadInCloud && !isReadInUserDoc && !isBeforeCutoff;
     });
   }, [shopMessages, currentUser, readShopMessageIds]);
 
@@ -741,9 +891,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Subscribe to real-time Repair Orders
+    let isInitialROLoad = true;
+    const prevROMap = new Map<string, string>();
+
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
       setRepairOrders(cloudROs);
       setIsCloudSynced(true);
+
+      if (isInitialROLoad) {
+        cloudROs.forEach(r => {
+          prevROMap.set(r.id, `${r.status}_${r.history?.length || 0}_${r.updatedAt || ''}_${r.recommendations?.length || 0}_${r.quote?.status || ''}_${r.parts?.length || 0}`);
+        });
+        isInitialROLoad = false;
+        return;
+      }
+
+      cloudROs.forEach(r => {
+        const sig = `${r.status}_${r.history?.length || 0}_${r.updatedAt || ''}_${r.recommendations?.length || 0}_${r.quote?.status || ''}_${r.parts?.length || 0}`;
+        const prevSig = prevROMap.get(r.id);
+        if (prevSig && prevSig !== sig) {
+          const summary = r.lastChangeSummary || `Status: ${STATUS_CONFIG[r.status]?.label || r.status}`;
+          recordROChange(r.id, summary);
+        }
+        prevROMap.set(r.id, sig);
+      });
     });
 
     // Subscribe to real-time Users
@@ -940,11 +1111,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (!ro) {
       setSelectedROModalTab(null);
     }
+    if (ro) {
+      clearROChangeAlert(ro.id);
+    }
   };
 
   const openROWithTab = (ro: RepairOrder, tab: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' = 'DETAILS') => {
     setSelectedROId(ro.id);
     setSelectedROModalTab(tab);
+    clearROChangeAlert(ro.id);
   };
 
   const openQuoteModal = (roId: string) => {
@@ -1162,6 +1337,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    const statusLabel = STATUS_CONFIG[newStatus]?.label || newStatus.replace(/_/g, ' ');
+    const changeSummary = `Status: ${statusLabel}`;
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: newStatus,
@@ -1174,11 +1352,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       postRepairFollowUpCompleted,
       isUrgent: isNowUrgent,
       history: [...targetRO.history, newHistoryItem],
+      updatedAt: now,
+      lastChangeSummary: changeSummary,
     };
 
     // Optimistically update local state & sync to Firestore cloud
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
+    recordROChange(roId, changeSummary);
 
     if (newStatus === 'APPROVED') {
       // Specifically target Service Manager, Parts Specialists, and the assigned Tech on this RO only
@@ -1262,10 +1443,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dispatchedAt: now,
       waitingDiagnosisAt: now,
       history: [...targetRO.history, newHistory],
+      updatedAt: now,
+      lastChangeSummary: `Assigned to ${tech.name}`,
     };
 
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
+    recordROChange(roId, `Assigned to ${tech.name}`);
 
     triggerNotification(
       updatedRO,
@@ -1306,10 +1490,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       advisorId: newAdvisor.id,
       advisorName: newAdvisor.name,
       history: [...targetRO.history, newHistory],
+      updatedAt: now,
+      lastChangeSummary: `Service Writer: ${newAdvisor.name}`,
     };
 
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
+    recordROChange(roId, `Service Writer: ${newAdvisor.name}`);
 
     triggerNotification(
       updatedRO,
@@ -2243,13 +2430,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
               ];
 
+          const now = new Date().toISOString();
+          const changeSummary = `Updated: ${Object.keys(updates).slice(0, 3).join(', ')}`;
           const updatedRO = {
             ...ro,
             ...updates,
             quote: updatedQuote,
-            history: newHistory
+            history: newHistory,
+            updatedAt: now,
+            lastChangeSummary: changeSummary,
           };
           syncRepairOrder(updatedRO);
+          if (!options?.isAutoSave) {
+            recordROChange(roId, changeSummary);
+          }
           return updatedRO;
         }
         return ro;
@@ -2284,6 +2478,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? `Repair completed & test drive finished by ${currentUser.name}. Out Miles: ${numOut ? `${numOut.toLocaleString()} mi` : 'Recorded'}${testDriveDistance !== undefined ? ` (+${testDriveDistance} mi test drive)` : ''}.${notes ? ` Notes: "${notes}"` : ''}`
       : `Out Miles updated to ${numOut ? `${numOut.toLocaleString()} mi` : 'cleared'} by ${currentUser.name}.${notes ? ` Notes: "${notes}"` : ''}`;
 
+    const changeSummary = completeRepair ? 'Repair complete & out miles logged' : 'Out miles logged';
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: newStatus,
@@ -2297,6 +2493,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       testDriveCompletedAt: numOut !== undefined ? (targetRO.testDriveCompletedAt || now) : undefined,
       testDriveCompletedBy: numOut !== undefined ? (targetRO.testDriveCompletedBy || currentUser.name) : undefined,
       completedAt: completeRepair ? (targetRO.completedAt || now) : targetRO.completedAt,
+      updatedAt: now,
+      lastChangeSummary: changeSummary,
       history: [
         ...targetRO.history,
         {
@@ -2322,6 +2520,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     syncRepairOrder(updatedRO);
+    recordROChange(roId, changeSummary);
 
     if (completeRepair) {
       triggerNotification(
@@ -3453,8 +3652,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (syncedRO) {
       syncRepairOrder(syncedRO);
+      recordROChange(roId, 'Inspection checklist updated');
     }
-  }, [inspectionChecklist, currentUser]);
+  }, [inspectionChecklist, currentUser, recordROChange]);
 
   const passAllInspectionItems = useCallback((roId: string) => {
     let syncedRO: RepairOrder | null = null;
@@ -3509,8 +3709,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (syncedRO) {
       syncRepairOrder(syncedRO);
+      recordROChange(roId, 'Inspection checklist checked');
     }
-  }, [inspectionChecklist, currentUser]);
+  }, [inspectionChecklist, currentUser, recordROChange]);
 
   const resetROInspection = useCallback((roId: string) => {
     const targetRO = repairOrders.find(r => r.id === roId);
@@ -3807,12 +4008,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    const changeSummary = submitToAdvisor 
+      ? `Labor time submitted (${nextQuote.totalLaborHours} hrs)` 
+      : `Quote estimate updated ($${nextQuote.grandTotal.toFixed(2)})`;
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: nextROStatus,
       concernStatuses: nextConcernStatuses.length > 0 ? nextConcernStatuses : targetRO.concernStatuses,
       quote: nextQuote,
       history: newHistory,
+      updatedAt: now,
+      lastChangeSummary: changeSummary,
     };
 
     setRepairOrders(prev => {
@@ -3826,6 +4033,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     syncRepairOrder(updatedRO);
+    if (!isAutoSave) {
+      recordROChange(roId, changeSummary);
+    }
 
     if (submitToAdvisor) {
       playNotificationChime(true);
@@ -4036,12 +4246,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    const changeSummary = status === 'APPROVED' ? 'Quote authorized' : 'Quote declined';
+
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: targetROStatus,
       parts: updatedParts,
       quote: updatedQuote,
       history: [...targetRO.history, historyItem],
+      updatedAt: now,
+      lastChangeSummary: changeSummary,
     };
 
     setRepairOrders(prev => {
@@ -4055,6 +4269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     syncRepairOrder(updatedRO);
+    recordROChange(roId, changeSummary);
 
     if (status === 'APPROVED') {
       // 1. Service Manager
@@ -4952,6 +5167,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         convertAppointmentToRO,
         isAppointmentCalendarOpen,
         setIsAppointmentCalendarOpen,
+        roChangeAlerts,
+        roChangeAlertsList,
+        unreadROChangesCount,
+        hasROChange,
+        clearROChangeAlert,
+        clearAllROChangeAlerts,
+        recordROChange,
       }}
     >
       {children}

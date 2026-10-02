@@ -10,7 +10,8 @@ import {
   AlertCircle, 
   Sparkles, 
   CheckCircle,
-  MessageSquare
+  MessageSquare,
+  Bell
 } from 'lucide-react';
 import { RepairOrder, User as AppUser } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
@@ -33,8 +34,10 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
   showCadence = true,
   onOpenFollowUp
 }) => {
-  const { setSelectedRO } = useApp();
+  const { setSelectedRO, hasROChange, roChangeAlerts } = useApp();
   const ro = cleanRO3700(rawRO);
+  const hasChangeAlert = hasROChange ? hasROChange(ro.id) : false;
+  const changeAlert = roChangeAlerts ? roChangeAlerts[ro.id] : undefined;
   const statusInfo = STATUS_CONFIG[ro.status] || STATUS_CONFIG.CREATED;
   const isCompleted = isROCompleted(ro);
   const postRepair = isCompleted ? getPostRepairFollowUpStatus(ro) : null;
@@ -374,6 +377,15 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
             >
               <MessageSquare className="w-3 h-3 text-slate-500" />
               <span>{ro.messages.length}</span>
+            </span>
+          )}
+          {hasChangeAlert && (
+            <span
+              id={`ro-line-change-bell-${ro.id}`}
+              className="inline-flex items-center justify-center p-1 rounded-full bg-red-100 text-red-600 ring-2 ring-red-500 animate-bounce shadow-xs shrink-0"
+              title={`RO #${ro.id} has new updates: ${changeAlert?.changeSummary || 'Recent change'} - Click to review`}
+            >
+              <Bell className="w-3.5 h-3.5 fill-red-600 text-red-600" />
             </span>
           )}
           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />

@@ -13,6 +13,8 @@ export const UrgentToastStack: React.FC = () => {
                     n.title.toLowerCase().includes('part') || 
                     n.message.toLowerCase().includes('part');
     if (isParts) return false;
+    // Exclude shop chat alerts: chat has its own dedicated floating launcher & audio chime
+    if (n.type === 'SHOP_CHAT') return false;
     return true;
   }).slice(0, 2);
 

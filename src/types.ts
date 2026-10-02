@@ -20,6 +20,8 @@ export interface User {
   phone?: string;
   activeROCount?: number;
   isDeactivated?: boolean;
+  lastReadChatTimestamp?: string;
+  readShopMessageIds?: string[];
 }
 
 export type ROStatus = 
@@ -212,6 +214,8 @@ export interface RepairOrder {
   taxExemptNumber?: string; // Optional tax exempt resale or state certificate number
   vehiclePhotos?: VehiclePhoto[]; // Photos of vehicle (walkaround, damage, odometer, tech findings)
   linePhotos?: LinePhoto[]; // Photos attached to specific concern lines (Line 1, Line 2, etc.)
+  updatedAt?: string; // Timestamp of latest change/update made to repair order
+  lastChangeSummary?: string; // Short description of latest modification
 }
 
 export interface LinePhoto {
@@ -357,6 +361,18 @@ export interface ShopChatMessage {
   timestamp: string;
   roId?: string; // Optional reference to a specific Repair Order #
   isUrgent?: boolean;
+  readBy?: string[]; // Array of user IDs who have read this message
+}
+
+export interface ROChangeAlert {
+  roId: string;
+  roNumber: string;
+  customerName: string;
+  vehicleDesc: string;
+  status: ROStatus;
+  changedAt: string;
+  changeSummary: string;
+  advisorId?: string;
 }
 
 export interface UrgentNotification {
