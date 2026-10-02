@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -147,6 +148,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
 }) => {
   const { 
     currentUser, 
+    shopName,
     users, 
     staffLeaveEntries, 
     addStaffLeaveEntry, 
@@ -434,7 +436,11 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
 
   // Print schedule
   const handlePrint = () => {
+    document.body.classList.add('printing-attendance');
     window.print();
+    setTimeout(() => {
+      document.body.classList.remove('printing-attendance');
+    }, 1000);
   };
 
   // Security Gate: Service Manager only
@@ -1390,10 +1396,115 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
     </div>
   );
 
+  const renderPrintableAttendanceDocument = () => (
+    typeof document !== 'undefined' ? createPortal(
+      <div 
+        id="printable-attendance-document"
+        className="bg-white text-black max-w-4xl mx-auto space-y-4 font-sans text-xs"
+      >
+        {/* Header */}
+        <div className="border-b-2 border-black pb-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-2xl font-black tracking-tight text-black uppercase">
+                {shopName || 'Woolwine CDJR'}
+              </div>
+              <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
+                STAFF ATTENDANCE & OUT-OF-OFFICE SCHEDULE
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="inline-block px-3 py-1 bg-white text-black font-mono font-black text-sm rounded border-2 border-black">
+                PERIOD: {MONTH_NAMES[currentMonth].toUpperCase()} {currentYear}
+              </div>
+              <div className="text-[11px] text-black font-bold mt-1 font-mono">
+                Printed: {new Date().toLocaleDateString()}
+              </div>
+              <div className="text-[10px] text-black font-mono">
+                Manager: {currentUser.name}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Roll Call & Attendance Summary */}
+        <div className="attendance-print-section p-2.5 border-2 border-black rounded bg-white flex items-center justify-between text-xs font-black">
+          <span>Staff Roster Summary ({MONTH_NAMES[currentMonth]} {currentYear}):</span>
+          <div className="flex items-center gap-4">
+            <span>Total Crew: {activeStaff.length}</span>
+            <span>Absent Today: {entriesToday.length}</span>
+            <span>Total Out Logged: {filteredEntries.length}</span>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="attendance-print-section space-y-1">
+          <table className="w-full text-left text-xs border-collapse border-2 border-black">
+            <thead>
+              <tr className="bg-slate-100 border-b-2 border-black text-[10px] font-black uppercase">
+                <th className="border-r border-black p-1.5 w-10 text-center">#</th>
+                <th className="border-r border-black p-1.5 w-36">Staff Name</th>
+                <th className="border-r border-black p-1.5 w-24">Role</th>
+                <th className="border-r border-black p-1.5 w-24">Leave Type</th>
+                <th className="border-r border-black p-1.5 w-32">Date / Duration</th>
+                <th className="border-r border-black p-1.5">Reason & Coverage Notes</th>
+                <th className="p-1.5 w-24 text-center">Approved</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-4 text-center italic font-bold">
+                    No staff absences or leaves recorded for this schedule period.
+                  </td>
+                </tr>
+              ) : (
+                filteredEntries.map((entry, idx) => (
+                  <tr key={entry.id || idx} className="border-b border-black/40">
+                    <td className="border-r border-black/40 p-1.5 text-center font-mono font-bold">
+                      {idx + 1}
+                    </td>
+                    <td className="border-r border-black/40 p-1.5 font-black text-black">
+                      {entry.userName}
+                    </td>
+                    <td className="border-r border-black/40 p-1.5 uppercase font-mono text-[10px]">
+                      {entry.userRole?.replace(/_/g, ' ') || 'Staff'}
+                    </td>
+                    <td className="border-r border-black/40 p-1.5 font-bold uppercase text-[10px]">
+                      {entry.leaveType === 'VACATION' ? '🌴 Vacation' : entry.leaveType === 'SICK' ? '🤒 Sick' : entry.leaveType === 'LEFT_EARLY' ? '⏰ Left Early' : 'Personal'}
+                    </td>
+                    <td className="border-r border-black/40 p-1.5 font-mono text-[11px] whitespace-nowrap">
+                      {entry.startDate === entry.endDate ? entry.startDate : `${entry.startDate} to ${entry.endDate}`}
+                    </td>
+                    <td className="border-r border-black/40 p-1.5">
+                      <div className="font-medium text-black">{entry.timeDetails || 'Scheduled absence'}</div>
+                      {entry.notes && <div className="text-[10px] italic mt-0.5">Notes: {entry.notes}</div>}
+                    </td>
+                    <td className="p-1.5 text-center font-bold text-[10px]">
+                      ✓ Service Mgr
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Sign-Off Footer */}
+        <div className="attendance-print-section pt-3 border-t-2 border-black flex justify-between items-center text-xs">
+          <span className="font-bold">Service Manager Approval Signature: ____________________________________</span>
+          <span className="font-mono text-[10px]">Printed: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      </div>,
+      document.body
+    ) : null
+  );
+
   if (asModal) {
     return (
+      <>
       <div 
-        className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+        className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print"
         onClick={onClose}
       >
         <div 
@@ -1426,8 +1537,15 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
           </div>
         </div>
       </div>
+      {renderPrintableAttendanceDocument()}
+      </>
     );
   }
 
-  return content;
+  return (
+    <>
+      {content}
+      {renderPrintableAttendanceDocument()}
+    </>
+  );
 };

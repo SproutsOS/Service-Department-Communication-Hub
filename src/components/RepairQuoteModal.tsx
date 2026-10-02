@@ -1084,7 +1084,13 @@ export const RepairQuoteModal: React.FC = () => {
                   </>
                 )}
                 <span className="text-slate-300 font-black">•</span>
-                <span>Miles: <strong className="text-white font-black">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} mi` : `${vehicle.mileage ?? 0} mi`}</strong></span>
+                <span>In: <strong className="text-white font-black">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} mi` : `${vehicle.mileage ?? 0} mi`}</strong></span>
+                {(activeQuoteRO.outMileage !== undefined || activeQuoteRO.vehicle?.outMileage !== undefined) && (
+                  <>
+                    <span className="text-slate-300 font-black">•</span>
+                    <span>Out: <strong className="text-emerald-300 font-black">{Number(activeQuoteRO.outMileage ?? activeQuoteRO.vehicle?.outMileage).toLocaleString()} mi</strong></span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -2441,8 +2447,25 @@ export const RepairQuoteModal: React.FC = () => {
               {vehicle.year} {vehicle.make} {vehicle.model}
             </span>
             <span className="text-black block text-[11px] font-bold">
-              Mileage: {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : 'N/A'}
+              In Miles: {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : 'N/A'}
             </span>
+            {(() => {
+              const quoteOut = activeQuoteRO.outMileage ?? activeQuoteRO.vehicle?.outMileage;
+              if (quoteOut !== undefined) {
+                const driveDist = vehicle.mileage ? Math.max(0, quoteOut - vehicle.mileage) : undefined;
+                return (
+                  <span className="text-black block text-[11px] font-black">
+                    Out Miles: {quoteOut.toLocaleString()} mi {driveDist !== undefined ? `(+${driveDist.toFixed(1)} mi drive)` : ''}
+                  </span>
+                );
+              }
+              return null;
+            })()}
+            {activeQuoteRO.testDriveNotes && (
+              <span className="text-black block text-[10px] italic">
+                Test Drive: {activeQuoteRO.testDriveNotes}
+              </span>
+            )}
             {vehicle.engine && (
               <span className="text-black block text-[10px] font-bold">Engine: {vehicle.engine}</span>
             )}

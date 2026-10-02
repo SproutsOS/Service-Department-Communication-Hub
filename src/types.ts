@@ -113,7 +113,8 @@ export interface VehicleInfo {
   make: string;
   model: string;
   vin: string;
-  mileage: number;
+  mileage: number; // In Miles / Intake Odometer
+  outMileage?: number; // Out Miles / Post-Test Drive Odometer
   licensePlate?: string;
   color?: string;
   engine?: string;
@@ -194,6 +195,11 @@ export interface RepairOrder {
   contactHistory?: CustomerContactRecord[];
   // 3-Day Post-Repair Customer Follow-Up & Quality Verification
   completedAt?: string; // Timestamp when repair order was completed/closed
+  outMileage?: number; // Out Miles (Post test drive / repair completion)
+  testDriveCompleted?: boolean;
+  testDriveNotes?: string;
+  testDriveCompletedAt?: string;
+  testDriveCompletedBy?: string;
   postRepairFollowUpDate?: string; // Scheduled date for 3-day post-repair quality check call (YYYY-MM-DD)
   postRepairFollowUpCompleted?: boolean; // Whether 3-day follow-up call was conducted
   postRepairFollowUpCompletedAt?: string; // Timestamp when 3-day follow-up was completed

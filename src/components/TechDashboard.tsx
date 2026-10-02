@@ -28,21 +28,231 @@ import {
   Trash2,
   X,
   Eye,
-  ShoppingCart
+  ShoppingCart,
+  Gauge,
+  Car,
+  History
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { ROStatus, RepairOrder, ConcernPayType } from '../types';
+import { ROStatus, RepairOrder, ConcernPayType, WarrantyOperationType } from '../types';
 import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField } from '../utils/formatters';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
-import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
+import { TechTestDriveModal } from './TechTestDriveModal';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
   onRequestParts?: (lineIndex?: number, lineText?: string) => void;
 }
+
+export const InlineOutMilesBox: React.FC<{ ro: RepairOrder }> = ({ ro }) => {
+  const { updateOutMileage } = useApp();
+  const inMiles = ro.vehicle.mileage ?? 0;
+  const initialOut = ro.outMileage ?? ro.vehicle.outMileage;
+  const [val, setVal] = useState<string>(initialOut !== undefined ? String(initialOut) : '');
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    const currentOut = ro.outMileage ?? ro.vehicle.outMileage;
+    if (currentOut !== undefined) {
+      setVal(String(currentOut));
+    }
+  }, [ro.outMileage, ro.vehicle.outMileage]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextVal = e.target.value;
+    setVal(nextVal);
+    const num = nextVal.trim() === '' ? undefined : Number(nextVal);
+    if (nextVal.trim() === '' || (!isNaN(Number(nextVal)) && Number(nextVal) >= 0)) {
+      updateOutMileage(ro.id, num);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    }
+  };
+
+  const parsedOut = val.trim() !== '' && !isNaN(Number(val)) ? Number(val) : undefined;
+  const diff = parsedOut !== undefined && inMiles > 0 ? parsedOut - inMiles : undefined;
+
+  return (
+    <div 
+      onClick={(e) => e.stopPropagation()}
+      className="flex items-center gap-1.5 px-3 py-1 bg-white rounded-lg text-xs font-bold border-2 border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 shadow-2xs transition-all"
+    >
+      <Gauge className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+      <span className="text-slate-700 font-bold whitespace-nowrap">Miles Out:</span>
+      <input
+        type="number"
+        value={val}
+        onChange={handleChange}
+        placeholder="Enter Out Miles"
+        className="w-24 sm:w-28 px-2 py-0.5 text-xs font-black text-slate-900 bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-hidden text-center"
+      />
+      <span className="text-slate-500 text-[11px] font-bold">mi</span>
+      {diff !== undefined && diff >= 0 && (
+        <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap hidden sm:inline">
+          +{diff.toFixed(1)} mi
+        </span>
+      )}
+      {isSaved && (
+        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
+          <Check className="w-3 h-3 text-emerald-600" /> Saved
+        </span>
+      )}
+    </div>
+  );
+};
+
+interface PastPunchModalProps {
+  ro: RepairOrder;
+  lineNum?: number;
+  lineDescription?: string;
+  onClose: () => void;
+}
+
+export const TechPastPunchModal: React.FC<PastPunchModalProps> = ({ ro, lineNum, lineDescription, onClose }) => {
+  const { currentUser, addManualTimePunch } = useApp();
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [manualStartTime, setManualStartTime] = useState('08:00');
+  const [manualEndTime, setManualEndTime] = useState('09:30');
+  const [manualTechName, setManualTechName] = useState(currentUser.name);
+  const [manualOpType, setManualOpType] = useState<WarrantyOperationType>('REPAIR');
+  const [manualNotes, setManualNotes] = useState(lineNum ? `Line ${lineNum}${lineDescription ? `: ${lineDescription}` : ''}` : '');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const clockInISO = new Date(`${manualDate}T${manualStartTime}:00`).toISOString();
+      const clockOutISO = new Date(`${manualDate}T${manualEndTime}:00`).toISOString();
+
+      addManualTimePunch(ro.id, {
+        techId: currentUser.id,
+        techName: manualTechName.trim() || currentUser.name,
+        techEmployeeNumber: currentUser.employeeNumber,
+        clockIn: clockInISO,
+        clockOut: clockOutISO,
+        operationType: manualOpType,
+        notes: manualNotes.trim() || (lineNum ? `Line ${lineNum}` : undefined),
+      });
+
+      onClose();
+    } catch {
+      alert('Invalid date or time entered. Please verify the timestamps.');
+    }
+  };
+
+  return (
+    <div 
+      onClick={(e) => e.stopPropagation()} 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4"
+    >
+      <div className="bg-white w-full max-w-md rounded-xl border-2 border-slate-700 shadow-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+            <History className="w-4 h-4 text-blue-600" />
+            <span>Add Past Labor Punch {lineNum ? `(Line ${lineNum})` : ''}</span>
+          </h4>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Technician Name</label>
+            <input
+              type="text"
+              value={manualTechName}
+              onChange={(e) => setManualTechName(e.target.value)}
+              className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-slate-900 bg-white"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Operation / Phase</label>
+            <select
+              value={manualOpType}
+              onChange={(e) => setManualOpType(e.target.value as WarrantyOperationType)}
+              className="w-full px-3 py-2 font-bold border-2 border-slate-400 rounded-lg text-slate-800 bg-white cursor-pointer"
+            >
+              <option value="REPAIR">Component Repair / Assembly</option>
+              <option value="DIAGNOSTIC">Diagnostic Scan & Testing</option>
+              <option value="ROAD_TEST">Road Test & Verification</option>
+              <option value="WAITING_PARTS">Teardown / Staging</option>
+              <option value="GENERAL">General Labor / Service</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+                className="w-full px-2 py-2 border-2 border-slate-400 rounded-lg text-slate-900 text-xs bg-white"
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Clock In</label>
+              <input
+                type="time"
+                value={manualStartTime}
+                onChange={(e) => setManualStartTime(e.target.value)}
+                className="w-full px-2 py-2 border-2 border-slate-400 rounded-lg text-slate-900 text-xs bg-white"
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Clock Out</label>
+              <input
+                type="time"
+                value={manualEndTime}
+                onChange={(e) => setManualEndTime(e.target.value)}
+                className="w-full px-2 py-2 border-2 border-slate-400 rounded-lg text-slate-900 text-xs bg-white"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Work Description / Punch Notes</label>
+            <textarea
+              rows={2}
+              value={manualNotes}
+              onChange={(e) => setManualNotes(e.target.value)}
+              placeholder="e.g. Completed repair and tested system..."
+              className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-slate-900 bg-white"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-xs cursor-pointer"
+            >
+              Save Past Punch
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({ ro, onRequestParts }) => {
   const { 
@@ -57,7 +267,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
     clockOutOfRO,
     updateLineLaborHours,
     deletePartItem,
-    updatePartItem
+    updatePartItem,
+    updateRecommendedService,
+    deleteRecommendedService
   } = useApp();
 
   const canSelectPayType = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
@@ -71,6 +283,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
   );
   const activePunch = myActivePunch || (currentUser.role !== 'TECHNICIAN' ? anyActivePunch : undefined);
   const isClockedIn = Boolean(activePunch);
+
+  // Manual Past Punch Modal state
+  const [pastPunchModal, setPastPunchModal] = useState<{ isOpen: boolean; lineNum?: number; concernText?: string } | null>(null);
 
   // Live timer for active punch
   const [activeElapsedSecs, setActiveElapsedSecs] = useState<number>(0);
@@ -101,6 +316,69 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
   const lines = (ro.concerns && ro.concerns.length > 0)
     ? ro.concerns
     : [ro.primaryConcern || 'Customer Concern'];
+
+  const recommendations = ro.recommendations || [];
+
+  // Track recommendation fields inside TechCauseCorrectionSection
+  const [recHours, setRecHours] = useState<Record<string, string>>({});
+  const [recCauses, setRecCauses] = useState<Record<string, string>>({});
+  const [recCorrections, setRecCorrections] = useState<Record<string, string>>({});
+  const recDebounceTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const focusedRecFieldRef = useRef<{ recId: string; field: 'cause' | 'correction' | 'hours' } | null>(null);
+
+  useEffect(() => {
+    const nextH: Record<string, string> = {};
+    const nextC: Record<string, string> = {};
+    const nextCorr: Record<string, string> = {};
+
+    recommendations.forEach(rec => {
+      if (focusedRecFieldRef.current?.recId === rec.id) {
+        nextH[rec.id] = recHours[rec.id] ?? (rec.laborHours !== undefined ? String(rec.laborHours) : '');
+        nextC[rec.id] = recCauses[rec.id] ?? (rec.cause || '');
+        nextCorr[rec.id] = recCorrections[rec.id] ?? (rec.correction || '');
+      } else {
+        nextH[rec.id] = rec.laborHours !== undefined ? String(rec.laborHours) : '';
+        nextC[rec.id] = rec.cause || '';
+        nextCorr[rec.id] = rec.correction || '';
+      }
+    });
+
+    setRecHours(nextH);
+    setRecCauses(nextC);
+    setRecCorrections(nextCorr);
+  }, [ro.recommendations]);
+
+  const handleRecCauseChange = (recId: string, val: string) => {
+    setRecCauses(prev => ({ ...prev, [recId]: val }));
+    if (recDebounceTimersRef.current[`cause_${recId}`]) {
+      clearTimeout(recDebounceTimersRef.current[`cause_${recId}`]);
+    }
+    recDebounceTimersRef.current[`cause_${recId}`] = setTimeout(() => {
+      updateRecommendedService(ro.id, recId, { cause: val });
+    }, 600);
+  };
+
+  const handleRecCorrectionChange = (recId: string, val: string) => {
+    setRecCorrections(prev => ({ ...prev, [recId]: val }));
+    if (recDebounceTimersRef.current[`corr_${recId}`]) {
+      clearTimeout(recDebounceTimersRef.current[`corr_${recId}`]);
+    }
+    recDebounceTimersRef.current[`corr_${recId}`] = setTimeout(() => {
+      updateRecommendedService(ro.id, recId, { correction: val });
+    }, 600);
+  };
+
+  const handleRecHoursChange = (recId: string, val: string, globalLineNum: number) => {
+    setRecHours(prev => ({ ...prev, [recId]: val }));
+    if (recDebounceTimersRef.current[`hours_${recId}`]) {
+      clearTimeout(recDebounceTimersRef.current[`hours_${recId}`]);
+    }
+    recDebounceTimersRef.current[`hours_${recId}`] = setTimeout(() => {
+      const num = Math.max(0, Number(val) || 0);
+      updateRecommendedService(ro.id, recId, { laborHours: num });
+      updateLineLaborHours(ro.id, globalLineNum - 1, val);
+    }, 600);
+  };
 
   // Track requested labor hours per line (mirrored to quote)
   const [lineHours, setLineHours] = useState<string[]>(() => {
@@ -475,27 +753,27 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   }`}
                 >
                   {/* Line Identification Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-black px-2.5 py-0.5 bg-slate-900 text-white rounded-md uppercase tracking-wider shadow-2xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 pb-2.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="text-xs font-black px-3 py-1 bg-slate-900 text-white rounded-lg uppercase tracking-wider shadow-2xs">
                         Line {idx + 1}
                       </span>
                       {isMyLine && (
-                        <span className="text-[10px] font-black px-2 py-0.5 bg-blue-600 text-white rounded-md uppercase tracking-wider shadow-2xs">
+                        <span className="text-xs font-black px-2.5 py-1 bg-blue-600 text-white rounded-md uppercase tracking-wider shadow-2xs">
                           Your Line
                         </span>
                       )}
 
                       {canSelectPayType ? (
-                        <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-slate-300">
-                          <span className="text-[10px] font-bold text-slate-500 px-1 hidden xs:inline uppercase tracking-wider">Type:</span>
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-300 shadow-2xs">
+                          <span className="text-xs font-bold text-slate-500 px-1 hidden xs:inline uppercase tracking-wider">Type:</span>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               updateConcernPayType(ro.id, idx, 'CUSTOMER_PAY');
                             }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
                               payType === 'CUSTOMER_PAY'
                                 ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
                                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -510,7 +788,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                               e.stopPropagation();
                               updateConcernPayType(ro.id, idx, 'WARRANTY');
                             }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
                               payType === 'WARRANTY'
                                 ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -525,7 +803,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                               e.stopPropagation();
                               updateConcernPayType(ro.id, idx, 'INTERNAL');
                             }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
                               payType === 'INTERNAL'
                                 ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
                                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -536,7 +814,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           </button>
                         </div>
                       ) : (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                        <span className={`text-xs font-bold px-3 py-1 rounded-md border shadow-2xs ${
                           payType === 'CUSTOMER_PAY'
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
                             : payType === 'WARRANTY'
@@ -548,15 +826,15 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       )}
 
                       {isLineComplete ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Line {idx + 1} Documented
+                        <span className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Line {idx + 1} Documented
                         </span>
                       ) : isLinePartiallyDone ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                          Line {idx + 1} Partially Documented
+                        <span className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Line {idx + 1} Partially Documented
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
+                        <span className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300 flex items-center gap-1.5 shadow-2xs">
                           Line {idx + 1} Pending
                         </span>
                       )}
@@ -576,9 +854,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                             );
                           }
                         }}
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
                           isClockedIn
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300 shadow-xs'
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
                             : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
                         }`}
                         title={
@@ -589,26 +867,40 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       >
                         {isClockedIn ? (
                           <>
-                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                            <Square className="w-2.5 h-2.5 fill-white" />
+                            <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                            <Square className="w-3 h-3 fill-white" />
                             <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
                           </>
                         ) : (
                           <>
-                            <Play className="w-2.5 h-2.5 fill-current" />
+                            <Play className="w-3 h-3 fill-current" />
                             <span>Clock In</span>
                           </>
                         )}
                       </button>
 
+                      {/* Add Past Punch Button directly to the right of Clock In */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPastPunchModal({ isOpen: true, lineNum: idx + 1, concernText });
+                        }}
+                        className="px-3 py-1.5 rounded-full text-xs font-bold border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                        title={`Log a completed past labor punch for Line ${idx + 1}`}
+                      >
+                        <History className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                        <span>+ Past Punch</span>
+                      </button>
+
                       {/* Inline Labor Hours Requested Input for Line {idx + 1} (Syncs to Quote) */}
                       <div 
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-full border-2 border-slate-300 shadow-2xs hover:border-blue-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all"
+                        className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border-2 border-slate-300 shadow-2xs hover:border-blue-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all"
                         title={`Enter labor hours requested for Line ${idx + 1} — automatically updates the repair quote`}
                       >
-                        <Clock className="w-3 h-3 text-blue-600 shrink-0" />
-                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider shrink-0">
+                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider shrink-0">
                           Hours:
                         </label>
                         <input
@@ -623,9 +915,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           }}
                           onChange={(e) => handleLineHoursChange(idx, e.target.value)}
                           onBlur={() => handleLineHoursBlur(idx)}
-                          className="w-12 text-xs font-bold text-slate-900 bg-transparent text-center focus:outline-hidden"
+                          className="w-12 text-xs font-extrabold text-slate-900 bg-transparent text-center focus:outline-hidden"
                         />
-                        <span className="text-[10px] font-bold text-slate-500 pr-0.5">hrs</span>
+                        <span className="text-xs font-bold text-slate-500 pr-0.5">hrs</span>
                       </div>
 
                       {/* Request Parts directly to the right of hours entry box */}
@@ -636,34 +928,34 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                             e.stopPropagation();
                             onRequestParts(idx, concernText);
                           }}
-                          className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                          className="px-3.5 py-1.5 rounded-full text-xs font-bold border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                           title={`Request required parts for Line ${idx + 1} from the Parts Department`}
                         >
-                          <Package className="w-3 h-3 text-amber-600" />
+                          <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span>Request Parts</span>
                         </button>
                       )}
 
-                      {/* See Parts Ordered Button directly to the right of Request Parts */}
+                      {/* Parts Requested Button directly to the right of Request Parts */}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setViewingPartsLineIndex(viewingPartsLineIndex === idx ? null : idx);
                         }}
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
                           viewingPartsLineIndex === idx
                             ? 'bg-blue-700 text-white border-blue-800 ring-2 ring-blue-300'
                             : lineParts.length > 0
-                            ? 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-300'
+                            ? 'bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-300'
                             : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                         }`}
-                        title={`View parts ordered for Line ${idx + 1}`}
+                        title={`View parts requested for Line ${idx + 1}`}
                       >
-                        <Eye className="w-3 h-3 text-blue-600" />
-                        <span>See Parts Ordered</span>
+                        <Eye className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>Parts Requested</span>
                         {lineParts.length > 0 && (
-                          <span className={`px-1.5 py-0.2 text-[9px] font-black rounded-full ${
+                          <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
                             viewingPartsLineIndex === idx ? 'bg-white text-blue-900' : 'bg-blue-600 text-white'
                           }`}>
                             {lineParts.length}
@@ -673,9 +965,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                     </div>
 
                     {/* Line Technician Selector / Display */}
-                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-slate-300">
-                      <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
+                    <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs">
+                      <Wrench className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider hidden xs:inline shrink-0">Tech:</span>
                       {canAssignTech ? (
                         <select
                           value={ro.concernTechIds?.[idx] || ''}
@@ -686,7 +978,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                             const t = users.find(u => u.id === tId);
                             updateConcernTech(ro.id, idx, tId, t?.name);
                           }}
-                          className={`text-[11px] font-bold bg-white border rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-500 focus:outline-hidden cursor-pointer ${
+                          className={`text-xs font-bold bg-white border rounded-md px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-hidden cursor-pointer ${
                             ro.concernTechIds?.[idx] === currentUser.id
                               ? 'border-blue-500 text-blue-800 bg-blue-50/50'
                               : 'border-slate-300 text-slate-800'
@@ -701,14 +993,14 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           ))}
                         </select>
                       ) : (
-                        <span className="text-[11px] font-bold text-slate-800">
+                        <span className="text-xs font-bold text-slate-800">
                           {assignedTechName || ro.techName || 'Unassigned'}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Expandable Parts Ordered for Line {idx + 1} Section */}
+                  {/* Expandable Parts Requested for Line {idx + 1} Section */}
                   {viewingPartsLineIndex === idx && (
                     <div 
                       onClick={(e) => e.stopPropagation()}
@@ -718,7 +1010,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         <div className="flex items-center gap-2">
                           <Package className="w-4 h-4 text-blue-700" />
                           <span className="text-xs font-black text-blue-950 uppercase tracking-wider">
-                            Parts Ordered for Line {idx + 1}
+                            Parts Requested for Line {idx + 1}
                           </span>
                           <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full">
                             {lineParts.length} {lineParts.length === 1 ? 'Part' : 'Parts'}
@@ -914,7 +1206,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         focusedFieldRef.current = null;
                         handleBlurSave();
                       }}
-                      placeholder={`Type Line ${idx + 1} cause findings (e.g., Code P0300 - cylinder 3 spark plug fouled with oil due to leaking valve cover spark plug tube seal)...`}
+                      placeholder={`Type Line ${idx + 1} cause...`}
                       className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
@@ -938,7 +1230,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         focusedFieldRef.current = null;
                         handleBlurSave();
                       }}
-                      placeholder={`Type Line ${idx + 1} correction performed (e.g., Replaced valve cover gasket and spark plug tube seals, installed new plugs, cleared codes, road tested 5 miles)...`}
+                      placeholder={`Type Line ${idx + 1} correction...`}
                       className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
@@ -957,6 +1249,330 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 </div>
               );
             })}
+
+            {/* Inspection Findings & Recommended Services (Sequential Lines following Concerns) */}
+            {recommendations.map((rec, recIdx) => {
+              const globalLineNum = lines.length + recIdx + 1;
+              const recCause = recCauses[rec.id] !== undefined ? recCauses[rec.id] : (rec.cause || '');
+              const recCorr = recCorrections[rec.id] !== undefined ? recCorrections[rec.id] : (rec.correction || '');
+              const recHrs = recHours[rec.id] !== undefined ? recHours[rec.id] : (rec.laborHours !== undefined ? String(rec.laborHours) : '');
+              const isRecComplete = Boolean(recCause.trim() && recCorr.trim());
+              const isRecPartiallyDone = Boolean(recCause.trim() || recCorr.trim());
+              const lineParts = (ro.parts || []).filter(p => p.roLineNumber === globalLineNum);
+              const recPayType = rec.payType || 'CUSTOMER_PAY';
+
+              return (
+                <div key={rec.id} className="p-3.5 bg-amber-50/40 rounded-xl border-2 border-amber-300 space-y-3 shadow-xs">
+                  {/* Top Bar: Pay Type, Status, Clock In/Out, Hours, Request Parts, Tech assignment & Remove */}
+                  <div className="flex items-center justify-between gap-2.5 flex-wrap pb-2.5 border-b border-amber-200">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <span className="px-3 py-1 rounded-lg bg-amber-700 text-white font-black text-xs shadow-2xs">
+                          Line {globalLineNum}
+                        </span>
+                        <span className="text-amber-900 font-bold text-xs hidden sm:inline">21-Pt Inspection Finding</span>
+                      </span>
+
+                      {/* Pay Type Badge / Selector */}
+                      {canSelectPayType ? (
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-300 shadow-2xs">
+                          <span className="text-xs font-bold text-slate-500 px-1 hidden xs:inline uppercase tracking-wider">Type:</span>
+                          <button
+                            type="button"
+                            onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'CUSTOMER_PAY' })}
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
+                              recPayType === 'CUSTOMER_PAY'
+                                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            Customer Pay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'WARRANTY' })}
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
+                              recPayType === 'WARRANTY'
+                                ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            Warranty
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'INTERNAL' })}
+                            className={`px-3 py-1 rounded text-xs font-extrabold border transition-colors cursor-pointer ${
+                              recPayType === 'INTERNAL'
+                                ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            Internal
+                          </button>
+                        </div>
+                      ) : (
+                        <span className={`text-xs font-bold px-3 py-1 rounded-md border shadow-2xs ${
+                          recPayType === 'CUSTOMER_PAY'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : recPayType === 'WARRANTY'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                        }`}>
+                          {recPayType === 'CUSTOMER_PAY' ? 'Customer Pay' : recPayType === 'WARRANTY' ? 'Warranty' : 'Internal'}
+                        </span>
+                      )}
+
+                      {/* Urgency Badge */}
+                      <span className={`text-xs font-black uppercase px-3 py-1 rounded-md border flex items-center gap-1.5 shadow-2xs ${
+                        rec.urgency === 'SAFETY'
+                          ? 'bg-red-100 text-red-800 border-red-300'
+                          : 'bg-amber-100 text-amber-800 border-amber-300'
+                      }`}>
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>{rec.urgency === 'SAFETY' ? 'Immediate Safety Hazard' : 'Recommended'}</span>
+                      </span>
+
+                      {/* Documentation Status Badge */}
+                      {isRecComplete ? (
+                        <span className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Line {globalLineNum} Documented
+                        </span>
+                      ) : isRecPartiallyDone ? (
+                        <span className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Line {globalLineNum} Partially Documented
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold px-3.5 py-1.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300 flex items-center gap-1.5 shadow-2xs">
+                          Line {globalLineNum} Pending
+                        </span>
+                      )}
+
+                      {/* Clock In / Out Button for this recommendation line */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isClockedIn) {
+                            clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${globalLineNum}`);
+                          } else {
+                            clockInToRO(
+                              ro.id, 
+                              `Working on Line ${globalLineNum}: ${rec.serviceName.slice(0, 50)}`, 
+                              recPayType === 'WARRANTY' ? 'REPAIR' : 'GENERAL'
+                            );
+                          }
+                        }}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
+                          isClockedIn
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
+                        }`}
+                        title={
+                          isClockedIn 
+                            ? `Clocked in on RO #${ro.id} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
+                            : `Clock in to work on Line ${globalLineNum}`
+                        }
+                      >
+                        {isClockedIn ? (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                            <Square className="w-3 h-3 fill-white" />
+                            <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Clock In</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Add Past Punch Button directly to the right of Clock In */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPastPunchModal({ isOpen: true, lineNum: globalLineNum, concernText: rec.serviceName });
+                        }}
+                        className="px-3 py-1.5 rounded-full text-xs font-bold border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                        title={`Log a completed past labor punch for Line ${globalLineNum}`}
+                      >
+                        <History className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                        <span>+ Past Punch</span>
+                      </button>
+
+                      {/* Labor Hours requested input for Line (Syncs to Quote and Recommendation) */}
+                      <div 
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border-2 border-slate-300 shadow-2xs hover:border-blue-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all"
+                        title={`Enter labor hours for Line ${globalLineNum} — automatically updates the repair quote`}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider shrink-0">
+                          Hours:
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="99"
+                          placeholder="0.0"
+                          value={recHrs}
+                          onFocus={() => {
+                            focusedRecFieldRef.current = { recId: rec.id, field: 'hours' };
+                          }}
+                          onChange={(e) => handleRecHoursChange(rec.id, e.target.value, globalLineNum)}
+                          onBlur={() => {
+                            focusedRecFieldRef.current = null;
+                            const num = Math.max(0, Number(recHrs) || 0);
+                            updateRecommendedService(ro.id, rec.id, { laborHours: num });
+                            updateLineLaborHours(ro.id, globalLineNum - 1, recHrs || '0');
+                          }}
+                          className="w-12 text-xs font-extrabold text-slate-900 bg-transparent text-center focus:outline-hidden"
+                        />
+                        <span className="text-xs font-bold text-slate-500 pr-0.5">hrs</span>
+                      </div>
+
+                      {/* Remove Line Button directly to the right of hours */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteRecommendedService(ro.id, rec.id);
+                        }}
+                        className="px-3.5 py-1.5 rounded-full text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        title={`Remove Line ${globalLineNum}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>Remove Line</span>
+                      </button>
+
+                      {/* Request Parts for this line */}
+                      {onRequestParts && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRequestParts(globalLineNum - 1, rec.serviceName);
+                          }}
+                          className="px-3.5 py-1.5 rounded-full text-xs font-bold border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                          title={`Request required parts for Line ${globalLineNum} from the Parts Department`}
+                        >
+                          <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>Request Parts</span>
+                        </button>
+                      )}
+
+                      {/* Parts Requested Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingPartsLineIndex(viewingPartsLineIndex === (globalLineNum - 1) ? null : (globalLineNum - 1));
+                        }}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                          viewingPartsLineIndex === (globalLineNum - 1)
+                            ? 'bg-blue-700 text-white border-blue-800 ring-2 ring-blue-300'
+                            : lineParts.length > 0
+                            ? 'bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-300'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                        }`}
+                        title={`View parts requested for Line ${globalLineNum}`}
+                      >
+                        <Eye className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>Parts Requested</span>
+                        {lineParts.length > 0 && (
+                          <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                            viewingPartsLineIndex === (globalLineNum - 1) ? 'bg-white text-blue-900' : 'bg-blue-600 text-white'
+                          }`}>
+                            {lineParts.length}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 21-Point Inspection Finding Header banner */}
+                  <div className="bg-amber-100/80 p-2.5 rounded-lg border border-amber-300 text-xs flex items-start justify-between gap-2 shadow-2xs">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <Wrench className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-extrabold text-amber-950">
+                          <span>Line {globalLineNum} Inspection Finding: </span>
+                          <span className="text-blue-900">{rec.serviceName}</span>
+                        </div>
+                        {rec.notes && (
+                          <div className="text-[11px] text-amber-900 mt-0.5 italic">
+                            {rec.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Line {globalLineNum} Cause */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                        <span>Line {globalLineNum} Cause</span>
+                      </label>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={recCause}
+                      onFocus={() => {
+                        focusedRecFieldRef.current = { recId: rec.id, field: 'cause' };
+                      }}
+                      onChange={(e) => handleRecCauseChange(rec.id, e.target.value)}
+                      onBlur={() => {
+                        focusedRecFieldRef.current = null;
+                        updateRecommendedService(ro.id, rec.id, { cause: recCause });
+                      }}
+                      placeholder={`Type Line ${globalLineNum} cause...`}
+                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+
+                  {/* Line {globalLineNum} Correction */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                        <span>Line {globalLineNum} Correction</span>
+                      </label>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={recCorr}
+                      onFocus={() => {
+                        focusedRecFieldRef.current = { recId: rec.id, field: 'correction' };
+                      }}
+                      onChange={(e) => handleRecCorrectionChange(rec.id, e.target.value)}
+                      onBlur={() => {
+                        focusedRecFieldRef.current = null;
+                        updateRecommendedService(ro.id, rec.id, { correction: recCorr });
+                      }}
+                      placeholder={`Type Line ${globalLineNum} correction...`}
+                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+
+                  {/* Integrated Line Parts for this Recommendation Line */}
+                  <LinePartsSection ro={ro} lineNum={globalLineNum} />
+
+                  {/* Line Evidence & Inspection Photos */}
+                  <LinePhotoSection 
+                    roId={ro.id} 
+                    roLineNumber={globalLineNum} 
+                    concernIndex={globalLineNum - 1} 
+                    photos={ro.linePhotos} 
+                    lineTitle={rec.serviceName} 
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Option to Add Additional Concern Found Line */}
@@ -968,7 +1584,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                 className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-300 hover:border-blue-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5 text-blue-600" />
-                <span>+ Additional Concern Found Line {lines.length + 1}</span>
+                <span>+ Additional Concern Found Line {lines.length + recommendations.length + 1}</span>
               </button>
             </div>
           ) : (
@@ -976,7 +1592,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
               <div className="text-xs font-bold text-blue-900 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Plus className="w-4 h-4 text-blue-600" />
-                  <span>Additional Concern Found (Line {lines.length + 1})</span>
+                  <span>Additional Concern Found (Line {lines.length + recommendations.length + 1})</span>
                 </span>
                 <button 
                   type="button" 
@@ -1002,7 +1618,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   type="text"
                   value={newLineText}
                   onChange={(e) => setNewLineText(e.target.value)}
-                  placeholder={`Describe additional concern found for Line ${lines.length + 1} (e.g., Leaking water pump, worn front lower control arm bushings)...`}
+                  placeholder={`Describe additional concern found for Line ${lines.length + recommendations.length + 1} (e.g., Leaking water pump, worn front lower control arm bushings)...`}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
@@ -1052,7 +1668,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                     />
                     <Package className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Request Parts for Line {lines.length + 1}</span>
+                    <span>Request Parts for Line {lines.length + recommendations.length + 1}</span>
                   </label>
                 </div>
 
@@ -1075,16 +1691,16 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                     disabled={!newLineText.trim()}
                     className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer shadow-xs whitespace-nowrap"
                   >
-                    Add Line {lines.length + 1}
+                    Add Line {lines.length + recommendations.length + 1}
                   </button>
                 </div>
               </div>
             </form>
           )}
 
-          {/* Tech Quick Actions: ProDemand Labor Lookup & Quote Builder & Request Parts */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
-            <div className="flex items-center gap-2 flex-wrap">
+          {/* Tech Quick Actions: ProDemand Labor Lookup, Copy VIN, Current Miles, Miles Out & Quote Builder */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <a
                 href="https://www.prodemand.com"
                 target="_blank"
@@ -1110,6 +1726,18 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   <span>Copy VIN</span>
                 </button>
               )}
+
+              {/* Current Miles (Miles In) */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-800 rounded-lg text-xs font-bold border border-slate-300 shadow-2xs">
+                <Gauge className="w-3.5 h-3.5 text-slate-600" />
+                <span className="text-slate-500 font-medium">Current Miles:</span>
+                <span className="font-extrabold text-slate-900 font-mono">
+                  {ro.vehicle.mileage !== undefined ? `${Number(ro.vehicle.mileage).toLocaleString()} mi` : 'N/A'}
+                </span>
+              </div>
+
+              {/* Box for Miles Out */}
+              <InlineOutMilesBox ro={ro} />
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -1169,6 +1797,16 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Manual Past Punch Modal */}
+      {pastPunchModal?.isOpen && (
+        <TechPastPunchModal
+          ro={ro}
+          lineNum={pastPunchModal.lineNum}
+          lineDescription={pastPunchModal.concernText}
+          onClose={() => setPastPunchModal(null)}
+        />
       )}
     </div>
   );
@@ -1589,6 +2227,7 @@ export const TechDashboard: React.FC = () => {
 
   const [partsModalRO, setPartsModalRO] = useState<RepairOrder | null>(null);
   const [partsModalLine, setPartsModalLine] = useState<{ index?: number; text?: string }>({});
+  const [testDriveModalRO, setTestDriveModalRO] = useState<RepairOrder | null>(null);
 
   const canSelectPayType = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
   const canAssignTech = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
@@ -1615,6 +2254,12 @@ export const TechDashboard: React.FC = () => {
 
   const handleQuickStatus = (e: React.MouseEvent, roId: string, newStatus: ROStatus) => {
     e.stopPropagation();
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (newStatus === 'REPAIR_COMPLETE' && targetRO && !targetRO.outMileage && !targetRO.vehicle.outMileage) {
+      // Tech clicked "Repair Complete" — prompt for Out Miles if not yet entered!
+      setTestDriveModalRO(targetRO);
+      return;
+    }
     updateROStatus(roId, newStatus, `1-tap status updated to ${STATUS_CONFIG[newStatus]?.label || newStatus} by ${currentUser.name}`);
   };
 
@@ -1814,13 +2459,33 @@ export const TechDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={(e) => handleQuickStatus(e, ro.id, 'REPAIR_COMPLETE')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
                         normalizeROStatus(ro.status) === 'REPAIR_COMPLETE'
                           ? 'bg-teal-600 text-white shadow-xs'
                           : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                       }`}
+                      title={ro.outMileage ? `Repair complete. Out Miles: ${ro.outMileage} mi` : "Complete repair and enter test drive out miles"}
                     >
-                      Repair Complete
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Repair Complete</span>
+                      {ro.outMileage && (
+                        <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-teal-800 text-teal-100 font-bold">
+                          {Number(ro.outMileage).toLocaleString()} mi
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTestDriveModalRO(ro);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-300 transition-colors cursor-pointer flex items-center gap-1.5"
+                      title="Enter Out Miles from test drive"
+                    >
+                      <Gauge className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{ro.outMileage ? `Out: ${Number(ro.outMileage).toLocaleString()} mi` : '+ Out Miles'}</span>
                     </button>
 
                     <button
@@ -1893,12 +2558,12 @@ export const TechDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Tech Tools: ProDemand Labor Lookup, Repair Quote & Parts Request */}
+                {/* Tech Tools: ProDemand Labor Lookup, Copy VIN, Current Miles, Miles Out & Quote Builder */}
                 <div 
                   onClick={(e) => e.stopPropagation()}
-                  className="p-2.5 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border-2 border-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-2xs"
+                  className="p-2.5 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border-2 border-slate-300 flex flex-wrap items-center justify-between gap-2.5 shadow-2xs"
                 >
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <a
                       href="https://www.prodemand.com"
                       target="_blank"
@@ -1924,6 +2589,18 @@ export const TechDashboard: React.FC = () => {
                         <span>Copy VIN</span>
                       </button>
                     )}
+
+                    {/* Current Miles (Miles In) */}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-800 rounded-lg text-xs font-bold border border-slate-300 shadow-2xs">
+                      <Gauge className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="text-slate-500 font-medium">Current Miles:</span>
+                      <span className="font-extrabold text-slate-900 font-mono">
+                        {ro.vehicle.mileage !== undefined ? `${Number(ro.vehicle.mileage).toLocaleString()} mi` : 'N/A'}
+                      </span>
+                    </div>
+
+                    {/* Box for Miles Out */}
+                    <InlineOutMilesBox ro={ro} />
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
@@ -2016,9 +2693,6 @@ export const TechDashboard: React.FC = () => {
                   }} 
                 />
 
-                {/* Official Warranty Labor Time Clock & Multi-Punch Tracking */}
-                <WarrantyTimeClockSection ro={ro} />
-
                 {/* Technician Additional Recommended Services (21-Point Inspection & MPI Findings) */}
                 <TechRecommendationsSection 
                   ro={ro} 
@@ -2071,6 +2745,12 @@ export const TechDashboard: React.FC = () => {
           setPartsModalRO(null);
           setPartsModalLine({});
         }} 
+      />
+
+      {/* Technician Road Test & Out Miles Verification Modal */}
+      <TechTestDriveModal
+        ro={testDriveModalRO}
+        onClose={() => setTestDriveModalRO(null)}
       />
     </div>
   );

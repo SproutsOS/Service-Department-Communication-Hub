@@ -33,10 +33,19 @@ textarea.border-red-500 {
 }
 
 /* 
- * Official Clean Print Stylesheet for Warranty Documentation & Repair Quotes
+ * Official Clean Print Stylesheet for Dealership Records:
+ * 1. Warranty Repair & Labor Time Records (#printable-warranty-document)
+ * 2. Repair Estimates & Quotes (#printable-quote-document)
+ * 3. 21-Point Vehicle Multi-Point Inspection (#printable-inspection-document)
+ * 4. Daily Service Drive Appointment Schedule (#printable-appointment-document)
+ * 5. Staff Attendance & Out-of-Office Schedule (#printable-attendance-document)
  */
 @media screen {
-  #printable-quote-document {
+  #printable-quote-document,
+  #printable-warranty-document,
+  #printable-inspection-document,
+  #printable-appointment-document,
+  #printable-attendance-document {
     display: none !important;
   }
 }
@@ -51,9 +60,17 @@ textarea.border-red-500 {
     padding: 0 !important;
   }
 
-  /* When printing a quote, hide the interactive app tree completely */
+  /* When printing an official document, isolate it by hiding the interactive app tree completely */
   body.printing-quote #root,
-  body:has(#printable-quote-document) #root {
+  body.printing-warranty #root,
+  body.printing-inspection #root,
+  body.printing-appointment #root,
+  body.printing-attendance #root,
+  body:has(#printable-quote-document) #root,
+  body:has(#printable-warranty-document) #root,
+  body:has(#printable-inspection-document) #root,
+  body:has(#printable-appointment-document) #root,
+  body:has(#printable-attendance-document) #root {
     display: none !important;
   }
 
@@ -63,86 +80,79 @@ textarea.border-red-500 {
     display: none !important;
   }
 
-  /* Official Printable Repair Quote Document */
-  #printable-quote-document {
+  /* Official Printable Documents Base Layout */
+  #printable-quote-document,
+  #printable-warranty-document,
+  #printable-inspection-document,
+  #printable-appointment-document,
+  #printable-attendance-document {
     display: block !important;
     visibility: visible !important;
     position: static !important;
     width: 100% !important;
     max-width: 8.5in !important;
     margin: 0 auto !important;
-    padding: 0.25in !important;
+    padding: 0.3in !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
     overflow: visible !important;
   }
 
-  /* Keep each repair line item, table, and summary block intact so it never splits across page bottoms and tops */
+  /* Prevent page-break splits across page bottoms and tops */
   #printable-quote-document .quote-line-item,
   #printable-quote-document .quote-summary-block,
-  #printable-quote-document .break-inside-avoid,
-  #printable-quote-document [data-print-keep-together="true"],
-  #printable-quote-document table,
-  #printable-quote-document tr {
+  #printable-warranty-document .warranty-print-section,
+  #printable-inspection-document .inspection-print-section,
+  #printable-appointment-document .appointment-print-section,
+  #printable-attendance-document .attendance-print-section,
+  .break-inside-avoid,
+  [data-print-keep-together="true"],
+  table,
+  tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
     -webkit-column-break-inside: avoid !important;
   }
 
-  #printable-quote-document .quote-line-item {
-    overflow: visible !important;
-    display: block !important;
-    margin-bottom: 0.75rem !important;
-  }
-
-  /* Force all fonts in printable quote to be solid black (#000000) with uniform darkness and no lighter shades */
+  /* Force solid legible text colors with uniform darkness */
   #printable-quote-document,
-  #printable-quote-document * {
+  #printable-quote-document *,
+  #printable-warranty-document,
+  #printable-warranty-document *,
+  #printable-inspection-document,
+  #printable-inspection-document *,
+  #printable-appointment-document,
+  #printable-appointment-document *,
+  #printable-attendance-document,
+  #printable-attendance-document * {
     visibility: visible !important;
-    color: #000000 !important;
-    -webkit-text-fill-color: #000000 !important;
     opacity: 1 !important;
     text-shadow: none !important;
   }
 
-  /* Prevent dark inverted badges from having black text on black background when printed */
+  /* Prevent dark inverted badges from having unreadable text when printed */
   #printable-quote-document .bg-slate-950,
   #printable-quote-document .bg-slate-900,
-  #printable-quote-document .bg-slate-800 {
+  #printable-quote-document .bg-slate-800,
+  #printable-warranty-document .bg-slate-950,
+  #printable-warranty-document .bg-slate-900,
+  #printable-warranty-document .bg-slate-800,
+  #printable-inspection-document .bg-slate-950,
+  #printable-inspection-document .bg-slate-900,
+  #printable-inspection-document .bg-slate-800,
+  #printable-appointment-document .bg-slate-950,
+  #printable-appointment-document .bg-slate-900,
+  #printable-appointment-document .bg-slate-800,
+  #printable-attendance-document .bg-slate-950,
+  #printable-attendance-document .bg-slate-900,
+  #printable-attendance-document .bg-slate-800 {
     background-color: #f1f5f9 !important;
+    color: #000000 !important;
     border: 1.5px solid #000000 !important;
-  }
-
-  /* Support for printable warranty and inspection documents */
-  #printable-warranty-document,
-  #printable-inspection-document {
-    display: block !important;
-    visibility: visible !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0.35in !important;
-    background: #ffffff !important;
-    box-shadow: none !important;
-    border: none !important;
-    z-index: 99999 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    color-adjust: exact !important;
-  }
-
-  #printable-warranty-document *,
-  #printable-inspection-document * {
-    visibility: visible !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    color-adjust: exact !important;
   }
 }
 

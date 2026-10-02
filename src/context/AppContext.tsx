@@ -181,6 +181,7 @@ interface AppContextType {
   ) => void;
   deleteRepairOrder: (roId: string) => boolean;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
+  updateOutMileage: (roId: string, outMileage: number | undefined, notes?: string, completeRepair?: boolean) => boolean;
   addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string) => boolean;
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean; concernCauses?: string[]; concernCorrections?: string[] }) => boolean;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
@@ -517,7 +518,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEY_INSPECTION_CHECKLIST);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: InspectionChecklistItem) => {
+            if (item.id === 'insp_oil_fluid' && (!item.defaultRecommendationName || item.defaultRecommendationName === 'Engine Oil & Filter Service')) {
+              return { ...item, defaultRecommendationName: 'Oil and filter change overdue' };
+            }
+            return item;
+          });
+        }
       }
     } catch {
       // ignore
@@ -2153,13 +2161,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Update core entered repair order details (Service Manager & Advisor)
+  // Update core entered repair order details (Service Manager & Advisor, or Tech for Out Mileage)
   const updateRepairOrderDetails = (
     roId: string, 
     updates: Partial<RepairOrder>,
     options?: { isAutoSave?: boolean }
   ): boolean => {
-    const canEdit = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
+    const isTechUpdatingOutMiles = currentUser.role === 'TECHNICIAN' && (
+      updates.outMileage !== undefined || 
+      updates.testDriveNotes !== undefined ||
+      (updates.vehicle !== undefined && updates.vehicle.outMileage !== undefined)
+    );
+    const canEdit = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR' || isTechUpdatingOutMiles;
     if (!canEdit) {
       if (!options?.isAutoSave) {
         alert('Permission Denied: Only the Service Manager or Service Advisor has permission to modify core repair order records.');
@@ -2230,6 +2243,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     });
+    return true;
+  };
+
+  // Technician & Staff: Log Out Mileage when test drive is finished and repair is completed
+  const updateOutMileage = (
+    roId: string, 
+    outMileage: number | undefined, 
+    notes?: string, 
+    completeRepair?: boolean
+  ): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const now = new Date().toISOString();
+    const inMiles = targetRO.vehicle.mileage;
+    const numOut = outMileage !== undefined && outMileage !== null && !isNaN(Number(outMileage)) ? Number(outMileage) : undefined;
+    const testDriveDistance = numOut !== undefined && inMiles !== undefined ? Math.max(0, numOut - inMiles) : undefined;
+
+    const newStatus = completeRepair ? 'REPAIR_COMPLETE' : targetRO.status;
+    const historyNotes = completeRepair
+      ? `Repair completed & test drive finished by ${currentUser.name}. Out Miles: ${numOut ? `${numOut.toLocaleString()} mi` : 'Recorded'}${testDriveDistance !== undefined ? ` (+${testDriveDistance} mi test drive)` : ''}.${notes ? ` Notes: "${notes}"` : ''}`
+      : `Out Miles updated to ${numOut ? `${numOut.toLocaleString()} mi` : 'cleared'} by ${currentUser.name}.${notes ? ` Notes: "${notes}"` : ''}`;
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      status: newStatus,
+      outMileage: numOut,
+      vehicle: {
+        ...targetRO.vehicle,
+        outMileage: numOut
+      },
+      testDriveCompleted: numOut !== undefined,
+      testDriveNotes: notes !== undefined ? notes : targetRO.testDriveNotes,
+      testDriveCompletedAt: numOut !== undefined ? (targetRO.testDriveCompletedAt || now) : undefined,
+      testDriveCompletedBy: numOut !== undefined ? (targetRO.testDriveCompletedBy || currentUser.name) : undefined,
+      completedAt: completeRepair ? (targetRO.completedAt || now) : targetRO.completedAt,
+      history: [
+        ...targetRO.history,
+        {
+          id: `hist_${Date.now()}`,
+          status: newStatus,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: now,
+          notes: historyNotes
+        }
+      ]
+    };
+
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    syncRepairOrder(updatedRO);
+
+    if (completeRepair) {
+      triggerNotification(
+        updatedRO,
+        `✅ Repair & Test Drive Completed: #${targetRO.id}`,
+        `Technician ${currentUser.name} completed repairs and test drive for ${targetRO.customerName}. Out Miles: ${numOut ? `${numOut.toLocaleString()} mi` : 'Recorded'}. Ready for advisor review / customer pickup.`,
+        false,
+        'STATUS_CHANGE',
+        'SERVICE_ADVISOR',
+        targetRO.advisorId
+      );
+    } else {
+      triggerNotification(
+        updatedRO,
+        `🚗 Test Drive Out Miles: #${targetRO.id}`,
+        `${currentUser.name} recorded Out Miles: ${numOut ? `${numOut.toLocaleString()} mi` : 'Updated'} for ${targetRO.customerName}.`,
+        false,
+        'STATUS_CHANGE',
+        'SERVICE_ADVISOR',
+        targetRO.advisorId
+      );
+    }
+
     return true;
   };
 
@@ -3278,9 +3375,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           r.serviceName.toLowerCase() === (checklistItem?.defaultRecommendationName || updatedItem.name).toLowerCase()
         );
         const recName = checklistItem?.defaultRecommendationName || updatedItem.name;
-        const defaultCause = updatedItem.status === 'IMMEDIATE_ATTENTION'
-          ? `${updatedItem.name} inspected: Immediate safety concern / mechanical failure identified.`
-          : `${updatedItem.name} inspected: Future maintenance / attention recommended.`;
+        const defaultCause = '';
 
         const recNotes = [
           updatedItem.cause ? `Cause: ${updatedItem.cause}` : '',
@@ -3307,8 +3402,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             category: updatedItem.category === 'TIRES_WHEELS' ? 'TIRES' : updatedItem.category === 'BRAKES_SUSPENSION' ? 'BRAKES' : 'OTHER',
             urgency,
             notes: recNotes || undefined,
-            cause: defaultCause,
-            correction: `Perform ${recName}`,
+            cause: '',
+            correction: '',
             laborHours: updatedItem.category === 'TIRES_WHEELS' ? 1.0 : updatedItem.category === 'BRAKES_SUSPENSION' ? 2.0 : 0.5,
             payType: 'CUSTOMER_PAY',
             inspectionItemId: itemId,
@@ -3741,6 +3836,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const concernsList = (targetRO.concerns && targetRO.concerns.length > 0)
       ? targetRO.concerns
       : [targetRO.primaryConcern || 'General Diagnostic & Service'];
+    const recsList = targetRO.recommendations || [];
+
+    // If updating a recommendation line (lineIndex >= concernsList.length)
+    if (lineIndex >= concernsList.length) {
+      const recIdx = lineIndex - concernsList.length;
+      const targetRec = recsList[recIdx];
+      if (targetRec) {
+        updateRecommendedService(roId, targetRec.id, { laborHours: numHours });
+      }
+    }
 
     const linePayType: ConcernPayType = targetRO.concernPayTypes?.[lineIndex] || targetRO.quote?.payType || 'CUSTOMER_PAY';
     const hourlyRate = PAY_TYPE_RATES[linePayType] || targetRO.quote?.defaultLaborRate || 165.00;
@@ -3748,7 +3853,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const existingLaborItems: LaborLineItem[] = targetRO.quote?.laborItems ? [...targetRO.quote.laborItems] : [];
 
     // Ensure all concerns have mirrored labor items
-    const mirroredItems: LaborLineItem[] = concernsList.map((concern, idx) => {
+    const concernLaborItems: LaborLineItem[] = concernsList.map((concern, idx) => {
       const matched = existingLaborItems.find(item => item.roLineNumber === idx + 1);
       const itemPay = matched?.payType || targetRO.concernPayTypes?.[idx] || 'CUSTOMER_PAY';
       const itemRate = matched?.hourlyRate || PAY_TYPE_RATES[itemPay] || 165.00;
@@ -3772,9 +3877,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
+    // Ensure all recommendation lines also have mirrored labor items
+    const recLaborItems: LaborLineItem[] = recsList.map((rec, rIdx) => {
+      const globalLineNum = concernsList.length + rIdx + 1;
+      const matched = existingLaborItems.find(item => item.roLineNumber === globalLineNum);
+      const itemPay = matched?.payType || rec.payType || 'CUSTOMER_PAY';
+      const itemRate = matched?.hourlyRate || PAY_TYPE_RATES[itemPay] || 165.00;
+      const currentHours = lineIndex === globalLineNum - 1
+        ? numHours
+        : (matched?.laborHours !== undefined ? Number(matched.laborHours) || 0 : (rec.laborHours || 0));
+      const subtotal = Number((currentHours * itemRate).toFixed(2));
+      const correction = rec.correction || `Perform ${rec.serviceName}`;
+
+      return {
+        id: matched?.id || `labor_rec_${rec.id}`,
+        description: correction,
+        laborHours: currentHours,
+        hourlyRate: itemRate,
+        subtotal,
+        payType: itemPay,
+        roLineNumber: globalLineNum,
+        concernText: rec.serviceName,
+        correctionText: correction,
+        addedByAdvisor: false,
+      };
+    });
+
     // Keep advisor added lines if any
-    const advisorLines = existingLaborItems.filter(item => item.addedByAdvisor === true);
-    const updatedLaborItems = [...mirroredItems, ...advisorLines];
+    const advisorLines = existingLaborItems.filter(item => item.addedByAdvisor === true && (!item.roLineNumber || item.roLineNumber > concernsList.length + recsList.length));
+    const updatedLaborItems = [...concernLaborItems, ...recLaborItems, ...advisorLines];
 
     const totalLaborHours = Number(updatedLaborItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
     const totalLaborCost = Number(updatedLaborItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
@@ -4729,6 +4860,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerNotification,
         deleteRepairOrder,
         updateRepairOrderDetails,
+        updateOutMileage,
         addRepairOrderConcern,
         toggleCustomerTaxExempt,
         addVehiclePhoto,

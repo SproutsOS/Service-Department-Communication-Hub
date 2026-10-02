@@ -8,7 +8,7 @@ export const DEFAULT_INSPECTION_CHECKLIST: InspectionChecklistItem[] = [
     category: 'UNDER_HOOD',
     order: 1,
     isEnabled: true,
-    defaultRecommendationName: 'Engine Oil & Filter Service',
+    defaultRecommendationName: 'Oil and filter change overdue',
     quickChips: ['Oil Level Low / Dark', 'Oil Filter Leaking', 'Drain Plug Seep', 'Engine Sludge / Overdue Service'],
   },
   {

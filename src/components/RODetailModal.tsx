@@ -38,7 +38,8 @@ import {
   Camera,
   ListFilter,
   Receipt,
-  Copy
+  Copy,
+  Gauge
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
@@ -50,6 +51,7 @@ import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
+import { TechTestDriveSection } from './TechTestDriveSection';
 import { VehiclePhotoManager } from './VehiclePhotoManager';
 import { ROLineBreakdown } from './ROLineBreakdown';
 import { LinePartsSection } from './LinePartsSection';
@@ -112,6 +114,7 @@ export const RODetailModal: React.FC = () => {
   const [editVehicleModel, setEditVehicleModel] = useState(selectedRO?.vehicle.model || '');
   const [editVehicleVin, setEditVehicleVin] = useState(selectedRO?.vehicle.vin || '');
   const [editVehicleMileage, setEditVehicleMileage] = useState<number | string>(selectedRO?.vehicle.mileage ?? '');
+  const [editVehicleOutMileage, setEditVehicleOutMileage] = useState<number | string>(selectedRO?.outMileage ?? selectedRO?.vehicle.outMileage ?? '');
   const [editPrimaryConcern, setEditPrimaryConcern] = useState(selectedRO?.primaryConcern || '');
   const [editConcerns, setEditConcerns] = useState<string[]>(
     selectedRO?.concerns && selectedRO.concerns.length > 0
@@ -170,6 +173,7 @@ export const RODetailModal: React.FC = () => {
     setEditVehicleModel(selectedRO.vehicle.model || '');
     setEditVehicleVin(selectedRO.vehicle.vin || '');
     setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
+    setEditVehicleOutMileage(selectedRO.outMileage ?? selectedRO.vehicle.outMileage ?? '');
     setEditPrimaryConcern(selectedRO.primaryConcern || '');
     setEditConcerns(selectedRO.concerns && selectedRO.concerns.length > 0 ? selectedRO.concerns : [selectedRO.primaryConcern || '']);
     setEditConcernPayTypes(
@@ -228,16 +232,21 @@ export const RODetailModal: React.FC = () => {
       const finalConcernCauses = overrides?.concernCauses !== undefined ? overrides.concernCauses : editConcernCauses;
       const finalConcernCorrections = overrides?.concernCorrections !== undefined ? overrides.concernCorrections : editConcernCorrections;
 
+      const parsedOutMiles = editVehicleOutMileage !== '' && !isNaN(Number(editVehicleOutMileage)) ? Number(editVehicleOutMileage) : undefined;
+      const finalOutMileage = overrides?.outMileage !== undefined ? overrides.outMileage : (parsedOutMiles !== undefined ? parsedOutMiles : selectedRO.outMileage);
+
       updateRepairOrderDetails(selectedRO.id, {
         customerName: overrides?.customerName !== undefined ? overrides.customerName : editCustomerName.trim(),
         customerPhone: overrides?.customerPhone !== undefined ? overrides.customerPhone : editCustomerPhone.trim(),
+        outMileage: finalOutMileage,
         vehicle: {
           ...selectedRO.vehicle,
           year: overrides?.vehicle?.year !== undefined ? overrides.vehicle.year : (Number(editVehicleYear) || selectedRO.vehicle.year),
           make: overrides?.vehicle?.make !== undefined ? overrides.vehicle.make : editVehicleMake.trim(),
           model: overrides?.vehicle?.model !== undefined ? overrides.vehicle.model : editVehicleModel.trim(),
           vin: overrides?.vehicle?.vin !== undefined ? overrides.vehicle.vin : editVehicleVin.trim().toUpperCase(),
-          mileage: overrides?.vehicle?.mileage !== undefined ? overrides.vehicle.mileage : (Number(editVehicleMileage) || selectedRO.vehicle.mileage || 0)
+          mileage: overrides?.vehicle?.mileage !== undefined ? overrides.vehicle.mileage : (Number(editVehicleMileage) || selectedRO.vehicle.mileage || 0),
+          outMileage: finalOutMileage
         },
         primaryConcern: finalPrimary,
         concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
@@ -269,16 +278,20 @@ export const RODetailModal: React.FC = () => {
     const validConcerns = editConcerns.map(c => c.trim()).filter(Boolean);
     const finalPrimary = validConcerns[0] || editPrimaryConcern.trim() || selectedRO.primaryConcern;
 
+    const parsedOutMiles = editVehicleOutMileage !== '' && !isNaN(Number(editVehicleOutMileage)) ? Number(editVehicleOutMileage) : undefined;
+
     updateRepairOrderDetails(selectedRO.id, {
       customerName: editCustomerName.trim(),
       customerPhone: editCustomerPhone.trim(),
+      outMileage: parsedOutMiles,
       vehicle: {
         ...selectedRO.vehicle,
         year: Number(editVehicleYear) || selectedRO.vehicle.year,
         make: editVehicleMake.trim(),
         model: editVehicleModel.trim(),
         vin: editVehicleVin.trim().toUpperCase(),
-        mileage: Number(editVehicleMileage) || selectedRO.vehicle.mileage || 0
+        mileage: Number(editVehicleMileage) || selectedRO.vehicle.mileage || 0,
+        outMileage: parsedOutMiles
       },
       primaryConcern: finalPrimary,
       concerns: validConcerns.length > 0 ? validConcerns : [finalPrimary],
@@ -838,6 +851,7 @@ export const RODetailModal: React.FC = () => {
                       setEditVehicleModel(selectedRO.vehicle.model);
                       setEditVehicleVin(selectedRO.vehicle.vin);
                       setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
+                      setEditVehicleOutMileage(selectedRO.outMileage ?? selectedRO.vehicle.outMileage ?? '');
                       setEditPrimaryConcern(selectedRO.primaryConcern);
                       setEditPromisedTime(selectedRO.promisedTime);
                       setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
@@ -986,11 +1000,24 @@ export const RODetailModal: React.FC = () => {
                 <span>Copy VIN</span>
               </button>
               <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
-              <span className="font-bold text-slate-900 text-sm whitespace-nowrap shrink-0">
-                {selectedRO.vehicle.mileage !== undefined && selectedRO.vehicle.mileage !== null && Number(selectedRO.vehicle.mileage) > 0
-                  ? `${Number(selectedRO.vehicle.mileage).toLocaleString()} mi`
-                  : 'N/A'}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap whitespace-nowrap shrink-0">
+                <span className="font-bold text-slate-900 text-sm">
+                  {selectedRO.vehicle.mileage !== undefined && selectedRO.vehicle.mileage !== null && Number(selectedRO.vehicle.mileage) > 0
+                    ? `In: ${Number(selectedRO.vehicle.mileage).toLocaleString()} mi`
+                    : 'N/A'}
+                </span>
+                {(selectedRO.outMileage !== undefined || selectedRO.vehicle.outMileage !== undefined) && (
+                  <span className="font-bold text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                    <Gauge className="w-3 h-3 text-emerald-700" />
+                    <span>Out: {Number(selectedRO.outMileage ?? selectedRO.vehicle.outMileage).toLocaleString()} mi</span>
+                    {selectedRO.vehicle.mileage ? (
+                      <span className="text-[10px] text-emerald-700 font-semibold">
+                        (+{Math.max(0, Number(selectedRO.outMileage ?? selectedRO.vehicle.outMileage) - selectedRO.vehicle.mileage).toFixed(1)} mi)
+                      </span>
+                    ) : null}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1379,7 +1406,7 @@ export const RODetailModal: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Mileage (mi)
+                          In Mileage (Intake)
                         </label>
                         <input
                           type="number"
@@ -1399,8 +1426,42 @@ export const RODetailModal: React.FC = () => {
                           className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
                         />
                       </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Out Mileage (Test Drive)
+                          </label>
+                          {editVehicleOutMileage !== '' && editVehicleMileage !== '' && Number(editVehicleOutMileage) >= Number(editVehicleMileage) && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300">
+                              +{(Number(editVehicleOutMileage) - Number(editVehicleMileage)).toFixed(1)} mi
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          value={editVehicleOutMileage}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditVehicleOutMileage(val);
+                            const numVal = val !== '' && !isNaN(Number(val)) ? Number(val) : undefined;
+                            triggerManagerAutoSave({
+                              outMileage: numVal,
+                              vehicle: {
+                                ...selectedRO.vehicle,
+                                outMileage: numVal
+                              }
+                            });
+                          }}
+                          onBlur={flushManagerAutoSave}
+                          placeholder="e.g. 74504"
+                          className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                        />
+                      </div>
                     </div>
                   </div>
+
+                  {/* Road Test & Out Mileage Section */}
+                  <TechTestDriveSection ro={selectedRO} />
 
                   {/* Customer Complaints & Concerns Lines */}
                   <div className="bg-slate-50 p-3.5 rounded-xl border-2 border-slate-400 space-y-2.5">

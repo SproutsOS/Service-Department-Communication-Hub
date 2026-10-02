@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -2100,8 +2101,9 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
       {/* 5. PRINT SCHEDULE MODAL / SHEET */}
       {/* ======================================================== */}
       {isPrintModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-2xs">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        <>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-2xs no-print">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
             {/* Modal Controls */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between no-print">
               <div className="flex items-center gap-2">
@@ -2113,7 +2115,13 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    document.body.classList.add('printing-appointment');
+                    window.print();
+                    setTimeout(() => {
+                      document.body.classList.remove('printing-appointment');
+                    }, 1000);
+                  }}
                   className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" />
@@ -2129,8 +2137,8 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
               </div>
             </div>
 
-            {/* Printable Content */}
-            <div className="p-6 overflow-y-auto space-y-4 print:p-0">
+            {/* Screen Preview Content */}
+            <div className="p-6 overflow-y-auto space-y-4">
               <div className="border-b-2 border-slate-900 pb-3 flex justify-between items-start">
                 <div>
                   <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">{shopName || 'Precision Auto Service'}</h2>
@@ -2169,7 +2177,9 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
                           <div className="text-[11px] text-slate-600">{appt.customerPhone}</div>
                         </td>
                         <td className="border border-slate-300 p-2">
-                          <div className="font-bold text-slate-900">{appt.vehicleYear} {appt.vehicleMake} {appt.vehicleModel}</div>
+                          <div className="font-bold text-slate-900">
+                            {appt.vehicleYear ? `${appt.vehicleYear} ` : ''}{appt.vehicleMake} {appt.vehicleModel}
+                          </div>
                           {appt.vehicleVin && <div className="text-[10px] text-slate-500 font-mono">{appt.vehicleVin}</div>}
                         </td>
                         <td className="border border-slate-300 p-2 font-bold">
@@ -2188,11 +2198,106 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
 
               <div className="pt-4 flex justify-between text-xs text-slate-500">
                 <span>Precision Auto Dealership Management System</span>
-                <span>Page 1 of 1</span>
+                <span>{selectedDayAppointments.length} Total Appointments Scheduled</span>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Standalone Printable Document for Service Drive Log */}
+        {typeof document !== 'undefined' && createPortal(
+          <div 
+            id="printable-appointment-document"
+            className="bg-white text-black max-w-4xl mx-auto space-y-4 font-sans text-xs"
+          >
+            {/* Header */}
+            <div className="border-b-2 border-black pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-2xl font-black tracking-tight text-black uppercase">
+                    {shopName || 'Precision Dealership Service'}
+                  </div>
+                  <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
+                    SERVICE DRIVE DAILY APPOINTMENT & CHECK-IN LOG
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="inline-block px-3 py-1 bg-white text-black font-mono font-black text-sm rounded border-2 border-black">
+                    DATE: {selectedDateStr}
+                  </div>
+                  <div className="text-[11px] text-black font-bold mt-1 font-mono">
+                    Total Booked: {selectedDayAppointments.length} Appointments
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Appointment Roster Table */}
+            <div className="appointment-print-section space-y-1">
+              <table className="w-full text-left text-xs border-collapse border-2 border-black">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-black text-[10px] font-black uppercase">
+                    <th className="border-r border-black p-1.5 w-8 text-center">✓</th>
+                    <th className="border-r border-black p-1.5 w-20">Time</th>
+                    <th className="border-r border-black p-1.5 w-36">Customer & Phone</th>
+                    <th className="border-r border-black p-1.5 w-40">Vehicle & VIN</th>
+                    <th className="border-r border-black p-1.5 w-20">Type</th>
+                    <th className="border-r border-black p-1.5">Customer Requested Services / Concerns</th>
+                    <th className="p-1.5 w-24">Advisor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedDayAppointments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-4 text-center italic font-bold">
+                        No appointments booked for {selectedDateStr}.
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedDayAppointments.map((appt, i) => (
+                      <tr key={appt.id || i} className="border-b border-black/40">
+                        <td className="border-r border-black/40 p-1.5 text-center font-mono">
+                          [ &nbsp; ]
+                        </td>
+                        <td className="border-r border-black/40 p-1.5 font-mono font-black whitespace-nowrap">
+                          {appt.appointmentTime}
+                        </td>
+                        <td className="border-r border-black/40 p-1.5">
+                          <div className="font-black text-black">{appt.customerName}</div>
+                          <div className="text-[10px] text-black font-mono font-bold">{appt.customerPhone}</div>
+                        </td>
+                        <td className="border-r border-black/40 p-1.5">
+                          <div className="font-bold text-black">
+                            {appt.vehicleYear ? `${appt.vehicleYear} ` : ''}{appt.vehicleMake} {appt.vehicleModel}
+                          </div>
+                          {appt.vehicleVin && <div className="text-[9px] font-mono text-black">VIN: {appt.vehicleVin}</div>}
+                        </td>
+                        <td className="border-r border-black/40 p-1.5 font-bold uppercase text-[10px]">
+                          {appt.transportationType}
+                        </td>
+                        <td className="border-r border-black/40 p-1.5">
+                          <div className="font-bold text-black">{appt.serviceConcerns.join(', ')}</div>
+                          {appt.notes && <div className="text-[10px] italic mt-0.5">Note: {appt.notes}</div>}
+                        </td>
+                        <td className="p-1.5 font-bold text-black text-[11px]">
+                          {appt.advisorName}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Verification Sign-Off Footer */}
+            <div className="appointment-print-section pt-3 border-t-2 border-black flex justify-between items-center text-xs">
+              <span className="font-bold">Drive Manager / Greeter Signature: ____________________________________</span>
+              <span className="font-mono text-[10px]">Printed: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          </div>,
+          document.body
+        )}
+        </>
       )}
 
     </div>
