@@ -19,6 +19,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { WarrantyLaborTimePunch } from '../types';
 import { formatMilitaryDate, formatMilitaryTime, formatMilitaryDateTime } from '../utils/formatters';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 export const WarrantyPrintModal: React.FC = () => {
   const { 

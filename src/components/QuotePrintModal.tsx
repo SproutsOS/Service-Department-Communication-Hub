@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -35,22 +35,65 @@ export const QuotePrintModal: React.FC = () => {
 
   const [copied, setCopied] = useState(false);
 
-  // Close on Escape key
+  // Live RO and clean data
+  const liveRO = initialRO ? (repairOrders.find(r => r.id === initialRO.id) || initialRO) : null;
+  const cleanRO = liveRO ? cleanRO3700(liveRO) : null;
+
+  // Reliable native direct print
+  const handlePrint = useCallback(() => {
+    if (!cleanRO) return;
+    const roNumber = cleanRO.id || '';
+    const vehicleDesc = cleanRO.vehicle ? `${cleanRO.vehicle.year} ${cleanRO.vehicle.make} ${cleanRO.vehicle.model}` : '';
+    const title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
+    const prevTitle = document.title;
+    document.title = title;
+
+    document.body.classList.add('printing-quote');
+
+    const cleanup = () => {
+      document.body.classList.remove('printing-quote');
+      document.title = prevTitle;
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    setTimeout(cleanup, 1500);
+  }, [cleanRO]);
+
+  // Close on Escape key or trigger Print on Ctrl+P / Cmd+P
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         closeQuotePrintModal();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [closeQuotePrintModal]);
+  }, [closeQuotePrintModal, handlePrint]);
 
-  if (!initialRO) return null;
+  // Ensure clean print isolation if system print is triggered
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      document.body.classList.add('printing-quote');
+    };
+    const handleAfterPrint = () => {
+      document.body.classList.remove('printing-quote');
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+      document.body.classList.remove('printing-quote');
+    };
+  }, []);
 
-  // Always use latest live RO data from AppContext
-  const ro = repairOrders.find(r => r.id === initialRO.id) || initialRO;
-  const cleanRO = cleanRO3700(ro);
+  if (!cleanRO) return null;
+
   const quote = cleanRO.quote;
 
   const inMiles = cleanRO.vehicle.mileage ?? 0;
@@ -81,19 +124,6 @@ export const QuotePrintModal: React.FC = () => {
   const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
   const taxAmount = isTaxExempt ? 0 : (quote?.taxAmount ?? (taxableAmount * (taxRatePercent / 100)));
   const grandTotal = quote?.grandTotal ?? (taxableAmount + taxAmount);
-
-  const handlePrint = () => {
-    document.body.classList.add('printing-quote');
-    const originalTitle = document.title;
-    const roNumber = cleanRO.id || '';
-    const vehicleDesc = cleanRO.vehicle ? `${cleanRO.vehicle.year} ${cleanRO.vehicle.make} ${cleanRO.vehicle.model}` : '';
-    document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
-    window.print();
-    setTimeout(() => {
-      document.body.classList.remove('printing-quote');
-      document.title = originalTitle;
-    }, 1000);
-  };
 
   const handleCopySummary = () => {
     const lines: string[] = [
