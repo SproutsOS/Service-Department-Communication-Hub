@@ -2566,10 +2566,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const now = new Date().toISOString();
           const changeSummary = `Updated: ${Object.keys(updates).slice(0, 3).join(', ')}`;
+
+          // If concerns were updated / lines were removed, synchronize with recommendations, 21-point inspection items, and quote labor
+          let updatedRecommendations = updates.recommendations !== undefined 
+            ? (updates.recommendations ? [...updates.recommendations] : [])
+            : (ro.recommendations ? [...ro.recommendations] : []);
+          let updatedInspection = updates.inspection !== undefined ? updates.inspection : ro.inspection;
+          let cleanedQuote = updatedQuote;
+
+          if (updates.concerns && Array.isArray(updates.concerns)) {
+            const oldConcerns = ro.concerns && ro.concerns.length > 0 ? ro.concerns : [ro.primaryConcern || ''];
+            const newConcerns = updates.concerns;
+            const removedConcerns = oldConcerns.filter(oc => oc.trim() && !newConcerns.some(nc => nc.trim().toLowerCase() === oc.trim().toLowerCase()));
+
+            if (removedConcerns.length > 0) {
+              const removedSet = new Set(removedConcerns.map(c => c.trim().toLowerCase()));
+
+              // 1. Remove matching recommendations
+              const matchingRecs = updatedRecommendations.filter(r => 
+                removedSet.has(r.serviceName.trim().toLowerCase()) || 
+                (r.notes && removedSet.has(r.notes.trim().toLowerCase()))
+              );
+              const removedRecIds = new Set(matchingRecs.map(r => r.id));
+              const removedItemIds = new Set(matchingRecs.map(r => r.inspectionItemId).filter(Boolean));
+
+              if (removedRecIds.size > 0) {
+                updatedRecommendations = updatedRecommendations.filter(r => !removedRecIds.has(r.id));
+              }
+
+              // 2. Reset in 21-point inspection checklist
+              if (updatedInspection && updatedInspection.items) {
+                const newItems = { ...updatedInspection.items };
+                let inspChanged = false;
+                Object.keys(newItems).forEach(k => {
+                  const item = newItems[k];
+                  const itemName = (item.name || '').trim().toLowerCase();
+                  if (
+                    (item.recommendationId && removedRecIds.has(item.recommendationId)) ||
+                    removedItemIds.has(k) ||
+                    removedSet.has(itemName)
+                  ) {
+                    newItems[k] = {
+                      ...item,
+                      status: 'PASSED',
+                      recommendationId: undefined,
+                      notes: '',
+                    };
+                    inspChanged = true;
+                  }
+                });
+                if (inspChanged) {
+                  updatedInspection = {
+                    ...updatedInspection,
+                    items: newItems,
+                  };
+                }
+              }
+
+              // 3. Remove from quote labor items
+              if (cleanedQuote && cleanedQuote.laborItems && cleanedQuote.laborItems.length > 0) {
+                const filteredLabor = cleanedQuote.laborItems.filter(l => {
+                  if (removedRecIds.has(l.id.replace('labor_rec_', ''))) return false;
+                  if (l.concernText && removedSet.has(l.concernText.trim().toLowerCase())) return false;
+                  return true;
+                });
+                if (filteredLabor.length !== cleanedQuote.laborItems.length) {
+                  const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+                  const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+                  const totalPartsCost = Number(cleanedQuote.totalPartsCost || 0);
+                  const isExempt = cleanedQuote.isTaxExempt || false;
+                  const taxRate = isExempt ? 0 : (cleanedQuote.taxRate !== undefined ? cleanedQuote.taxRate : 0.07);
+                  const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
+                  const shopSupplies = cleanedQuote.shopSuppliesFee || 0;
+                  const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
+
+                  cleanedQuote = {
+                    ...cleanedQuote,
+                    laborItems: filteredLabor,
+                    totalLaborHours,
+                    totalLaborCost,
+                    taxAmount,
+                    grandTotal,
+                    updatedAt: new Date().toISOString(),
+                  };
+                }
+              }
+            }
+          }
+
           const updatedRO = {
             ...ro,
             ...updates,
-            quote: updatedQuote,
+            recommendations: updatedRecommendations,
+            inspection: updatedInspection,
+            quote: cleanedQuote,
             history: newHistory,
             updatedAt: now,
             lastChangeSummary: changeSummary,
@@ -3534,18 +3624,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const targetRO = prev.find(r => r.id === roId);
       if (!targetRO || !targetRO.recommendations) return prev;
 
+      const recToDelete = targetRO.recommendations.find(rec => rec.id === recId);
       const updatedRecs = targetRO.recommendations.filter(rec => rec.id !== recId);
+      const recNameLower = (recToDelete?.serviceName || '').trim().toLowerCase();
 
-      // Also clean up any inspection items that referenced this recommendationId
+      // 1. Clean up inspection checklist items (reset status to PASSED / OK)
       let updatedInspection = targetRO.inspection;
       if (targetRO.inspection && targetRO.inspection.items) {
         const newItems = { ...targetRO.inspection.items };
         let changed = false;
         Object.keys(newItems).forEach(k => {
-          if (newItems[k].recommendationId === recId) {
+          const item = newItems[k];
+          const itemNameLower = (item.name || '').trim().toLowerCase();
+          if (
+            item.recommendationId === recId || 
+            (recToDelete?.inspectionItemId && k === recToDelete.inspectionItemId) ||
+            (recNameLower && itemNameLower === recNameLower)
+          ) {
             newItems[k] = {
-              ...newItems[k],
+              ...item,
+              status: 'PASSED',
               recommendationId: undefined,
+              notes: '',
             };
             changed = true;
           }
@@ -3558,10 +3658,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      // 2. Clean up from targetRO.concerns if present
+      let updatedConcerns = targetRO.concerns ? [...targetRO.concerns] : (targetRO.primaryConcern ? [targetRO.primaryConcern] : []);
+      let updatedPayTypes = targetRO.concernPayTypes ? [...targetRO.concernPayTypes] : undefined;
+      let updatedTechIds = targetRO.concernTechIds ? [...targetRO.concernTechIds] : undefined;
+      let updatedTechNames = targetRO.concernTechNames ? [...targetRO.concernTechNames] : undefined;
+      let updatedCauses = targetRO.concernCauses ? [...targetRO.concernCauses] : undefined;
+      let updatedCorrections = targetRO.concernCorrections ? [...targetRO.concernCorrections] : undefined;
+      let updatedStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : undefined;
+
+      if (recNameLower && updatedConcerns.length > 0) {
+        const cIdx = updatedConcerns.findIndex(c => c.trim().toLowerCase() === recNameLower);
+        if (cIdx >= 0 && updatedConcerns.length > 1) {
+          updatedConcerns.splice(cIdx, 1);
+          if (updatedPayTypes) updatedPayTypes.splice(cIdx, 1);
+          if (updatedTechIds) updatedTechIds.splice(cIdx, 1);
+          if (updatedTechNames) updatedTechNames.splice(cIdx, 1);
+          if (updatedCauses) updatedCauses.splice(cIdx, 1);
+          if (updatedCorrections) updatedCorrections.splice(cIdx, 1);
+          if (updatedStatuses) updatedStatuses.splice(cIdx, 1);
+        } else if (cIdx === 0 && updatedConcerns.length === 1 && targetRO.primaryConcern && targetRO.primaryConcern.trim().toLowerCase() === recNameLower) {
+          updatedConcerns = ['General Inspection'];
+        }
+      }
+
+      // 3. Clean up from quote labor items
+      let updatedQuote = targetRO.quote;
+      if (targetRO.quote?.laborItems && targetRO.quote.laborItems.length > 0) {
+        const filteredLabor = targetRO.quote.laborItems.filter(l => {
+          if (l.id === `labor_rec_${recId}`) return false;
+          if (recNameLower && l.concernText && l.concernText.trim().toLowerCase() === recNameLower) return false;
+          return true;
+        });
+
+        if (filteredLabor.length !== targetRO.quote.laborItems.length) {
+          const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+          const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+          const totalPartsCost = Number(targetRO.quote.totalPartsCost || 0);
+          const isExempt = targetRO.quote.isTaxExempt || false;
+          const taxRate = isExempt ? 0 : (targetRO.quote.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
+          const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
+          const shopSupplies = targetRO.quote.shopSuppliesFee || 0;
+          const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
+
+          updatedQuote = {
+            ...targetRO.quote,
+            laborItems: filteredLabor,
+            totalLaborHours,
+            totalLaborCost,
+            taxAmount,
+            grandTotal,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+
       const updatedRO: RepairOrder = {
         ...targetRO,
+        concerns: updatedConcerns,
+        concernPayTypes: updatedPayTypes,
+        concernTechIds: updatedTechIds,
+        concernTechNames: updatedTechNames,
+        concernCauses: updatedCauses,
+        concernCorrections: updatedCorrections,
+        concernStatuses: updatedStatuses,
         inspection: updatedInspection,
         recommendations: updatedRecs,
+        quote: updatedQuote,
       };
 
       syncedRO = updatedRO;
@@ -3577,6 +3740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (syncedRO) {
       syncRepairOrder(syncedRO);
+      recordROChange(roId, 'Inspection recommendation line removed');
       return true;
     }
     return false;
@@ -3709,13 +3873,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // If status is changed to PASSED or NOT_APPLICABLE, remove any auto-generated recommendation line for this inspection item
       let updatedRecommendations = targetRO.recommendations ? [...targetRO.recommendations] : [];
+      let updatedConcerns = targetRO.concerns ? [...targetRO.concerns] : (targetRO.primaryConcern ? [targetRO.primaryConcern] : []);
+      let updatedPayTypes = targetRO.concernPayTypes ? [...targetRO.concernPayTypes] : undefined;
+      let updatedTechIds = targetRO.concernTechIds ? [...targetRO.concernTechIds] : undefined;
+      let updatedTechNames = targetRO.concernTechNames ? [...targetRO.concernTechNames] : undefined;
+      let updatedCauses = targetRO.concernCauses ? [...targetRO.concernCauses] : undefined;
+      let updatedCorrections = targetRO.concernCorrections ? [...targetRO.concernCorrections] : undefined;
+      let updatedStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : undefined;
+      let updatedQuote = targetRO.quote;
+
       if (updatedItem.status === 'PASSED' || updatedItem.status === 'NOT_APPLICABLE') {
-        updatedRecommendations = updatedRecommendations.filter(r => {
-          if (r.inspectionItemId && r.inspectionItemId === itemId) return false;
-          if (updatedItem.recommendationId && r.id === updatedItem.recommendationId) return false;
-          return true;
+        const defaultName = (checklistItem?.defaultRecommendationName || updatedItem.name || '').toLowerCase().trim();
+        const recsToRemove = updatedRecommendations.filter(r => {
+          if (r.inspectionItemId && r.inspectionItemId === itemId) return true;
+          if (updatedItem.recommendationId && r.id === updatedItem.recommendationId) return true;
+          if (r.serviceName && defaultName && r.serviceName.toLowerCase().trim() === defaultName) return true;
+          return false;
         });
+
+        const removedRecIds = new Set(recsToRemove.map(r => r.id));
+        const removedRecNames = new Set(recsToRemove.map(r => r.serviceName.toLowerCase().trim()));
+        if (defaultName) removedRecNames.add(defaultName);
+
+        updatedRecommendations = updatedRecommendations.filter(r => !removedRecIds.has(r.id));
         updatedItem.recommendationId = undefined;
+
+        // Clean up from concerns if present
+        if (removedRecNames.size > 0 && updatedConcerns.length > 0) {
+          const keepIndices = updatedConcerns.map((c, i) => (!removedRecNames.has(c.toLowerCase().trim()) ? i : -1)).filter(i => i >= 0);
+          if (keepIndices.length > 0 && keepIndices.length < updatedConcerns.length) {
+            updatedConcerns = keepIndices.map(i => updatedConcerns[i]);
+            if (updatedPayTypes) updatedPayTypes = keepIndices.map(i => updatedPayTypes![i]);
+            if (updatedTechIds) updatedTechIds = keepIndices.map(i => updatedTechIds![i]);
+            if (updatedTechNames) updatedTechNames = keepIndices.map(i => updatedTechNames![i]);
+            if (updatedCauses) updatedCauses = keepIndices.map(i => updatedCauses![i]);
+            if (updatedCorrections) updatedCorrections = keepIndices.map(i => updatedCorrections![i]);
+            if (updatedStatuses) updatedStatuses = keepIndices.map(i => updatedStatuses![i]);
+          } else if (keepIndices.length === 0 && targetRO.primaryConcern && !removedRecNames.has(targetRO.primaryConcern.toLowerCase().trim())) {
+            updatedConcerns = [targetRO.primaryConcern];
+          }
+        }
+
+        // Clean up from quote labor items
+        if (targetRO.quote?.laborItems && targetRO.quote.laborItems.length > 0 && (removedRecIds.size > 0 || removedRecNames.size > 0)) {
+          const filteredLabor = targetRO.quote.laborItems.filter(l => {
+            if (removedRecIds.has(l.id.replace('labor_rec_', ''))) return false;
+            if (l.concernText && removedRecNames.has(l.concernText.toLowerCase().trim())) return false;
+            return true;
+          });
+          if (filteredLabor.length !== targetRO.quote.laborItems.length) {
+            const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+            const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+            const totalPartsCost = Number(targetRO.quote.totalPartsCost || 0);
+            const isExempt = targetRO.quote.isTaxExempt || false;
+            const taxRate = isExempt ? 0 : (targetRO.quote.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
+            const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
+            const shopSupplies = targetRO.quote.shopSuppliesFee || 0;
+            const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
+
+            updatedQuote = {
+              ...targetRO.quote,
+              laborItems: filteredLabor,
+              totalLaborHours,
+              totalLaborCost,
+              taxAmount,
+              grandTotal,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+        }
       } else if (
         updatedItem.status === 'IMMEDIATE_ATTENTION' || updatedItem.status === 'FUTURE_ATTENTION'
       ) {
@@ -3769,8 +3995,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const updatedRO: RepairOrder = {
         ...targetRO,
+        concerns: updatedConcerns,
+        concernPayTypes: updatedPayTypes,
+        concernTechIds: updatedTechIds,
+        concernTechNames: updatedTechNames,
+        concernCauses: updatedCauses,
+        concernCorrections: updatedCorrections,
+        concernStatuses: updatedStatuses,
         inspection: updatedSheet,
         recommendations: updatedRecommendations,
+        quote: updatedQuote,
       };
 
       syncedRO = updatedRO;
