@@ -72,7 +72,8 @@ export const RepairQuoteModal: React.FC = () => {
     sendShopChatMessage,
     activeRoleView,
     shopName,
-    updateTechCauseAndCorrection
+    updateTechCauseAndCorrection,
+    openQuotePrintModal
   } = useApp();
 
   const isTech = currentUser.role === 'TECHNICIAN' || activeRoleView === 'TECHNICIAN';
@@ -995,16 +996,14 @@ export const RepairQuoteModal: React.FC = () => {
   };
 
   const handlePrint = () => {
-    document.body.classList.add('printing-quote');
-    const originalTitle = document.title;
-    const roNumber = activeQuoteRO?.id || '';
-    const vehicleDesc = activeQuoteRO?.vehicle ? `${activeQuoteRO.vehicle.year} ${activeQuoteRO.vehicle.make} ${activeQuoteRO.vehicle.model}` : '';
-    document.title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
-    window.print();
-    setTimeout(() => {
-      document.body.classList.remove('printing-quote');
-      document.title = originalTitle;
-    }, 1000);
+    try {
+      flushQuoteAutoSave();
+    } catch (e) {
+      console.error('Error flushing auto-save:', e);
+    }
+    if (activeQuoteRO) {
+      openQuotePrintModal(activeQuoteRO.id);
+    }
   };
 
   return (

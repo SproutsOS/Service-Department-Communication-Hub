@@ -79,6 +79,7 @@ export const RODetailModal: React.FC = () => {
     deleteRepairOrder,
     openDirectChat,
     openQuoteModal,
+    openQuotePrintModal,
     activeQuoteRO,
     openWarrantyPrintModal,
     updateConcernPayType,
@@ -871,7 +872,7 @@ export const RODetailModal: React.FC = () => {
                 </button>
               )}
 
-              {/* Top Edit Quote Button (Blue) - Directly to the left of Print Warranty */}
+              {/* Top Edit Quote Button (Blue) - Directly to the left of Print Quote */}
               <button
                 type="button"
                 id="header-edit-quote-btn"
@@ -886,6 +887,18 @@ export const RODetailModal: React.FC = () => {
                     (${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)})
                   </span>
                 )}
+              </button>
+
+              {/* Top Print Quote Button */}
+              <button
+                type="button"
+                id="header-print-quote-btn"
+                onClick={() => openQuotePrintModal(selectedRO.id)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer shadow-2xs shrink-0"
+                title="Preview and print official repair estimate & quote sheet"
+              >
+                <Printer className="w-3.5 h-3.5 text-blue-600" />
+                <span className="hidden sm:inline">Print Quote</span>
               </button>
 
               <button
@@ -1728,14 +1741,25 @@ export const RODetailModal: React.FC = () => {
                             Estimate / Quote Total (By Line & Totaled)
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => openQuoteModal(selectedRO.id)}
-                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Calculator className="w-3.5 h-3.5" />
-                          <span>{selectedRO.quote ? 'Open & Edit Full Quote' : '+ Initiate Repair Quote'}</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openQuotePrintModal(selectedRO.id)}
+                            className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer border border-white/20"
+                            title="Preview and print formatted repair estimate document"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-blue-300" />
+                            <span>Print Quote</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openQuoteModal(selectedRO.id)}
+                            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                            <span>{selectedRO.quote ? 'Open & Edit Full Quote' : '+ Initiate Repair Quote'}</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Line-by-line itemized totals summary */}
@@ -2364,6 +2388,16 @@ export const RODetailModal: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openQuotePrintModal(selectedRO.id)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer shadow-2xs"
+              title="Preview and print official repair estimate & customer quote"
+            >
+              <Printer className="w-3.5 h-3.5 text-blue-600" />
+              <span>Print Quote</span>
+            </button>
+
             <button
               type="button"
               onClick={() => openWarrantyPrintModal(selectedRO.id)}

@@ -297,6 +297,11 @@ interface AppContextType {
   openWarrantyPrintModal: (roId: string) => void;
   closeWarrantyPrintModal: () => void;
 
+  // Repair Quote / Estimate Print Feature
+  activeQuotePrintRO: RepairOrder | null;
+  openQuotePrintModal: (roId: string) => void;
+  closeQuotePrintModal: () => void;
+
   // Service Manager Staff Attendance & Calendar (Service Manager Only)
   staffLeaveEntries: StaffLeaveEntry[];
   addStaffLeaveEntry: (entry: Omit<StaffLeaveEntry, 'id' | 'createdAt' | 'createdByManagerId' | 'createdByManagerName'>) => boolean;
@@ -505,6 +510,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedROId, setSelectedROId] = useState<string | null>(null);
   const [selectedROModalTab, setSelectedROModalTab] = useState<'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null>(null);
   const [quoteModalROId, setQuoteModalROId] = useState<string | null>(null);
+  const [quotePrintROId, setQuotePrintROId] = useState<string | null>(null);
   const [warrantyPrintROId, setWarrantyPrintROId] = useState<string | null>(null);
   const [isNewROModalOpen, setIsNewROModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -922,6 +928,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [repairOrders, quoteModalROId]);
 
   const activeWarrantyPrintRO = repairOrders.find(ro => ro.id === warrantyPrintROId) || null;
+  const activeQuotePrintRO = useMemo(() => {
+    const found = repairOrders.find(ro => ro.id === quotePrintROId);
+    return found ? cleanRO3700(found) : null;
+  }, [repairOrders, quotePrintROId]);
 
   const setSelectedRO = (ro: RepairOrder | null, tab?: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS') => {
     setSelectedROId(ro ? ro.id : null);
@@ -951,6 +961,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const closeWarrantyPrintModal = () => {
     setWarrantyPrintROId(null);
+  };
+
+  const openQuotePrintModal = (roId: string) => {
+    setQuotePrintROId(roId);
+  };
+
+  const closeQuotePrintModal = () => {
+    setQuotePrintROId(null);
   };
 
   const setCurrentUser = (user: User) => {
@@ -4914,6 +4932,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeWarrantyPrintRO,
         openWarrantyPrintModal,
         closeWarrantyPrintModal,
+        activeQuotePrintRO,
+        openQuotePrintModal,
+        closeQuotePrintModal,
         activeRoleView,
         setActiveRoleView,
         staffLeaveEntries,

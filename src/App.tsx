@@ -15,6 +15,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { RepairQuoteModal } from './components/RepairQuoteModal';
 import { WarrantyPrintModal } from './components/WarrantyPrintModal';
+import { QuotePrintModal } from './components/QuotePrintModal';
 import { CustomerDirectoryModal } from './components/CustomerDirectoryModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
@@ -878,6 +879,7 @@ const MainContent: React.FC = () => {
         <RepairQuoteModal />
       </ErrorBoundary>
       <WarrantyPrintModal />
+      <QuotePrintModal />
       <CustomerDirectoryModal />
       <UrgentToastStack />
 

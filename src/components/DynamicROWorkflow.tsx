@@ -24,6 +24,7 @@ import {
   Pencil,
   Plus,
   Receipt,
+  Printer,
   X
 } from 'lucide-react';
 import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome, LineApprovalStatus } from '../types';
@@ -95,7 +96,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   addRepairOrderConcern,
   isTechScreen = false
 }) => {
-  const { updateConcernStatus } = useApp();
+  const { updateConcernStatus, openQuotePrintModal } = useApp();
   const ro = cleanRO3700(rawRO);
   const [smartWorkflowOrder, setSmartWorkflowOrder] = useState<boolean>(true);
   const [quickTechCause, setQuickTechCause] = useState<string>(ro.cause || '');
@@ -984,6 +985,15 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openQuotePrintModal(ro.id)}
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer border border-white/20"
+                      title="Preview and print formatted repair estimate"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-blue-300" />
+                      <span>Print Quote</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => openQuoteModal(ro.id)}
