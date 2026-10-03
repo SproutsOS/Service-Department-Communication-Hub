@@ -55,6 +55,18 @@ export const TICKET_FLOW_STEPS: FlowStepConfig[] = [
     description: 'Technician actively scanning, diagnosing, and inspecting',
   },
   {
+    key: 'DIAG_PAUSED',
+    label: 'Diag Paused',
+    shortLabel: 'Diag Paused',
+    stepNumber: 2,
+    badgeClass: 'bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-yellow-300',
+    borderClass: 'border-yellow-400',
+    bgClass: 'bg-yellow-50',
+    textClass: 'text-yellow-800',
+    icon: 'PauseCircle',
+    description: 'Diagnosis paused pending customer info, parts, or tech break',
+  },
+  {
     key: 'ESTIMATE_DONE',
     label: 'Estimate Done',
     shortLabel: 'Estimate Done',
@@ -194,6 +206,13 @@ export const STATUS_CONFIG: Record<
     borderClass: 'border-blue-400',
     icon: 'Wrench',
     description: 'Technician actively scanning, diagnosing, and inspecting',
+  },
+  DIAG_PAUSED: {
+    label: 'Diag Paused',
+    badgeClass: 'bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full uppercase px-2.5 py-0.5 border border-yellow-300',
+    borderClass: 'border-yellow-400',
+    icon: 'PauseCircle',
+    description: 'Diagnosis paused pending customer info, parts, or tech break',
   },
   ESTIMATE_DONE: {
     label: 'Estimate Done',
@@ -357,6 +376,10 @@ export function normalizeROStatus(status: string): string {
     case 'IN_BAY':
     case 'IN_DIAG':
       return 'IN_DIAG';
+    case 'DIAG_PAUSED':
+    case 'PAUSED_DIAG':
+    case 'DIAGNOSTIC_PAUSED':
+      return 'DIAG_PAUSED';
     case 'GETTING_ESTIMATE':
     case 'ESTIMATE_DONE':
       return 'ESTIMATE_DONE';

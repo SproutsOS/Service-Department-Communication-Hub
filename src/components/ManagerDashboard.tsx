@@ -26,7 +26,7 @@ import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
 import { ROStatus, RepairOrder } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
-import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince, sortROsNumerically } from '../utils/formatters';
+import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince, sortROsNumerically, matchesROSearch } from '../utils/formatters';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
@@ -143,13 +143,7 @@ export const ManagerDashboard: React.FC = () => {
     if (advisorFilter !== 'ALL' && ro.advisorId !== advisorFilter && ro.advisorName !== advisorFilter) return false;
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchRO = ro.id.toLowerCase().includes(q);
-      const matchCustomer = ro.customerName.toLowerCase().includes(q);
-      const matchVehicle = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`.toLowerCase().includes(q);
-      const matchTech = ro.techName?.toLowerCase().includes(q);
-      const matchPart = ro.parts.some(p => p.partNumber.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-      return matchRO || matchCustomer || matchVehicle || matchTech || matchPart;
+      return matchesROSearch(ro, searchQuery, users);
     }
 
     return true;

@@ -37,7 +37,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { ROStatus, RepairOrder, ConcernPayType, WarrantyOperationType } from '../types';
-import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField, sortROsNumerically } from '../utils/formatters';
+import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField, sortROsNumerically, matchesROSearch } from '../utils/formatters';
 import { ROCard } from './ROCard';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { LinePartsSection } from './LinePartsSection';
@@ -2283,7 +2283,6 @@ export const TechDashboard: React.FC = () => {
   const [partsModalLine, setPartsModalLine] = useState<{ index?: number; text?: string }>({});
   const [testDriveModalRO, setTestDriveModalRO] = useState<RepairOrder | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
 
   // Filter to this technician's assigned ROs (primary tech or assigned to an individual line)
   const myROs = repairOrders.filter(ro => ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id));
@@ -2294,35 +2293,17 @@ export const TechDashboard: React.FC = () => {
     normalizeROStatus(ro.status) !== 'REPAIR_COMPLETE' && 
     normalizeROStatus(ro.status) !== 'READY_FOR_PICKUP'
   );
-  const completedROs = myROs.filter(ro => 
-    ro.status === 'CLOSED' || 
-    ro.status === 'COMPLETED' || 
-    normalizeROStatus(ro.status) === 'REPAIR_COMPLETE' || 
-    normalizeROStatus(ro.status) === 'READY_FOR_PICKUP'
-  );
 
   const filterAndSortROs = (list: RepairOrder[]) => {
     let filtered = list;
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      filtered = list.filter(ro => {
-        const matchRO = ro.id.toLowerCase().includes(q);
-        const matchCustomer = ro.customerName.toLowerCase().includes(q);
-        const matchPhone = (ro.customerPhone || '').includes(q);
-        const matchVehicle = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`.toLowerCase().includes(q);
-        const matchVin = (ro.vehicle.vin || '').toLowerCase().includes(q);
-        const matchConcern = (ro.concerns || [ro.primaryConcern || '']).some(c => c.toLowerCase().includes(q));
-        const matchParts = (ro.parts || []).some(p => p.partNumber?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
-        const matchAdvisor = (ro.advisorName || '').toLowerCase().includes(q);
-        return matchRO || matchCustomer || matchPhone || matchVehicle || matchVin || matchConcern || matchParts || matchAdvisor;
-      });
+      filtered = list.filter(ro => matchesROSearch(ro, searchQuery, users));
     }
     return sortROsNumerically(filtered);
   };
 
   const filteredActiveROs = filterAndSortROs(activeROs);
-  const filteredCompletedROs = filterAndSortROs(completedROs);
-  const displayList = activeTab === 'ACTIVE' ? filteredActiveROs : filteredCompletedROs;
+  const displayList = filteredActiveROs;
 
   return (
     <div className="space-y-6">
@@ -2374,6 +2355,12 @@ export const TechDashboard: React.FC = () => {
             </span>
           </div>
           <div>
+            <span className="text-yellow-400 text-[11px] uppercase font-bold tracking-wider block">Diag Paused:</span>
+            <span className="text-2xl font-black text-yellow-300 mt-1 block">
+              {myROs.filter(r => normalizeROStatus(r.status) === 'DIAG_PAUSED').length}
+            </span>
+          </div>
+          <div>
             <span className="text-indigo-400 text-[11px] uppercase font-bold tracking-wider block">Waiting on Approval:</span>
             <span className="text-2xl font-black text-indigo-300 mt-1 block">
               {myROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE' || normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL' || normalizeROStatus(r.status) === 'APPROVED').length}
@@ -2391,41 +2378,19 @@ export const TechDashboard: React.FC = () => {
               {myROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS').length}
             </span>
           </div>
-          <div>
-            <span className="text-emerald-400 text-[11px] uppercase font-bold tracking-wider block">Finished:</span>
-            <span className="text-2xl font-black text-emerald-400 mt-1 block">
-              {completedROs.length}
-            </span>
-          </div>
         </div>
       </div>
 
-      {/* Tab Switcher & Search Bar to the right of Finished */}
+      {/* Action Row & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setActiveTab('ACTIVE')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-              activeTab === 'ACTIVE' 
-                ? 'bg-blue-600 text-white shadow-xs' 
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Active Repair Orders ({filteredActiveROs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('COMPLETED')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-              activeTab === 'COMPLETED' 
-                ? 'bg-blue-600 text-white shadow-xs' 
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Finished ({filteredCompletedROs.length})
-          </button>
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-black text-blue-900 shadow-2xs">
+            <Wrench className="w-3.5 h-3.5 text-blue-600" />
+            <span>Active Repair Orders ({filteredActiveROs.length})</span>
+          </div>
         </div>
 
-        {/* Search Bar directly to the right of Finished */}
+        {/* Search Bar */}
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input

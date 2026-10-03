@@ -25,7 +25,7 @@ import { normalizeROStatus } from '../data/mockData';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
-import { sortROsNumerically } from '../utils/formatters';
+import { sortROsNumerically, matchesROSearch } from '../utils/formatters';
 
 export const AdvisorDashboard: React.FC = () => {
   const { 
@@ -124,12 +124,7 @@ export const AdvisorDashboard: React.FC = () => {
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchRO = ro.id.toLowerCase().includes(q);
-      const matchCust = ro.customerName.toLowerCase().includes(q);
-      const matchVeh = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`.toLowerCase().includes(q);
-      const matchTech = ro.techName?.toLowerCase().includes(q);
-      return matchRO || matchCust || matchVeh || matchTech;
+      return matchesROSearch(ro, searchQuery, users);
     }
 
     return true;
@@ -591,14 +586,24 @@ export const AdvisorDashboard: React.FC = () => {
           {/* Search Filter & View Mode Toggle */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-600 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Filter my ROs by customer, vehicle, RO number, or technician..."
+                placeholder="Search by RO #, customer, vehicle, tech name or # (e.g. 101)..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full text-sm pl-9 pr-3 py-1.5 bg-white border-2 border-slate-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs text-slate-900 placeholder:text-slate-500 font-medium"
+                className="w-full text-sm pl-9 pr-8 py-1.5 bg-white border-2 border-slate-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs text-slate-900 placeholder:text-slate-500 font-medium"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm font-bold cursor-pointer"
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
             </div>
 
             {/* Card View vs Line View Toggle */}

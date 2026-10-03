@@ -1,3 +1,5 @@
+import { RepairOrder, User } from '../types';
+
 const MONTH_NAMES_UPPER = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 export function formatMilitaryDate(dateInput?: string | number | Date): string {
@@ -492,5 +494,172 @@ export function compareROsNumerically(a: { id?: string; roNumber?: string }, b: 
  */
 export function sortROsNumerically<T extends { id?: string; roNumber?: string }>(ros: T[]): T[] {
   return [...ros].sort(compareROsNumerically);
+}
+
+/**
+ * Comprehensive search matching function for Repair Orders.
+ * Supports searching by:
+ * - Technician Name (primary tech, line-level assigned techs, time clock punches)
+ * - Technician Number / Employee Number (e.g. "101", "#101", "Tech 101", "Tech #102")
+ * - Technician User ID / Employee ID
+ * - RO Number / ID ("RO-10488", "10488", "#10488")
+ * - Customer Name & Customer Phone (including digits)
+ * - Vehicle (Year, Make, Model, VIN, License Plate, Color)
+ * - Advisor Name
+ * - Service Bay
+ * - Customer Complaints / Line Items / Parts (part number, description)
+ */
+export function matchesROSearch(
+  ro: RepairOrder,
+  searchQuery: string,
+  users?: User[]
+): boolean {
+  if (!searchQuery || !searchQuery.trim()) return true;
+
+  const rawQuery = searchQuery.trim().toLowerCase();
+  // Strip leading prefixes like "ro-", "ro #", "ro ", "tech ", "tech #", "technician ", "#"
+  const cleanQuery = rawQuery
+    .replace(/^(ro\s*#?|ro-|#)/i, '')
+    .replace(/^(tech\s*#?|technician\s*#?)/i, '')
+    .trim();
+
+  // 1. Match RO Number / ID
+  const roIdLower = ro.id.toLowerCase();
+  if (roIdLower.includes(rawQuery) || (cleanQuery && roIdLower.includes(cleanQuery))) {
+    return true;
+  }
+  const roNumeric = extractRONumber(ro.id);
+  if (cleanQuery && /^\d+$/.test(cleanQuery) && roNumeric === parseInt(cleanQuery, 10)) {
+    return true;
+  }
+
+  // 2. Match Customer Name & Phone Number
+  if (ro.customerName && ro.customerName.toLowerCase().includes(rawQuery)) return true;
+  if (ro.customerPhone) {
+    if (ro.customerPhone.toLowerCase().includes(rawQuery)) return true;
+    const rawPhoneDigits = ro.customerPhone.replace(/\D/g, '');
+    const queryDigits = rawQuery.replace(/\D/g, '');
+    if (queryDigits.length >= 3 && rawPhoneDigits.includes(queryDigits)) return true;
+  }
+
+  // 3. Match Vehicle Details
+  const vehicleStr = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} ${ro.vehicle.vin || ''} ${ro.vehicle.licensePlate || ''} ${ro.vehicle.color || ''}`.toLowerCase();
+  if (vehicleStr.includes(rawQuery)) return true;
+  if (cleanQuery && vehicleStr.includes(cleanQuery)) return true;
+
+  // 4. Match Technician Name, Tech Number / Employee Number, and Tech ID
+  // Primary Assigned Tech
+  if (ro.techName && ro.techName.toLowerCase().includes(rawQuery)) return true;
+  if (cleanQuery && ro.techName && ro.techName.toLowerCase().includes(cleanQuery)) return true;
+  if (ro.techId && ro.techId.toLowerCase() === rawQuery) return true;
+
+  // Line-Level Assigned Techs
+  if (ro.concernTechNames && ro.concernTechNames.some(tn => tn && (tn.toLowerCase().includes(rawQuery) || (cleanQuery && tn.toLowerCase().includes(cleanQuery))))) {
+    return true;
+  }
+  if (ro.concernTechIds && ro.concernTechIds.some(tid => tid && tid.toLowerCase() === rawQuery)) {
+    return true;
+  }
+
+  // Tech User Lookup (by employeeNumber, ID, name)
+  if (users && users.length > 0) {
+    // Gather all tech IDs tied to this RO
+    const assignedTechIds = new Set<string>();
+    if (ro.techId) assignedTechIds.add(ro.techId);
+    if (ro.concernTechIds) {
+      ro.concernTechIds.forEach(id => {
+        if (id) assignedTechIds.add(id);
+      });
+    }
+
+    for (const techId of assignedTechIds) {
+      const u = users.find(user => user.id === techId);
+      if (u) {
+        if (u.name.toLowerCase().includes(rawQuery)) return true;
+        if (cleanQuery && u.name.toLowerCase().includes(cleanQuery)) return true;
+        if (u.employeeNumber) {
+          const emp = u.employeeNumber.toLowerCase();
+          if (
+            emp === rawQuery ||
+            emp === cleanQuery ||
+            `#${emp}` === rawQuery ||
+            `tech ${emp}` === rawQuery ||
+            `tech #${emp}` === rawQuery ||
+            emp.includes(cleanQuery)
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+
+    // Match query against any technician user in system, then check if assigned to this RO
+    const matchingTechUsers = users.filter(u => {
+      const matchName = u.name.toLowerCase().includes(rawQuery) || (cleanQuery && u.name.toLowerCase().includes(cleanQuery));
+      const matchEmp = u.employeeNumber && (
+        u.employeeNumber.toLowerCase() === rawQuery ||
+        u.employeeNumber.toLowerCase() === cleanQuery ||
+        `#${u.employeeNumber.toLowerCase()}` === rawQuery ||
+        `tech ${u.employeeNumber.toLowerCase()}` === rawQuery ||
+        `tech #${u.employeeNumber.toLowerCase()}` === rawQuery ||
+        u.employeeNumber.toLowerCase().includes(cleanQuery)
+      );
+      const matchId = u.id.toLowerCase() === rawQuery;
+      return matchName || matchEmp || matchId;
+    });
+
+    if (matchingTechUsers.length > 0) {
+      const matchingTechIds = new Set(matchingTechUsers.map(u => u.id));
+      const matchingTechNames = new Set(matchingTechUsers.map(u => u.name.toLowerCase()));
+
+      if (ro.techId && matchingTechIds.has(ro.techId)) return true;
+      if (ro.techName && matchingTechNames.has(ro.techName.toLowerCase())) return true;
+      if (ro.concernTechIds && ro.concernTechIds.some(id => id && matchingTechIds.has(id))) return true;
+      if (ro.concernTechNames && ro.concernTechNames.some(name => name && matchingTechNames.has(name.toLowerCase()))) return true;
+    }
+  }
+
+  // Time clock punches (technician employee number and punch tech name)
+  if (ro.timePunches && ro.timePunches.length > 0) {
+    const matchPunch = ro.timePunches.some(punch => {
+      if (punch.techName && punch.techName.toLowerCase().includes(rawQuery)) return true;
+      if (cleanQuery && punch.techName && punch.techName.toLowerCase().includes(cleanQuery)) return true;
+      if (punch.techEmployeeNumber) {
+        const emp = punch.techEmployeeNumber.toLowerCase();
+        if (
+          emp === rawQuery ||
+          emp === cleanQuery ||
+          `#${emp}` === rawQuery ||
+          `tech ${emp}` === rawQuery ||
+          `tech #${emp}` === rawQuery ||
+          emp.includes(cleanQuery)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+    if (matchPunch) return true;
+  }
+
+  // 5. Match Advisor Name
+  if (ro.advisorName && ro.advisorName.toLowerCase().includes(rawQuery)) return true;
+
+  // 6. Match Bay
+  if (ro.bay && ro.bay.toLowerCase().includes(rawQuery)) return true;
+
+  // 7. Match Customer Concerns & Line Items
+  if (ro.primaryConcern && ro.primaryConcern.toLowerCase().includes(rawQuery)) return true;
+  if (ro.concerns && ro.concerns.some(c => c && c.toLowerCase().includes(rawQuery))) return true;
+  if (ro.diagnosticNotes && ro.diagnosticNotes.toLowerCase().includes(rawQuery)) return true;
+  if (ro.cause && ro.cause.toLowerCase().includes(rawQuery)) return true;
+  if (ro.correction && ro.correction.toLowerCase().includes(rawQuery)) return true;
+
+  // 8. Match Parts
+  if (ro.parts && ro.parts.some(p => (p.partNumber && p.partNumber.toLowerCase().includes(rawQuery)) || (p.description && p.description.toLowerCase().includes(rawQuery)))) {
+    return true;
+  }
+
+  return false;
 }
 

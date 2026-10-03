@@ -28,6 +28,7 @@ export type ROStatus =
   // User Requested Ticket Flow
   | 'WAITING_DIAGNOSTICS'
   | 'IN_DIAG'
+  | 'DIAG_PAUSED'
   | 'ESTIMATE_DONE'
   | 'WAITING_FOR_APPROVAL'
   | 'APPROVED'
