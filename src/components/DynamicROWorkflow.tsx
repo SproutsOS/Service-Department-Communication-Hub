@@ -265,7 +265,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
     }
 
     // 11. Overdue Cadence
-    if (cadence.isOverdue || cadence.isDueToday) {
+    if (!isTechScreen && (cadence.isOverdue || cadence.isDueToday)) {
       return {
         id: 'FOLLOWUP_CADENCE',
         sectionKey: 'section-cadence',
@@ -366,11 +366,11 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  {ro.techId 
-                    ? `Primary technician assigned for diagnostics and repairs. Vehicle placed in ${ro.techName}'s queue.`
-                    : 'Select a technician from the shop roster to assign primary responsibility for this repair order.'}
-                </p>
+                {!ro.techId && (
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Select a technician from the shop roster to assign primary responsibility for this repair order.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1678,16 +1678,21 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
 
   // Dynamic sorting: When smartWorkflowOrder is enabled, the section matching activeAction.sectionKey is placed at index 0!
   const sortedSections = useMemo(() => {
+    const list = sections.filter(sec => {
+      if (isTechScreen && sec.key === 'section-cadence') return false;
+      return true;
+    });
+
     if (!smartWorkflowOrder || !activeAction.sectionKey) {
-      return [...sections].sort((a, b) => a.naturalOrder - b.naturalOrder);
+      return [...list].sort((a, b) => a.naturalOrder - b.naturalOrder);
     }
 
-    return [...sections].sort((a, b) => {
+    return [...list].sort((a, b) => {
       if (a.key === activeAction.sectionKey) return -1;
       if (b.key === activeAction.sectionKey) return 1;
       return a.naturalOrder - b.naturalOrder;
     });
-  }, [smartWorkflowOrder, activeAction.sectionKey, sections]);
+  }, [smartWorkflowOrder, activeAction.sectionKey, sections, isTechScreen]);
 
   return (
     <div className="space-y-3">

@@ -532,10 +532,20 @@ export const RODetailModal: React.FC = () => {
 
   useEffect(() => {
     if (selectedROModalTab) {
-      setActiveTab(selectedROModalTab);
+      if (isTechScreen && selectedROModalTab === 'CHAT') {
+        setActiveTab('DETAILS');
+      } else {
+        setActiveTab(selectedROModalTab);
+      }
       setSelectedROModalTab(null);
     }
-  }, [selectedROModalTab, setSelectedROModalTab]);
+  }, [selectedROModalTab, setSelectedROModalTab, isTechScreen]);
+
+  useEffect(() => {
+    if (isTechScreen && (activeTab === 'LINES' || activeTab === 'CHAT' || activeTab === 'HISTORY' || activeTab === 'CONTACTS' || activeTab === 'PHOTOS')) {
+      setActiveTab('DETAILS');
+    }
+  }, [isTechScreen, activeTab]);
   const [chatInput, setChatInput] = useState('');
   const [isUrgentMessage, setIsUrgentMessage] = useState(false);
   const [statusNote, setStatusNote] = useState('');
@@ -800,20 +810,22 @@ export const RODetailModal: React.FC = () => {
               )}
 
               {/* Line View (Itemized Concerns & Labor Lines) Quick Toggle */}
-              <button
-                type="button"
-                id="ro-modal-line-view-toggle"
-                onClick={() => setActiveTab(activeTab === 'LINES' ? 'DETAILS' : 'LINES')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
-                  activeTab === 'LINES'
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                    : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
-                }`}
-                title="Toggle between Workflow and Itemized Line View"
-              >
-                <ListFilter className={`w-3.5 h-3.5 ${activeTab === 'LINES' ? 'text-white' : 'text-blue-700'}`} />
-                <span>Line View</span>
-              </button>
+              {!isTechScreen && (
+                <button
+                  type="button"
+                  id="ro-modal-line-view-toggle"
+                  onClick={() => setActiveTab(activeTab === 'LINES' ? 'DETAILS' : 'LINES')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
+                    activeTab === 'LINES'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
+                  }`}
+                  title="Toggle between Workflow and Itemized Line View"
+                >
+                  <ListFilter className={`w-3.5 h-3.5 ${activeTab === 'LINES' ? 'text-white' : 'text-blue-700'}`} />
+                  <span>Line View</span>
+                </button>
+              )}
 
               {/* Repair Quote Initiation / Status */}
               {isTechScreen && (
@@ -1065,25 +1077,27 @@ export const RODetailModal: React.FC = () => {
           </button>
 
           {/* Line View (Concerns & Pay Types & Tech Breakdown) */}
-          <button
-            id="ro-tab-lines"
-            onClick={() => setActiveTab('LINES')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'LINES'
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-slate-800 hover:text-black'
-            }`}
-          >
-            <ListFilter className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'LINES' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>Line View</span>
-            {((selectedRO.concerns?.length || 1) > 0) && (
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                activeTab === 'LINES' ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-900'
-              }`}>
-                {selectedRO.concerns?.length || 1}
-              </span>
-            )}
-          </button>
+          {!isTechScreen && (
+            <button
+              id="ro-tab-lines"
+              onClick={() => setActiveTab('LINES')}
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'LINES'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-800 hover:text-black'
+              }`}
+            >
+              <ListFilter className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'LINES' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <span>Line View</span>
+              {((selectedRO.concerns?.length || 1) > 0) && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  activeTab === 'LINES' ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-900'
+                }`}>
+                  {selectedRO.concerns?.length || 1}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Vehicle Photos Tab: Exclusively on Advisor board (isAdvisorScreen) or Manager overview */}
           {isAdvisorScreen && (
@@ -1106,23 +1120,25 @@ export const RODetailModal: React.FC = () => {
             </button>
           )}
 
-          <button
-            id="ro-tab-chat"
-            onClick={() => setActiveTab('CHAT')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'CHAT'
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-slate-800 hover:text-black'
-            }`}
-          >
-            <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CHAT' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>Live Communication</span>
-            {selectedRO.messages.length > 0 && (
-              <span className="bg-slate-200 text-slate-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                {selectedRO.messages.length}
-              </span>
-            )}
-          </button>
+          {!isTechScreen && (
+            <button
+              id="ro-tab-chat"
+              onClick={() => setActiveTab('CHAT')}
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'CHAT'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-800 hover:text-black'
+              }`}
+            >
+              <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CHAT' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <span>Live Communication</span>
+              {selectedRO.messages.length > 0 && (
+                <span className="bg-slate-200 text-slate-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {selectedRO.messages.length}
+                </span>
+              )}
+            </button>
+          )}
 
           {!isAdvisorScreen && currentUser.role !== 'SERVICE_ADVISOR' && activeRoleView !== 'SERVICE_ADVISOR' && (
             <button
@@ -1162,36 +1178,40 @@ export const RODetailModal: React.FC = () => {
             )}
           </button>
 
-          <button
-            id="ro-tab-history"
-            onClick={() => setActiveTab('HISTORY')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'HISTORY'
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-slate-800 hover:text-black'
-            }`}
-          >
-            <History className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'HISTORY' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>Audit History ({selectedRO.history.length})</span>
-          </button>
+          {!isTechScreen && (
+            <button
+              id="ro-tab-history"
+              onClick={() => setActiveTab('HISTORY')}
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'HISTORY'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-800 hover:text-black'
+              }`}
+            >
+              <History className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'HISTORY' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <span>Audit History ({selectedRO.history.length})</span>
+            </button>
+          )}
 
-          <button
-            id="ro-tab-contacts"
-            onClick={() => setActiveTab('CONTACTS')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'CONTACTS'
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-slate-800 hover:text-black'
-            }`}
-          >
-            <Phone className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CONTACTS' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>Follow-Ups</span>
-            {(selectedRO.contactHistory?.length || 0) > 0 && (
-              <span className="bg-blue-100 text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                {selectedRO.contactHistory?.length}
-              </span>
-            )}
-          </button>
+          {!isTechScreen && (
+            <button
+              id="ro-tab-contacts"
+              onClick={() => setActiveTab('CONTACTS')}
+              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'CONTACTS'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-800 hover:text-black'
+              }`}
+            >
+              <Phone className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CONTACTS' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <span>Follow-Ups</span>
+              {(selectedRO.contactHistory?.length || 0) > 0 && (
+                <span className="bg-blue-100 text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {selectedRO.contactHistory?.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Tab Content Area */}

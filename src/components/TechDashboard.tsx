@@ -2265,6 +2265,269 @@ export const TechPartsRequestModal: React.FC<TechPartsRequestModalProps> = ({ ro
   );
 };
 
+interface TechCompactCardProps {
+  ro: RepairOrder;
+  onClick: () => void;
+}
+
+export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick }) => {
+  const { currentUser } = useApp();
+  const statusCfg = STATUS_CONFIG[ro.status] || STATUS_CONFIG.WAITING_DIAGNOSTICS;
+  const etaBadge = formatEtaBadge(ro.promisedTime);
+
+  // Active punch for current technician
+  const myPunch = ro.timePunches?.find(
+    p => p.techId === currentUser.id && p.clockIn && !p.clockOut
+  );
+  const [elapsedSecs, setElapsedSecs] = useState<number>(() => {
+    if (!myPunch) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(myPunch.clockIn).getTime()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!myPunch) {
+      setElapsedSecs(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setElapsedSecs(Math.max(0, Math.floor((Date.now() - new Date(myPunch.clockIn).getTime()) / 1000)));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [myPunch?.clockIn]);
+
+  const formatElapsed = (totalSecs: number) => {
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m ${secs}s`;
+  };
+
+  const concernsList = (ro.concerns && ro.concerns.length > 0)
+    ? ro.concerns
+    : [ro.primaryConcern || 'General Inspection'];
+
+  const loggedHours = ro.quote?.laborItems 
+    ? ro.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
+    : 0;
+
+  const partsCount = (ro.parts || []).length;
+  const photosCount = (ro.vehiclePhotos?.length || 0) + (ro.linePhotos?.length || 0);
+
+  return (
+    <div
+      onClick={onClick}
+      className={`group bg-white rounded-xl border-2 transition-all p-4 flex flex-col justify-between cursor-pointer hover:shadow-md ${
+        myPunch 
+          ? 'border-emerald-500 ring-2 ring-emerald-400/40 shadow-sm' 
+          : ro.isUrgent
+          ? 'border-red-400 hover:border-red-500 shadow-2xs'
+          : 'border-slate-300 hover:border-blue-500 shadow-2xs'
+      }`}
+    >
+      <div className="space-y-2.5">
+        {/* Top Header: RO ID, Status, Waiter, Urgent, ETA */}
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
+              #{ro.id}
+            </span>
+            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${statusCfg.badgeClass}`}>
+              {statusCfg.label}
+            </span>
+            {ro.isWaiter && (
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
+                Waiter
+              </span>
+            )}
+            {ro.isUrgent && (
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-600 text-white animate-pulse shadow-2xs">
+                Urgent
+              </span>
+            )}
+          </div>
+
+          {ro.promisedTime && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+              etaBadge.pastDue 
+                ? 'bg-red-100 text-red-800 border-red-300' 
+                : etaBadge.urgent 
+                ? 'bg-amber-100 text-amber-800 border-amber-300' 
+                : 'bg-slate-100 text-slate-700 border-slate-300'
+            }`}>
+              {etaBadge.text}
+            </span>
+          )}
+        </div>
+
+        {/* Customer & Vehicle Info */}
+        <div>
+          <h4 className="text-sm font-bold text-slate-900 truncate">
+            {ro.customerName}
+          </h4>
+          <p className="text-xs text-slate-600 font-medium truncate">
+            {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
+            {ro.vehicle.vin && <span className="font-mono text-slate-400 ml-1.5">• {ro.vehicle.vin.slice(-6)}</span>}
+          </p>
+        </div>
+
+        {/* Active Clocked In Banner on the card */}
+        {myPunch && (
+          <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-300 text-emerald-950 text-xs font-bold">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>Clocked In: Line {myPunch.roLineNumber || 1}</span>
+            </span>
+            <span className="font-mono font-black text-emerald-800">
+              {formatElapsed(elapsedSecs)}
+            </span>
+          </div>
+        )}
+
+        {/* Complaints List Summary */}
+        <div className="space-y-1 pt-1 border-t border-slate-100 text-xs">
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+            <span>Lines ({concernsList.length}):</span>
+            {loggedHours > 0 && (
+              <span className="text-blue-700 font-extrabold font-mono">
+                {loggedHours.toFixed(1)} hrs logged
+              </span>
+            )}
+          </div>
+          <div className="space-y-1">
+            {concernsList.slice(0, 2).map((c, i) => (
+              <p key={i} className="text-slate-700 text-xs font-medium truncate">
+                <strong className="text-slate-900 font-semibold">L{i + 1}:</strong> {c}
+              </p>
+            ))}
+            {concernsList.length > 2 && (
+              <p className="text-[11px] text-slate-400 font-semibold italic">
+                +{concernsList.length - 2} more line{concernsList.length - 2 > 1 ? 's' : ''}...
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer Details & Action indicator */}
+      <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
+        <div className="flex items-center gap-2">
+          {partsCount > 0 && (
+            <span className="flex items-center gap-1 text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+              <Package className="w-3 h-3" />
+              <span>{partsCount} part{partsCount === 1 ? '' : 's'}</span>
+            </span>
+          )}
+          {photosCount > 0 && (
+            <span className="flex items-center gap-1 text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+              <span>{photosCount} photo{photosCount === 1 ? '' : 's'}</span>
+            </span>
+          )}
+        </div>
+
+        <span className="text-blue-600 font-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+          <span>Open Station</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </span>
+      </div>
+    </div>
+  );
+};
+
+interface TechROStationModalProps {
+  ro: RepairOrder | null;
+  onClose: () => void;
+  onRequestParts: (lineIndex?: number, lineText?: string) => void;
+  onTestDrive: (ro: RepairOrder) => void;
+}
+
+export const TechROStationModal: React.FC<TechROStationModalProps> = ({
+  ro,
+  onClose,
+  onRequestParts,
+  onTestDrive
+}) => {
+  if (!ro) return null;
+  const statusCfg = STATUS_CONFIG[ro.status] || STATUS_CONFIG.WAITING_DIAGNOSTICS;
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-slate-100 w-full max-w-5xl max-h-[92vh] rounded-2xl border-2 border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+      >
+        {/* Modal Header Bar */}
+        <div className="p-4 sm:p-5 bg-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-mono text-base font-black px-3 py-1 rounded-lg bg-blue-600 text-white shadow-xs">
+              #{ro.id}
+            </span>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-sm sm:text-base text-white">{ro.customerName}</span>
+                {ro.customerPhone && (
+                  <span className="text-xs text-slate-400 font-mono">({ro.customerPhone})</span>
+                )}
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${statusCfg.badgeClass}`}>
+                  {statusCfg.label}
+                </span>
+                {ro.isWaiter && (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
+                    Waiter
+                  </span>
+                )}
+                {ro.isUrgent && (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-600 text-white animate-pulse shadow-2xs">
+                    Urgent
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5 font-medium">
+                {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model} • VIN: <span className="font-mono">{ro.vehicle.vin || 'N/A'}</span> • Advisor: {ro.advisorName}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* Road Test Action */}
+            <button
+              type="button"
+              onClick={() => onTestDrive(ro)}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Log Road Test / Test Drive & Out Mileage"
+            >
+              <Car className="w-3.5 h-3.5 text-blue-400" />
+              <span>Road Test / Out Miles</span>
+            </button>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+              title="Close Technician Station"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Scrollable Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+          {/* Tech Cause & Correction Section with Clock In/Out, Hours, Request Parts on each line */}
+          <TechCauseCorrectionSection 
+            ro={ro} 
+            onRequestParts={onRequestParts} 
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const TechDashboard: React.FC = () => {
   const { 
     currentUser, 
@@ -2278,6 +2541,9 @@ export const TechDashboard: React.FC = () => {
     updateConcernPayType,
     updateConcernTech
   } = useApp();
+
+  const [selectedTechROId, setSelectedTechROId] = useState<string | null>(null);
+  const selectedTechRO = repairOrders.find(r => r.id === selectedTechROId) || null;
 
   const [partsModalRO, setPartsModalRO] = useState<RepairOrder | null>(null);
   const [partsModalLine, setPartsModalLine] = useState<{ index?: number; text?: string }>({});
@@ -2381,16 +2647,9 @@ export const TechDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Action Row & Search Bar */}
+      {/* Search Bar & Active Repair Orders Counter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-black text-blue-900 shadow-2xs">
-            <Wrench className="w-3.5 h-3.5 text-blue-600" />
-            <span>Active Repair Orders ({filteredActiveROs.length})</span>
-          </div>
-        </div>
-
-        {/* Search Bar */}
+        {/* Search Bar to the left */}
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
@@ -2411,9 +2670,17 @@ export const TechDashboard: React.FC = () => {
             </button>
           )}
         </div>
+
+        {/* Active Repair Orders badge */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-black text-blue-900 shadow-2xs">
+            <Wrench className="w-3.5 h-3.5 text-blue-600" />
+            <span>Active Repair Orders ({filteredActiveROs.length})</span>
+          </div>
+        </div>
       </div>
 
-      {/* Small Cards Grid for Each Repair Order (Opens RO on Click) */}
+      {/* Small Cards Grid for Each Repair Order (Opens Technician Station on Click) */}
       {displayList.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-2" />
@@ -2429,14 +2696,28 @@ export const TechDashboard: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {displayList.map(ro => (
-            <ROCard
+            <TechCompactCard
               key={ro.id}
               ro={ro}
-              onClick={() => setSelectedRO(ro)}
-              isMainCard={true}
+              onClick={() => setSelectedTechROId(ro.id)}
             />
           ))}
         </div>
+      )}
+
+      {/* Technician Opened Station Modal */}
+      {selectedTechRO && (
+        <TechROStationModal
+          ro={selectedTechRO}
+          onClose={() => setSelectedTechROId(null)}
+          onRequestParts={(lineIndex, lineText) => {
+            setPartsModalRO(selectedTechRO);
+            setPartsModalLine({ index: lineIndex, text: lineText });
+          }}
+          onTestDrive={(targetRO) => {
+            setTestDriveModalRO(targetRO);
+          }}
+        />
       )}
 
       {/* Technician Parts Request Modal */}
