@@ -119,6 +119,14 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
             {ro.customerPhone}
           </div>
         )}
+        {ro.advisorName && (
+          <div className="text-[10px] text-slate-600 mt-1 font-semibold flex items-center gap-1 flex-wrap">
+            <span className="text-slate-400 font-normal">Advisor:</span>
+            <span className={`px-1.5 py-0.2 rounded font-bold ${ro.advisorId === currentUser.id ? 'bg-blue-50 text-blue-800' : 'bg-amber-50 text-amber-900 border border-amber-200'}`}>
+              {ro.advisorName}
+            </span>
+          </div>
+        )}
       </td>
 
       {/* 3. Vehicle & VIN */}

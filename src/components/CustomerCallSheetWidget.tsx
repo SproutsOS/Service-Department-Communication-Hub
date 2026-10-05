@@ -56,7 +56,11 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
   const [searchQuery, setSearchQuery] = useState('');
 
   // Map both active cadence orders and completed orders (post-repair quality check)
-  const allCadenceItems: CallSheetItem[] = repairOrders.flatMap((ro): CallSheetItem[] => {
+  const targetROs = filterAdvisorId 
+    ? repairOrders.filter(ro => ro.advisorId === filterAdvisorId)
+    : repairOrders;
+
+  const allCadenceItems: CallSheetItem[] = targetROs.flatMap((ro): CallSheetItem[] => {
     const isCompleted = isROCompleted(ro);
     if (isCompleted) {
       const postRepair = getPostRepairFollowUpStatus(ro);

@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   UserCheck, 
+  Users,
   Plus, 
   Clock, 
   AlertTriangle, 
   Package, 
   CheckCircle2, 
   Search, 
-  MessageSquare,
-  Wrench,
-  Send,
-  Calculator,
-  ShieldCheck,
-  PhoneCall,
-  LayoutGrid,
-  ListFilter,
-  CalendarCheck
+  MessageSquare, 
+  Wrench, 
+  Send, 
+  Calculator, 
+  ShieldCheck, 
+  PhoneCall, 
+  LayoutGrid, 
+  ListFilter, 
+  CalendarCheck,
+  ChevronRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -45,34 +47,60 @@ export const AdvisorDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
 
-  // Strictly filter by this advisor's ROs to prevent clutter (sorted in numerical order)
-  const myROs = sortROsNumerically(repairOrders.filter(ro => ro.advisorId === currentUser.id));
+  // Scope filter: 'MY_ROS' (default: only assigned to logged-in advisor), 'ALL_SHOP' (all advisors), or specific advisor ID
+  const [advisorScope, setAdvisorScope] = useState<'MY_ROS' | 'ALL_SHOP' | string>('MY_ROS');
 
-  // Separate Active repair orders vs Completed repair orders (keeps active screen completely uncluttered)
-  const myActiveROs = myROs.filter(ro => !isROCompleted(ro));
-  const myCompletedROs = myROs.filter(ro => isROCompleted(ro));
+  // List of all active service advisors / managers for quick colleague switching
+  const serviceAdvisors = useMemo(() => {
+    return users.filter(u => 
+      (u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER') && !u.isDeactivated
+    );
+  }, [users]);
 
-  // 3-Day Post-repair customer follow-up metrics
-  const myPostRepairList = myCompletedROs.map(ro => ({
-    ro,
-    status: getPostRepairFollowUpStatus(ro),
-  }));
-  const myPostRepairDue = myPostRepairList.filter(p => p.status.needsCall);
-  const postRepairDueCount = myPostRepairDue.length;
-  const postRepairOverdueCount = myPostRepairDue.filter(p => p.status.isOverdue).length;
-  const postRepairDueTodayCount = myPostRepairDue.filter(p => p.status.isDueToday).length;
+  // 1. My assigned repair orders (Default queue for this Advisor)
+  const myROs = useMemo(() => {
+    return sortROsNumerically(repairOrders.filter(ro => ro.advisorId === currentUser.id));
+  }, [repairOrders, currentUser.id]);
+  const myActiveROs = useMemo(() => myROs.filter(ro => !isROCompleted(ro)), [myROs]);
+  const myCompletedROs = useMemo(() => myROs.filter(ro => isROCompleted(ro)), [myROs]);
+
+  // 2. All shop repair orders (across all advisors)
+  const allShopROs = useMemo(() => sortROsNumerically(repairOrders), [repairOrders]);
+  const allActiveShopROs = useMemo(() => allShopROs.filter(ro => !isROCompleted(ro)), [allShopROs]);
+
+  // 3. Current active scope list
+  const currentScopeROs = useMemo(() => {
+    if (advisorScope === 'MY_ROS') return myROs;
+    if (advisorScope === 'ALL_SHOP') return allShopROs;
+    return sortROsNumerically(repairOrders.filter(ro => ro.advisorId === advisorScope));
+  }, [advisorScope, myROs, allShopROs, repairOrders]);
+
+  const currentScopeActiveROs = useMemo(() => currentScopeROs.filter(ro => !isROCompleted(ro)), [currentScopeROs]);
+  const currentScopeCompletedROs = useMemo(() => currentScopeROs.filter(ro => isROCompleted(ro)), [currentScopeROs]);
+
+  // 3-Day Post-repair customer follow-up metrics for current scope
+  const currentPostRepairList = useMemo(() => {
+    return currentScopeCompletedROs.map(ro => ({
+      ro,
+      status: getPostRepairFollowUpStatus(ro),
+    }));
+  }, [currentScopeCompletedROs]);
+  const currentPostRepairDue = useMemo(() => currentPostRepairList.filter(p => p.status.needsCall), [currentPostRepairList]);
+  const postRepairDueCount = currentPostRepairDue.length;
+  const postRepairOverdueCount = currentPostRepairDue.filter(p => p.status.isOverdue).length;
+  const postRepairDueTodayCount = currentPostRepairDue.filter(p => p.status.isDueToday).length;
 
   // Active in-progress customer cadence counts
-  const myEligibleROs = myActiveROs.filter(ro => isEligibleForCadence(ro));
-  const myOverdueCalls = myEligibleROs.filter(ro => getContactCadenceStatus(ro).isOverdue).length;
-  const myDueTodayCalls = myEligibleROs.filter(ro => getContactCadenceStatus(ro).isDueToday).length;
-  const totalCadenceCallsDue = myOverdueCalls + myDueTodayCalls;
+  const currentEligibleROs = useMemo(() => currentScopeActiveROs.filter(ro => isEligibleForCadence(ro)), [currentScopeActiveROs]);
+  const overdueCallsCount = useMemo(() => currentEligibleROs.filter(ro => getContactCadenceStatus(ro).isOverdue).length, [currentEligibleROs]);
+  const dueTodayCallsCount = useMemo(() => currentEligibleROs.filter(ro => getContactCadenceStatus(ro).isDueToday).length, [currentEligibleROs]);
+  const totalCadenceCallsDue = overdueCallsCount + dueTodayCallsCount;
 
   // Total calls due across active cadence AND 3-day post-repair follow-up
   const totalCallsDue = totalCadenceCallsDue + postRepairDueCount;
 
-  // Status counts for this advisor (using active ROs only)
-  const todayStr = React.useMemo(() => {
+  // Status counts for selected scope (using active ROs only)
+  const todayStr = useMemo(() => {
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -80,22 +108,34 @@ export const AdvisorDashboard: React.FC = () => {
     return `${y}-${m}-${day}`;
   }, []);
 
-  const myTodayAppointments = React.useMemo(() => {
-    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.advisorId === currentUser.id && a.status !== 'CANCELLED');
-  }, [appointments, todayStr, currentUser.id]);
+  const todayAppointments = useMemo(() => {
+    return (appointments || []).filter(a => {
+      if (a.appointmentDate !== todayStr || a.status === 'CANCELLED') return false;
+      if (advisorScope === 'MY_ROS') return a.advisorId === currentUser.id;
+      if (advisorScope === 'ALL_SHOP') return true;
+      return a.advisorId === advisorScope;
+    });
+  }, [appointments, todayStr, advisorScope, currentUser.id]);
 
-  const waitingDiagnosisCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
-  const inDiagCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
-  const estimateDoneCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
-  const waitingApprovalCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
-  const approvedCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
-  const partsOrderedCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
-  const inRepairCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
-  const readyPickupCount = myActiveROs.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
-  const completedCount = myCompletedROs.length;
+  const waitingDiagnosisCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
+  const inDiagCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
+  const estimateDoneCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
+  const waitingApprovalCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
+  const approvedCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
+  const partsOrderedCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
+  const inRepairCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
+  const readyPickupCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
+  const completedCount = currentScopeCompletedROs.length;
+
+  // Cross-Advisor Search Lookup: When on "My ROs" and typing in search, also check other advisors' ROs
+  const otherAdvisorsMatchingROs = useMemo(() => {
+    if (!searchQuery.trim() || advisorScope !== 'MY_ROS') return [];
+    const otherROs = repairOrders.filter(ro => ro.advisorId !== currentUser.id);
+    return sortROsNumerically(otherROs.filter(ro => matchesROSearch(ro, searchQuery, users)));
+  }, [searchQuery, advisorScope, repairOrders, currentUser.id, users]);
 
   // Filtered list (sorted in numerical order)
-  const displayROs = sortROsNumerically(myROs.filter(ro => {
+  const displayROs = sortROsNumerically(currentScopeROs.filter(ro => {
     const isCompleted = isROCompleted(ro);
 
     if (activeTab === 'ALL') {
@@ -130,44 +170,112 @@ export const AdvisorDashboard: React.FC = () => {
     return true;
   }));
 
+  const activeAdvisorName = useMemo(() => {
+    if (advisorScope === 'MY_ROS') return currentUser.name;
+    if (advisorScope === 'ALL_SHOP') return 'All Service Advisors';
+    return serviceAdvisors.find(a => a.id === advisorScope)?.name || 'Selected Advisor';
+  }, [advisorScope, currentUser.name, serviceAdvisors]);
+
   return (
     <div className="space-y-3 sm:space-y-3.5">
       
-      {/* Header & Advisor Bio */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Header & Advisor Bio + Scope Controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-xl border-2 border-slate-700 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
-              Advisor Desk: {currentUser.name}
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Advisor Desk: {activeAdvisorName}
             </h1>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border-2 border-blue-400">
-              Personal Queue
+            <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-2xs ${
+              advisorScope === 'MY_ROS'
+                ? 'bg-blue-100 text-blue-900 border-blue-400'
+                : 'bg-purple-100 text-purple-900 border-purple-400'
+            }`}>
+              {advisorScope === 'MY_ROS' ? 'My Personal Queue' : advisorScope === 'ALL_SHOP' ? 'All Shop ROs View' : 'Colleague Queue View'}
             </span>
           </div>
           <p className="text-xs text-slate-600 mt-0.5">
-            Track your active repair orders and maintain twice-weekly customer communication.
+            {advisorScope === 'MY_ROS' 
+              ? 'Showing only your assigned repair orders. Use search or the scope selector to pull up any colleague’s RO when a customer calls.' 
+              : 'Viewing shared repair orders across advisors. You can view, diagnose, or update any customer’s order while assisting calls.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Advisor Scope Selector (My ROs vs All Shop ROs vs Colleague) */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-lg border-2 border-slate-600 text-xs">
+            <button
+              type="button"
+              id="advisor-scope-my-ros-btn"
+              onClick={() => setAdvisorScope('MY_ROS')}
+              className={`px-3 py-1.5 rounded-md font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+                advisorScope === 'MY_ROS'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-700 hover:text-slate-950 hover:bg-slate-200'
+              }`}
+              title="View only your assigned repair orders"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>My ROs ({myActiveROs.length})</span>
+            </button>
+
+            <button
+              type="button"
+              id="advisor-scope-all-shop-btn"
+              onClick={() => setAdvisorScope('ALL_SHOP')}
+              className={`px-3 py-1.5 rounded-md font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+                advisorScope === 'ALL_SHOP'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-700 hover:text-slate-950 hover:bg-slate-200'
+              }`}
+              title="Access and pull up all shop repair orders across all advisors"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>All Shop ({allActiveShopROs.length})</span>
+            </button>
+
+            {/* Colleague Quick Filter Dropdown */}
+            <select
+              value={advisorScope}
+              onChange={(e) => setAdvisorScope(e.target.value)}
+              className="ml-1 px-2 py-1 bg-white border border-slate-300 rounded text-xs font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
+              title="Filter by specific service advisor"
+            >
+              <option value="MY_ROS">My Queue ({currentUser.name})</option>
+              <option value="ALL_SHOP">All Service Advisors ({allActiveShopROs.length})</option>
+              {serviceAdvisors.filter(a => a.id !== currentUser.id).length > 0 && (
+                <optgroup label="Select Colleague:">
+                  {serviceAdvisors.filter(a => a.id !== currentUser.id).map(a => {
+                    const count = repairOrders.filter(r => r.advisorId === a.id && !isROCompleted(r)).length;
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({count} Active)
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
           {/* Appointment Calendar Button */}
           <button
             type="button"
             onClick={() => setIsAppointmentCalendarOpen(true)}
-            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
             title="Open Customer Service Appointment Calendar"
           >
             <CalendarCheck className="w-4 h-4 text-purple-200" />
-            <span>Appointment Calendar</span>
-            {myTodayAppointments.length > 0 && (
+            <span>Appointments</span>
+            {todayAppointments.length > 0 && (
               <span className="bg-purple-900 text-purple-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-purple-400">
-                {myTodayAppointments.length} Today
+                {todayAppointments.length}
               </span>
             )}
           </button>
 
           {/* View Mode Toggle */}
-          <div className="bg-slate-100 p-1 rounded-lg flex items-center border-2 border-slate-500">
+          <div className="bg-slate-100 p-1 rounded-lg flex items-center border-2 border-slate-600">
             <button
               type="button"
               onClick={() => setViewMode('BOARD')}
@@ -200,6 +308,29 @@ export const AdvisorDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Notice Banner when viewing shared/all shop orders */}
+      {advisorScope !== 'MY_ROS' && (
+        <div className="p-3 bg-blue-50/90 border-2 border-blue-400 rounded-xl flex items-center justify-between gap-3 text-xs shadow-2xs animate-in fade-in duration-150 flex-wrap">
+          <div className="flex items-center gap-2.5 text-blue-950 font-medium">
+            <div className="p-1.5 rounded-lg bg-blue-600 text-white shrink-0 shadow-2xs">
+              <Users className="w-4 h-4" />
+            </div>
+            <span>
+              {advisorScope === 'ALL_SHOP'
+                ? `Shared Access Active: Viewing all ${allActiveShopROs.length} active repair orders in the dealership. Click any order to open details or assist a calling customer.`
+                : `Viewing repair orders assigned to ${activeAdvisorName}. Click any order to pull up details, diagnosis, inspection findings, or parts status.`}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAdvisorScope('MY_ROS')}
+            className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white font-black rounded-lg shadow-2xs cursor-pointer transition-colors shrink-0"
+          >
+            ← Return to My ROs ({myActiveROs.length})
+          </button>
+        </div>
+      )}
 
       {/* 3-Day Post-Repair Customer Follow-Up Alert Banner */}
       {postRepairDueCount > 0 && viewMode === 'BOARD' && (
@@ -258,14 +389,14 @@ export const AdvisorDashboard: React.FC = () => {
             <div>
               <div className="text-xs font-black text-slate-900 flex items-center gap-2">
                 <span>In-Shop Cadence: {totalCadenceCallsDue} Calls Pending</span>
-                {myOverdueCalls > 0 && (
+                {overdueCallsCount > 0 && (
                   <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
-                    {myOverdueCalls} Overdue
+                    {overdueCallsCount} Overdue
                   </span>
                 )}
-                {myDueTodayCalls > 0 && (
+                {dueTodayCallsCount > 0 && (
                   <span className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
-                    {myDueTodayCalls} Due Today
+                    {dueTodayCallsCount} Due Today
                   </span>
                 )}
               </div>
@@ -291,6 +422,7 @@ export const AdvisorDashboard: React.FC = () => {
           <CustomerCallSheetWidget 
             onSelectRO={setSelectedRO}
             onOpenFollowUpModal={setSelectedFollowUpRO}
+            filterAdvisorId={advisorScope === 'MY_ROS' ? currentUser.id : advisorScope === 'ALL_SHOP' ? undefined : advisorScope}
           />
         </div>
       ) : (
@@ -329,7 +461,7 @@ export const AdvisorDashboard: React.FC = () => {
                 Active ROs
               </div>
               <div className="text-base sm:text-lg font-black text-black">
-                {myActiveROs.length}
+                {currentScopeActiveROs.length}
               </div>
             </button>
 
@@ -589,7 +721,11 @@ export const AdvisorDashboard: React.FC = () => {
               <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search by RO #, customer, vehicle, tech name or # (e.g. 101)..."
+                placeholder={
+                  advisorScope === 'MY_ROS'
+                    ? "Search my ROs, or type any customer/RO to pull up colleague orders..."
+                    : "Search all shop ROs by #, customer, phone, vehicle, or tech..."
+                }
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full text-sm pl-9 pr-8 py-1.5 bg-white border-2 border-slate-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs text-slate-900 placeholder:text-slate-500 font-medium"
@@ -639,23 +775,106 @@ export const AdvisorDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Cross-Advisor Customer Call Search Pull-Up Banner (Shown when searching on My ROs view and matches are found under other advisors) */}
+          {searchQuery.trim() && advisorScope === 'MY_ROS' && otherAdvisorsMatchingROs.length > 0 && (
+            <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500 rounded-xl shadow-xs space-y-2 animate-in fade-in duration-150">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-blue-600 text-white shrink-0 shadow-2xs">
+                    <PhoneCall className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                      <span>Customer Call Assistance: Found {otherAdvisorsMatchingROs.length} matching order(s) under other advisors</span>
+                      <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                        Cross-Advisor Access
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Customer is on the phone? Click any repair order below to pull up full details, inspection findings, parts, and notes immediately.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdvisorScope('ALL_SHOP')}
+                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Switch to All Shop View</span>
+                </button>
+              </div>
+
+              {/* Quick-action pull-up cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 border-t border-blue-200">
+                {otherAdvisorsMatchingROs.map(otherRO => {
+                  return (
+                    <div
+                      key={otherRO.id}
+                      onClick={() => setSelectedRO(otherRO)}
+                      className="p-2.5 bg-white rounded-lg border-2 border-blue-400 hover:border-blue-600 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-black text-blue-700">#{otherRO.id}</span>
+                          <span className="font-bold text-xs text-slate-900 truncate">{otherRO.customerName}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                            Advisor: {otherRO.advisorName}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {otherRO.vehicle.year} {otherRO.vehicle.make} {otherRO.vehicle.model} • {otherRO.primaryConcern || 'Service'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedRO(otherRO);
+                        }}
+                        className="px-2.5 py-1 bg-blue-600 group-hover:bg-blue-700 text-white text-xs font-bold rounded-md shadow-2xs shrink-0 cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Pull Up RO</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Repair Orders List */}
           <div>
             {displayROs.length === 0 ? (
-              <div className="bg-white rounded-lg border-2 border-slate-800 p-8 text-center">
-                <UserCheck className="w-9 h-9 text-slate-400 mx-auto mb-2" />
+              <div className="bg-white rounded-lg border-2 border-slate-800 p-8 text-center space-y-2">
+                <UserCheck className="w-9 h-9 text-slate-400 mx-auto mb-1" />
                 <h3 className="text-sm font-bold text-slate-800">
                   {activeTab === 'COMPLETED' ? 'No completed repair orders found' : 'No repair orders in this view'}
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
                   {activeTab === 'COMPLETED'
                     ? completedCount === 0
-                      ? 'No repair orders have been completed and closed yet.'
+                      ? 'No repair orders have been completed and closed in this scope yet.'
                       : 'No completed orders match the current filter or search.'
-                    : myActiveROs.length === 0 
-                    ? "You currently have no active repair orders assigned. Click 'Create RO' to open one." 
+                    : currentScopeActiveROs.length === 0 
+                    ? advisorScope === 'MY_ROS'
+                      ? "You currently have no active repair orders assigned. Click 'Create RO' to open one, or use the scope toggle above to pull up colleague orders."
+                      : `No active repair orders found under ${activeAdvisorName}.`
                     : "No orders match the selected filter."}
                 </p>
+                {advisorScope === 'MY_ROS' && allActiveShopROs.length > 0 && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setAdvisorScope('ALL_SHOP')}
+                      className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>View All {allActiveShopROs.length} Shop Repair Orders</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : displayMode === 'CARD' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
@@ -724,3 +943,4 @@ export const AdvisorDashboard: React.FC = () => {
     </div>
   );
 };
+

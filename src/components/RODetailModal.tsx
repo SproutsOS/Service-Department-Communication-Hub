@@ -829,7 +829,7 @@ export const RODetailModal: React.FC = () => {
         className="bg-white w-full h-full flex flex-col overflow-hidden"
       >
         {/* Top Header - Dark Navy Modern Theme matching Technician & Advisor Specification */}
-        <div className="p-4 sm:px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-4 shrink-0 flex-wrap">
+        <div className="p-4 sm:px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-4 shrink-0 flex-wrap relative">
           <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
             {/* Blue RO number badge */}
             <span className="px-3.5 py-1.5 bg-blue-600 text-white rounded-lg font-black text-sm sm:text-base tracking-wider shadow-sm shrink-0">
@@ -1009,7 +1009,7 @@ export const RODetailModal: React.FC = () => {
           </div>
 
           {/* Right Action buttons and Status Badges */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap sm:mr-14">
             {/* Time in shop badge */}
             <div className="hidden lg:flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
               <Clock className="w-3.5 h-3.5 text-blue-400" />
@@ -1098,18 +1098,18 @@ export const RODetailModal: React.FC = () => {
                 <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
               </button>
             )}
-
-            {/* Close Button */}
-            <button
-              id="close-ro-detail-btn"
-              type="button"
-              onClick={() => setSelectedRO(null)}
-              className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors shrink-0 cursor-pointer border border-slate-700"
-              title="Close Repair Order"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
+
+          {/* Close Button positioned in the Upper Right Corner of the Screen / Header */}
+          <button
+            id="close-ro-detail-btn"
+            type="button"
+            onClick={() => setSelectedRO(null)}
+            className="sm:absolute sm:top-4 sm:right-6 p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 hover:border-slate-500 rounded-lg transition-colors shrink-0 cursor-pointer border border-slate-700 shadow-sm z-30"
+            title="Close Repair Order"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Navigation Tabs */}
