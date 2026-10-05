@@ -19,12 +19,15 @@ import {
   RefreshCw,
   Edit3,
   CheckCircle2,
-  ShieldCheck
+  ShieldCheck,
+  Plus,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PartItem, RepairOrder, PartStatus } from '../types';
 import { formatEtaBadge, formatDateTime, formatCurrency } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
+import { EditPartModal } from './EditPartModal';
 
 interface ManagerPartsOnOrderModalProps {
   isOpen: boolean;
@@ -52,6 +55,10 @@ export const ManagerPartsOnOrderModal: React.FC<ManagerPartsOnOrderModalProps> =
   const [advisorFilter, setAdvisorFilter] = useState('ALL');
   const [editingEtaPartId, setEditingEtaPartId] = useState<string | null>(null);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  // Edit Part Modal State
+  const [editingPartData, setEditingPartData] = useState<{ part: PartItem; roId: string } | null>(null);
+  const [isAddPartModalOpen, setIsAddPartModalOpen] = useState(false);
 
   // Extract all active parts with their parent Repair Order
   const allOrderedParts = useMemo(() => {
@@ -272,6 +279,16 @@ export const ManagerPartsOnOrderModal: React.FC<ManagerPartsOnOrderModalProps> =
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsAddPartModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-all cursor-pointer"
+              title="Add a new part to any open Repair Order"
+            >
+              <Plus className="w-4 h-4 text-white" />
+              <span>+ Add Part</span>
+            </button>
+
             <button
               type="button"
               onClick={handlePrint}
@@ -679,6 +696,16 @@ export const ManagerPartsOnOrderModal: React.FC<ManagerPartsOnOrderModalProps> =
                       {/* Actions */}
                       <td className="py-3 px-4 align-top text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingPartData({ part, roId: ro.id })}
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-blue-200 shadow-2xs"
+                            title="Edit all part details (Part #, Description, Qty, Cost, Sell Price, ETA, Status, Notes)"
+                          >
+                            <Edit3 className="w-3 h-3 text-blue-600" />
+                            <span>Edit Part</span>
+                          </button>
+
                           {!isReceived && (
                             <button
                               type="button"
@@ -713,7 +740,7 @@ export const ManagerPartsOnOrderModal: React.FC<ManagerPartsOnOrderModalProps> =
           <div className="flex items-center gap-2 text-slate-600">
             <span className="font-bold">Showing {filteredParts.length} of {allOrderedParts.length} ordered parts</span>
             <span className="text-slate-300">•</span>
-            <span>All ETA updates auto-sync live with database & repair orders</span>
+            <span>All Part & ETA updates auto-sync live with database & repair orders</span>
           </div>
 
           <button
@@ -725,6 +752,26 @@ export const ManagerPartsOnOrderModal: React.FC<ManagerPartsOnOrderModalProps> =
           </button>
         </div>
       </div>
+
+      {/* Edit Part Modal */}
+      {editingPartData && (
+        <EditPartModal
+          isOpen={true}
+          onClose={() => setEditingPartData(null)}
+          part={editingPartData.part}
+          roId={editingPartData.roId}
+          onSuccess={(msg) => triggerToast(msg)}
+        />
+      )}
+
+      {/* Add New Part to Any RO Modal */}
+      {isAddPartModalOpen && (
+        <EditPartModal
+          isOpen={true}
+          onClose={() => setIsAddPartModalOpen(false)}
+          onSuccess={(msg) => triggerToast(msg)}
+        />
+      )}
     </div>
   );
 };

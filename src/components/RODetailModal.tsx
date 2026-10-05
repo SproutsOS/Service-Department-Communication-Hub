@@ -43,7 +43,7 @@ import {
   Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
+import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType, PartItem } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails, formatCurrency, cleanRO3700 } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
@@ -59,6 +59,7 @@ import { LinePartsSection } from './LinePartsSection';
 import { getContactCadenceStatus, formatContactType, formatContactOutcome } from '../utils/cadenceUtils';
 import { decodeVin } from '../utils/vinDecoder';
 import { DynamicROWorkflow } from './DynamicROWorkflow';
+import { EditPartModal } from './EditPartModal';
 
 export const RODetailModal: React.FC = () => {
   const { 
@@ -108,6 +109,10 @@ export const RODetailModal: React.FC = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [managerActionFeedback, setManagerActionFeedback] = useState<string | null>(null);
+
+  // Edit Part Modal State
+  const [editingPartItem, setEditingPartItem] = useState<PartItem | null>(null);
+  const [isAddPartModalOpen, setIsAddPartModalOpen] = useState(false);
 
   // Editable fields initialized from selectedRO
   const [editCustomerName, setEditCustomerName] = useState(selectedRO?.customerName || '');
@@ -2394,6 +2399,15 @@ export const RODetailModal: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddPartModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer mr-1"
+                          title="Add a new part to this Repair Order"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-white" />
+                          <span>+ Add Part</span>
+                        </button>
                         {quoteParts.length > 0 && (
                           <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
                             📋 {quoteParts.length} on Quote
@@ -2511,8 +2525,8 @@ export const RODetailModal: React.FC = () => {
                                 )}
                               </div>
 
-                              {/* Status / ETA Badge Box */}
-                              <div className="shrink-0 flex items-center sm:text-right">
+                              {/* Status / ETA Badge Box & Action */}
+                              <div className="shrink-0 flex flex-col sm:items-end gap-2">
                                 {isQuote ? (
                                   <div className="px-3.5 py-2 rounded-lg border-2 bg-purple-100 border-purple-400 text-purple-950 flex items-center gap-2 shadow-2xs">
                                     <Calculator className="w-4 h-4 text-purple-700 shrink-0" />
@@ -2589,6 +2603,34 @@ export const RODetailModal: React.FC = () => {
                                     </div>
                                   </div>
                                 )}
+
+                                {/* Edit Part Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const foundPart = (selectedRO.parts || []).find(p => p.id === part.id) || {
+                                      id: part.id,
+                                      roId: selectedRO.id,
+                                      partNumber: part.partNumber || '',
+                                      description: part.name,
+                                      name: part.name,
+                                      quantity: part.quantity || 1,
+                                      status: part.status as any,
+                                      price: part.price,
+                                      vendor: part.vendor || 'STELLANTIS',
+                                      estimatedArrival: part.estimatedArrival || 'Pending ETA',
+                                      notes: part.notes,
+                                      roLineNumber: part.roLineNumber,
+                                      requestType: part.requestType as any
+                                    };
+                                    setEditingPartItem(foundPart as PartItem);
+                                  }}
+                                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-white hover:bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-slate-300 shadow-2xs transition-all cursor-pointer"
+                                  title="Edit part details, pricing, supplier, ETA and line assignment"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Edit Part</span>
+                                </button>
                               </div>
                             </div>
                           );
@@ -2850,6 +2892,33 @@ export const RODetailModal: React.FC = () => {
           <CustomerFollowUpModal
             ro={selectedRO}
             onClose={() => setIsFollowUpModalOpen(false)}
+            onSuccess={(msg) => {
+              setManagerActionFeedback(msg);
+              setTimeout(() => setManagerActionFeedback(null), 4000);
+            }}
+          />
+        )}
+
+        {/* Edit Part Modal */}
+        {editingPartItem && selectedRO && (
+          <EditPartModal
+            isOpen={true}
+            onClose={() => setEditingPartItem(null)}
+            part={editingPartItem}
+            roId={selectedRO.id}
+            onSuccess={(msg) => {
+              setManagerActionFeedback(msg);
+              setTimeout(() => setManagerActionFeedback(null), 4000);
+            }}
+          />
+        )}
+
+        {/* Add New Part to this RO Modal */}
+        {isAddPartModalOpen && selectedRO && (
+          <EditPartModal
+            isOpen={true}
+            onClose={() => setIsAddPartModalOpen(false)}
+            roId={selectedRO.id}
             onSuccess={(msg) => {
               setManagerActionFeedback(msg);
               setTimeout(() => setManagerActionFeedback(null), 4000);

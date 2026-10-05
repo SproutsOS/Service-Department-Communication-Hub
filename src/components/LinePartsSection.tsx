@@ -1,8 +1,10 @@
-import React from 'react';
-import { Package, Tag, Clock, CheckCircle2, AlertCircle, Building2, Truck } from 'lucide-react';
-import { RepairOrder } from '../types';
+import React, { useState } from 'react';
+import { Package, Tag, Clock, CheckCircle2, AlertCircle, Building2, Truck, Edit3, Plus } from 'lucide-react';
+import { RepairOrder, PartItem } from '../types';
 import { getLineParts, IntegratedLinePart } from '../utils/lineParts';
 import { formatEtaBadge } from '../utils/formatters';
+import { EditPartModal } from './EditPartModal';
+import { useApp } from '../context/AppContext';
 
 interface LinePartsSectionProps {
   ro: RepairOrder;
@@ -17,8 +19,37 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
   className = '',
   compact = false,
 }) => {
+  const { currentUser, activeRoleView } = useApp();
+  const [editingPartItem, setEditingPartItem] = useState<PartItem | null>(null);
+  const [isAddPartOpen, setIsAddPartOpen] = useState(false);
+
   const parts = getLineParts(ro, lineNum);
   const totalPartsCost = parts.reduce((sum, p) => sum + p.subtotal, 0);
+
+  const canEditParts = currentUser.role === 'SERVICE_MANAGER' || 
+                       currentUser.role === 'PARTS_SPECIALIST' || 
+                       currentUser.role === 'SERVICE_ADVISOR' ||
+                       activeRoleView === 'SERVICE_MANAGER' ||
+                       activeRoleView === 'PARTS_SPECIALIST' ||
+                       activeRoleView === 'SERVICE_ADVISOR';
+
+  const handleOpenEdit = (part: IntegratedLinePart) => {
+    const rawPart = (ro.parts || []).find(p => p.id === part.id) || {
+      id: part.id,
+      roId: ro.id,
+      partNumber: part.partNumber || '',
+      description: part.name,
+      name: part.name,
+      quantity: part.quantity || 1,
+      status: part.status as any,
+      price: part.price,
+      vendor: part.vendor || 'STELLANTIS',
+      estimatedArrival: part.estimatedArrival || 'Pending ETA',
+      roLineNumber: lineNum,
+      requestType: part.isQuoteOnly ? 'QUOTE_ONLY' : 'ORDER_NOW'
+    };
+    setEditingPartItem(rawPart as PartItem);
+  };
 
   return (
     <div className={`space-y-2 pt-2 border-t border-slate-100 ${className}`}>
@@ -34,11 +65,25 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
           </span>
         </span>
 
-        {parts.length > 0 && (
-          <span className="text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-            Parts Total: <strong className="text-emerald-700">${totalPartsCost.toFixed(2)}</strong>
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {parts.length > 0 && (
+            <span className="text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              Parts Total: <strong className="text-emerald-700">${totalPartsCost.toFixed(2)}</strong>
+            </span>
+          )}
+
+          {canEditParts && (
+            <button
+              type="button"
+              onClick={() => setIsAddPartOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold border border-blue-200 cursor-pointer shadow-2xs transition-colors"
+              title={`Add part specifically to Line ${lineNum}`}
+            >
+              <Plus className="w-3 h-3 text-blue-600" />
+              <span>+ Add Part</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Parts List */}
@@ -93,7 +138,7 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
                   </span>
                 </div>
 
-                {/* Badges: Source, ETA & Status */}
+                {/* Badges: Source, ETA, Status & Edit Button */}
                 <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto flex-wrap">
                   {/* Part Source Badge */}
                   {part.vendor && (
@@ -131,11 +176,44 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
                     <Package className="w-3 h-3" />
                     <span>{part.availability}</span>
                   </span>
+
+                  {/* Edit Part Button */}
+                  {canEditParts && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(part)}
+                      className="p-1 rounded bg-white hover:bg-blue-50 text-slate-500 hover:text-blue-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                      title="Edit part specifications, price, supplier & ETA"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Edit Part Modal */}
+      {editingPartItem && (
+        <EditPartModal
+          isOpen={true}
+          onClose={() => setEditingPartItem(null)}
+          part={editingPartItem}
+          roId={ro.id}
+          initialLineNumber={lineNum}
+        />
+      )}
+
+      {/* Add Part to this Line Modal */}
+      {isAddPartOpen && (
+        <EditPartModal
+          isOpen={true}
+          onClose={() => setIsAddPartOpen(false)}
+          roId={ro.id}
+          initialLineNumber={lineNum}
+        />
       )}
     </div>
   );
