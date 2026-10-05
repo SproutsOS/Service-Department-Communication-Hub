@@ -152,6 +152,30 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
     return matching[0];
   };
 
+  // Helper to find exact concern line index for an inspection item
+  const findLinkedLineNumber = (itemId: string, item: InspectionChecklistItem): number => {
+    const recName = (item.defaultRecommendationName || '').toLowerCase().trim();
+    const itemName = item.name.toLowerCase().trim();
+    
+    if (ro.concerns && ro.concerns.length > 0) {
+      const idx = ro.concerns.findIndex(c => {
+        const cLower = c.toLowerCase().trim();
+        return (recName && (cLower === recName || cLower.includes(recName) || recName.includes(cLower))) ||
+               (itemName && (cLower === itemName || cLower.includes(itemName) || itemName.includes(cLower)));
+      });
+      if (idx >= 0) return idx + 1;
+    }
+
+    const matchingRec = findLinkedRec(itemId, item);
+    if (matchingRec) {
+      const recIdx = recommendations.findIndex(r => r.id === matchingRec.id);
+      if (recIdx >= 0) {
+        return (ro.concerns?.length || 1);
+      }
+    }
+    return -1;
+  };
+
   // 21-Point Inspection Checklist Item Status change
   const handleSetInspectionStatus = (item: InspectionChecklistItem, status: InspectionItemStatus) => {
     const existing = inspectionItemsMap[item.id];
@@ -389,8 +413,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                           const isFuture = hasResult && status === 'FUTURE_ATTENTION';
                           const isImmediate = hasResult && status === 'IMMEDIATE_ATTENTION';
                           const isNA = hasResult && status === 'NOT_APPLICABLE';
-                          const linkedRec = findLinkedRec(item.id, item);
-                          const linkedRecIndex = linkedRec ? recommendations.findIndex(r => r.id === linkedRec.id) : -1;
+                          const linkedLineNum = (isImmediate || isFuture) ? findLinkedLineNumber(item.id, item) : -1;
 
                           return (
                             <div 
@@ -416,9 +439,9 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                     }`}>
                                       {item.order}. {item.name}
                                     </span>
-                                    {linkedRecIndex >= 0 && (
+                                    {linkedLineNum > 0 && (
                                       <span className="text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded shadow-2xs">
-                                        → Line {baseConcernsCount + linkedRecIndex + 1}
+                                        → Line {linkedLineNum}
                                       </span>
                                     )}
                                     {item.hasMeasurement && (
@@ -511,14 +534,14 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
           </div>
 
           {/* ========================================================================= */}
-          {/* 2. REQUESTED SERVICES & 21-POINT INSPECTION FINDINGS (JOB LINES) */}
+          {/* 2. REQUESTED SERVICES & 21-POINT INSPECTION FINDINGS (JOB LINES SUMMARY) */}
           {/* ========================================================================= */}
           <div className="rounded-xl border-2 border-amber-400 bg-amber-50/40 p-3.5 space-y-3 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 pb-2.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
                   <Wrench className="w-4 h-4 text-amber-700" />
-                  <span>Inspection Findings & Recommended Services ({recommendations.length} Job Lines)</span>
+                  <span>Inspection Findings & Job Lines Created ({recommendations.length})</span>
                 </span>
                 {pendingCount > 0 && (
                   <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
@@ -536,12 +559,16 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
             {recommendations.length === 0 ? (
               <div className="p-4 rounded-lg bg-white border border-dashed border-amber-300 text-center text-xs text-slate-500 space-y-1">
                 <p className="font-semibold text-slate-700">No additional issues flagged on inspection yet.</p>
-                <p className="text-[11px] text-slate-400">When the technician marks an inspection point as 🔴 Immediate or 🟡 Future Attention, the newly created job line and requested parts appear here automatically.</p>
+                <p className="text-[11px] text-slate-400">When the technician marks an inspection point as 🔴 Immediate or 🟡 Future Attention, the job line is automatically created on the Repair Order.</p>
               </div>
             ) : (
-              <div className="space-y-3.5">
+              <div className="space-y-2.5">
                 {recommendations.map((rec, recIdx) => {
-                  const globalLineNum = baseConcernsCount + recIdx + 1;
+                  const checkItem = effectiveChecklist.find(i => i.id === rec.inspectionItemId);
+                  const linkedLine = checkItem 
+                    ? findLinkedLineNumber(checkItem.id, checkItem) 
+                    : findLinkedLineNumber(rec.id, { id: rec.id, name: rec.serviceName, category: 'UNDER_HOOD', order: 1 });
+                  const globalLineNum = linkedLine > 0 ? linkedLine : (recIdx + 2);
                   const isImmediate = rec.urgency === 'SAFETY';
                   const recPayType = rec.payType || 'CUSTOMER_PAY';
                   const recStatus = rec.status || 'PENDING';
@@ -549,7 +576,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                   return (
                     <div 
                       key={rec.id}
-                      className={`rounded-xl border-2 transition-all p-3.5 space-y-3 shadow-xs bg-white ${
+                      className={`rounded-xl border-2 transition-all p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs bg-white ${
                         recStatus === 'APPROVED'
                           ? 'border-emerald-400 ring-1 ring-emerald-300'
                           : recStatus === 'DECLINED'
@@ -559,209 +586,106 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                           : 'border-amber-300'
                       }`}
                     >
-                      {/* Top Row: Line Number, Inspection Finding Name, Urgency, Status, Pay Type & Advisor Actions */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-black px-2.5 py-1 rounded-md bg-slate-900 text-white shadow-2xs">
-                            Line {globalLineNum}
-                          </span>
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border shadow-2xs flex items-center gap-1 ${
-                            isImmediate
-                              ? 'bg-red-100 text-red-950 border-red-300'
-                              : 'bg-amber-100 text-amber-950 border-amber-300'
-                          }`}>
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>{isImmediate ? '🔴 Immediate Safety Concern' : '🟡 Recommended Maintenance'}</span>
-                          </span>
+                      {/* Left: Line badge, finding name, severity, tech */}
+                      <div className="flex items-center gap-2.5 flex-wrap min-w-0 flex-1">
+                        <span className="font-mono text-xs font-black px-2.5 py-1 rounded-md bg-slate-900 text-white shadow-2xs shrink-0">
+                          Line {globalLineNum}
+                        </span>
 
-                          {recStatus === 'APPROVED' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                              <span>Approved</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-xs text-slate-900 break-words">
+                              {rec.serviceName}
                             </span>
-                          )}
-                          {recStatus === 'DECLINED' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
-                              <XCircle className="w-3 h-3 text-rose-700" />
-                              <span>Declined</span>
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border shadow-2xs flex items-center gap-1 ${
+                              isImmediate
+                                ? 'bg-red-100 text-red-950 border-red-300'
+                                : 'bg-amber-100 text-amber-950 border-amber-300'
+                            }`}>
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>{isImmediate ? '🔴 Immediate Safety' : '🟡 Future Attention'}</span>
                             </span>
-                          )}
-                          {recStatus === 'PENDING' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-950 border border-purple-300 shadow-2xs">
-                              <Clock className="w-3 h-3 text-purple-700" />
-                              <span>Waiting on Approval</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* Pay Type Selector */}
-                          <div className="flex items-center gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200 text-[10px]">
-                            <button
-                              type="button"
-                              onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'CUSTOMER_PAY' })}
-                              className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
-                                recPayType === 'CUSTOMER_PAY' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              Customer Pay
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'WARRANTY' })}
-                              className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
-                                recPayType === 'WARRANTY' ? 'bg-amber-500 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              Warranty
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'INTERNAL' })}
-                              className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
-                                recPayType === 'INTERNAL' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              Internal
-                            </button>
-                          </div>
-
-                          {/* Advisor Action Buttons */}
-                          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-300 shadow-2xs">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = recStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
-                                updateRecommendedService(ro.id, rec.id, { status: next });
-                                setStatusFeedback(next === 'APPROVED' ? `✓ Authorized Line ${globalLineNum}: ${rec.serviceName}` : `Reset Line ${globalLineNum} to Pending`);
-                                setTimeout(() => setStatusFeedback(null), 3000);
-                              }}
-                              className={`px-2.5 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
-                                recStatus === 'APPROVED'
-                                  ? 'bg-emerald-600 text-white shadow-2xs ring-1 ring-emerald-500'
-                                  : 'text-slate-700 hover:text-emerald-700 hover:bg-emerald-50'
-                              }`}
-                              title={recStatus === 'APPROVED' ? 'Line is Approved (Click to reset)' : 'Approve this job line'}
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Approve</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = recStatus === 'DECLINED' ? 'PENDING' : 'DECLINED';
-                                updateRecommendedService(ro.id, rec.id, { status: next });
-                                setStatusFeedback(next === 'DECLINED' ? `✕ Line ${globalLineNum} marked Declined` : `Reset Line ${globalLineNum} to Pending`);
-                                setTimeout(() => setStatusFeedback(null), 3000);
-                              }}
-                              className={`px-2.5 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
-                                recStatus === 'DECLINED'
-                                  ? 'bg-rose-600 text-white shadow-2xs ring-1 ring-rose-500'
-                                  : 'text-slate-700 hover:text-rose-700 hover:bg-rose-50'
-                              }`}
-                              title={recStatus === 'DECLINED' ? 'Line is Declined (Click to reset)' : 'Decline this job line'}
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                              <span>Decline</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (confirm(`Remove recommended service line "${rec.serviceName}"?`)) {
-                                  deleteRecommendedService(ro.id, rec.id);
-                                  setStatusFeedback(`Removed recommendation "${rec.serviceName}"`);
-                                  setTimeout(() => setStatusFeedback(null), 3000);
-                                }
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
-                              title="Delete recommendation line"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Job Title / Stated Finding */}
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
-                          <span>Inspection Finding / Required Job:</span>
-                        </label>
-                        <div className="bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-950 flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-sm font-black text-slate-900">{rec.serviceName}</span>
-                          <div className="flex items-center gap-2">
-                            {rec.requestedByTechName && (
-                              <span className="text-[11px] font-medium text-slate-500">
-                                Tech: <strong className="text-slate-800 font-bold">{rec.requestedByTechName}</strong>
+                            {recStatus === 'APPROVED' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                                <span>Approved</span>
+                              </span>
+                            ) : recStatus === 'DECLINED' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
+                                <XCircle className="w-3 h-3 text-rose-700" />
+                                <span>Declined</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-950 border border-purple-300 shadow-2xs">
+                                <Clock className="w-3 h-3 text-purple-700" />
+                                <span>Waiting on Approval</span>
                               </span>
                             )}
-                            <div className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-slate-300 text-xs font-bold shadow-2xs">
-                              <Clock className="w-3 h-3 text-blue-600" />
-                              <span>{rec.laborHours !== undefined ? `${rec.laborHours} hrs` : '1.0 hr'}</span>
-                            </div>
                           </div>
+
+                          {(rec.cause || rec.correction) && (
+                            <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-2 flex-wrap">
+                              {rec.cause && <span>Cause: <strong className="font-mono text-amber-900">{rec.cause}</strong></span>}
+                              {rec.correction && <span>• Correction: <strong className="font-mono text-emerald-900">{rec.correction}</strong></span>}
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* 2. Diagnostic Cause */}
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
-                          <span>Cause (Diagnostic Root Cause / Measurement):</span>
-                        </label>
-                        <div className="bg-amber-50/50 px-3 py-2 rounded-lg border border-amber-200 text-xs font-semibold text-amber-950 font-mono">
-                          {rec.cause || rec.notes || <span className="italic text-slate-400 font-sans font-normal">Identified during 21-point vehicle inspection</span>}
-                        </div>
-                      </div>
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-center flex-wrap">
+                        {/* Request Parts for this line */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onRequestParts) {
+                              onRequestParts(globalLineNum - 1, rec.serviceName);
+                            } else {
+                              setInternalPartsRO(ro);
+                              setInternalPartsLine({ index: globalLineNum - 1, text: rec.serviceName });
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+                          title="Request parts for this line"
+                        >
+                          <Package className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Request Parts</span>
+                        </button>
 
-                      {/* 3. Repair Correction */}
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black inline-flex items-center justify-center">3</span>
-                          <span>Correction (Repair Procedure / Action Plan):</span>
-                        </label>
-                        <div className="bg-emerald-50/50 px-3 py-2 rounded-lg border border-emerald-200 text-xs font-semibold text-emerald-950 font-mono">
-                          {rec.correction || <span className="italic text-slate-400 font-sans font-normal">Replace components and verify operation</span>}
-                        </div>
-                      </div>
+                        {/* Approve / Reset Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = recStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
+                            updateRecommendedService(ro.id, rec.id, { status: next });
+                            setStatusFeedback(next === 'APPROVED' ? `✓ Authorized Line ${globalLineNum}: ${rec.serviceName}` : `Reset Line ${globalLineNum} to Pending`);
+                            setTimeout(() => setStatusFeedback(null), 3000);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer border ${
+                            recStatus === 'APPROVED'
+                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-400'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{recStatus === 'APPROVED' ? 'Approved ✓' : 'Authorize'}</span>
+                        </button>
 
-                      {/* 4. Requested Parts for this Line */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                            <Package className="w-3.5 h-3.5 text-purple-600" />
-                            <span>Parts Requested for Line {globalLineNum}:</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onRequestParts) {
-                                onRequestParts(globalLineNum - 1, rec.serviceName);
-                              } else {
-                                setInternalPartsRO(ro);
-                                setInternalPartsLine({ index: globalLineNum - 1, text: rec.serviceName });
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>+ Request / Add Parts</span>
-                          </button>
-                        </div>
-                        <LinePartsSection ro={ro} lineNum={globalLineNum} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Remove inspection recommendation for "${rec.serviceName}"?`)) {
+                              deleteRecommendedService(ro.id, rec.id);
+                              setStatusFeedback(`Removed "${rec.serviceName}"`);
+                              setTimeout(() => setStatusFeedback(null), 3000);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                          title="Delete recommendation line"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-
-                      {/* 5. Photos for this Line */}
-                      <LinePhotoSection 
-                        roId={ro.id} 
-                        roLineNumber={globalLineNum} 
-                        concernIndex={baseConcernsCount + recIdx} 
-                        photos={ro.linePhotos} 
-                        lineTitle={rec.serviceName} 
-                      />
                     </div>
                   );
                 })}

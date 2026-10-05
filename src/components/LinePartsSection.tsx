@@ -1,7 +1,8 @@
 import React from 'react';
-import { Package, Tag, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Package, Tag, Clock, CheckCircle2, AlertCircle, Building2, Truck } from 'lucide-react';
 import { RepairOrder } from '../types';
 import { getLineParts, IntegratedLinePart } from '../utils/lineParts';
+import { formatEtaBadge } from '../utils/formatters';
 
 interface LinePartsSectionProps {
   ro: RepairOrder;
@@ -47,61 +48,93 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
         </div>
       ) : (
         <div className="pl-2 sm:pl-5.5 space-y-1.5">
-          {parts.map((part) => (
-            <div
-              key={part.id}
-              className={`p-2.5 rounded-lg border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs transition-colors ${
-                part.isQuoteOnly
-                  ? 'bg-purple-50/60 border-purple-200 hover:border-purple-300'
-                  : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {/* Part Name, Part #, Qty, and Price */}
-              <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-                {/* Part Name */}
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="font-extrabold text-slate-900 break-words">
-                    {part.name}
-                  </span>
-                  {part.partNumber && (
-                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-300 shrink-0">
-                      #{part.partNumber}
+          {parts.map((part) => {
+            const etaFormatted = part.estimatedArrival ? formatEtaBadge(part.estimatedArrival) : null;
+            return (
+              <div
+                key={part.id}
+                className={`p-2.5 rounded-lg border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs transition-colors ${
+                  part.isQuoteOnly
+                    ? 'bg-purple-50/60 border-purple-200 hover:border-purple-300'
+                    : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {/* Part Name, Part #, Qty, and Price */}
+                <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                  {/* Part Name */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-extrabold text-slate-900 break-words">
+                      {part.name}
                     </span>
-                  )}
+                    {part.partNumber && (
+                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-300 shrink-0">
+                        #{part.partNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="text-slate-300">•</span>
+
+                  {/* Qty */}
+                  <span className="text-[11px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">
+                    Qty: {part.quantity}
+                  </span>
+
+                  <span className="text-slate-300">•</span>
+
+                  {/* Price */}
+                  <span className="text-[11px] font-black font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+                    ${part.price.toFixed(2)}
+                    {part.quantity > 1 ? (
+                      <span className="text-[10px] font-normal text-emerald-700 ml-1">
+                        ea (${part.subtotal.toFixed(2)})
+                      </span>
+                    ) : ''}
+                  </span>
                 </div>
 
-                <span className="text-slate-300">•</span>
-
-                {/* Qty */}
-                <span className="text-[11px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">
-                  Qty: {part.quantity}
-                </span>
-
-                <span className="text-slate-300">•</span>
-
-                {/* Price */}
-                <span className="text-[11px] font-black font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
-                  ${part.price.toFixed(2)}
-                  {part.quantity > 1 ? (
-                    <span className="text-[10px] font-normal text-emerald-700 ml-1">
-                      ea (${part.subtotal.toFixed(2)})
+                {/* Badges: Source, ETA & Status */}
+                <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto flex-wrap">
+                  {/* Part Source Badge */}
+                  {part.vendor && (
+                    <span 
+                      className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300 flex items-center gap-1 shadow-2xs"
+                      title={`Part Source / Supplier: ${part.vendor}`}
+                    >
+                      <Building2 className="w-3 h-3 text-slate-600 shrink-0" />
+                      <span>{part.vendor}</span>
                     </span>
-                  ) : ''}
-                </span>
-              </div>
+                  )}
 
-              {/* Badges: Status & Availability */}
-              <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto flex-wrap">
-                <span
-                  className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 ${part.badgeClass}`}
-                  title={`Status: ${part.availability}`}
-                >
-                  <Package className="w-3 h-3" />
-                  <span>{part.availability}</span>
-                </span>
+                  {/* Part ETA Badge */}
+                  {etaFormatted && etaFormatted.text && (
+                    <span 
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border flex items-center gap-1 shadow-2xs ${
+                        etaFormatted.pastDue 
+                          ? 'bg-rose-100 text-rose-900 border-rose-300 font-extrabold' 
+                          : etaFormatted.urgent 
+                            ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold' 
+                            : 'bg-amber-50 text-amber-900 border-amber-200'
+                      }`}
+                      title={`Estimated Arrival: ${part.estimatedArrival}`}
+                    >
+                      <Clock className="w-3 h-3 shrink-0" />
+                      <span>{etaFormatted.text}</span>
+                    </span>
+                  )}
+
+                  {/* Status / Availability Badge */}
+                  <span
+                    className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 ${part.badgeClass}`}
+                    title={`Status: ${part.availability}`}
+                  >
+                    <Package className="w-3 h-3" />
+                    <span>{part.availability}</span>
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

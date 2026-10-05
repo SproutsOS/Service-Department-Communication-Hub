@@ -194,6 +194,8 @@ interface AppContextType {
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
   updateConcernTech: (roId: string, concernIndex: number, techId: string, techName?: string) => boolean;
   updateConcernStatus: (roId: string, concernIndex: number, status: LineApprovalStatus) => boolean;
+  updateRepairOrderConcernText: (roId: string, concernIndex: number, newText: string) => boolean;
+  deleteRepairOrderConcern: (roId: string, concernIndex: number) => boolean;
   logCustomerContact: (
     roId: string, 
     contactData: {
@@ -3632,6 +3634,141 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Update customer complaint / symptom text on an existing line
+  const updateRepairOrderConcernText = (roId: string, concernIndex: number, newText: string): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'SERVICE_ADVISOR') {
+      console.warn('Editing complaints is only permitted by Service Manager and Service Advisor');
+      return false;
+    }
+    const cleanText = newText.trim();
+    if (!cleanText) return false;
+
+    let updatedRO: RepairOrder | null = null;
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const currentConcerns = ro.concerns && ro.concerns.length > 0 
+            ? [...ro.concerns] 
+            : [ro.primaryConcern || 'Customer Concern'];
+          
+          if (concernIndex >= currentConcerns.length) {
+            currentConcerns.push(cleanText);
+          } else {
+            currentConcerns[concernIndex] = cleanText;
+          }
+
+          const primaryConcern = currentConcerns[0] || cleanText;
+
+          // Also update quote labor item description if it mirrors this line
+          let updatedQuote = ro.quote;
+          if (updatedQuote && updatedQuote.laborItems) {
+            const lineNum = concernIndex + 1;
+            const updatedLabor = updatedQuote.laborItems.map(item => {
+              if ((item.roLineNumber || 1) === lineNum) {
+                return {
+                  ...item,
+                  description: `Concern: ${cleanText}`,
+                  concernText: cleanText
+                };
+              }
+              return item;
+            });
+            updatedQuote = {
+              ...updatedQuote,
+              laborItems: updatedLabor,
+              updatedAt: new Date().toISOString()
+            };
+          }
+
+          const updatedItem: RepairOrder = {
+            ...ro,
+            primaryConcern,
+            concerns: currentConcerns,
+            quote: updatedQuote
+          };
+          updatedRO = updatedItem;
+          return updatedItem;
+        }
+        return ro;
+      });
+
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (updatedRO) {
+      syncRepairOrder(updatedRO);
+      recordROChange(roId, `Updated Line ${concernIndex + 1} complaint: "${cleanText}"`);
+    }
+    return true;
+  };
+
+  // Delete a customer complaint line from the repair order
+  const deleteRepairOrderConcern = (roId: string, concernIndex: number): boolean => {
+    if (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'SERVICE_ADVISOR') {
+      console.warn('Deleting complaint lines is only permitted by Service Manager and Service Advisor');
+      return false;
+    }
+
+    let updatedRO: RepairOrder | null = null;
+    setRepairOrders(prev => {
+      const updated = prev.map(ro => {
+        if (ro.id === roId) {
+          const currentConcerns = ro.concerns && ro.concerns.length > 0 
+            ? [...ro.concerns] 
+            : [ro.primaryConcern || 'Customer Concern'];
+          
+          if (currentConcerns.length <= 1) {
+            // Keep at least one concern
+            return ro;
+          }
+
+          const newConcerns = currentConcerns.filter((_, i) => i !== concernIndex);
+          const newPayTypes = (ro.concernPayTypes || []).filter((_, i) => i !== concernIndex);
+          const newTechIds = (ro.concernTechIds || []).filter((_, i) => i !== concernIndex);
+          const newTechNames = (ro.concernTechNames || []).filter((_, i) => i !== concernIndex);
+          const newCauses = (ro.concernCauses || []).filter((_, i) => i !== concernIndex);
+          const newCorrections = (ro.concernCorrections || []).filter((_, i) => i !== concernIndex);
+          const newStatuses = (ro.concernStatuses || []).filter((_, i) => i !== concernIndex);
+
+          const primaryConcern = newConcerns[0] || 'Customer Concern';
+
+          const updatedItem: RepairOrder = {
+            ...ro,
+            primaryConcern,
+            concerns: newConcerns,
+            concernPayTypes: newPayTypes,
+            concernTechIds: newTechIds,
+            concernTechNames: newTechNames,
+            concernCauses: newCauses,
+            concernCorrections: newCorrections,
+            concernStatuses: newStatuses
+          };
+          updatedRO = updatedItem;
+          return updatedItem;
+        }
+        return ro;
+      });
+
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    if (updatedRO) {
+      syncRepairOrder(updatedRO);
+      recordROChange(roId, `Removed Line ${concernIndex + 1} complaint`);
+    }
+    return true;
+  };
+
   // Technician Request Additional Services (MPI Findings: Air filter, cabin air filter, tires, scheduled maint, etc.)
   const addRecommendedService = (roId: string, item: {
     serviceName: string;
@@ -5926,6 +6063,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateConcernPayType,
         updateConcernTech,
         updateConcernStatus,
+        updateRepairOrderConcernText,
+        deleteRepairOrderConcern,
         logCustomerContact,
         clearAllRepairOrders,
         resetAllDataToCleanSlateHandler,

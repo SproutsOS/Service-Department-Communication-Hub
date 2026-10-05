@@ -1066,10 +1066,11 @@ export const RODetailModal: React.FC = () => {
               </button>
             )}
 
-            {/* Manager Edit RO Info */}
-            {isManager && (
+            {/* Edit RO Info (Service Advisor & Service Manager) */}
+            {(isManager || isAdvisor) && (
               <button
                 type="button"
+                id="edit-ro-info-btn"
                 onClick={() => {
                   if (!isEditingDetails && selectedRO) {
                     setEditCustomerName(selectedRO.customerName);
@@ -1092,7 +1093,7 @@ export const RODetailModal: React.FC = () => {
                     ? 'bg-blue-600 text-white border-blue-500 shadow-xs' 
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 shadow-2xs'
                 }`}
-                title="Service Manager: Edit core repair order details"
+                title="Edit customer complaints, vehicle details, promised time, and assignment"
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
@@ -1381,14 +1382,14 @@ export const RODetailModal: React.FC = () => {
                 </div>
               )}
 
-              {/* Service Manager Edit Form */}
-              {isManager && isEditingDetails && (
+              {/* Edit RO Form (Advisor & Manager) */}
+              {(isManager || isAdvisor) && isEditingDetails && (
                 <form onSubmit={handleSaveDetails} className="bg-white rounded-xl p-5 border-2 border-blue-500 shadow-sm space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <Edit3 className="w-4 h-4 text-blue-600" />
                       <h4 className="text-sm font-bold text-slate-900">
-                        Service Manager: Edit Repair Order Information
+                        Edit Repair Order Information & Customer Complaints
                       </h4>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1402,7 +1403,7 @@ export const RODetailModal: React.FC = () => {
                         </span>
                       )}
                       <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                        Manager Authority Active
+                        {isManager ? 'Manager Authority Active' : 'Advisor Authority Active'}
                       </span>
                     </div>
                   </div>

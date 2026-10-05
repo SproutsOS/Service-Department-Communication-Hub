@@ -96,7 +96,12 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   addRepairOrderConcern,
   isTechScreen = false
 }) => {
-  const { updateConcernStatus, openQuotePrintModal } = useApp();
+  const { 
+    updateConcernStatus, 
+    openQuotePrintModal,
+    updateRepairOrderConcernText,
+    deleteRepairOrderConcern
+  } = useApp();
   const ro = cleanRO3700(rawRO);
   const [smartWorkflowOrder, setSmartWorkflowOrder] = useState<boolean>(true);
   const [quickTechCause, setQuickTechCause] = useState<string>(ro.cause || '');
@@ -106,6 +111,8 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [lineCauseInput, setLineCauseInput] = useState<string>('');
   const [lineCorrectionInput, setLineCorrectionInput] = useState<string>('');
+  const [editingComplaintIdx, setEditingComplaintIdx] = useState<number | null>(null);
+  const [complaintInput, setComplaintInput] = useState<string>('');
   const [isAddingConcern, setIsAddingConcern] = useState<boolean>(false);
   const [newConcernText, setNewConcernText] = useState<string>('');
   const [newConcernPayType, setNewConcernPayType] = useState<ConcernPayType>('CUSTOMER_PAY');
@@ -852,13 +859,66 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
 
                       {/* 1. Customer Stated Complaint */}
                       <div className="space-y-1">
-                        <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
-                          <span>Complaint (Customer Stated Symptom):</span>
-                        </label>
-                        <div className="bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-950 whitespace-pre-wrap leading-relaxed">
-                          {concern}
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
+                            <span>Complaint (Customer Stated Symptom):</span>
+                          </label>
+                          {editingComplaintIdx !== idx && (isManager || isAdvisor) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingComplaintIdx(idx);
+                                setComplaintInput(concern || '');
+                              }}
+                              className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-blue-50 cursor-pointer"
+                              title="Edit this customer complaint / symptom description"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit Complaint</span>
+                            </button>
+                          )}
                         </div>
+
+                        {editingComplaintIdx === idx ? (
+                          <div className="space-y-2 p-2.5 bg-blue-50/60 rounded-lg border-2 border-blue-400 animate-in fade-in duration-100">
+                            <textarea
+                              rows={2}
+                              value={complaintInput}
+                              onChange={(e) => setComplaintInput(e.target.value)}
+                              placeholder="Enter updated customer complaint or symptom..."
+                              className="w-full px-3 py-1.5 border border-blue-300 rounded-lg text-xs font-bold text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              autoFocus
+                            />
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingComplaintIdx(null)}
+                                className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (complaintInput.trim()) {
+                                    updateRepairOrderConcernText(ro.id, idx, complaintInput.trim());
+                                    triggerActionNotice(`✓ Updated Line ${lineNum} complaint!`);
+                                  }
+                                  setEditingComplaintIdx(null);
+                                }}
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded shadow-2xs cursor-pointer flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Save Complaint</span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-950 whitespace-pre-wrap leading-relaxed">
+                            {concern}
+                          </div>
+                        )}
                       </div>
 
                       {/* 2. Cause (Technician Diagnostic Findings) */}

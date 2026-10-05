@@ -138,8 +138,25 @@ export const PartsDashboard: React.FC = () => {
     quantity: number;
     price: string;
     roLineNumber?: number;
+    vendor?: string;
+    timeFrameId?: string;
+    status?: PartStatus;
+    estimatedArrival?: string;
+    trackingNumber?: string;
+    notes?: string;
   }>>([
-    { id: 'pline_1', partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }
+    { 
+      id: 'pline_1', 
+      partNumber: '', 
+      description: '', 
+      quantity: 1, 
+      price: '', 
+      roLineNumber: 1,
+      vendor: getSavedVendorsFromStorage()[0] || 'STELLANTIS',
+      timeFrameId: 'TODAY_5PM',
+      status: 'DAILY_ORDER',
+      estimatedArrival: computeEtaAndStatus('TODAY_5PM').estimatedArrival
+    }
   ]);
   const [partVendor, setPartVendor] = useState<string>(() => getSavedVendorsFromStorage()[0] || '');
   const [partStatus, setPartStatus] = useState<PartStatus>('IN_STOCK');
@@ -397,6 +414,11 @@ export const PartsDashboard: React.FC = () => {
     const effectiveVendor = currentDraft.vendor || part.vendor || vendors[0] || '';
     const effectiveStatus = currentDraft.status || part.status;
     const effectiveEta = currentDraft.estimatedArrival || part.estimatedArrival;
+    
+    // Explicitly update requestType based on status if field is status
+    const effectiveRequestType = field === 'status'
+      ? (value === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'ORDER_NOW')
+      : (field === 'requestType' ? value : (part.requestType || (effectiveStatus === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'ORDER_NOW')));
 
     updatePartItem(roId, part.id, {
       partNumber: cleanPn,
@@ -404,6 +426,7 @@ export const PartsDashboard: React.FC = () => {
       quantity: qty,
       vendor: effectiveVendor,
       status: effectiveStatus,
+      requestType: effectiveRequestType,
       estimatedArrival: effectiveEta,
       roLineNumber: part.roLineNumber,
     });
@@ -415,12 +438,12 @@ export const PartsDashboard: React.FC = () => {
       description: `Additional Part for Line ${lineNumber}`,
       quantity: 1,
       price: undefined,
-      vendor: vendors[0] || '',
-      status: 'QUOTE_ONLY',
-      requestType: 'QUOTE_ONLY',
-      estimatedArrival: 'Price Quoted for Main Estimate',
+      vendor: vendors[0] || 'STELLANTIS',
+      status: 'REQUESTED',
+      requestType: 'ORDER_NOW',
+      estimatedArrival: 'Pending Parts Counter',
       roLineNumber: lineNumber,
-      sentToEstimate: true,
+      sentToEstimate: false,
     });
     showToast(`✓ Added additional part line to Line ${lineNumber}!`);
   };
@@ -730,21 +753,47 @@ export const PartsDashboard: React.FC = () => {
   };
 
   const handleAddPartLine = () => {
+    const defaultTf = 'TODAY_5PM';
+    const tfCalc = computeEtaAndStatus(defaultTf);
     setPartLines(prev => [
       ...prev,
-      { id: `pline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }
+      { 
+        id: `pline_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 
+        partNumber: '', 
+        description: '', 
+        quantity: 1, 
+        price: '', 
+        roLineNumber: 1,
+        vendor: vendors[0] || 'STELLANTIS',
+        timeFrameId: defaultTf,
+        status: tfCalc.status,
+        estimatedArrival: tfCalc.estimatedArrival
+      }
     ]);
   };
 
   const handleRemovePartLine = (id: string) => {
     if (partLines.length <= 1) {
-      setPartLines([{ id: `pline_${Date.now()}`, partNumber: '', description: '', quantity: 1, price: '', roLineNumber: 1 }]);
+      const defaultTf = 'TODAY_5PM';
+      const tfCalc = computeEtaAndStatus(defaultTf);
+      setPartLines([{ 
+        id: `pline_${Date.now()}`, 
+        partNumber: '', 
+        description: '', 
+        quantity: 1, 
+        price: '', 
+        roLineNumber: 1,
+        vendor: vendors[0] || 'STELLANTIS',
+        timeFrameId: defaultTf,
+        status: tfCalc.status,
+        estimatedArrival: tfCalc.estimatedArrival
+      }]);
       return;
     }
     setPartLines(prev => prev.filter(p => p.id !== id));
   };
 
-  const handleUpdatePartLine = (id: string, field: 'partNumber' | 'description' | 'quantity' | 'price' | 'roLineNumber', value: any) => {
+  const handleUpdatePartLine = (id: string, field: string, value: any) => {
     setPartLines(prev => prev.map(p => {
       if (p.id !== id) return p;
       return { ...p, [field]: value };
@@ -1114,9 +1163,9 @@ export const PartsDashboard: React.FC = () => {
         const qty = Math.max(1, Number(draft.quantity) || rp.quantity || 1);
 
         const rpTfCalc = draft.timeFrameId ? computeEtaAndStatus(draft.timeFrameId) : null;
-        const rpStatus = draft.status || rpTfCalc?.status || effectiveStatus;
-        const rpVendor = draft.vendor || effectiveVendor || 'STELLANTIS';
-        const rpEta = draft.estimatedArrival || rpTfCalc?.estimatedArrival || etaArrival;
+        const rpStatus = draft.status || rpTfCalc?.status || 'DAILY_ORDER';
+        const rpVendor = draft.vendor || rp.vendor || vendors[0] || 'STELLANTIS';
+        const rpEta = draft.estimatedArrival || rpTfCalc?.estimatedArrival || new Date().toISOString();
 
         updatePartItem(selectedTargetRoId, rp.id, {
           partNumber: cleanPn,
@@ -1132,7 +1181,7 @@ export const PartsDashboard: React.FC = () => {
       });
     }
 
-    // 2. Process manual part lines
+    // 2. Process manual part lines (each with its own independent source and ETA)
     const validLines = partLines.filter(l => l.partNumber.trim() || l.description.trim());
     validLines.forEach(line => {
       const cleanPn = line.partNumber.trim().toUpperCase() || 'TBD';
@@ -1140,17 +1189,22 @@ export const PartsDashboard: React.FC = () => {
       const qty = Math.max(1, Number(line.quantity) || 1);
       const priceVal = line.price ? parseFloat(line.price) : undefined;
 
+      const lineTfCalc = line.timeFrameId ? computeEtaAndStatus(line.timeFrameId) : null;
+      const lineStatus = line.status || lineTfCalc?.status || 'DAILY_ORDER';
+      const lineVendor = line.vendor || vendors[0] || 'STELLANTIS';
+      const lineEta = line.estimatedArrival || lineTfCalc?.estimatedArrival || new Date().toISOString();
+
       if (line.sourcePartId) {
         updatePartItem(selectedTargetRoId, line.sourcePartId, {
           partNumber: cleanPn,
           description: cleanDesc,
           quantity: qty,
-          status: effectiveStatus,
-          vendor: effectiveVendor || 'STELLANTIS',
-          estimatedArrival: etaArrival,
-          trackingNumber: partTracking.trim() || undefined,
+          status: lineStatus,
+          vendor: lineVendor,
+          estimatedArrival: lineEta,
+          trackingNumber: line.trackingNumber || partTracking.trim() || undefined,
           price: priceVal,
-          notes: partNotes.trim() || undefined,
+          notes: line.notes || partNotes.trim() || undefined,
           roLineNumber: line.roLineNumber,
         });
       } else {
@@ -1158,12 +1212,12 @@ export const PartsDashboard: React.FC = () => {
           partNumber: cleanPn,
           description: cleanDesc,
           quantity: qty,
-          status: effectiveStatus,
-          vendor: effectiveVendor || 'STELLANTIS',
-          estimatedArrival: etaArrival,
-          trackingNumber: partTracking.trim() || undefined,
+          status: lineStatus,
+          vendor: lineVendor,
+          estimatedArrival: lineEta,
+          trackingNumber: line.trackingNumber || partTracking.trim() || undefined,
           price: priceVal,
-          notes: partNotes.trim() || undefined,
+          notes: line.notes || partNotes.trim() || undefined,
           roLineNumber: line.roLineNumber,
         });
       }
@@ -1465,14 +1519,14 @@ export const PartsDashboard: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                    <span>ACTION REQUIRED: TECHNICIAN PARTS REQUESTS (QUOTING)</span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[11px] font-black uppercase tracking-wider animate-pulse">
+                    <span>ACTION REQUIRED: TECHNICIAN PARTS REQUESTS (TO ORDER & QUOTE)</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-600 text-white text-[11px] font-black uppercase tracking-wider animate-pulse">
                       {rosPendingPartsQuote.length} Vehicle{rosPendingPartsQuote.length === 1 ? '' : 's'} Waiting
                     </span>
                   </h2>
                 </div>
                 <p className="text-xs text-slate-700 font-medium">
-                  Review and price requested parts, then click "Submit Parts Quote to Advisor" to hand off to the advisor.
+                  Review requested parts. Use "Order Now" to order parts immediately or "Quote Only" for pricing estimates.
                 </p>
               </div>
             </div>
@@ -3735,7 +3789,7 @@ export const PartsDashboard: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Input Row */}
+                      {/* Input Row: Part #, Price, Qty, Total */}
                       <div className="grid grid-cols-12 gap-2 items-center">
                         <div className="col-span-12 sm:col-span-5">
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-0.5">
@@ -3795,6 +3849,79 @@ export const PartsDashboard: React.FC = () => {
                           </span>
                         </div>
                       </div>
+
+                      {/* Part Logistics: Independent Part Source & Part ETA per individual part */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-2 border-t border-amber-200/80 items-center">
+                        <div className="sm:col-span-6">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="block text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                              Part Source / Supplier
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const customV = prompt('Enter supplier / vendor name:');
+                                if (customV && customV.trim()) {
+                                  const clean = customV.trim().toUpperCase();
+                                  if (!vendors.includes(clean)) {
+                                    setVendors(prev => [...prev, clean]);
+                                  }
+                                  updateReqDraft(rp.id, 'vendor', clean);
+                                  showToast(`✓ Source "${clean}" saved for Part #${idx + 1}!`);
+                                }
+                              }}
+                              className="text-[9px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              <span>Add Source</span>
+                            </button>
+                          </div>
+                          <select
+                            value={draft.vendor || vendors[0] || ''}
+                            onChange={(e) => {
+                              if (e.target.value === '__ADD_NEW__') {
+                                const customV = prompt('Enter supplier / vendor name:');
+                                if (customV && customV.trim()) {
+                                  const clean = customV.trim().toUpperCase();
+                                  if (!vendors.includes(clean)) setVendors(prev => [...prev, clean]);
+                                  updateReqDraft(rp.id, 'vendor', clean);
+                                }
+                              } else {
+                                updateReqDraft(rp.id, 'vendor', e.target.value);
+                              }
+                            }}
+                            className="w-full px-2 py-1 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="">-- Select Source --</option>
+                            {vendors.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                            <option value="__ADD_NEW__">+ Add Custom Source...</option>
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-6">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="block text-[9px] font-bold uppercase tracking-wider text-amber-900">
+                              Part ETA / Arrival Time
+                            </label>
+                            {draft.estimatedArrival && (
+                              <span className="text-[10px] font-semibold text-slate-600">
+                                <strong>{formatEtaBadge(draft.estimatedArrival).text}</strong>
+                              </span>
+                            )}
+                          </div>
+                          <ArrivalTimeFrameDropdown
+                            size="sm"
+                            value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
+                            onChange={({ timeFrameId, status, estimatedArrival }) => {
+                              updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
+                              updateReqDraft(rp.id, 'status', status);
+                              updateReqDraft(rp.id, 'estimatedArrival', estimatedArrival);
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -3805,7 +3932,7 @@ export const PartsDashboard: React.FC = () => {
                   return (
                     <div 
                       key={line.id} 
-                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-2"
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-2.5"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -3846,6 +3973,7 @@ export const PartsDashboard: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Line Inputs */}
                       <div className="grid grid-cols-12 gap-2 items-center">
                         <div className="col-span-12 sm:col-span-4">
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-0.5">
@@ -3879,8 +4007,8 @@ export const PartsDashboard: React.FC = () => {
                           </label>
                           <input
                             type="number"
-                            min={1}
-                            max={99}
+                            min="1"
+                            max="99"
                             value={line.quantity}
                             onChange={e => handleUpdatePartLine(line.id, 'quantity', parseInt(e.target.value) || 1)}
                             className="w-full px-2 py-1.5 text-xs font-bold border border-slate-300 rounded-lg text-center bg-white"
@@ -3905,6 +4033,79 @@ export const PartsDashboard: React.FC = () => {
                           </div>
                         </div>
                       </div>
+
+                      {/* Part Logistics: Independent Part Source & Part ETA per manual part */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-2 border-t border-slate-200 items-center">
+                        <div className="sm:col-span-6">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-700">
+                              Part Source / Supplier
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const customV = prompt('Enter supplier / vendor name:');
+                                if (customV && customV.trim()) {
+                                  const clean = customV.trim().toUpperCase();
+                                  if (!vendors.includes(clean)) {
+                                    setVendors(prev => [...prev, clean]);
+                                  }
+                                  handleUpdatePartLine(line.id, 'vendor', clean);
+                                  showToast(`✓ Source "${clean}" saved for Part #${requestedPartsForSelectedRO.length + index + 1}!`);
+                                }
+                              }}
+                              className="text-[9px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              <span>Add Source</span>
+                            </button>
+                          </div>
+                          <select
+                            value={line.vendor || vendors[0] || ''}
+                            onChange={(e) => {
+                              if (e.target.value === '__ADD_NEW__') {
+                                const customV = prompt('Enter supplier / vendor name:');
+                                if (customV && customV.trim()) {
+                                  const clean = customV.trim().toUpperCase();
+                                  if (!vendors.includes(clean)) setVendors(prev => [...prev, clean]);
+                                  handleUpdatePartLine(line.id, 'vendor', clean);
+                                }
+                              } else {
+                                handleUpdatePartLine(line.id, 'vendor', e.target.value);
+                              }
+                            }}
+                            className="w-full px-2 py-1 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="">-- Select Source --</option>
+                            {vendors.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                            <option value="__ADD_NEW__">+ Add Custom Source...</option>
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-6">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-700">
+                              Part ETA / Arrival Time
+                            </label>
+                            {line.estimatedArrival && (
+                              <span className="text-[10px] font-semibold text-slate-600">
+                                <strong>{formatEtaBadge(line.estimatedArrival).text}</strong>
+                              </span>
+                            )}
+                          </div>
+                          <ArrivalTimeFrameDropdown
+                            size="sm"
+                            value={line.timeFrameId || line.status || 'DAILY_ORDER'}
+                            onChange={({ timeFrameId, status, estimatedArrival }) => {
+                              handleUpdatePartLine(line.id, 'timeFrameId', timeFrameId);
+                              handleUpdatePartLine(line.id, 'status', status);
+                              handleUpdatePartLine(line.id, 'estimatedArrival', estimatedArrival);
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -3922,85 +4123,24 @@ export const PartsDashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* Order Logistics & Settings (Simplified 2-Column Bar) */}
+              {/* Order Level Options: Bulk Source/ETA & Tracking / Internal Notes */}
               <div className="pt-3 border-t border-slate-200 space-y-2.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                        Part Source
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const customV = prompt('Enter custom vendor or supplier name to save for future use:');
-                          if (customV && customV.trim()) {
-                            const clean = customV.trim().toUpperCase();
-                            if (!vendors.includes(clean)) {
-                              setVendors(prev => [...prev, clean]);
-                            }
-                            setPartVendor(clean);
-                            showToast(`✓ Saved "${clean}" for future use!`);
-                          }
-                        }}
-                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add Source</span>
-                      </button>
-                    </div>
-                    <select
-                      value={partVendor}
-                      onChange={e => {
-                        if (e.target.value === '__ADD_NEW__') {
-                          setIsAddingCustomVendor(true);
-                          setShowAdvancedOptions(true);
-                        } else {
-                          setPartVendor(e.target.value);
-                        }
-                      }}
-                      className="w-full text-xs font-bold px-3 py-2 border border-slate-300 rounded-xl bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 outline-none"
-                    >
-                      <option value="">{vendors.length === 0 ? '-- No Sources Saved (+ Add)' : '-- Select Source --'}</option>
-                      {vendors.map(v => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                      <option value="__ADD_NEW__">+ Add Custom Source...</option>
-                    </select>
+                <div className="flex items-center justify-between text-xs pt-1 flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
+                    <Package className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Individual Source & ETA enabled for every part above.</span>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Part ETA
-                    </label>
-                    <ArrivalTimeFrameDropdown
-                      value={partTimeFrameId || partStatus}
-                      onChange={({ timeFrameId, status, estimatedArrival }) => {
-                        setPartTimeFrameId(timeFrameId);
-                        setPartStatus(status);
-                        setPartEstimatedArrival(estimatedArrival);
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Toggle for optional advanced fields */}
-                <div className="flex items-center justify-between text-xs pt-1">
                   <button
                     type="button"
                     onClick={() => setShowAdvancedOptions(prev => !prev)}
                     className="text-slate-500 hover:text-blue-600 font-medium cursor-pointer flex items-center gap-1"
                   >
-                    <span>{showAdvancedOptions ? '− Hide Tracking & Notes' : '+ Additional Options (Tracking #, Notes)'}</span>
+                    <span>{showAdvancedOptions ? '− Hide Tracking & Notes' : '+ Tracking Number & Notes'}</span>
                   </button>
-                  {partEstimatedArrival && (
-                    <span className="text-[11px] font-semibold text-slate-500">
-                      Calculated Arrival: <strong>{formatEtaBadge(partEstimatedArrival).text}</strong>
-                    </span>
-                  )}
                 </div>
 
-                {/* Collapsible Advanced Options */}
+                {/* Collapsible Advanced Options (Tracking & Notes) */}
                 {showAdvancedOptions && (
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-xs animate-in fade-in duration-150">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

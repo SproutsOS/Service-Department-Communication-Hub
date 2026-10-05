@@ -12,6 +12,7 @@ export interface IntegratedLinePart {
   isQuoteOnly: boolean;
   badgeClass: string;
   vendor?: string;
+  estimatedArrival?: string;
   trackingNumber?: string;
   source: 'RO_PART' | 'QUOTE_PART';
 }
@@ -103,6 +104,7 @@ export function getLineParts(ro: RepairOrder, lineNum: number): IntegratedLinePa
         isQuoteOnly,
         badgeClass,
         vendor: p.vendor,
+        estimatedArrival: p.estimatedArrival,
         trackingNumber: p.trackingNumber,
         source: 'RO_PART',
       });
