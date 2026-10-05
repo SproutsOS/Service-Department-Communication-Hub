@@ -17,6 +17,7 @@ import {
   RepairQuote,
   QuoteStatus,
   LaborLineItem,
+  QuotePartItem,
   WarrantyLaborTimePunch,
   WarrantyOperationType,
   ConcernPayType,
@@ -32,7 +33,12 @@ import {
   ServiceAppointment,
   AppointmentStatus,
   TransportationType,
-  ROChangeAlert
+  ROChangeAlert,
+  StandaloneQuote,
+  StandaloneQuoteLine,
+  StandaloneQuotePart,
+  StandaloneQuoteStatus,
+  RollToROParams
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
@@ -48,6 +54,7 @@ import {
   subscribeToShopSettings,
   subscribeToShopMessages,
   subscribeToCustomers,
+  subscribeToStandaloneQuotes,
   saveShopMessage,
   deleteShopMessagesFromCloud,
   CHAT_MAX_AGE_MS,
@@ -60,6 +67,8 @@ import {
   syncNotification,
   syncCustomer,
   deleteCustomerDoc,
+  syncStandaloneQuote,
+  deleteStandaloneQuoteDoc,
   markNotificationReadDoc,
   markAllNotificationsReadDocs,
   syncShopSettings,
@@ -76,6 +85,19 @@ interface AppContextType {
   isSetupWizardOpen: boolean;
   setIsSetupWizardOpen: (isOpen: boolean) => void;
   isCloudSynced: boolean;
+
+  // Standalone Quote & Pre-RO Estimator Hub
+  quotes: StandaloneQuote[];
+  isQuoteBuilderOpen: boolean;
+  setIsQuoteBuilderOpen: (open: boolean) => void;
+  activeQuoteBuilderId: string | null;
+  setActiveQuoteBuilderId: (id: string | null) => void;
+  openQuoteBuilder: (quoteId?: string | null) => void;
+  closeQuoteBuilder: () => void;
+  createStandaloneQuote: (quoteData: Omit<StandaloneQuote, 'id' | 'quoteNumber' | 'createdAt' | 'updatedAt'>) => StandaloneQuote;
+  updateStandaloneQuote: (quoteId: string, updates: Partial<StandaloneQuote>) => void;
+  deleteStandaloneQuote: (quoteId: string) => void;
+  convertQuoteToRepairOrder: (params: RollToROParams) => string;
 
   currentUser: User;
   users: User[];
@@ -527,6 +549,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
   }, [customers]);
+
+  // Standalone Quotes & Estimates State
+  const STORAGE_KEY_STANDALONE_QUOTES = 'dealership_standalone_quotes';
+  const [quotes, setQuotes] = useState<StandaloneQuote[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_STANDALONE_QUOTES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const [isQuoteBuilderOpen, setIsQuoteBuilderOpen] = useState(false);
+  const [activeQuoteBuilderId, setActiveQuoteBuilderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_STANDALONE_QUOTES, JSON.stringify(quotes));
+    } catch {
+      // ignore
+    }
+  }, [quotes]);
 
   const [selectedROId, setSelectedROId] = useState<string | null>(null);
   const [selectedROModalTab, setSelectedROModalTab] = useState<'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS' | null>(null);
@@ -1175,6 +1223,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // Subscribe to real-time Standalone Quotes in Google Cloud Firestore
+    const unsubscribeQuotes = subscribeToStandaloneQuotes((cloudQuotes) => {
+      if (cloudQuotes && cloudQuotes.length > 0) {
+        setQuotes(cloudQuotes);
+      }
+    });
+
     return () => {
       unsubscribeROs();
       unsubscribeUsers();
@@ -1182,6 +1237,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubscribeSettings();
       unsubscribeMessages();
       unsubscribeCustomers();
+      unsubscribeQuotes();
     };
   }, []);
 
@@ -2356,6 +2412,238 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     return newId;
+  };
+
+  // ==========================================
+  // Standalone Quote & Pre-RO Estimator Handlers
+  // ==========================================
+  const createStandaloneQuote = (quoteData: Omit<StandaloneQuote, 'id' | 'quoteNumber' | 'createdAt' | 'updatedAt'>): StandaloneQuote => {
+    const maxQuoteNum = quotes.reduce((max, q) => {
+      const match = (q.quoteNumber || q.id).match(/\d+/);
+      const num = match ? parseInt(match[0], 10) : 0;
+      return num > max ? num : max;
+    }, 1040);
+    
+    const nextNum = maxQuoteNum + 1;
+    const newId = `QTE-${nextNum}`;
+    const now = new Date().toISOString();
+
+    const newQuote: StandaloneQuote = {
+      ...quoteData,
+      id: newId,
+      quoteNumber: `EST-${nextNum}`,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setQuotes(prev => [newQuote, ...prev.filter(q => q.id !== newId)]);
+    syncStandaloneQuote(newQuote);
+    return newQuote;
+  };
+
+  const updateStandaloneQuote = (quoteId: string, updates: Partial<StandaloneQuote>) => {
+    const now = new Date().toISOString();
+    let updatedQuoteToSync: StandaloneQuote | null = null;
+
+    setQuotes(prev => {
+      const target = prev.find(q => q.id === quoteId);
+      if (!target) return prev;
+
+      const updated: StandaloneQuote = {
+        ...target,
+        ...updates,
+        updatedAt: now
+      };
+      updatedQuoteToSync = updated;
+      return prev.map(q => q.id === quoteId ? updated : q);
+    });
+
+    if (updatedQuoteToSync) {
+      syncStandaloneQuote(updatedQuoteToSync);
+    }
+  };
+
+  const deleteStandaloneQuote = (quoteId: string) => {
+    setQuotes(prev => prev.filter(q => q.id !== quoteId));
+    deleteStandaloneQuoteDoc(quoteId);
+  };
+
+  const convertQuoteToRepairOrder = (params: RollToROParams): string => {
+    const targetQuote = quotes.find(q => q.id === params.quoteId);
+    if (!targetQuote) return '';
+
+    const maxRoNum = repairOrders.reduce((max, ro) => {
+      const match = ro.id.match(/\d+/);
+      const num = match ? parseInt(match[0], 10) : 0;
+      return num > max ? num : max;
+    }, 10488);
+    const newRoId = `RO-${maxRoNum + 1}`;
+    const now = new Date().toISOString();
+
+    const cleanConcerns = targetQuote.lines.map(l => l.concern.trim()).filter(Boolean);
+    const cleanPayTypes = targetQuote.lines.map(l => l.payType || 'CUSTOMER_PAY');
+    const initialStatus: ROStatus = params.initialStatus || 'APPROVED';
+
+    const advisor = params.advisorId ? users.find(u => u.id === params.advisorId) : undefined;
+    const tech = params.techId ? users.find(u => u.id === params.techId) : undefined;
+
+    // Map parts from quote lines to RO parts
+    const roParts: PartItem[] = [];
+    targetQuote.lines.forEach((line) => {
+      (line.parts || []).forEach((part, pIdx) => {
+        roParts.push({
+          id: `prt_${Date.now()}_${line.lineNum}_${pIdx}_${Math.random().toString(36).substring(2, 6)}`,
+          roId: newRoId,
+          partNumber: part.partNumber || '',
+          description: part.description,
+          name: part.description,
+          quantity: part.quantity || 1,
+          status: (initialStatus === 'PARTS_ORDERED' || initialStatus === 'APPROVED') ? 'ORDERED' : 'NEEDED',
+          cost: part.cost,
+          price: part.price,
+          vendor: part.vendor || 'STELLANTIS',
+          estimatedArrival: part.estimatedArrival || 'Today 5:00 PM',
+          roLineNumber: line.lineNum,
+          requestType: 'ORDER_NOW'
+        });
+      });
+    });
+
+    // Map quote labor items
+    const laborItems: LaborLineItem[] = targetQuote.lines.map((line) => ({
+      id: `labor_${Date.now()}_line_${line.lineNum}`,
+      description: line.correction ? `Concern: ${line.concern} — Correction: ${line.correction}` : `Concern: ${line.concern}`,
+      laborHours: line.laborHours || 0,
+      hourlyRate: line.laborRate || targetQuote.defaultLaborRate || 165.00,
+      subtotal: line.laborSubtotal || 0,
+      payType: line.payType || 'CUSTOMER_PAY',
+      roLineNumber: line.lineNum,
+      concernText: line.concern,
+      correctionText: line.correction || '',
+      addedByAdvisor: true
+    }));
+
+    const partsItems: QuotePartItem[] = roParts.map((p) => ({
+      id: `qpart_${p.id}`,
+      description: p.description,
+      partNumber: p.partNumber,
+      quantity: p.quantity,
+      unitPrice: p.price || 0,
+      subtotal: Number(((p.quantity || 1) * (p.price || 0)).toFixed(2)),
+      sourcePartId: p.id,
+      roLineNumber: p.roLineNumber
+    }));
+
+    const mergedQuote: RepairQuote = {
+      id: `quote_${Date.now()}_${newRoId}`,
+      roId: newRoId,
+      createdAt: now,
+      updatedAt: now,
+      initiatedByTechId: tech?.id || currentUser.id,
+      initiatedByTechName: tech?.name || currentUser.name,
+      status: 'APPROVED',
+      laborItems,
+      partsItems,
+      defaultLaborRate: targetQuote.defaultLaborRate || 165.00,
+      shopSuppliesFee: targetQuote.shopSuppliesFee || 0,
+      applyShopSupplies: targetQuote.applyShopSupplies ?? true,
+      taxRate: targetQuote.taxRate || 0.07,
+      taxAmount: targetQuote.taxAmount || 0,
+      isTaxExempt: targetQuote.isTaxExempt,
+      taxExemptNumber: targetQuote.taxExemptNumber,
+      totalLaborHours: targetQuote.totalLaborHours || 0,
+      totalLaborCost: targetQuote.totalLaborCost || 0,
+      totalPartsCost: targetQuote.totalPartsCost || 0,
+      grandTotal: targetQuote.grandTotal || 0,
+      advisorNotes: `Rolled from Estimate #${targetQuote.quoteNumber || targetQuote.id}. Auth: ${params.authorizationMethod}. Quoted Total: $${targetQuote.grandTotal.toFixed(2)}`,
+      approvedAt: now,
+      approvedBy: currentUser.name
+    };
+
+    const newRO: RepairOrder = {
+      id: newRoId,
+      customerName: targetQuote.customerName,
+      customerPhone: targetQuote.customerPhone,
+      vehicle: {
+        year: typeof targetQuote.vehicle.year === 'number'
+          ? targetQuote.vehicle.year 
+          : (parseInt(String(targetQuote.vehicle.year), 10) || new Date().getFullYear()),
+        make: targetQuote.vehicle.make || 'Vehicle',
+        model: targetQuote.vehicle.model || 'Model',
+        vin: targetQuote.vehicle.vin || `1C4PJMCB${Math.random().toString().slice(2, 10)}`,
+        mileage: params.inMileage !== undefined && params.inMileage !== ''
+          ? (Number(params.inMileage) || 0) 
+          : (targetQuote.vehicle.mileage !== undefined && targetQuote.vehicle.mileage !== ''
+              ? (typeof targetQuote.vehicle.mileage === 'number' ? targetQuote.vehicle.mileage : (Number(targetQuote.vehicle.mileage) || 0))
+              : 0),
+        engine: targetQuote.vehicle.engine,
+        licensePlate: targetQuote.vehicle.licensePlate
+      },
+      createdAt: now,
+      advisorId: params.advisorId || targetQuote.advisorId || currentUser.id,
+      advisorName: params.advisorName || targetQuote.advisorName || currentUser.name,
+      techId: tech?.id,
+      techName: tech?.name,
+      primaryConcern: cleanConcerns[0] || 'Quoted Vehicle Repair Operations',
+      concerns: cleanConcerns,
+      concernPayTypes: cleanPayTypes,
+      status: initialStatus,
+      isUrgent: false,
+      promisedTime: params.promisedTime,
+      parts: roParts,
+      quote: mergedQuote,
+      isTaxExempt: targetQuote.isTaxExempt,
+      taxExemptNumber: targetQuote.taxExemptNumber,
+      messages: [],
+      history: [
+        {
+          id: `hist_${Date.now()}_init`,
+          status: initialStatus,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: now,
+          notes: `[Estimate Converted to RO] Generated from Quote #${targetQuote.quoteNumber || targetQuote.id} by ${params.advisorName || currentUser.name}. Authorization: ${params.authorizationMethod}. Quoted Amount: $${targetQuote.grandTotal.toFixed(2)}`
+        }
+      ]
+    };
+
+    // 1. Add RO to State & Cloud
+    setRepairOrders(prev => [newRO, ...prev]);
+    syncRepairOrder(newRO);
+
+    // 2. Mark Quote as ROLLED_TO_RO
+    const updatedQuote: StandaloneQuote = {
+      ...targetQuote,
+      status: 'ROLLED_TO_RO',
+      convertedRoId: newRoId,
+      convertedAt: now,
+      convertedBy: currentUser.name,
+      authorizationMethod: params.authorizationMethod,
+      updatedAt: now
+    };
+
+    setQuotes(prev => prev.map(q => q.id === targetQuote.id ? updatedQuote : q));
+    syncStandaloneQuote(updatedQuote);
+
+    // 3. Open the newly generated RO on screen
+    setSelectedRO(newRO);
+
+    return newRoId;
+  };
+
+  const openQuoteBuilder = (quoteId?: string | null) => {
+    if (quoteId) {
+      setActiveQuoteBuilderId(quoteId);
+    } else {
+      setActiveQuoteBuilderId(null);
+    }
+    setIsQuoteBuilderOpen(true);
+  };
+
+  const closeQuoteBuilder = () => {
+    setIsQuoteBuilderOpen(false);
+    setActiveQuoteBuilderId(null);
   };
 
   // Customer Management in the Cloud
@@ -6005,6 +6293,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isStaffManagementOpen,
         isTimeCardCalculatorOpen,
         isCustomerDirectoryOpen,
+        quotes,
+        isQuoteBuilderOpen,
+        setIsQuoteBuilderOpen,
+        activeQuoteBuilderId,
+        setActiveQuoteBuilderId,
+        openQuoteBuilder,
+        closeQuoteBuilder,
+        createStandaloneQuote,
+        updateStandaloneQuote,
+        deleteStandaloneQuote,
+        convertQuoteToRepairOrder,
         managerViewSection,
         setManagerViewSection,
         prefilledCustomerForNewRO,

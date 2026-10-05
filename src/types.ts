@@ -328,6 +328,91 @@ export interface RepairQuote {
   declinedReason?: string;
 }
 
+// ==========================================
+// Standalone Quote & Estimate Builder Types
+// ==========================================
+export type StandaloneQuoteStatus = 'DRAFT' | 'SENT_TO_CUSTOMER' | 'CUSTOMER_APPROVED' | 'ROLLED_TO_RO' | 'DECLINED' | 'EXPIRED';
+
+export interface StandaloneQuotePart {
+  id: string;
+  partNumber?: string;
+  description: string;
+  quantity: number;
+  cost?: number;
+  price: number;
+  subtotal: number;
+  vendor?: string;
+  estimatedArrival?: string;
+  status?: LineApprovalStatus;
+}
+
+export interface StandaloneQuoteLine {
+  id: string;
+  lineNum: number;
+  concern: string;
+  cause?: string;
+  correction?: string;
+  payType: ConcernPayType;
+  laborHours: number;
+  laborRate: number;
+  laborSubtotal: number;
+  parts: StandaloneQuotePart[];
+  status?: LineApprovalStatus;
+}
+
+export interface StandaloneQuote {
+  id: string; // e.g. "QTE-1048"
+  quoteNumber: string; // e.g. "EST-1048"
+  createdAt: string;
+  updatedAt: string;
+  advisorId: string;
+  advisorName: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  vehicle: {
+    year: number | string;
+    make: string;
+    model: string;
+    vin?: string;
+    engine?: string;
+    licensePlate?: string;
+    mileage?: number | string;
+  };
+  status: StandaloneQuoteStatus;
+  expirationDate: string; // e.g. 30 days
+  lines: StandaloneQuoteLine[];
+  defaultLaborRate: number;
+  applyShopSupplies: boolean;
+  shopSuppliesFee: number;
+  taxRate: number;
+  taxAmount: number;
+  isTaxExempt?: boolean;
+  taxExemptNumber?: string;
+  totalLaborHours: number;
+  totalLaborCost: number;
+  totalPartsCost: number;
+  grandTotal: number;
+  customerNotes?: string;
+  internalNotes?: string;
+  convertedRoId?: string;
+  convertedAt?: string;
+  convertedBy?: string;
+  authorizationMethod?: string;
+}
+
+export interface RollToROParams {
+  quoteId: string;
+  inMileage?: number | string;
+  advisorId?: string;
+  advisorName?: string;
+  techId?: string;
+  techName?: string;
+  promisedTime?: string;
+  authorizationMethod: string;
+  initialStatus?: ROStatus;
+}
+
 export type RecommendedServiceStatus = 'PENDING' | 'APPROVED' | 'DECLINED';
 
 export interface RecommendedService {

@@ -22,6 +22,7 @@ import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { DraggableShopChatButton } from './components/DraggableShopChatButton';
 import { ManagerStaffCalendar } from './components/ManagerStaffCalendar';
 import { AppointmentCalendar } from './components/AppointmentCalendar';
+import { QuoteBuilderModal } from './components/QuoteBuilderModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -41,7 +42,8 @@ import {
   CalendarDays,
   CalendarCheck,
   PhoneCall,
-  PlusCircle
+  PlusCircle,
+  Receipt
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -72,7 +74,12 @@ const MainContent: React.FC = () => {
     appointments,
     setIsNewROModalOpen,
     managerViewSection,
-    setManagerViewSection
+    setManagerViewSection,
+    quotes,
+    isQuoteBuilderOpen,
+    closeQuoteBuilder,
+    activeQuoteBuilderId,
+    openQuoteBuilder
   } = useApp();
   
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
@@ -392,6 +399,22 @@ const MainContent: React.FC = () => {
                       Leave/PTO
                     </span>
                   </button>
+
+                  {/* 8. Quote & Estimate Builder (Roll to RO) */}
+                  <button
+                    id="sidebar-quote-builder-btn"
+                    onClick={() => openQuoteBuilder()}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 text-slate-400 hover:bg-slate-800 hover:text-white group"
+                    title="Pre-RO Quote & Estimate Builder (Build menu & custom quotes, roll to Repair Order with 1 click)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Receipt className="w-4 h-4 shrink-0 text-amber-400 group-hover:text-amber-300" />
+                      <span className="text-sm font-medium">Quote Builder</span>
+                    </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-700/50 uppercase tracking-wider">
+                      {quotes.length > 0 ? `${quotes.length} Quotes` : 'Estimator'}
+                    </span>
+                  </button>
                 </div>
               </>
             ) : (
@@ -486,6 +509,24 @@ const MainContent: React.FC = () => {
                     >
                       <PlusCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>+ Create New RO</span>
+                    </button>
+
+                    {/* 4. Quote & Estimate Builder */}
+                    <button
+                      id="sidebar-advisor-quote-builder-btn"
+                      onClick={() => openQuoteBuilder()}
+                      className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-colors cursor-pointer bg-amber-500/10 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 shadow-xs font-bold text-xs"
+                      title="Pre-RO Quote & Estimate Builder (Roll to Repair Order with 1 click)"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Receipt className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Quote & Estimates</span>
+                      </div>
+                      {quotes.length > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-900 text-amber-200">
+                          {quotes.length}
+                        </span>
+                      )}
                     </button>
                   </div>
                 )}
@@ -881,6 +922,13 @@ const MainContent: React.FC = () => {
       <WarrantyPrintModal />
       <QuotePrintModal />
       <CustomerDirectoryModal />
+      <ErrorBoundary fallbackTitle="Quote Builder Error">
+        <QuoteBuilderModal 
+          isOpen={isQuoteBuilderOpen} 
+          onClose={closeQuoteBuilder} 
+          initialQuoteId={activeQuoteBuilderId} 
+        />
+      </ErrorBoundary>
       <UrgentToastStack />
 
       {/* Draggable Floating Quick Chat Launcher (hold left mouse button and drag to reposition anywhere) */}

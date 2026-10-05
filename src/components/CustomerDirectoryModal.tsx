@@ -22,7 +22,8 @@ import {
   Cloud, 
   ArrowUpRight,
   Save,
-  AlertCircle
+  AlertCircle,
+  Receipt
 } from 'lucide-react';
 
 export const CustomerDirectoryModal: React.FC = () => {
@@ -36,7 +37,10 @@ export const CustomerDirectoryModal: React.FC = () => {
     isCustomerDirectoryOpen, 
     setIsCustomerDirectoryOpen,
     setPrefilledCustomerForNewRO,
-    isCloudSynced
+    isCloudSynced,
+    createStandaloneQuote,
+    openQuoteBuilder,
+    currentUser
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -286,6 +290,45 @@ export const CustomerDirectoryModal: React.FC = () => {
     setPrefilledCustomerForNewRO(targetCustomer);
     setIsCustomerDirectoryOpen(false);
     setIsNewROModalOpen(true);
+  };
+
+  // Launch Quote Builder with pre-filled customer & vehicle
+  const handleCreateQuoteForCustomer = (vehicle?: VehicleInfo) => {
+    if (!activeCustomer) return;
+    const selectedVeh = vehicle || activeCustomer.vehicles?.[0];
+    const newQuote = createStandaloneQuote({
+      advisorId: currentUser.id,
+      advisorName: currentUser.name,
+      customerName: activeCustomer.name,
+      customerPhone: activeCustomer.phone || '',
+      customerEmail: activeCustomer.email || '',
+      vehicle: {
+        year: selectedVeh?.year || '',
+        make: selectedVeh?.make || '',
+        model: selectedVeh?.model || '',
+        vin: selectedVeh?.vin || '',
+        mileage: selectedVeh?.mileage || '',
+        licensePlate: selectedVeh?.licensePlate || ''
+      },
+      status: 'DRAFT',
+      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      lines: [],
+      defaultLaborRate: 165.00,
+      applyShopSupplies: true,
+      shopSuppliesFee: 0,
+      taxRate: activeCustomer.isTaxExempt ? 0 : 0.07,
+      taxAmount: 0,
+      isTaxExempt: activeCustomer.isTaxExempt,
+      taxExemptNumber: activeCustomer.taxExemptNumber,
+      totalLaborHours: 0,
+      totalLaborCost: 0,
+      totalPartsCost: 0,
+      grandTotal: 0,
+      customerNotes: activeCustomer.notes || ''
+    });
+
+    setIsCustomerDirectoryOpen(false);
+    openQuoteBuilder(newQuote.id);
   };
 
   return (
@@ -753,6 +796,16 @@ export const CustomerDirectoryModal: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => handleCreateQuoteForCustomer()}
+                        className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+                        title="Create a Pre-RO Estimate / Quote with this customer pre-filled"
+                      >
+                        <Receipt className="w-4 h-4" />
+                        <span>Create Quote</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleStartROForCustomer()}
                         className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
                         title="Start a new Repair Order with this customer pre-filled"
@@ -1020,14 +1073,25 @@ export const CustomerDirectoryModal: React.FC = () => {
                             <span className="text-[10px] text-slate-500">
                               Vehicle #{idx + 1}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleStartROForCustomer(veh)}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors shadow-2xs"
-                            >
-                              <span>Create RO</span>
-                              <ArrowUpRight className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleCreateQuoteForCustomer(veh)}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 transition-colors shadow-2xs"
+                                title="Create Quote for this vehicle"
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                                <span>Quote</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStartROForCustomer(veh)}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors shadow-2xs"
+                              >
+                                <span>Create RO</span>
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ))}

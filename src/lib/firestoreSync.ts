@@ -14,7 +14,7 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer } from '../types';
+import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer, StandaloneQuote } from '../types';
 
 // Collection references
 export const REPAIR_ORDERS_COL = 'repairOrders';
@@ -24,6 +24,7 @@ export const NOTIFICATIONS_COL = 'notifications';
 export const SETTINGS_COL = 'settings';
 export const SHOP_SETTINGS_DOC = 'shop';
 export const SHOP_MESSAGES_COL = 'shopMessages';
+export const QUOTES_COL = 'standaloneQuotes';
 
 export enum OperationType {
   CREATE = 'create',
@@ -411,6 +412,45 @@ export async function markAllNotificationsReadDocs(notifIds: string[]) {
     await batch.commit();
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, NOTIFICATIONS_COL);
+  }
+}
+
+// Subscribe to real-time standalone quotes / estimates
+export function subscribeToStandaloneQuotes(callback: (quotes: StandaloneQuote[]) => void) {
+  const colRef = collection(db, QUOTES_COL);
+  return onSnapshot(colRef, (snapshot) => {
+    const quoteList: StandaloneQuote[] = [];
+    snapshot.forEach((docSnap) => {
+      quoteList.push(docSnap.data() as StandaloneQuote);
+    });
+    // Sort descending by creation date
+    quoteList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    callback(quoteList);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, QUOTES_COL);
+  });
+}
+
+// Save or update a standalone quote
+export async function syncStandaloneQuote(quote: StandaloneQuote): Promise<boolean> {
+  try {
+    const cleanQuote = sanitizeForFirestore(quote);
+    const docRef = doc(db, QUOTES_COL, quote.id);
+    await setDoc(docRef, cleanQuote, { merge: true });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${QUOTES_COL}/${quote.id}`);
+    return false;
+  }
+}
+
+// Delete a standalone quote
+export async function deleteStandaloneQuoteDoc(quoteId: string) {
+  try {
+    const docRef = doc(db, QUOTES_COL, quoteId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${QUOTES_COL}/${quoteId}`);
   }
 }
 

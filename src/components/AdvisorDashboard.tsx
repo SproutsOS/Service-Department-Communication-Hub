@@ -17,7 +17,8 @@ import {
   LayoutGrid, 
   ListFilter, 
   CalendarCheck,
-  ChevronRight
+  ChevronRight,
+  Receipt
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -37,7 +38,9 @@ export const AdvisorDashboard: React.FC = () => {
     setIsNewROModalOpen, 
     users,
     appointments,
-    setIsAppointmentCalendarOpen 
+    setIsAppointmentCalendarOpen,
+    openQuoteBuilder,
+    quotes 
   } = useApp();
   
   const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET'>('BOARD');
@@ -257,6 +260,23 @@ export const AdvisorDashboard: React.FC = () => {
               )}
             </select>
           </div>
+
+          {/* Quote & Estimate Builder Button */}
+          <button
+            type="button"
+            id="advisor-quote-builder-btn"
+            onClick={() => openQuoteBuilder()}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Pre-RO Quote & Estimate Builder (Roll to Repair Order with 1 click)"
+          >
+            <Receipt className="w-4 h-4 text-amber-200" />
+            <span>Quote Builder</span>
+            {quotes.length > 0 && (
+              <span className="bg-amber-950 text-amber-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400">
+                {quotes.length}
+              </span>
+            )}
+          </button>
 
           {/* Appointment Calendar Button */}
           <button

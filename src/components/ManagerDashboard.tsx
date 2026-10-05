@@ -21,7 +21,8 @@ import {
   Calculator,
   ShieldCheck,
   PhoneCall,
-  ExternalLink
+  ExternalLink,
+  Receipt
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -45,7 +46,9 @@ export const ManagerDashboard: React.FC = () => {
     appointments,
     setIsAppointmentCalendarOpen,
     managerViewSection: viewSection,
-    setManagerViewSection: setViewSection
+    setManagerViewSection: setViewSection,
+    openQuoteBuilder,
+    quotes
   } = useApp();
 
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
@@ -183,6 +186,21 @@ export const ManagerDashboard: React.FC = () => {
             {totalPartsOnOrderCount > 0 && (
               <span className="bg-orange-950 text-orange-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-orange-400">
                 {totalPartsOnOrderCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="open-quote-builder-mgr"
+            onClick={() => openQuoteBuilder()}
+            className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
+            title="Pre-RO Quote & Estimate Builder (Roll into Repair Orders)"
+          >
+            <Receipt className="w-4 h-4 text-amber-200" />
+            <span>Quote Builder</span>
+            {quotes.length > 0 && (
+              <span className="bg-amber-950 text-amber-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400">
+                {quotes.length}
               </span>
             )}
           </button>

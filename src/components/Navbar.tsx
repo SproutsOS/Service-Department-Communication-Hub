@@ -17,7 +17,8 @@ import {
   Lock,
   X,
   CalendarDays,
-  CalendarCheck
+  CalendarCheck,
+  Receipt
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -48,6 +49,8 @@ export const Navbar: React.FC = () => {
     unreadROChangesCount,
     clearROChangeAlert,
     clearAllROChangeAlerts,
+    openQuoteBuilder,
+    quotes,
   } = useApp();
 
   const todayStr = useMemo(() => {
@@ -263,20 +266,37 @@ export const Navbar: React.FC = () => {
 
         {/* Appointments Calendar Button (Advisors & Service Manager) */}
         {(currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR') && (
-          <button
-            id="navbar-appointment-calendar-btn"
-            onClick={() => setIsAppointmentCalendarOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white border border-purple-700 shadow-xs"
-            title="Service Appointment Calendar (Customer Check-Ins, Waiters, Loaners)"
-          >
-            <CalendarCheck className="w-4 h-4 text-purple-300" />
-            <span className="hidden sm:inline">Appointments</span>
-            {todayAppointmentsCount > 0 && (
-              <span className="bg-purple-700 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                {todayAppointmentsCount}
-              </span>
-            )}
-          </button>
+          <>
+            <button
+              id="navbar-quote-builder-btn"
+              onClick={() => openQuoteBuilder()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-amber-950/70 hover:bg-amber-900 text-amber-200 hover:text-white border border-amber-700/80 shadow-xs"
+              title="Pre-RO Quote & Estimate Builder (Build menu estimates & roll into Repair Orders)"
+            >
+              <Receipt className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Quote Builder</span>
+              {quotes.length > 0 && (
+                <span className="bg-amber-600 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {quotes.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              id="navbar-appointment-calendar-btn"
+              onClick={() => setIsAppointmentCalendarOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white border border-purple-700 shadow-xs"
+              title="Service Appointment Calendar (Customer Check-Ins, Waiters, Loaners)"
+            >
+              <CalendarCheck className="w-4 h-4 text-purple-300" />
+              <span className="hidden sm:inline">Appointments</span>
+              {todayAppointmentsCount > 0 && (
+                <span className="bg-purple-700 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {todayAppointmentsCount}
+                </span>
+              )}
+            </button>
+          </>
         )}
 
         {/* Staff Directory Button (Service Manager Only) */}
