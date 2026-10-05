@@ -90,22 +90,13 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
                 </span>
               </div>
 
-              {/* Badges: Quote Only and Availability */}
+              {/* Badges: Status & Availability */}
               <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto flex-wrap">
-                {/* Quote Only Badge */}
-                {part.isQuoteOnly && (
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border bg-purple-100 text-purple-900 border-purple-300 shadow-2xs flex items-center gap-1">
-                    <span>💬</span>
-                    <span>QUOTE ONLY</span>
-                  </span>
-                )}
-
-                {/* Availability Badge */}
                 <span
-                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 ${part.badgeClass}`}
-                  title={`Availability Status: ${part.availability}`}
+                  className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 ${part.badgeClass}`}
+                  title={`Status: ${part.availability}`}
                 >
-                  <Clock className="w-2.5 h-2.5" />
+                  <Package className="w-3 h-3" />
                   <span>{part.availability}</span>
                 </span>
               </div>

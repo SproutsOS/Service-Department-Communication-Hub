@@ -65,7 +65,9 @@ export type PredefinedPartStatus =
   | 'IN_TRANSIT' 
   | 'RECEIVED' 
   | 'ISSUED_TO_TECH'
-  | 'BACKORDERED';
+  | 'BACKORDERED'
+  | 'DECLINED'
+  | 'CANCELLED';
 
 export type PartStatus = PredefinedPartStatus | (string & {});
 
@@ -98,6 +100,7 @@ export interface Message {
   content: string;
   timestamp: string;
   isUrgent?: boolean;
+  readBy?: string[]; // Array of user IDs who have viewed this message
 }
 
 export interface StatusHistory {

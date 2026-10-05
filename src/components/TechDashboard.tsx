@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Wrench, 
   Clock, 
@@ -32,7 +32,8 @@ import {
   Gauge,
   Car,
   History,
-  Search
+  Search,
+  Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
@@ -760,11 +761,62 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       <span className="text-xs font-black px-3 py-1 bg-slate-900 text-white rounded-lg uppercase tracking-wider shadow-2xs">
                         Line {idx + 1}
                       </span>
-                      {isMyLine && (
-                        <span className="text-xs font-black px-2.5 py-1 bg-blue-600 text-white rounded-md uppercase tracking-wider shadow-2xs">
-                          Your Line
-                        </span>
-                      )}
+
+                      {/* Line Authorization Decision Badge: Approved / Denied / Waiting on Approval */}
+                      {(() => {
+                        const lineNum = idx + 1;
+                        const explicitStatus = ro.concernStatuses?.[idx] || ro.quote?.lineStatuses?.[lineNum];
+
+                        if (explicitStatus === 'APPROVED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-emerald-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approved</span>
+                            </span>
+                          );
+                        }
+
+                        if (explicitStatus === 'DECLINED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-rose-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-rose-700">
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Denied</span>
+                            </span>
+                          );
+                        }
+
+                        // If whole RO is in approved state
+                        if (ro.status === 'APPROVED' || ro.quote?.status === 'APPROVED' || ['PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)) {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-emerald-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approved</span>
+                            </span>
+                          );
+                        }
+
+                        // If whole RO is denied
+                        if (ro.status === 'DENIED' || ro.quote?.status === 'DECLINED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-rose-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-rose-700">
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Denied</span>
+                            </span>
+                          );
+                        }
+
+                        // If quote / estimate is submitted, or if awaiting approval / estimate done / findings completed
+                        if (ro.status === 'WAITING_FOR_APPROVAL' || ro.status === 'WAITING_APPROVAL' || ro.status === 'ESTIMATE_DONE' || ro.quote?.status === 'SUBMITTED' || isLineComplete || (lineHours[idx] && Number(lineHours[idx]) > 0)) {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-purple-700 text-white rounded-md flex items-center gap-1 shadow-xs border border-purple-800">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Waiting on Approval</span>
+                            </span>
+                          );
+                        }
+
+                        return null;
+                      })()}
 
                       {canSelectPayType ? (
                         <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-300 shadow-2xs">
@@ -925,11 +977,11 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       {/* Inline Labor Hours Requested Input for Line {idx + 1} (Syncs to Quote) */}
                       <div 
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border-2 border-slate-300 shadow-2xs hover:border-blue-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all"
+                        className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all"
                         title={`Enter labor hours requested for Line ${idx + 1} — automatically updates the repair quote`}
                       >
-                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider shrink-0">
+                        <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                        <label className="text-xs font-black text-slate-800 uppercase tracking-wider shrink-0">
                           Hours:
                         </label>
                         <input
@@ -944,9 +996,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           }}
                           onChange={(e) => handleLineHoursChange(idx, e.target.value)}
                           onBlur={() => handleLineHoursBlur(idx)}
-                          className="w-12 text-xs font-extrabold text-slate-900 bg-transparent text-center focus:outline-hidden"
+                          className="w-16 sm:w-20 text-sm font-black text-slate-950 bg-slate-100 hover:bg-slate-50 focus:bg-white px-2 py-1 rounded border border-slate-300 focus:border-blue-600 text-center focus:outline-none transition-colors"
                         />
-                        <span className="text-xs font-bold text-slate-500 pr-0.5">hrs</span>
+                        <span className="text-xs font-black text-slate-600 pr-0.5">hrs</span>
                       </div>
 
                       {/* Request Parts directly to the right of hours entry box */}
@@ -965,32 +1017,147 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         </button>
                       )}
 
-                      {/* Parts Requested Button directly to the right of Request Parts */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setViewingPartsLineIndex(viewingPartsLineIndex === idx ? null : idx);
-                        }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
-                          viewingPartsLineIndex === idx
-                            ? 'bg-blue-700 text-white border-blue-800 ring-2 ring-blue-300'
-                            : lineParts.length > 0
-                            ? 'bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-300'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                        }`}
-                        title={`View parts requested for Line ${idx + 1}`}
-                      >
-                        <Eye className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span>Parts Requested</span>
-                        {lineParts.length > 0 && (
-                          <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
-                            viewingPartsLineIndex === idx ? 'bg-white text-blue-900' : 'bg-blue-600 text-white'
-                          }`}>
-                            {lineParts.length}
-                          </span>
-                        )}
-                      </button>
+                      {/* Parts Buttons directly to the right of Request Parts */}
+                      {(() => {
+                        const isPartOrdered = (p: typeof lineParts[0]) => 
+                          p.status === 'ORDERED' || 
+                          p.status === 'IN_TRANSIT' || 
+                          p.status === 'IN_STOCK' || 
+                          p.status === 'RECEIVED' || 
+                          p.status === 'ISSUED_TO_TECH' ||
+                          p.status === 'DAILY_ORDER' ||
+                          p.status === 'LOCAL_PURCHASE' ||
+                          p.status === 'SPECIAL_ORDER' ||
+                          p.status === 'SPECIAL_ORDER_1_5_DAYS' ||
+                          p.status === 'VOR_UPGRADE';
+
+                        const isPartQuoteOnly = (p: typeof lineParts[0]) => 
+                          !isPartOrdered(p) && 
+                          p.status !== 'APPROVED' &&
+                          p.status !== 'DECLINED' &&
+                          p.status !== 'CANCELLED' &&
+                          (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY');
+
+                        const isPartRequested = (p: typeof lineParts[0]) => 
+                          !isPartOrdered(p) && 
+                          p.status !== 'DECLINED' &&
+                          p.status !== 'CANCELLED' &&
+                          !isPartQuoteOnly(p);
+
+                        const isPartDeclined = (p: typeof lineParts[0]) =>
+                          p.status === 'DECLINED' || p.status === 'CANCELLED';
+
+                        const orderedParts = lineParts.filter(isPartOrdered);
+                        const quotedParts = lineParts.filter(isPartQuoteOnly);
+                        const requestedParts = lineParts.filter(isPartRequested);
+                        const declinedParts = lineParts.filter(isPartDeclined);
+
+                        const isOpen = viewingPartsLineIndex === idx;
+
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {/* 1. Parts Ordered Button */}
+                            {orderedParts.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingPartsLineIndex(isOpen ? null : idx);
+                                }}
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                                  isOpen
+                                    ? 'bg-amber-600 text-white border-amber-700 ring-2 ring-amber-300'
+                                    : 'bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-300'
+                                }`}
+                                title={`View ${orderedParts.length} parts ordered for Line ${idx + 1}`}
+                              >
+                                <Truck className={`w-3.5 h-3.5 shrink-0 ${isOpen ? 'text-white' : 'text-amber-600'}`} />
+                                <span>Parts Ordered</span>
+                                <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                                  isOpen ? 'bg-white text-slate-900' : 'bg-amber-600 text-white'
+                                }`}>
+                                  {orderedParts.length}
+                                </span>
+                              </button>
+                            )}
+
+                            {/* 2. Parts on Quote Button (Waiting on Approval) */}
+                            {quotedParts.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingPartsLineIndex(isOpen ? null : idx);
+                                }}
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                                  isOpen
+                                    ? 'bg-purple-700 text-white border-purple-800 ring-2 ring-purple-300'
+                                    : 'bg-purple-50 hover:bg-purple-100 text-purple-950 border-purple-300'
+                                }`}
+                                title={`View ${quotedParts.length} parts on quote waiting on approval for Line ${idx + 1}`}
+                              >
+                                <Calculator className={`w-3.5 h-3.5 shrink-0 ${isOpen ? 'text-white' : 'text-purple-600'}`} />
+                                <span>Parts on Quote</span>
+                                <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                                  isOpen ? 'bg-white text-slate-900' : 'bg-purple-600 text-white'
+                                }`}>
+                                  {quotedParts.length}
+                                </span>
+                              </button>
+                            )}
+
+                            {/* 3. Parts Requested Button (if not covered above) */}
+                            {requestedParts.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingPartsLineIndex(isOpen ? null : idx);
+                                }}
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                                  isOpen
+                                    ? 'bg-blue-700 text-white border-blue-800 ring-2 ring-blue-300'
+                                    : 'bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-300'
+                                }`}
+                                title={`View ${requestedParts.length} parts requested for Line ${idx + 1}`}
+                              >
+                                <Eye className={`w-3.5 h-3.5 shrink-0 ${isOpen ? 'text-white' : 'text-blue-600'}`} />
+                                <span>Parts Requested</span>
+                                <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                                  isOpen ? 'bg-white text-slate-900' : 'bg-blue-600 text-white'
+                                }`}>
+                                  {requestedParts.length}
+                                </span>
+                              </button>
+                            )}
+
+                            {/* 4. Parts Declined Button */}
+                            {declinedParts.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingPartsLineIndex(isOpen ? null : idx);
+                                }}
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                                  isOpen
+                                    ? 'bg-red-700 text-white border-red-800 ring-2 ring-red-300'
+                                    : 'bg-red-50 hover:bg-red-100 text-red-900 border-red-300'
+                                }`}
+                                title={`View ${declinedParts.length} declined parts for Line ${idx + 1}`}
+                              >
+                                <Ban className={`w-3.5 h-3.5 shrink-0 ${isOpen ? 'text-white' : 'text-red-600'}`} />
+                                <span>Parts Declined</span>
+                                <span className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                                  isOpen ? 'bg-white text-slate-900' : 'bg-red-600 text-white'
+                                }`}>
+                                  {declinedParts.length}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Line Technician Selector / Display */}
@@ -1029,181 +1196,243 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Expandable Parts Requested for Line {idx + 1} Section */}
-                  {viewingPartsLineIndex === idx && (
-                    <div 
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-3.5 bg-blue-50/80 rounded-xl border-2 border-blue-300 space-y-2.5 shadow-xs animate-in fade-in duration-150"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Package className="w-4 h-4 text-blue-700" />
-                          <span className="text-xs font-black text-blue-950 uppercase tracking-wider">
-                            Parts Requested for Line {idx + 1}
-                          </span>
-                          <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full">
-                            {lineParts.length} {lineParts.length === 1 ? 'Part' : 'Parts'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {onRequestParts && (
-                            <button
-                              type="button"
-                              onClick={() => onRequestParts(idx, concernText)}
-                              className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>+ Request More Parts</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setViewingPartsLineIndex(null)}
-                            className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                            title="Close parts list"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                  {/* Expandable Parts Requested / Ordered / Quoted for Line {idx + 1} Section */}
+                  {viewingPartsLineIndex === idx && (() => {
+                    const isPartOrdered = (p: typeof lineParts[0]) => 
+                      p.status === 'ORDERED' || 
+                      p.status === 'IN_TRANSIT' || 
+                      p.status === 'IN_STOCK' || 
+                      p.status === 'RECEIVED' || 
+                      p.status === 'ISSUED_TO_TECH' ||
+                      p.status === 'DAILY_ORDER' ||
+                      p.status === 'LOCAL_PURCHASE' ||
+                      p.status === 'SPECIAL_ORDER' ||
+                      p.status === 'SPECIAL_ORDER_1_5_DAYS' ||
+                      p.status === 'VOR_UPGRADE';
 
-                      {lineParts.length === 0 ? (
-                        <div className="bg-white p-3 rounded-lg border border-dashed border-slate-300 text-center space-y-2">
-                          <p className="text-xs font-semibold text-slate-600">No parts have been requested or ordered for Line {idx + 1} yet.</p>
-                          {onRequestParts && (
+                    const isPartQuoteOnly = (p: typeof lineParts[0]) => 
+                      !isPartOrdered(p) && 
+                      p.status !== 'APPROVED' &&
+                      p.status !== 'DECLINED' &&
+                      p.status !== 'CANCELLED' &&
+                      (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY');
+
+                    const orderedParts = lineParts.filter(isPartOrdered);
+                    const quotedParts = lineParts.filter(isPartQuoteOnly);
+                    const hasOrderedParts = orderedParts.length > 0;
+                    const hasQuotedParts = quotedParts.length > 0;
+
+                    return (
+                      <div 
+                        onClick={(e) => e.stopPropagation()}
+                        className={`p-3.5 rounded-xl border-2 space-y-2.5 shadow-xs animate-in fade-in duration-150 ${
+                          hasOrderedParts 
+                            ? 'bg-amber-50/80 border-amber-300' 
+                            : hasQuotedParts
+                            ? 'bg-purple-50/80 border-purple-300'
+                            : 'bg-blue-50/80 border-blue-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {hasOrderedParts ? (
+                              <Truck className="w-4 h-4 text-amber-700" />
+                            ) : hasQuotedParts ? (
+                              <Calculator className="w-4 h-4 text-purple-700" />
+                            ) : (
+                              <Package className="w-4 h-4 text-blue-700" />
+                            )}
+                            <span className={`text-xs font-black uppercase tracking-wider ${
+                              hasOrderedParts ? 'text-amber-950' : hasQuotedParts ? 'text-purple-950' : 'text-blue-950'
+                            }`}>
+                              {hasOrderedParts && hasQuotedParts
+                                ? `Line ${idx + 1} Parts Breakdown`
+                                : hasOrderedParts
+                                ? `Parts Ordered for Line ${idx + 1}`
+                                : hasQuotedParts
+                                ? `Parts on Quote (Pending Approval) for Line ${idx + 1}`
+                                : `Parts Requested for Line ${idx + 1}`}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {orderedParts.length > 0 && (
+                                <span className="px-2 py-0.5 text-white text-[10px] font-black rounded-full bg-amber-600">
+                                  {orderedParts.length} Ordered
+                                </span>
+                              )}
+                              {quotedParts.length > 0 && (
+                                <span className="px-2 py-0.5 text-white text-[10px] font-black rounded-full bg-purple-600">
+                                  {quotedParts.length} on Quote
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {onRequestParts && (
+                              <button
+                                type="button"
+                                onClick={() => onRequestParts(idx, concernText)}
+                                className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>+ Request More Parts</span>
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => onRequestParts(idx, concernText)}
-                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                              onClick={() => setViewingPartsLineIndex(null)}
+                              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                              title="Close parts list"
                             >
-                              <Package className="w-3.5 h-3.5" />
-                              <span>+ Request Parts for Line {idx + 1}</span>
+                              <X className="w-4 h-4" />
                             </button>
-                          )}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {lineParts.map((part) => {
-                            const etaBadge = formatEtaBadge(part.estimatedArrival);
-                            const isROApproved = Boolean(
-                              ro.status === 'APPROVED' || 
-                              ro.quote?.status === 'APPROVED' || 
-                              ro.quote?.approvedAt || 
-                              ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
-                            );
-                            return (
-                              <div 
-                                key={part.id} 
-                                className="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-300 shadow-2xs gap-2"
+
+                        {lineParts.length === 0 ? (
+                          <div className="bg-white p-3 rounded-lg border border-dashed border-slate-300 text-center space-y-2">
+                            <p className="text-xs font-semibold text-slate-600">No parts have been requested or ordered for Line {idx + 1} yet.</p>
+                            {onRequestParts && (
+                              <button
+                                type="button"
+                                onClick={() => onRequestParts(idx, concernText)}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
                               >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-mono text-slate-700 text-[11px] font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                      #{part.partNumber || 'TBD'}
-                                    </span>
-                                    <span className="font-bold text-slate-900 break-words">{part.description}</span>
-                                    <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                                      Qty: {part.quantity}
-                                    </span>
-                                    {/* Order Now / Quote Only switchable toggle */}
-                                    {isROApproved ? (
-                                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
-                                        Approved
+                                <Package className="w-3.5 h-3.5" />
+                                <span>+ Request Parts for Line {idx + 1}</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {lineParts.map((part) => {
+                              const etaBadge = formatEtaBadge(part.estimatedArrival);
+                              const isThisPartOrdered = isPartOrdered(part);
+                              const isThisPartQuoteOnly = isPartQuoteOnly(part);
+                              const isThisPartApproved = part.status === 'APPROVED';
+
+                              return (
+                                <div 
+                                  key={part.id} 
+                                  className="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-300 shadow-2xs gap-2"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-mono text-slate-700 text-[11px] font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                        #{part.partNumber || 'TBD'}
                                       </span>
-                                    ) : (
-                                      <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-300 shrink-0">
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            updatePartItem(ro.id, part.id, {
-                                              requestType: 'ORDER_NOW',
-                                              status: part.status === 'QUOTE_ONLY' ? 'REQUESTED' : part.status,
-                                              estimatedArrival: part.estimatedArrival === 'Price Quote Needed' ? 'Pending Parts Counter' : part.estimatedArrival,
-                                            });
-                                          }}
-                                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                            (part.requestType === 'ORDER_NOW' || (!part.requestType && part.status !== 'QUOTE_ONLY'))
-                                              ? 'bg-blue-600 text-white shadow-2xs'
-                                              : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                                          }`}
-                                          title="Change to Order Now"
-                                        >
-                                          <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
-                                          <span>Order Now</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            updatePartItem(ro.id, part.id, {
-                                              requestType: 'QUOTE_ONLY',
-                                              status: 'QUOTE_ONLY',
-                                              estimatedArrival: 'Price Quote Needed',
-                                            });
-                                          }}
-                                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                            (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
-                                              ? 'bg-purple-600 text-white shadow-2xs'
-                                              : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                                          }`}
-                                          title="Change to Quote Only"
-                                        >
-                                          <Calculator className="w-2.5 h-2.5 shrink-0" />
-                                          <span>Quote Only</span>
-                                        </button>
-                                      </div>
+                                      <span className="font-bold text-slate-900 break-words">{part.description}</span>
+                                      <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                        Qty: {part.quantity}
+                                      </span>
+                                      {/* Order Now / Quote Only switchable toggle */}
+                                      {isThisPartOrdered ? (
+                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 shrink-0 flex items-center gap-1">
+                                          <Truck className="w-3 h-3 text-amber-700" />
+                                          <span>Ordered</span>
+                                        </span>
+                                      ) : isThisPartApproved ? (
+                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                          Approved
+                                        </span>
+                                      ) : (
+                                        <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-300 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updatePartItem(ro.id, part.id, {
+                                                requestType: 'ORDER_NOW',
+                                                status: 'REQUESTED',
+                                                estimatedArrival: part.estimatedArrival === 'Price Quote Needed' ? 'Pending Parts Counter' : part.estimatedArrival,
+                                              });
+                                            }}
+                                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                              !isThisPartQuoteOnly
+                                                ? 'bg-blue-600 text-white shadow-2xs'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                                            }`}
+                                            title="Change to Parts Requested / Order Now"
+                                          >
+                                            <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
+                                            <span>Order Now</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updatePartItem(ro.id, part.id, {
+                                                requestType: 'QUOTE_ONLY',
+                                                status: 'QUOTE_ONLY',
+                                                estimatedArrival: 'Price Quote Needed',
+                                              });
+                                            }}
+                                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                              isThisPartQuoteOnly
+                                                ? 'bg-purple-600 text-white shadow-2xs'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                                            }`}
+                                            title="Change to Quote Only"
+                                          >
+                                            <Calculator className="w-2.5 h-2.5 shrink-0" />
+                                            <span>Quote Only</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {part.notes && !part.notes.startsWith('For Line') && (
+                                      <p className="text-[11px] text-slate-500 mt-0.5 italic">{part.notes}</p>
                                     )}
                                   </div>
-                                  {part.notes && !part.notes.startsWith('For Line') && (
-                                    <p className="text-[11px] text-slate-500 mt-0.5 italic">{part.notes}</p>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                                    part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
-                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                                      : isROApproved && (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
-                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
-                                      : part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY'
-                                      ? 'bg-purple-100 text-purple-800 border-purple-300 font-extrabold'
-                                      : part.status === 'REQUESTED'
-                                      ? 'bg-blue-100 text-blue-800 border-blue-300'
-                                      : 'bg-amber-100 text-amber-800 border-amber-300'
-                                  }`}>
-                                    {isROApproved && (part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY')
-                                      ? 'Approved (Order Now)'
-                                      : part.requestType === 'QUOTE_ONLY' || part.status === 'QUOTE_ONLY'
-                                      ? 'Quote Only'
-                                      : part.status.replace(/_/g, ' ')}
-                                  </span>
-                                  {part.estimatedArrival && part.status !== 'ISSUED_TO_TECH' && (
-                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                                      etaBadge.pastDue ? 'bg-red-100 text-red-700 border-red-300' : 'bg-orange-100 text-orange-700 border-orange-300'
+                                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                                      part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                        : isThisPartOrdered
+                                        ? 'bg-amber-100 text-amber-800 border-amber-300 font-extrabold'
+                                        : isThisPartApproved
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
+                                        : isThisPartQuoteOnly
+                                        ? 'bg-purple-100 text-purple-800 border-purple-300 font-extrabold'
+                                        : 'bg-blue-100 text-blue-800 border-blue-300 font-bold'
                                     }`}>
-                                      {etaBadge.text}
+                                      {part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH'
+                                        ? (part.status === 'ISSUED_TO_TECH' ? 'Issued to Tech' : 'Parts In / Received')
+                                        : isThisPartOrdered
+                                        ? (part.status === 'IN_STOCK' ? 'In Stock' : 'Parts Ordered')
+                                        : isThisPartApproved
+                                        ? 'Approved'
+                                        : isThisPartQuoteOnly
+                                        ? 'On Quote (Pending Approval)'
+                                        : 'Parts Requested'}
                                     </span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deletePartItem(ro.id, part.id);
-                                    }}
-                                    className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-                                    title="Remove this part request"
-                                  >
-                                    <Trash2 className="w-3 h-3 text-rose-600" />
-                                    <span>Remove Part</span>
-                                  </button>
+                                    {part.estimatedArrival && part.status !== 'ISSUED_TO_TECH' && isThisPartOrdered && (
+                                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                                        etaBadge.pastDue ? 'bg-red-100 text-red-700 border-red-300' : 'bg-orange-100 text-orange-700 border-orange-300'
+                                      }`}>
+                                        {etaBadge.text}
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deletePartItem(ro.id, part.id);
+                                      }}
+                                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                      title="Remove this part request"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-600" />
+                                      <span>Remove Part</span>
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Customer Concern / Additional Concern Found for Line {idx + 1} */}
                   <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs flex items-start gap-2 shadow-2xs">
@@ -1301,6 +1530,52 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         </span>
                         <span className="text-amber-900 font-bold text-xs hidden sm:inline">21-Pt Inspection Finding</span>
                       </span>
+
+                      {/* Recommendation Line Authorization Decision Badge */}
+                      {(() => {
+                        if (rec.status === 'APPROVED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-emerald-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approved</span>
+                            </span>
+                          );
+                        }
+
+                        if (rec.status === 'DECLINED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-rose-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-rose-700">
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Denied</span>
+                            </span>
+                          );
+                        }
+
+                        const explicitStatus = ro.quote?.lineStatuses?.[globalLineNum];
+                        if (explicitStatus === 'APPROVED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-emerald-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approved</span>
+                            </span>
+                          );
+                        }
+                        if (explicitStatus === 'DECLINED') {
+                          return (
+                            <span className="text-xs font-black uppercase px-2.5 py-1 bg-rose-600 text-white rounded-md flex items-center gap-1 shadow-xs border border-rose-700">
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Denied</span>
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <span className="text-xs font-black uppercase px-2.5 py-1 bg-purple-700 text-white rounded-md flex items-center gap-1 shadow-xs border border-purple-800">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Waiting on Approval</span>
+                          </span>
+                        );
+                      })()}
 
                       {/* Pay Type Badge / Selector */}
                       {canSelectPayType ? (
@@ -1457,11 +1732,11 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       {/* Labor Hours requested input for Line (Syncs to Quote and Recommendation) */}
                       <div 
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border-2 border-slate-300 shadow-2xs hover:border-blue-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all"
+                        className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all"
                         title={`Enter labor hours for Line ${globalLineNum} — automatically updates the repair quote`}
                       >
-                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider shrink-0">
+                        <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                        <label className="text-xs font-black text-slate-800 uppercase tracking-wider shrink-0">
                           Hours:
                         </label>
                         <input
@@ -1481,9 +1756,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                             updateRecommendedService(ro.id, rec.id, { laborHours: num });
                             updateLineLaborHours(ro.id, globalLineNum - 1, recHrs || '0');
                           }}
-                          className="w-12 text-xs font-extrabold text-slate-900 bg-transparent text-center focus:outline-hidden"
+                          className="w-16 sm:w-20 text-sm font-black text-slate-950 bg-slate-100 hover:bg-slate-50 focus:bg-white px-2 py-1 rounded border border-slate-300 focus:border-blue-600 text-center focus:outline-none transition-colors"
                         />
-                        <span className="text-xs font-bold text-slate-500 pr-0.5">hrs</span>
+                        <span className="text-xs font-black text-slate-600 pr-0.5">hrs</span>
                       </div>
 
                       {/* Remove Line Button directly to the right of hours */}
@@ -1695,9 +1970,9 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   </div>
 
                   {/* Labor Hours input */}
-                  <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full border border-slate-300 shadow-2xs">
-                    <Clock className="w-3 h-3 text-blue-600 shrink-0" />
-                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Hours:</span>
+                  <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border-2 border-slate-400 shadow-2xs">
+                    <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Hours:</span>
                     <input
                       type="number"
                       step="0.1"
@@ -1706,10 +1981,10 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       placeholder="0.0"
                       value={newLineHours}
                       onChange={(e) => setNewLineHours(e.target.value)}
-                      className="w-12 text-xs font-bold text-slate-900 bg-transparent text-center focus:outline-hidden"
+                      className="w-16 text-sm font-black text-slate-950 bg-slate-100 hover:bg-slate-50 focus:bg-white px-2 py-0.5 rounded border border-slate-300 text-center focus:outline-none focus:border-blue-600"
                       title="Requested labor hours for this line (syncs to quote)"
                     />
-                    <span className="text-[10px] font-bold text-slate-500 pr-0.5">hrs</span>
+                    <span className="text-xs font-black text-slate-600 pr-0.5">hrs</span>
                   </div>
 
                   {/* Request Parts immediate toggle */}
@@ -2340,11 +2615,6 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
                 Waiter
               </span>
             )}
-            {ro.isUrgent && (
-              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-600 text-white animate-pulse shadow-2xs">
-                Urgent
-              </span>
-            )}
           </div>
 
           {ro.promisedTime && (
@@ -2369,6 +2639,11 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
             {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
             {ro.vehicle.vin && <span className="font-mono text-slate-400 ml-1.5">• {ro.vehicle.vin.slice(-6)}</span>}
           </p>
+          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5">
+            <span>Current Miles: <strong className="text-slate-800 font-mono">{ro.vehicle.mileage ? Number(ro.vehicle.mileage).toLocaleString() : 'N/A'}</strong></span>
+            <span>•</span>
+            <span>Out Miles: <strong className={`font-mono ${(ro.outMileage || ro.vehicle.outMileage) ? 'text-emerald-700' : 'text-slate-400'}`}>{(ro.outMileage || ro.vehicle.outMileage) ? Number(ro.outMileage || ro.vehicle.outMileage).toLocaleString() : '--'}</strong></span>
+          </div>
         </div>
 
         {/* Active Clocked In Banner on the card */}
@@ -2423,6 +2698,25 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
               <span>{photosCount} photo{photosCount === 1 ? '' : 's'}</span>
             </span>
           )}
+          {(() => {
+            const unreadMessages = (ro.messages || []).filter(m => !(m.readBy || []).includes(currentUser.id));
+            const hasUnreadUrgent = unreadMessages.some(m => m.isUrgent);
+            const hasUnread = unreadMessages.length > 0;
+            if (!ro.messages || ro.messages.length === 0) return null;
+
+            return (
+              <span className={`flex items-center gap-1 font-bold px-1.5 py-0.5 rounded border ${
+                hasUnreadUrgent 
+                  ? 'bg-red-600 text-white border-red-500 animate-pulse shadow-2xs font-black ring-1 ring-red-400' 
+                  : hasUnread 
+                  ? 'bg-blue-600 text-white border-blue-500 font-bold'
+                  : 'bg-slate-100 text-slate-700 border-slate-300'
+              }`}>
+                <MessageSquare className="w-3 h-3" />
+                {hasUnreadUrgent ? <span>URGENT</span> : hasUnread ? <span>NEW</span> : null}
+              </span>
+            );
+          })()}
         </div>
 
         <span className="text-blue-600 font-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
@@ -2447,60 +2741,207 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
   onRequestParts,
   onTestDrive
 }) => {
+  const { sendMessage, markROMessagesAsRead, updateOutMileage, currentUser, users } = useApp();
   if (!ro) return null;
   const statusCfg = STATUS_CONFIG[ro.status] || STATUS_CONFIG.WAITING_DIAGNOSTICS;
 
+  const unreadMessages = (ro.messages || []).filter(m => !(m.readBy || []).includes(currentUser.id));
+  const hasUnreadUrgentMessage = unreadMessages.some(m => m.isUrgent);
+  const hasUnreadMessage = unreadMessages.length > 0;
+
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [isUrgentReply, setIsUrgentReply] = useState(false);
+
+  // Out Miles entry & auto-save state
+  const [outMilesInput, setOutMilesInput] = useState<string>(
+    ro.outMileage !== undefined && ro.outMileage !== null 
+      ? String(ro.outMileage) 
+      : ro.vehicle?.outMileage !== undefined && ro.vehicle?.outMileage !== null 
+      ? String(ro.vehicle.outMileage) 
+      : ''
+  );
+  const [outMilesSaved, setOutMilesSaved] = useState(false);
+  const outMilesDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (ro) {
+      const val = ro.outMileage ?? ro.vehicle?.outMileage;
+      setOutMilesInput(val !== undefined && val !== null ? String(val) : '');
+    }
+  }, [ro?.id, ro?.outMileage, ro?.vehicle?.outMileage]);
+
+  const saveOutMilesDirectly = useCallback((valueStr: string) => {
+    if (!ro) return;
+    const cleanStr = valueStr.trim();
+    if (cleanStr === '') {
+      updateOutMileage(ro.id, undefined);
+      setOutMilesSaved(true);
+      setTimeout(() => setOutMilesSaved(false), 2500);
+      return;
+    }
+    const num = Number(cleanStr);
+    if (!isNaN(num) && num >= 0) {
+      updateOutMileage(ro.id, num);
+      setOutMilesSaved(true);
+      setTimeout(() => setOutMilesSaved(false), 2500);
+    }
+  }, [ro, updateOutMileage]);
+
+  const handleOutMilesChange = (val: string) => {
+    const cleaned = val.replace(/[^0-9]/g, '');
+    setOutMilesInput(cleaned);
+    if (outMilesDebounceRef.current) {
+      clearTimeout(outMilesDebounceRef.current);
+    }
+    outMilesDebounceRef.current = setTimeout(() => {
+      saveOutMilesDirectly(cleaned);
+    }, 500);
+  };
+
+  const handleSaveOutMiles = () => {
+    if (outMilesDebounceRef.current) {
+      clearTimeout(outMilesDebounceRef.current);
+    }
+    saveOutMilesDirectly(outMilesInput);
+  };
+
+  // When chat is open and unread messages arrive or are present, mark them as read
+  useEffect(() => {
+    if (isChatOpen && hasUnreadMessage) {
+      markROMessagesAsRead(ro.id);
+    }
+  }, [isChatOpen, hasUnreadMessage, ro.id, markROMessagesAsRead]);
+
+  const toggleChat = () => {
+    const nextState = !isChatOpen;
+    setIsChatOpen(nextState);
+    if (nextState && (hasUnreadMessage || unreadMessages.length > 0)) {
+      markROMessagesAsRead(ro.id);
+    }
+  };
+
+  const handleSendTechMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    sendMessage(ro.id, chatInput.trim(), isUrgentReply);
+    setChatInput('');
+    setIsUrgentReply(false);
+  };
+
   return (
     <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex flex-col bg-slate-100 overflow-hidden animate-in fade-in duration-150"
     >
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-slate-100 w-full max-w-5xl max-h-[92vh] rounded-2xl border-2 border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-slate-100 w-full h-full flex flex-col overflow-hidden"
       >
-        {/* Modal Header Bar */}
-        <div className="p-4 sm:p-5 bg-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-base font-black px-3 py-1 rounded-lg bg-blue-600 text-white shadow-xs">
+        {/* Modal Header Bar - Full Screen Header */}
+        <div className="p-4 sm:p-5 bg-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0 border-b border-slate-800 shadow-sm">
+          <div className="flex items-start sm:items-center gap-3.5 flex-wrap">
+            <span className="font-mono text-lg font-black px-3.5 py-1.5 rounded-lg bg-blue-600 text-white shadow-xs shrink-0">
               #{ro.id}
             </span>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-sm sm:text-base text-white">{ro.customerName}</span>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="font-black text-base sm:text-lg text-white">{ro.customerName}</span>
                 {ro.customerPhone && (
-                  <span className="text-xs text-slate-400 font-mono">({ro.customerPhone})</span>
+                  <span className="text-sm text-slate-300 font-mono font-semibold">({ro.customerPhone})</span>
                 )}
-                <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${statusCfg.badgeClass}`}>
-                  {statusCfg.label}
-                </span>
                 {ro.isWaiter && (
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
+                  <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
                     Waiter
                   </span>
                 )}
-                {ro.isUrgent && (
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-600 text-white animate-pulse shadow-2xs">
-                    Urgent
-                  </span>
-                )}
               </div>
-              <p className="text-xs text-slate-300 mt-0.5 font-medium">
-                {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model} • VIN: <span className="font-mono">{ro.vehicle.vin || 'N/A'}</span> • Advisor: {ro.advisorName}
+
+              {/* Vehicle & VIN & Advisor - Larger font */}
+              <p className="text-sm sm:text-base text-slate-200 font-bold flex items-center gap-2 flex-wrap">
+                <span className="text-white font-extrabold">{ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}</span>
+                <span className="text-slate-500">•</span>
+                <span>VIN: <span className="font-mono text-blue-300 font-bold tracking-wide">{ro.vehicle.vin || 'N/A'}</span></span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-300 font-medium text-xs sm:text-sm">Advisor: <strong className="text-white">{ro.advisorName}</strong></span>
               </p>
+
+              {/* Current Miles & Out Miles - Larger font with automatic save */}
+              <div className="flex items-center gap-3 sm:gap-4 text-sm text-slate-200 mt-1.5 font-semibold flex-wrap">
+                <span className="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-600 shadow-2xs">
+                  <span className="text-slate-300 text-xs uppercase tracking-wider font-bold">Current Miles:</span>
+                  <span className="font-mono text-base font-black text-white">
+                    {ro.vehicle.mileage !== undefined && ro.vehicle.mileage !== null && Number(ro.vehicle.mileage) > 0
+                      ? `${Number(ro.vehicle.mileage).toLocaleString()} mi`
+                      : 'N/A'}
+                  </span>
+                </span>
+
+                <div className="flex items-center gap-2 bg-slate-800/95 px-3.5 py-1.5 rounded-lg border-2 border-emerald-400/90 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/30 flex-wrap">
+                  <span className="text-emerald-300 text-xs uppercase tracking-wider font-black flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Out Miles:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="Type out miles..."
+                      value={outMilesInput}
+                      onChange={(e) => handleOutMilesChange(e.target.value)}
+                      onBlur={handleSaveOutMiles}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveOutMiles();
+                        }
+                      }}
+                      className="w-28 sm:w-36 px-2.5 py-1 bg-slate-900 text-emerald-300 font-mono font-black text-sm sm:text-base rounded-md border-2 border-emerald-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/60 focus:outline-none placeholder:text-emerald-200/80 placeholder:text-xs placeholder:font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-xs"
+                      title="Enter Out Miles (automatically saves as you type)"
+                    />
+                    {outMilesSaved && (
+                      <span className="text-xs font-bold text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-400 animate-in fade-in">
+                        ✓ Auto-Saved
+                      </span>
+                    )}
+                    {(() => {
+                      const outNum = Number(outMilesInput);
+                      const inNum = Number(ro.vehicle.mileage);
+                      if (!isNaN(outNum) && outNum > 0 && !isNaN(inNum) && inNum > 0 && outNum >= inNum) {
+                        const diff = outNum - inNum;
+                        return (
+                          <span className="text-xs text-emerald-200 font-mono font-black ml-1 bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                            (+{diff.toFixed(1)} mi)
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {/* Road Test Action */}
+            {/* Live Communication Toggle Button (Blinks red when urgent message is present, stops when opened) */}
             <button
               type="button"
-              onClick={() => onTestDrive(ro)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Log Road Test / Test Drive & Out Mileage"
+              onClick={toggleChat}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition-all ${
+                hasUnreadUrgentMessage
+                  ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse ring-2 ring-red-400'
+                  : hasUnreadMessage
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400'
+                  : isChatOpen
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600'
+              }`}
+              title="Open / close live communication chat with Service Advisor"
             >
-              <Car className="w-3.5 h-3.5 text-blue-400" />
-              <span>Road Test / Out Miles</span>
+              <MessageSquare className="w-3.5 h-3.5 text-blue-200" />
+              <span>Live Chat</span>
+              {hasUnreadUrgentMessage && <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>}
+              {!hasUnreadUrgentMessage && hasUnreadMessage && <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping"></span>}
             </button>
 
             {/* Close Button */}
@@ -2515,10 +2956,145 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Scrollable Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+        {/* Modal Scrollable Body - Full Screen View */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Inter-Department Live Communication Thread Section (Only visible when user clicks Live Chat button) */}
+          {isChatOpen && (
+            <div className={`p-4 bg-white rounded-xl border-2 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 ${
+              hasUnreadUrgentMessage ? 'border-red-400 ring-2 ring-red-300/40' : 'border-blue-400'
+            }`}>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${hasUnreadUrgentMessage ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <span>Live Advisor & Shop Communication Thread</span>
+                      {hasUnreadUrgentMessage && (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-600 text-white animate-pulse">
+                          Urgent Message
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Direct channel with Service Advisor ({ro.advisorName}) & Service Management
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsChatOpen(false)}
+                    className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded cursor-pointer"
+                    title="Close chat thread"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Feed */}
+              <div className="max-h-56 overflow-y-auto space-y-2.5 p-2 bg-slate-50 rounded-lg border border-slate-200">
+                {(!ro.messages || ro.messages.length === 0) ? (
+                  <div className="p-4 text-center text-xs text-slate-400 italic">
+                    No messages yet on RO #{ro.id}. Type below to send a message to the Service Advisor.
+                  </div>
+                ) : (
+                  ro.messages.map(msg => {
+                    const isSelf = msg.senderId === currentUser.id;
+                    const sender = users.find(u => u.id === msg.senderId);
+                    return (
+                      <div 
+                        key={msg.id} 
+                        className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-bold text-slate-700">
+                            {msg.senderName}
+                          </span>
+                          {sender?.employeeNumber && (
+                            <span className="font-mono text-[9px] font-bold px-1 py-0.2 rounded bg-slate-200 text-slate-700">
+                              {sender.employeeNumber}
+                            </span>
+                          )}
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-600 font-bold uppercase">
+                            {msg.senderRole.replace('_', ' ')}
+                          </span>
+                          <span className="text-[9px] text-slate-400">
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        <div 
+                          className={`max-w-lg p-2.5 rounded-xl text-xs leading-relaxed ${
+                            msg.isUrgent
+                              ? 'bg-red-100 text-red-950 border-2 border-red-400 font-bold shadow-2xs'
+                              : isSelf
+                              ? 'bg-blue-600 text-white rounded-br-xs shadow-2xs'
+                              : 'bg-white text-slate-900 rounded-bl-xs border border-slate-300 shadow-2xs'
+                          }`}
+                        >
+                          {msg.isUrgent && (
+                            <div className="flex items-center gap-1 text-[9px] font-black text-red-700 uppercase tracking-wider mb-0.5">
+                              <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                              <span>Urgent Message</span>
+                            </div>
+                          )}
+                          {msg.content}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Reply Input Form */}
+              <form onSubmit={handleSendTechMessage} className="pt-2 border-t border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isUrgentReply}
+                      onChange={e => setIsUrgentReply(e.target.checked)}
+                      className="rounded text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-red-600 font-semibold text-xs flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Flag as Urgent Push Notification
+                    </span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">Press Enter to send</span>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={`Reply to ${ro.advisorName} regarding RO #${ro.id}...`}
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    className="flex-1 text-xs sm:text-sm px-3.5 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs bg-white text-slate-800"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim()}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer border-2 border-blue-700"
+                  >
+                    <span>Send</span>
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
           {/* Tech Cause & Correction Section with Clock In/Out, Hours, Request Parts on each line */}
           <TechCauseCorrectionSection 
+            ro={ro} 
+            onRequestParts={onRequestParts} 
+          />
+
+          {/* 21-Point Vehicle Multi-Point Inspection (MPI) & Recommendations Matrix */}
+          <TechRecommendationsSection 
             ro={ro} 
             onRequestParts={onRequestParts} 
           />
@@ -2694,7 +3270,7 @@ export const TechDashboard: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           {displayList.map(ro => (
             <TechCompactCard
               key={ro.id}

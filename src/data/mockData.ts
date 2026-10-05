@@ -1,5 +1,42 @@
 import { User, RepairOrder } from '../types';
 
+export const STANDARD_JOB_TITLES: string[] = [
+  'Oil Bay',
+  'Oil Bay Tech',
+  'PDI Tech',
+  'UCI Tech',
+  'Master Diagnostic Technician',
+  'ASE Master Tech',
+  'A-Level Technician',
+  'B-Level Technician',
+  'C-Level Technician',
+  'Lube / Express Tech',
+  'Service Advisor',
+  'Senior Service Advisor',
+  'Parts Specialist',
+  'Parts Manager',
+  'Service Manager',
+  'Shop Foreman',
+  'Quality Control Inspector',
+  'Warranty Administrator'
+];
+
+export const STANDARD_CERTIFICATION_LEVELS: string[] = [
+  'Oil Bay',
+  'PDI Tech',
+  'UCI Tech',
+  'Master Tech',
+  'ASE Master Tech',
+  'A-Level Tech',
+  'B-Level Tech',
+  'C-Level Tech',
+  'L1 Advanced Diagnostics',
+  'EV / Hybrid Certified',
+  'Diesel Master Specialist',
+  'Factory Certified Master',
+  'Express Lube'
+];
+
 export const INITIAL_USERS: User[] = [
   {
     id: 'usr_mgr_1',

@@ -13,6 +13,7 @@ import {
   StatusHistory,
   RecommendedService,
   ShopChatMessage,
+  Message,
   RepairQuote,
   QuoteStatus,
   LaborLineItem,
@@ -141,6 +142,7 @@ interface AppContextType {
   dispatchRO: (roId: string, techId: string, bay?: string) => void;
   reassignServiceWriter: (roId: string, newAdvisorId: string, notes?: string) => boolean;
   sendMessage: (roId: string, content: string, isUrgent?: boolean) => void;
+  markROMessagesAsRead: (roId: string) => void;
   addPartOrder: (roId: string, part: Omit<PartItem, 'id' | 'roId'>) => void;
   addMultiplePartOrders: (roId: string, parts: Array<Omit<PartItem, 'id' | 'roId'>>) => void;
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
@@ -1417,6 +1419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const isApprovedStatus = newStatus === 'APPROVED';
+    const isDeniedStatus = newStatus === 'DENIED';
     let updatedQuote = targetRO.quote;
     if (isApprovedStatus && updatedQuote && updatedQuote.status !== 'APPROVED') {
       updatedQuote = {
@@ -1424,6 +1427,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'APPROVED',
         approvedAt: updatedQuote.approvedAt || now,
         approvedBy: updatedQuote.approvedBy || currentUser.name,
+        updatedAt: now,
+      };
+    } else if (isDeniedStatus && updatedQuote && updatedQuote.status !== 'DECLINED') {
+      updatedQuote = {
+        ...updatedQuote,
+        status: 'DECLINED',
+        declinedAt: updatedQuote.declinedAt || now,
+        declinedReason: notes || updatedQuote.declinedReason || 'Declined by customer',
         updatedAt: now,
       };
     }
@@ -1470,6 +1481,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
       }
+    } else if (isDeniedStatus) {
+      updatedParts = targetRO.parts.map(p => {
+        if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY' || p.status === 'REQUESTED' || p.status === 'NEEDED') {
+          return {
+            ...p,
+            status: 'DECLINED' as PartStatus,
+            notes: p.notes ? `${p.notes} (Declined by customer)` : `Declined by customer${notes ? `: ${notes}` : ''}`,
+          };
+        }
+        return p;
+      });
     }
 
     const statusLabel = STATUS_CONFIG[newStatus]?.label || newStatus.replace(/_/g, ' ');
@@ -1520,6 +1542,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           `🔧 Repairs Authorized: RO #${targetRO.id}`,
           `Customer approved repairs. Work is authorized to proceed.`,
           true,
+          'STATUS_CHANGE',
+          'TECHNICIAN',
+          targetRO.techId
+        );
+      }
+    } else if (isDeniedStatus) {
+      triggerNotification(
+        updatedRO,
+        `RO Declined / Denied: #${targetRO.id}`,
+        `${currentUser.name} marked RO as declined${notes ? ` (${notes})` : ''}.`,
+        false,
+        'STATUS_CHANGE'
+      );
+      triggerNotification(
+        updatedRO,
+        `🛑 RO Declined: #${targetRO.id}`,
+        `Customer declined repair order. Quoted parts marked declined — do not order.`,
+        false,
+        'PARTS_UPDATE',
+        'PARTS_SPECIALIST'
+      );
+      if (targetRO.techId) {
+        triggerNotification(
+          updatedRO,
+          `⚠️ RO Declined: #${targetRO.id}`,
+          `Customer declined repair order${notes ? ` (${notes})` : ''}.`,
+          false,
           'STATUS_CHANGE',
           'TECHNICIAN',
           targetRO.techId
@@ -1654,7 +1703,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetRO = repairOrders.find(r => r.id === roId);
     if (!targetRO) return;
 
-    const newMsg = {
+    const newMsg: Message = {
       id: `msg_${Date.now()}`,
       roId: targetRO.id,
       senderId: currentUser.id,
@@ -1663,24 +1712,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       content: content.trim(),
       timestamp: new Date().toISOString(),
       isUrgent,
+      readBy: [currentUser.id],
     };
 
     const updatedRO: RepairOrder = {
       ...targetRO,
       isUrgent: isUrgent || targetRO.isUrgent,
-      messages: [...targetRO.messages, newMsg],
+      messages: [...(targetRO.messages || []), newMsg],
     };
 
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
 
+    // If technician sends message -> notify SERVICE_ADVISOR & SERVICE_MANAGER
+    // If advisor/manager sends message -> notify TECHNICIAN
+    const targetRole: UserRole | undefined = 
+      currentUser.role === 'TECHNICIAN' 
+        ? 'SERVICE_ADVISOR' 
+        : 'TECHNICIAN';
+
     triggerNotification(
       updatedRO,
-      isUrgent ? `URGENT Message from ${currentUser.name}` : `Message from ${currentUser.name}`,
-      `[${targetRO.id}] ${content.slice(0, 100)}${content.length > 100 ? '...' : ''}`,
+      isUrgent ? `🚨 URGENT Message from ${currentUser.name}` : `💬 Message from ${currentUser.name}`,
+      `[RO #${targetRO.id}] ${content.slice(0, 100)}${content.length > 100 ? '...' : ''}`,
       isUrgent,
-      'NEW_MESSAGE'
+      'NEW_MESSAGE',
+      targetRole
     );
+  };
+
+  // Mark all messages on an RO as read by current user
+  const markROMessagesAsRead = (roId: string) => {
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
+
+      let changed = false;
+      const updatedMessages = (targetRO.messages || []).map(m => {
+        const readBy = m.readBy || [];
+        if (!readBy.includes(currentUser.id)) {
+          changed = true;
+          return { ...m, readBy: [...readBy, currentUser.id] };
+        }
+        return m;
+      });
+
+      if (!changed) return prev;
+
+      // Check if any unread urgent messages remain for this user
+      const hasUnreadUrgent = updatedMessages.some(m => m.isUrgent && !(m.readBy || []).includes(currentUser.id));
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        isUrgent: hasUnreadUrgent ? targetRO.isUrgent : false,
+        messages: updatedMessages,
+      };
+
+      syncRepairOrder(updatedRO);
+      return prev.map(ro => ro.id === roId ? updatedRO : ro);
+    });
+
+    setNotifications(prev => prev.map(n => n.roId === roId ? { ...n, read: true } : n));
   };
 
   // Add Multiple Part Orders (Atomic batch insert)
@@ -3471,8 +3563,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           }
 
+          // Update ro.parts statuses for this line item
+          const updatedPartsList = (ro.parts || []).map(p => {
+            const pLine = p.roLineNumber !== undefined ? p.roLineNumber : 1;
+            if (pLine === lineNum) {
+              if (status === 'DECLINED' && (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY' || p.status === 'REQUESTED')) {
+                return {
+                  ...p,
+                  status: 'DECLINED' as PartStatus,
+                  notes: p.notes ? `${p.notes} (Declined on Line ${lineNum})` : `Declined by customer on Line ${lineNum}`,
+                };
+              }
+              if (status === 'APPROVED' && (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')) {
+                return {
+                  ...p,
+                  status: 'ORDERED' as PartStatus,
+                  requestType: 'ORDER_NOW' as const,
+                  orderedAt: p.orderedAt || new Date().toISOString(),
+                };
+              }
+            }
+            return p;
+          });
+
           const updatedItem: RepairOrder = {
             ...ro,
+            parts: updatedPartsList,
             concernStatuses: currentStatuses,
             quote: nextQuote
           };
@@ -3491,6 +3607,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedRO) {
       syncRepairOrder(updatedRO);
+      recordROChange(roId, `Line ${lineNum} marked ${status.toLowerCase()}`);
+
+      if (status === 'DECLINED') {
+        triggerNotification(
+          updatedRO,
+          `🛑 Line ${lineNum} Declined: RO #${(updatedRO as RepairOrder).id}`,
+          `Customer declined Line ${lineNum}. Quoted parts marked declined — do not order.`,
+          false,
+          'PARTS_UPDATE',
+          'PARTS_SPECIALIST'
+        );
+      } else if (status === 'APPROVED') {
+        triggerNotification(
+          updatedRO,
+          `🚨 Line ${lineNum} Approved: RO #${(updatedRO as RepairOrder).id}`,
+          `Customer authorized Line ${lineNum}. Please place parts orders now.`,
+          true,
+          'PARTS_UPDATE',
+          'PARTS_SPECIALIST'
+        );
+      }
     }
     return true;
   };
@@ -4348,6 +4485,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    // Sync individual parts items statuses from quote.partsItems into updatedRO.parts
+    let updatedParts = targetRO.parts ? [...targetRO.parts] : [];
+    if (quote.partsItems && quote.partsItems.length > 0) {
+      updatedParts = updatedParts.map(p => {
+        const matchingQuotePart = quote.partsItems.find(qp => 
+          (qp.sourcePartId && qp.sourcePartId === p.id) ||
+          (qp.partNumber && p.partNumber && qp.partNumber.trim().toUpperCase() === p.partNumber.trim().toUpperCase()) ||
+          (qp.description && p.description && qp.description.trim().toLowerCase() === p.description.trim().toLowerCase())
+        );
+        if (matchingQuotePart) {
+          if (matchingQuotePart.status === 'DECLINED') {
+            return {
+              ...p,
+              status: 'DECLINED' as PartStatus,
+              notes: p.notes ? `${p.notes} (Declined by customer)` : 'Declined by customer',
+            };
+          }
+        }
+        return p;
+      });
+    }
+
     const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : targetRO.status;
 
     let newHistory = [...targetRO.history];
@@ -4385,6 +4544,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedRO: RepairOrder = {
       ...targetRO,
       status: nextROStatus,
+      parts: updatedParts,
       concernStatuses: nextConcernStatuses.length > 0 ? nextConcernStatuses : targetRO.concernStatuses,
       quote: nextQuote,
       history: newHistory,
@@ -4574,6 +4734,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let updatedParts = status === 'APPROVED'
       ? targetRO.parts.map(p => {
+          const matchingQuotePart = targetRO.quote?.partsItems?.find(qp => 
+            (qp.sourcePartId && qp.sourcePartId === p.id) ||
+            (qp.partNumber && p.partNumber && qp.partNumber.trim().toUpperCase() === p.partNumber.trim().toUpperCase()) ||
+            (qp.description && p.description && qp.description.trim().toLowerCase() === p.description.trim().toLowerCase())
+          );
+          const lineNum = p.roLineNumber || 1;
+          const isLineDeclined = targetRO.quote?.lineStatuses?.[lineNum] === 'DECLINED';
+          const isPartDeclined = matchingQuotePart?.status === 'DECLINED' || isLineDeclined;
+
+          if (isPartDeclined) {
+            return {
+              ...p,
+              status: 'DECLINED' as PartStatus,
+              notes: p.notes ? `${p.notes} (Declined by customer)` : 'Declined by customer',
+            };
+          }
+
           if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
             return {
               ...p,
@@ -4587,7 +4764,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           return p;
         })
-      : targetRO.parts;
+      : targetRO.parts.map(p => {
+          if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY' || p.status === 'REQUESTED') {
+            return {
+              ...p,
+              status: 'DECLINED' as PartStatus,
+              notes: p.notes ? `${p.notes} (Declined by customer)` : `Declined by customer${reason ? `: ${reason}` : ''}`,
+            };
+          }
+          return p;
+        });
 
     // Merge any quote partsItems that were not yet in ro.parts
     if (status === 'APPROVED' && targetRO.quote?.partsItems) {
@@ -4598,19 +4784,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
         );
         if (!alreadyExists) {
+          const isPartDeclined = qp.status === 'DECLINED' || targetRO.quote?.lineStatuses?.[qp.roLineNumber || 1] === 'DECLINED';
           updatedParts.push({
-            id: qp.sourcePartId || `qpart_approved_${Date.now()}_${idx}`,
+            id: qp.sourcePartId || (isPartDeclined ? `qpart_declined_${Date.now()}_${idx}` : `qpart_approved_${Date.now()}_${idx}`),
             roId: targetRO.id,
             vendor: 'OEM / Parts Counter',
             partNumber: qp.partNumber || 'TBD',
             description: qp.description || 'Quoted Part',
             quantity: qp.quantity || 1,
             price: qp.unitPrice,
-            status: 'ORDERED',
-            requestType: 'ORDER_NOW',
-            orderedAt: now,
-            estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
+            status: isPartDeclined ? 'DECLINED' : 'ORDERED',
+            requestType: isPartDeclined ? 'QUOTE_ONLY' : 'ORDER_NOW',
+            orderedAt: isPartDeclined ? undefined : now,
+            estimatedArrival: isPartDeclined ? undefined : 'Daily Order (Arriving ~5:00 PM)',
             roLineNumber: qp.roLineNumber || 1,
+            notes: isPartDeclined ? 'Declined by customer' : undefined,
           });
         }
       });
@@ -4682,6 +4870,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         false,
         'STATUS_CHANGE'
       );
+      // Direct notification to Parts Department to clear quote and not order parts
+      triggerNotification(
+        updatedRO,
+        `🛑 Quote Declined: RO #${targetRO.id}`,
+        `Customer declined repair quote. Quoted parts marked declined — do not order.`,
+        false,
+        'PARTS_UPDATE',
+        'PARTS_SPECIALIST'
+      );
+      if (targetRO.techId) {
+        triggerNotification(
+          updatedRO,
+          `⚠️ Quote Declined: RO #${targetRO.id}`,
+          `Customer declined repair quote${reason ? ` (${reason})` : ''}.`,
+          false,
+          'STATUS_CHANGE',
+          'TECHNICIAN',
+          targetRO.techId
+        );
+      }
     }
 
     return true;
@@ -5537,6 +5745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dispatchRO,
         reassignServiceWriter,
         sendMessage,
+        markROMessagesAsRead,
         addPartOrder,
         addMultiplePartOrders,
         updatePartStatus,

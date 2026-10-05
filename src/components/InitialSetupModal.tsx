@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole } from '../types';
+import { STANDARD_JOB_TITLES, STANDARD_CERTIFICATION_LEVELS } from '../data/mockData';
 
 interface InitialStaffDraft {
   tempId: string;
@@ -501,13 +502,38 @@ export const InitialSetupModal: React.FC = () => {
                     />
                   </div>
                   {staffCategory === 'TECHNICIAN' && (
-                    <input
-                      type="text"
-                      placeholder="Certification Level (e.g. Master Tech, ASE A-Level, L1)"
-                      value={newStaffCert}
-                      onChange={(e) => setNewStaffCert(e.target.value)}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900"
-                    />
+                    <div className="space-y-1.5">
+                      <input
+                        type="text"
+                        list="initial-setup-cert-list"
+                        placeholder="Job Title / Certification (e.g. Oil Bay, PDI Tech, UCI Tech, Master Tech)"
+                        value={newStaffCert}
+                        onChange={(e) => setNewStaffCert(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white"
+                      />
+                      <datalist id="initial-setup-cert-list">
+                        {STANDARD_CERTIFICATION_LEVELS.map((c) => (
+                          <option key={c} value={c} />
+                        ))}
+                      </datalist>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[10px] font-bold text-slate-400">Presets:</span>
+                        {['Oil Bay', 'PDI Tech', 'UCI Tech', 'Master Tech', 'A-Level Tech'].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setNewStaffCert(preset)}
+                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded border transition-all cursor-pointer ${
+                              newStaffCert === preset
+                                ? 'bg-blue-600 text-white border-blue-700'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   <div className="flex justify-end gap-2">
                     <button

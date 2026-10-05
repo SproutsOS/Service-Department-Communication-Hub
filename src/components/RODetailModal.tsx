@@ -39,7 +39,8 @@ import {
   ListFilter,
   Receipt,
   Copy,
-  Gauge
+  Gauge,
+  Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType } from '../types';
@@ -72,6 +73,7 @@ export const RODetailModal: React.FC = () => {
     dispatchRO, 
     reassignServiceWriter,
     sendMessage, 
+    markROMessagesAsRead,
     addPartOrder, 
     updatePartStatus,
     updateRepairOrderDetails,
@@ -164,6 +166,69 @@ export const RODetailModal: React.FC = () => {
   const [techFindingsAutoSaveStatus, setTechFindingsAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [techFindingsLastSaved, setTechFindingsLastSaved] = useState<string>('');
 
+  // Header inline mileage quick-editor
+  const [isEditingHeaderMileage, setIsEditingHeaderMileage] = useState(false);
+  const [headerMileageInput, setHeaderMileageInput] = useState<string>('');
+
+  const [headerOutMileageInput, setHeaderOutMileageInput] = useState<string>('');
+  const [outMilesSaved, setOutMilesSaved] = useState<boolean>(false);
+  const outMilesDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync header mileage values when selectedRO changes
+  useEffect(() => {
+    if (selectedRO) {
+      const currentOut = selectedRO.outMileage ?? selectedRO.vehicle.outMileage;
+      setHeaderOutMileageInput(currentOut !== undefined && currentOut !== null ? String(currentOut) : '');
+      setHeaderMileageInput(selectedRO.vehicle.mileage ? String(selectedRO.vehicle.mileage) : '');
+    }
+  }, [selectedRO?.id, selectedRO?.outMileage, selectedRO?.vehicle?.outMileage, selectedRO?.vehicle?.mileage]);
+
+  const handleSaveHeaderMileage = () => {
+    if (!selectedRO) return;
+    const val = headerMileageInput.trim();
+    const numMiles = val !== '' && !isNaN(Number(val)) ? Number(val) : 0;
+    
+    updateRepairOrderDetails(selectedRO.id, {
+      vehicle: {
+        ...selectedRO.vehicle,
+        mileage: numMiles
+      }
+    });
+    setEditVehicleMileage(numMiles > 0 ? numMiles : '');
+    setIsEditingHeaderMileage(false);
+  };
+
+  const handleOutMilesChange = (val: string) => {
+    setHeaderOutMileageInput(val);
+    if (outMilesDebounceTimerRef.current) {
+      clearTimeout(outMilesDebounceTimerRef.current);
+    }
+    outMilesDebounceTimerRef.current = setTimeout(() => {
+      handleSaveHeaderOutMileage(val);
+    }, 1200);
+  };
+
+  const handleSaveHeaderOutMileage = (valOverride?: string) => {
+    if (outMilesDebounceTimerRef.current) {
+      clearTimeout(outMilesDebounceTimerRef.current);
+    }
+    if (!selectedRO) return;
+    const rawVal = valOverride !== undefined ? valOverride : headerOutMileageInput;
+    const cleanVal = rawVal.trim();
+    const numMiles = cleanVal !== '' && !isNaN(Number(cleanVal)) ? Number(cleanVal) : undefined;
+    
+    updateRepairOrderDetails(selectedRO.id, {
+      outMileage: numMiles,
+      vehicle: {
+        ...selectedRO.vehicle,
+        outMileage: numMiles
+      }
+    });
+    setEditVehicleOutMileage(numMiles !== undefined ? numMiles : '');
+    setOutMilesSaved(true);
+    setTimeout(() => setOutMilesSaved(false), 2500);
+  };
+
   // Keep manager edit state synced when selectedRO updates (unless currently editing)
   useEffect(() => {
     if (!selectedRO || isEditingDetails) return;
@@ -221,7 +286,7 @@ export const RODetailModal: React.FC = () => {
   }, []);
 
   const triggerManagerAutoSave = (overrides?: Partial<RepairOrder>) => {
-    if (!isManager || !selectedRO) return;
+    if ((!isManager && !isAdvisor) || !selectedRO) return;
     setManagerAutoSaveStatus('saving');
     if (managerAutoSaveTimerRef.current) {
       clearTimeout(managerAutoSaveTimerRef.current);
@@ -275,7 +340,7 @@ export const RODetailModal: React.FC = () => {
       clearTimeout(managerAutoSaveTimerRef.current);
       managerAutoSaveTimerRef.current = null;
     }
-    if (!isManager || !selectedRO) return;
+    if ((!isManager && !isAdvisor) || !selectedRO) return;
     const validConcerns = editConcerns.map(c => c.trim()).filter(Boolean);
     const finalPrimary = validConcerns[0] || editPrimaryConcern.trim() || selectedRO.primaryConcern;
 
@@ -545,7 +610,20 @@ export const RODetailModal: React.FC = () => {
     if (isTechScreen && (activeTab === 'LINES' || activeTab === 'CHAT' || activeTab === 'HISTORY' || activeTab === 'CONTACTS' || activeTab === 'PHOTOS')) {
       setActiveTab('DETAILS');
     }
-  }, [isTechScreen, activeTab]);
+    if (isAdvisorScreen && (activeTab === 'LINES' || activeTab === 'HISTORY' || activeTab === 'WARRANTY')) {
+      setActiveTab('DETAILS');
+    }
+  }, [isTechScreen, isAdvisorScreen, activeTab]);
+
+  // When CHAT tab is open and there are unread messages, mark them as read
+  useEffect(() => {
+    if (activeTab === 'CHAT' && selectedRO?.id) {
+      const hasUnread = (selectedRO.messages || []).some(m => !(m.readBy || []).includes(currentUser.id));
+      if (hasUnread) {
+        markROMessagesAsRead(selectedRO.id);
+      }
+    }
+  }, [activeTab, selectedRO?.id, selectedRO?.messages, currentUser.id, markROMessagesAsRead]);
   const [chatInput, setChatInput] = useState('');
   const [isUrgentMessage, setIsUrgentMessage] = useState(false);
   const [statusNote, setStatusNote] = useState('');
@@ -745,305 +823,292 @@ export const RODetailModal: React.FC = () => {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 overflow-hidden animate-in fade-in duration-150">
       <div 
         id="ro-detail-modal"
-        className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl sm:max-w-[1060px] w-full max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-white w-full h-full flex flex-col overflow-hidden"
       >
-        {/* Top Header */}
-        <div className="p-3 sm:px-6 sm:py-3.5 border-b border-slate-200 bg-slate-50 shrink-0">
-          {/* Top Row: RO number, status badge, priority/waiter tags on the left; Action buttons & close on the right */}
-          <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap shrink-0">
-            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
-              <span className="font-bold text-lg sm:text-xl text-blue-600 tracking-tight">
-                #{selectedRO.id}
-              </span>
-              {isTechScreen && (
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border-2 border-blue-400 flex items-center gap-1">
-                  <Wrench className="w-3 h-3 text-blue-600" />
-                  <span>Technician Station</span>
-                </span>
-              )}
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${currentStatusInfo.badgeClass}`}>
-                {currentStatusInfo.label}
-              </span>
-              {selectedRO.isWaiter && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
-                  <Clock className="w-3.5 h-3.5 text-red-600" /> WAITER
-                </span>
-              )}
-              {selectedRO.isUrgent && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-0.5 rounded-md border-2 border-red-500 shadow-2xs">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> HIGH PRIORITY
-                </span>
-              )}
-            </div>
+        {/* Top Header - Dark Navy Modern Theme matching Technician & Advisor Specification */}
+        <div className="p-4 sm:px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-4 shrink-0 flex-wrap">
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            {/* Blue RO number badge */}
+            <span className="px-3.5 py-1.5 bg-blue-600 text-white rounded-lg font-black text-sm sm:text-base tracking-wider shadow-sm shrink-0">
+              #{selectedRO.id}
+            </span>
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {/* Pro Demand Labor Guide Link */}
-              <a
-                href="https://www.prodemand.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors shadow-2xs shrink-0"
-                title="Open Pro Demand flat rate labor times"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Pro Demand</span> Labor ↗
-              </a>
-
-              {/* Advisor Quick Photos Action */}
-              {(isAdvisorScreen || isManager) && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('PHOTOS')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
-                    activeTab === 'PHOTOS'
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                      : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
-                  }`}
-                  title="Vehicle Intake & Walkaround Photos"
-                >
-                  <Camera className={`w-3.5 h-3.5 ${activeTab === 'PHOTOS' ? 'text-white' : 'text-blue-700'}`} />
-                  <span>Photos ({(selectedRO.vehiclePhotos?.length || 0)})</span>
-                </button>
-              )}
-
-              {/* Line View (Itemized Concerns & Labor Lines) Quick Toggle */}
-              {!isTechScreen && (
-                <button
-                  type="button"
-                  id="ro-modal-line-view-toggle"
-                  onClick={() => setActiveTab(activeTab === 'LINES' ? 'DETAILS' : 'LINES')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
-                    activeTab === 'LINES'
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                      : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
-                  }`}
-                  title="Toggle between Workflow and Itemized Line View"
-                >
-                  <ListFilter className={`w-3.5 h-3.5 ${activeTab === 'LINES' ? 'text-white' : 'text-blue-700'}`} />
-                  <span>Line View</span>
-                </button>
-              )}
-
-              {/* Repair Quote Initiation / Status */}
-              {isTechScreen && (
-                (() => {
-                  const loggedHours = selectedRO.quote?.laborItems 
-                    ? selectedRO.quote.laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) 
-                    : 0;
-                  const isQuoteActive = activeQuoteRO?.id === selectedRO.id;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => openQuoteModal(selectedRO.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer border shadow-2xs shrink-0 ${
-                        isQuoteActive
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100'
-                      }`}
-                      title={loggedHours > 0 ? `View / Log Labor Time (${loggedHours.toFixed(1)} hrs)` : 'Enter Job Labor Time'}
-                    >
-                      <Clock className={`w-3.5 h-3.5 ${isQuoteActive ? 'text-white' : 'text-blue-700'}`} />
-                      <span>{loggedHours > 0 ? `Total Labor Time: ${loggedHours.toFixed(1)} hrs` : '+ Enter Total Labor Time'}</span>
-                    </button>
-                  );
-                })()
-              )}
-
-              {isManager && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isEditingDetails && selectedRO) {
-                      setEditCustomerName(selectedRO.customerName);
-                      setEditCustomerPhone(selectedRO.customerPhone);
-                      setEditVehicleYear(selectedRO.vehicle.year);
-                      setEditVehicleMake(selectedRO.vehicle.make);
-                      setEditVehicleModel(selectedRO.vehicle.model);
-                      setEditVehicleVin(selectedRO.vehicle.vin);
-                      setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
-                      setEditVehicleOutMileage(selectedRO.outMileage ?? selectedRO.vehicle.outMileage ?? '');
-                      setEditPrimaryConcern(selectedRO.primaryConcern);
-                      setEditPromisedTime(selectedRO.promisedTime);
-                      setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
-                      setActiveTab('DETAILS');
-                    }
-                    setIsEditingDetails(!isEditingDetails);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shrink-0 ${
-                    isEditingDetails 
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                      : 'bg-white text-slate-900 border-slate-400 hover:bg-slate-100 shadow-2xs'
-                  }`}
-                  title="Service Manager: Edit core repair order details"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
-                </button>
-              )}
-
-              {/* Top Edit Quote Button (Blue) - Directly to the left of Print Quote */}
-              <button
-                type="button"
-                id="header-edit-quote-btn"
-                onClick={() => openQuoteModal(selectedRO.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700"
-                title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
-              >
-                <Calculator className="w-3.5 h-3.5 text-white" />
-                <span>Edit Quote</span>
-                {selectedRO.quote && (
-                  <span className="text-blue-100 font-mono text-[11px] font-bold">
-                    (${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)})
-                  </span>
-                )}
-              </button>
-
-              {/* Top Print Quote Button */}
-              <button
-                type="button"
-                id="header-print-quote-btn"
-                onClick={() => openQuotePrintModal(selectedRO.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer shadow-2xs shrink-0"
-                title="Preview and print official repair estimate & quote sheet"
-              >
-                <Printer className="w-3.5 h-3.5 text-blue-600" />
-                <span className="hidden sm:inline">Print Quote</span>
-              </button>
-
-              <button
-                id="header-print-warranty-btn"
-                type="button"
-                onClick={() => openWarrantyPrintModal(selectedRO.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs shrink-0"
-                title="Print Warranty Sheet with Cause, Correction, and Start/End Punch Clock Times"
-              >
-                <Printer className="w-3.5 h-3.5 text-indigo-600" />
-                <span className="hidden sm:inline">Print Warranty</span>
-              </button>
-
-              <button
-                id="close-ro-detail-btn"
-                onClick={() => setSelectedRO(null)}
-                className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Sub-Header Strip: Customer & Service Advisor on the left, Vehicle, VIN & Mileage on the right */}
-          <div className="mt-3 pt-2.5 border-t border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shrink-0">
-            {/* Customer & Advisor */}
-            <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap shrink-0 min-h-[34px]">
-              {selectedRO.customerName && (
-                <>
-                  <div className="flex items-center gap-1.5 font-bold text-slate-900 text-sm">
-                    <User className="w-4 h-4 text-slate-500" />
-                    <span>{selectedRO.customerName}</span>
-                  </div>
-                  {selectedRO.customerPhone && (
-                    <span className="text-slate-500 text-xs font-medium">({selectedRO.customerPhone})</span>
-                  )}
-                  <span className="text-slate-300 font-light">|</span>
-                </>
-              )}
-
-              {/* Service Advisor with Dropdown */}
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 shrink-0">
-                  <UserCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-slate-700">Advisor:</span>
-                </div>
-                {canReassignServiceWriter ? (
-                  <select
-                    id="header-reassign-advisor-select"
-                    value={selectedRO.advisorId || selectedAdvisorId}
-                    onChange={e => {
-                      const newId = e.target.value;
-                      setSelectedAdvisorId(newId);
-                      if (newId && newId !== selectedRO.advisorId) {
-                        handleReassignAdvisor(newId);
-                      }
-                    }}
-                    className="text-xs px-2.5 py-1 bg-white border-2 border-slate-600 hover:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs text-slate-900 font-bold cursor-pointer shrink-0"
-                    title="Change Service Advisor"
-                  >
-                    {serviceWriters.map(writer => (
-                      <option key={writer.id} value={writer.id}>
-                        {writer.name}{writer.employeeNumber ? ` (#${writer.employeeNumber})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className="text-xs font-bold text-slate-900 shrink-0">
-                    {selectedRO.advisorName}
-                  </span>
-                )}
-                {advisorReassignSuccess && (
-                  <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 shrink-0">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Updated
+            <div>
+              {/* Row 1: Customer Name and Phone */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
+                  {selectedRO.customerName}
+                </h2>
+                {selectedRO.customerPhone && (
+                  <span className="text-xs sm:text-sm text-slate-300 font-medium">
+                    ({selectedRO.customerPhone})
                   </span>
                 )}
               </div>
-            </div>
 
-            {/* Time in Shop - Between Advisor and Vehicle */}
-            <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-lg border border-slate-200/90 shadow-2xs self-start md:self-auto shrink-0 min-h-[36px]">
-              <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Time in Shop:</span>
-              <span className="font-black text-slate-950 text-xs font-mono bg-blue-50 text-blue-900 px-2.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
+              {/* Row 2: Vehicle, VIN & Advisor */}
+              <p className="text-xs sm:text-sm text-slate-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-white font-extrabold">{selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model}</span>
+                <span className="text-slate-500">•</span>
+                <span className="flex items-center gap-1">
+                  <span className="text-slate-300">VIN:</span>
+                  <span className="font-mono text-blue-300 font-bold tracking-wide select-all">{selectedRO.vehicle.vin || 'N/A'}</span>
+                  {selectedRO.vehicle.vin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedRO.vehicle.vin);
+                        alert(`Copied VIN: ${selectedRO.vehicle.vin}`);
+                      }}
+                      className="p-0.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title="Copy VIN to clipboard"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  )}
+                </span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-300 font-medium text-xs sm:text-sm flex items-center gap-1">
+                  <span>Advisor:</span>
+                  {canReassignServiceWriter ? (
+                    <select
+                      id="header-reassign-advisor-select"
+                      value={selectedRO.advisorId || selectedAdvisorId}
+                      onChange={e => {
+                        const newId = e.target.value;
+                        setSelectedAdvisorId(newId);
+                        if (newId && newId !== selectedRO.advisorId) {
+                          handleReassignAdvisor(newId);
+                        }
+                      }}
+                      className="text-xs px-2 py-0.5 bg-slate-800 border border-slate-600 hover:border-blue-400 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none text-white font-bold cursor-pointer"
+                      title="Change Service Advisor"
+                    >
+                      {serviceWriters.map(writer => (
+                        <option key={writer.id} value={writer.id} className="bg-slate-900 text-white">
+                          {writer.name}{writer.employeeNumber ? ` (#${writer.employeeNumber})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <strong className="text-white">{selectedRO.advisorName}</strong>
+                  )}
+                  {advisorReassignSuccess && (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/50">
+                      ✓ Updated
+                    </span>
+                  )}
+                </span>
+              </p>
+
+              {/* Row 3: Current Miles & Out Miles */}
+              <div className="flex items-center gap-3 sm:gap-4 text-sm text-slate-200 mt-1.5 font-semibold flex-wrap">
+                {/* Current Miles Badge with inline edit */}
+                {isEditingHeaderMileage ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveHeaderMileage();
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-slate-800 px-3 py-1 rounded-lg border-2 border-blue-400 shadow-2xs"
+                  >
+                    <span className="text-slate-300 text-xs uppercase tracking-wider font-bold">CURRENT MILES:</span>
+                    <input
+                      type="number"
+                      value={headerMileageInput}
+                      onChange={(e) => setHeaderMileageInput(e.target.value)}
+                      placeholder="Miles..."
+                      autoFocus
+                      className="w-24 px-1.5 py-0.5 text-xs font-mono font-black bg-slate-900 text-white border border-blue-400 rounded focus:outline-hidden"
+                    />
+                    <button
+                      type="submit"
+                      className="p-1 bg-blue-600 hover:bg-blue-700 text-white rounded cursor-pointer transition-colors shadow-2xs"
+                      title="Save Intake Mileage"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingHeaderMileage(false)}
+                      className="p-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded cursor-pointer transition-colors"
+                      title="Cancel"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHeaderMileageInput(selectedRO.vehicle.mileage ? String(selectedRO.vehicle.mileage) : '');
+                      setIsEditingHeaderMileage(true);
+                    }}
+                    className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 px-3 py-1.5 rounded-lg border border-slate-600 shadow-2xs cursor-pointer transition-colors group"
+                    title="Click to enter or edit Current Miles"
+                  >
+                    <span className="text-slate-300 text-xs uppercase tracking-wider font-bold">CURRENT MILES:</span>
+                    <span className="font-mono text-base font-black text-white">
+                      {selectedRO.vehicle.mileage !== undefined && selectedRO.vehicle.mileage !== null && Number(selectedRO.vehicle.mileage) > 0
+                        ? `${Number(selectedRO.vehicle.mileage).toLocaleString()} mi`
+                        : '+ Enter In Miles'}
+                    </span>
+                    <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-blue-400 transition-colors ml-0.5" />
+                  </button>
+                )}
+
+                {/* Out Miles Badge & Input Box (Exact Match to Screenshot) */}
+                <div className="flex items-center gap-2 bg-slate-800/95 px-3.5 py-1.5 rounded-lg border-2 border-emerald-400/90 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/30 flex-wrap">
+                  <span className="text-emerald-300 text-xs uppercase tracking-wider font-black flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    OUT MILES:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="Type out miles..."
+                      value={headerOutMileageInput}
+                      onChange={(e) => handleOutMilesChange(e.target.value)}
+                      onBlur={() => handleSaveHeaderOutMileage()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveHeaderOutMileage();
+                        }
+                      }}
+                      className="w-28 sm:w-36 px-2.5 py-1 bg-slate-900 text-emerald-300 font-mono font-black text-sm sm:text-base rounded-md border-2 border-emerald-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/60 focus:outline-none placeholder:text-emerald-200/80 placeholder:text-xs placeholder:font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-xs"
+                      title="Enter Out Miles (automatically saves as you type)"
+                    />
+                    {outMilesSaved && (
+                      <span className="text-xs font-bold text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-400 animate-in fade-in">
+                        ✓ Auto-Saved
+                      </span>
+                    )}
+                    {(() => {
+                      const outNum = Number(headerOutMileageInput);
+                      const inNum = Number(selectedRO.vehicle.mileage);
+                      if (!isNaN(outNum) && outNum > 0 && !isNaN(inNum) && inNum > 0 && outNum >= inNum) {
+                        const diff = outNum - inNum;
+                        return (
+                          <span className="text-xs text-emerald-200 font-mono font-black ml-1 bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                            (+{diff.toFixed(1)} mi)
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Action buttons and Status Badges */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* Time in shop badge */}
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+              <Clock className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-slate-400 font-medium">In Shop:</span>
+              <span className="text-white font-mono font-bold">
                 {formatDurationSince(selectedRO.createdAt) || 'Just arrived'}
               </span>
             </div>
 
-            {/* Vehicle, VIN & Miles */}
-            <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-lg border border-slate-200/90 shadow-2xs self-start md:self-auto flex-wrap shrink-0 min-h-[36px]">
-              <Car className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="font-bold text-slate-900 text-sm whitespace-nowrap">
-                {selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model}
+            {/* Status Badge */}
+            {!isAdvisorScreen && (
+              <span className={`px-2.5 py-1 rounded-md text-xs font-black uppercase tracking-wider border ${currentStatusInfo.badgeClass}`}>
+                {currentStatusInfo.label}
               </span>
-              <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
-              <span 
-                className="font-bold text-slate-900 text-sm whitespace-nowrap select-all shrink-0 font-mono" 
-                title={`VIN: ${selectedRO.vehicle.vin}`}
+            )}
+            {selectedRO.isWaiter && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-white bg-red-600 px-2.5 py-1 rounded-md shadow-xs animate-pulse">
+                <Clock className="w-3.5 h-3.5" /> WAITER
+              </span>
+            )}
+            {selectedRO.isUrgent && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-white bg-amber-600 px-2.5 py-1 rounded-md shadow-xs">
+                <AlertTriangle className="w-3.5 h-3.5" /> HIGH PRIORITY
+              </span>
+            )}
+
+            {/* Pro Demand Link */}
+            <a
+              href="https://www.prodemand.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-600 transition-colors shadow-2xs shrink-0"
+              title="Open Pro Demand flat rate labor times"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Pro Demand</span> Labor ↗
+            </a>
+
+            {/* Line View (Itemized Concerns & Labor Lines) Quick Toggle */}
+            {!isTechScreen && !isAdvisorScreen && (
+              <button
+                type="button"
+                id="ro-modal-line-view-toggle"
+                onClick={() => setActiveTab(activeTab === 'LINES' ? 'DETAILS' : 'LINES')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shadow-2xs shrink-0 ${
+                  activeTab === 'LINES'
+                    ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
+                }`}
+                title="Toggle between Workflow and Itemized Line View"
               >
-                {selectedRO.vehicle.vin}
-              </span>
+                <ListFilter className={`w-3.5 h-3.5 ${activeTab === 'LINES' ? 'text-white' : 'text-blue-300'}`} />
+                <span>Line View</span>
+              </button>
+            )}
+
+            {/* Manager Edit RO Info */}
+            {isManager && (
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(selectedRO.vehicle.vin);
-                  alert(`Copied VIN: ${selectedRO.vehicle.vin}`);
+                  if (!isEditingDetails && selectedRO) {
+                    setEditCustomerName(selectedRO.customerName);
+                    setEditCustomerPhone(selectedRO.customerPhone);
+                    setEditVehicleYear(selectedRO.vehicle.year);
+                    setEditVehicleMake(selectedRO.vehicle.make);
+                    setEditVehicleModel(selectedRO.vehicle.model);
+                    setEditVehicleVin(selectedRO.vehicle.vin);
+                    setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
+                    setEditVehicleOutMileage(selectedRO.outMileage ?? selectedRO.vehicle.outMileage ?? '');
+                    setEditPrimaryConcern(selectedRO.primaryConcern);
+                    setEditPromisedTime(selectedRO.promisedTime);
+                    setEditDiagnosticNotes(selectedRO.diagnosticNotes || '');
+                    setActiveTab('DETAILS');
+                  }
+                  setIsEditingDetails(!isEditingDetails);
                 }}
-                className="px-2 py-0.5 bg-slate-950 hover:bg-black text-white rounded text-xs font-mono font-bold border border-slate-700 flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0"
-                title="Copy VIN to clipboard"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shrink-0 ${
+                  isEditingDetails 
+                    ? 'bg-blue-600 text-white border-blue-500 shadow-xs' 
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 shadow-2xs'
+                }`}
+                title="Service Manager: Edit core repair order details"
               >
-                <Copy className="w-3 h-3 text-blue-400" />
-                <span>Copy VIN</span>
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
               </button>
-              <span className="text-slate-300 mx-3 select-none font-light shrink-0">|</span>
-              <div className="flex items-center gap-2 flex-wrap whitespace-nowrap shrink-0">
-                <span className="font-bold text-slate-900 text-sm">
-                  {selectedRO.vehicle.mileage !== undefined && selectedRO.vehicle.mileage !== null && Number(selectedRO.vehicle.mileage) > 0
-                    ? `In: ${Number(selectedRO.vehicle.mileage).toLocaleString()} mi`
-                    : 'N/A'}
-                </span>
-                {(selectedRO.outMileage !== undefined || selectedRO.vehicle.outMileage !== undefined) && (
-                  <span className="font-bold text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
-                    <Gauge className="w-3 h-3 text-emerald-700" />
-                    <span>Out: {Number(selectedRO.outMileage ?? selectedRO.vehicle.outMileage).toLocaleString()} mi</span>
-                    {selectedRO.vehicle.mileage ? (
-                      <span className="text-[10px] text-emerald-700 font-semibold">
-                        (+{Math.max(0, Number(selectedRO.outMileage ?? selectedRO.vehicle.outMileage) - selectedRO.vehicle.mileage).toFixed(1)} mi)
-                      </span>
-                    ) : null}
-                  </span>
-                )}
-              </div>
-            </div>
+            )}
+
+            {/* Close Button */}
+            <button
+              id="close-ro-detail-btn"
+              type="button"
+              onClick={() => setSelectedRO(null)}
+              className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors shrink-0 cursor-pointer border border-slate-700"
+              title="Close Repair Order"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
@@ -1062,36 +1127,38 @@ export const RODetailModal: React.FC = () => {
           </div>
         )}
 
-        <div className="flex flex-wrap border-b border-slate-200 px-3 sm:px-6 bg-white gap-1 sm:gap-2 overflow-x-auto shrink-0">
+        <div className="flex flex-wrap items-center border-b border-slate-200 px-3 sm:px-6 py-2.5 bg-slate-50 gap-2 overflow-x-auto shrink-0 shadow-2xs">
           <button
             id="ro-tab-details"
+            type="button"
             onClick={() => setActiveTab('DETAILS')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
               activeTab === 'DETAILS'
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-slate-800 hover:text-black'
+                ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
             }`}
           >
-            <FileText className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'DETAILS' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>{isTechScreen ? 'Technician Workflow & Tasks' : 'RO Details & Assignment'}</span>
+            <FileText className={`w-3.5 h-3.5 ${activeTab === 'DETAILS' ? 'text-white' : 'text-slate-700'}`} />
+            <span>{isTechScreen ? 'Technician Workflow & Tasks' : 'RO Details'}</span>
           </button>
 
           {/* Line View (Concerns & Pay Types & Tech Breakdown) */}
-          {!isTechScreen && (
+          {!isTechScreen && !isAdvisorScreen && (
             <button
               id="ro-tab-lines"
+              type="button"
               onClick={() => setActiveTab('LINES')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
                 activeTab === 'LINES'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-800 hover:text-black'
+                  ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                  : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
               }`}
             >
-              <ListFilter className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'LINES' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <ListFilter className={`w-3.5 h-3.5 ${activeTab === 'LINES' ? 'text-white' : 'text-slate-700'}`} />
               <span>Line View</span>
               {((selectedRO.concerns?.length || 1) > 0) && (
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                  activeTab === 'LINES' ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-900'
+                  activeTab === 'LINES' ? 'bg-blue-800 text-white' : 'bg-slate-200 text-slate-900 border border-slate-300'
                 }`}>
                   {selectedRO.concerns?.length || 1}
                 </span>
@@ -1103,92 +1170,133 @@ export const RODetailModal: React.FC = () => {
           {isAdvisorScreen && (
             <button
               id="ro-tab-photos"
+              type="button"
               onClick={() => setActiveTab('PHOTOS')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
                 activeTab === 'PHOTOS'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-800 hover:text-black'
+                  ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                  : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
               }`}
             >
-              <Camera className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'PHOTOS' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <Camera className={`w-3.5 h-3.5 ${activeTab === 'PHOTOS' ? 'text-white' : 'text-slate-700'}`} />
               <span>Vehicle Photos</span>
               {(selectedRO.vehiclePhotos?.length || 0) > 0 && (
-                <span className="bg-blue-100 text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  activeTab === 'PHOTOS' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-900 border border-blue-200'
+                }`}>
                   {selectedRO.vehiclePhotos?.length}
                 </span>
               )}
             </button>
           )}
 
-          {!isTechScreen && (
-            <button
-              id="ro-tab-chat"
-              onClick={() => setActiveTab('CHAT')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
-                activeTab === 'CHAT'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-800 hover:text-black'
-              }`}
-            >
-              <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CHAT' ? 'text-blue-700' : 'text-slate-800'}`} />
-              <span>Live Communication</span>
-              {selectedRO.messages.length > 0 && (
-                <span className="bg-slate-200 text-slate-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                  {selectedRO.messages.length}
-                </span>
-              )}
-            </button>
-          )}
+          {!isTechScreen && (() => {
+            const unreadMessages = (selectedRO.messages || []).filter(m => !(m.readBy || []).includes(currentUser.id));
+            const hasUnreadUrgent = unreadMessages.some(m => m.isUrgent);
+            const unreadCount = unreadMessages.length;
+
+            return (
+              <button
+                id="ro-tab-chat"
+                type="button"
+                onClick={() => {
+                  setActiveTab('CHAT');
+                  if (selectedRO?.id) {
+                    markROMessagesAsRead(selectedRO.id);
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
+                  hasUnreadUrgent
+                    ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white animate-pulse border-red-700 ring-2 ring-red-400'
+                    : unreadCount > 0
+                    ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700 ring-2 ring-blue-300'
+                    : activeTab === 'CHAT'
+                    ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                    : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
+                }`}
+              >
+                <MessageSquare className={`w-3.5 h-3.5 ${
+                  hasUnreadUrgent || unreadCount > 0 || activeTab === 'CHAT' ? 'text-white' : 'text-slate-700'
+                }`} />
+                <span>Live Communication</span>
+                {hasUnreadUrgent ? (
+                  <span className="bg-white text-red-700 text-[10px] px-1.5 py-0.2 rounded-full font-black animate-ping">
+                    NEW
+                  </span>
+                ) : unreadCount > 0 ? (
+                  <span className="bg-white text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                    NEW
+                  </span>
+                ) : null}
+              </button>
+            );
+          })()}
 
           {!isAdvisorScreen && currentUser.role !== 'SERVICE_ADVISOR' && activeRoleView !== 'SERVICE_ADVISOR' && (
             <button
               id="ro-tab-warranty"
+              type="button"
               onClick={() => setActiveTab('WARRANTY')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
                 activeTab === 'WARRANTY'
-                  ? 'border-indigo-600 text-indigo-700'
-                  : 'border-transparent text-slate-800 hover:text-black'
+                  ? 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white border-indigo-700'
+                  : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
               }`}
             >
-              <Clock className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'WARRANTY' ? 'text-indigo-700' : 'text-slate-800'}`} />
+              <Clock className={`w-3.5 h-3.5 ${activeTab === 'WARRANTY' ? 'text-white' : 'text-slate-700'}`} />
               <span>Warranty Time Clock</span>
               {(selectedRO.timePunches?.length || 0) > 0 && (
-                <span className="bg-indigo-100 text-indigo-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  activeTab === 'WARRANTY' ? 'bg-indigo-800 text-white' : 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                }`}>
                   {selectedRO.timePunches?.length}
                 </span>
               )}
             </button>
           )}
 
+          {/* Tab 3 Button: Parts (Quotes, Orders & ETA) */}
           <button
             id="ro-tab-parts"
+            type="button"
             onClick={() => setActiveTab('PARTS')}
-            className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
               activeTab === 'PARTS'
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-slate-800 hover:text-black'
+                ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
             }`}
           >
-            <Package className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'PARTS' ? 'text-blue-700' : 'text-slate-800'}`} />
-            <span>Parts Ordered (ETA)</span>
-            {selectedRO.parts.length > 0 && (
-              <span className="bg-purple-100 text-purple-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                {selectedRO.parts.length}
+            <Package className={`w-3.5 h-3.5 ${activeTab === 'PARTS' ? 'text-white' : 'text-slate-700'}`} />
+            <span>
+              {(() => {
+                const hasQuoteOnly = (selectedRO.quote?.partsItems && selectedRO.quote.partsItems.length > 0) || selectedRO.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY');
+                const hasOrdered = selectedRO.parts.some(p => ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'IN_STOCK', 'RECEIVED', 'ISSUED_TO_TECH'].includes(p.status));
+                if (hasQuoteOnly && hasOrdered) return 'Parts (Quote & Orders)';
+                if (hasQuoteOnly) return 'Parts on Estimate (Quote)';
+                return 'Parts Ordered (ETA)';
+              })()}
+            </span>
+            {(selectedRO.parts.length > 0 || (selectedRO.quote?.partsItems && selectedRO.quote.partsItems.length > 0)) && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                activeTab === 'PARTS' ? 'bg-blue-800 text-white' : 'bg-purple-100 text-purple-900 border border-purple-200'
+              }`}>
+                {selectedRO.parts.length || selectedRO.quote?.partsItems?.length}
               </span>
             )}
           </button>
 
-          {!isTechScreen && (
+          {!isTechScreen && !isAdvisorScreen && (
             <button
               id="ro-tab-history"
+              type="button"
               onClick={() => setActiveTab('HISTORY')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
                 activeTab === 'HISTORY'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-800 hover:text-black'
+                  ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                  : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
               }`}
             >
-              <History className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'HISTORY' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <History className={`w-3.5 h-3.5 ${activeTab === 'HISTORY' ? 'text-white' : 'text-slate-700'}`} />
               <span>Audit History ({selectedRO.history.length})</span>
             </button>
           )}
@@ -1196,26 +1304,70 @@ export const RODetailModal: React.FC = () => {
           {!isTechScreen && (
             <button
               id="ro-tab-contacts"
+              type="button"
               onClick={() => setActiveTab('CONTACTS')}
-              className={`py-2.5 px-2.5 sm:px-3 -mb-px border-b-2 text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
                 activeTab === 'CONTACTS'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-800 hover:text-black'
+                  ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                  : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
               }`}
             >
-              <Phone className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'CONTACTS' ? 'text-blue-700' : 'text-slate-800'}`} />
+              <Phone className={`w-3.5 h-3.5 ${activeTab === 'CONTACTS' ? 'text-white' : 'text-slate-700'}`} />
               <span>Follow-Ups</span>
               {(selectedRO.contactHistory?.length || 0) > 0 && (
-                <span className="bg-blue-100 text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  activeTab === 'CONTACTS' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-900 border border-blue-200'
+                }`}>
                   {selectedRO.contactHistory?.length}
                 </span>
               )}
             </button>
           )}
+
+          {/* Edit Quote Button - Directly to the right of Follow-Ups */}
+          <button
+            type="button"
+            id="tab-row-edit-quote-btn"
+            onClick={() => openQuoteModal(selectedRO.id)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700"
+            title={selectedRO.quote ? `View or Edit Repair Quote (${selectedRO.quote.status})` : 'Initiate Repair Quote'}
+          >
+            <Calculator className="w-3.5 h-3.5 text-white" />
+            <span>Edit Quote</span>
+            {selectedRO.quote && (
+              <span className="text-blue-100 font-mono text-[11px] font-bold">
+                (${(Number(selectedRO.quote.grandTotal) || 0).toFixed(2)})
+              </span>
+            )}
+          </button>
+
+          {/* Print Warranty Button - Directly to the right of Edit Quote */}
+          <button
+            type="button"
+            id="tab-row-print-warranty-btn"
+            onClick={() => openWarrantyPrintModal(selectedRO.id)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-2xs shrink-0 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300"
+            title="Print Warranty Sheet with Cause, Correction, and Start/End Punch Clock Times"
+          >
+            <Printer className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Print Warranty</span>
+          </button>
+
+          {/* Print Quote Button - Directly to the right of Print Warranty */}
+          <button
+            type="button"
+            id="tab-row-print-quote-btn"
+            onClick={() => openQuotePrintModal(selectedRO.id)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-2xs shrink-0 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300"
+            title="Preview and print official repair estimate & customer quote"
+          >
+            <Printer className="w-3.5 h-3.5 text-blue-600" />
+            <span>Print Quote</span>
+          </button>
         </div>
 
         {/* Tab Content Area */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">
+        <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 max-w-7xl w-full mx-auto">
 
           {/* TAB 1: DETAILS & ASSIGNMENT & QUICK STATUS CHANGE */}
           {activeTab === 'DETAILS' && (
@@ -1973,7 +2125,7 @@ export const RODetailModal: React.FC = () => {
           )}
 
           {/* TAB: ITEM & LINE BREAKDOWN (Concerns, Pay Types, Tech Assignments) */}
-          {activeTab === 'LINES' && (
+          {activeTab === 'LINES' && !isAdvisorScreen && (
             <div className="space-y-4">
               <ROLineBreakdown
                 ro={selectedRO}
@@ -2022,9 +2174,6 @@ export const RODetailModal: React.FC = () => {
                   <p className="text-[11px] text-slate-500">
                     Direct channel between Service Manager, Service Advisors, Techs, & Parts
                   </p>
-                </div>
-                <div className="text-[11px] font-medium text-slate-500">
-                  {selectedRO.messages.length} messages logged
                 </div>
               </div>
 
@@ -2131,117 +2280,328 @@ export const RODetailModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 3: PARTS ORDERED & ETA */}
+          {/* TAB 3: PARTS (QUOTED, ORDERED, IN STOCK & ETA) */}
           {activeTab === 'PARTS' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b-2 border-slate-200">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-purple-100 rounded-lg border-2 border-purple-300 text-purple-700">
-                    <Package className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                      Parts Ordered (ETA)
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Live delivery arrival times for parts ordered on this repair order
-                    </p>
-                  </div>
-                </div>
-                {selectedRO.parts.length > 0 && (
-                  <span className="text-xs font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
-                    {selectedRO.parts.length} {selectedRO.parts.length === 1 ? 'Part Ordered' : 'Parts Ordered'}
-                  </span>
-                )}
-              </div>
+              {(() => {
+                // Collect all unified parts from selectedRO.parts and selectedRO.quote.partsItems
+                const allPartsList: Array<{
+                  id: string;
+                  name: string;
+                  partNumber?: string;
+                  quantity: number;
+                  price?: number;
+                  status: string;
+                  requestType?: string;
+                  estimatedArrival?: string;
+                  notes?: string;
+                  roLineNumber?: number;
+                  vendor?: string;
+                  source: 'RO_PART' | 'QUOTE_PART';
+                }> = [];
 
-              {selectedRO.parts.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-slate-300">
-                  <Package className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                  <h5 className="text-sm font-bold text-slate-800">No Parts Ordered</h5>
-                  <p className="text-xs text-slate-500 mt-1">There are no parts ordered for this repair order yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {[...selectedRO.parts].sort((a, b) => {
-                    const lineA = a.roLineNumber || (a.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(a.notes.match(/For Line (\d+)/i)![1]) : 999);
-                    const lineB = b.roLineNumber || (b.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(b.notes.match(/For Line (\d+)/i)![1]) : 999);
-                    return lineA - lineB;
-                  }).map(part => {
-                    const etaBadge = formatEtaBadge(part.estimatedArrival);
-                    const lineNum = part.roLineNumber || (part.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(part.notes.match(/For Line (\d+)/i)![1]) : undefined);
-                    const etaDisplay = part.estimatedArrival ? (
-                      !isNaN(new Date(part.estimatedArrival).getTime())
-                        ? `${new Date(part.estimatedArrival).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${formatTimeOnly(new Date(part.estimatedArrival))}`
-                        : part.estimatedArrival
-                    ) : 'Pending ETA';
+                const seenIds = new Set<string>();
 
-                    return (
-                      <div 
-                        key={part.id}
-                        className="p-4 bg-white rounded-xl border-2 border-slate-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-purple-400 transition-colors"
-                      >
-                        {/* Part that was ordered */}
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {lineNum && (
-                              <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
-                                Line {lineNum}
-                              </span>
-                            )}
-                            <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                              #{part.partNumber}
-                            </span>
-                            {part.quantity > 1 && (
-                              <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                                Qty: {part.quantity}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-base font-black text-slate-900">
-                            {part.description}
-                          </div>
+                (selectedRO.parts || []).forEach(p => {
+                  seenIds.add(p.id);
+                  const lineNum = p.roLineNumber || (p.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(p.notes.match(/For Line (\d+)/i)![1], 10) : undefined);
+                  allPartsList.push({
+                    id: p.id,
+                    name: p.description || p.name || 'Part',
+                    partNumber: p.partNumber,
+                    quantity: p.quantity || 1,
+                    price: typeof p.price === 'number' ? p.price : (p.price ? parseFloat(String(p.price)) : undefined),
+                    status: p.status,
+                    requestType: p.requestType,
+                    estimatedArrival: p.estimatedArrival,
+                    notes: p.notes,
+                    roLineNumber: lineNum,
+                    vendor: p.vendor,
+                    source: 'RO_PART',
+                  });
+                });
+
+                (selectedRO.quote?.partsItems || []).forEach(qp => {
+                  if (qp.sourcePartId && seenIds.has(qp.sourcePartId)) return;
+                  const alreadyCaptured = allPartsList.some(
+                    p => p.name.trim().toLowerCase() === qp.description.trim().toLowerCase()
+                  );
+                  if (alreadyCaptured) return;
+
+                  allPartsList.push({
+                    id: qp.id,
+                    name: qp.description,
+                    partNumber: qp.partNumber,
+                    quantity: qp.quantity || 1,
+                    price: typeof qp.unitPrice === 'number' ? qp.unitPrice : undefined,
+                    status: (selectedRO.status === 'DENIED' || selectedRO.quote?.status === 'DECLINED') ? 'DECLINED' : 'QUOTE_ONLY',
+                    requestType: 'QUOTE_ONLY',
+                    estimatedArrival: 'Price Quote Needed',
+                    roLineNumber: qp.roLineNumber || 1,
+                    source: 'QUOTE_PART',
+                  });
+                });
+
+                const isROApproved = selectedRO.status === 'APPROVED' || 
+                                     selectedRO.quote?.status === 'APPROVED' || 
+                                     ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(selectedRO.status);
+
+                const quoteParts = allPartsList.filter(p => 
+                  p.status !== 'DECLINED' && 
+                  p.status !== 'CANCELLED' && 
+                  (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY' || (!isROApproved && p.source === 'QUOTE_PART'))
+                );
+
+                const orderedParts = allPartsList.filter(p => 
+                  p.status !== 'DECLINED' &&
+                  p.status !== 'CANCELLED' &&
+                  p.status !== 'QUOTE_ONLY' &&
+                  p.requestType !== 'QUOTE_ONLY' &&
+                  ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT'].includes(p.status)
+                );
+
+                const inStockParts = allPartsList.filter(p => 
+                  ['IN_STOCK', 'RECEIVED', 'ISSUED_TO_TECH'].includes(p.status)
+                );
+
+                const requestedParts = allPartsList.filter(p => 
+                  p.status !== 'DECLINED' && 
+                  p.status !== 'CANCELLED' && 
+                  !quoteParts.some(qp => qp.id === p.id) &&
+                  !orderedParts.some(op => op.id === p.id) &&
+                  !inStockParts.some(ip => ip.id === p.id)
+                );
+
+                const declinedParts = allPartsList.filter(p => 
+                  p.status === 'DECLINED' || p.status === 'CANCELLED'
+                );
+
+                return (
+                  <>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b-2 border-slate-200 gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-purple-100 rounded-lg border-2 border-purple-300 text-purple-700">
+                          <Package className="w-5 h-5" />
                         </div>
-
-                        {/* What the ETA is */}
-                        <div className="shrink-0 flex items-center sm:text-right">
-                          <div className={`px-3.5 py-2 rounded-lg border-2 flex items-center gap-2.5 ${
-                            etaBadge.pastDue 
-                              ? 'bg-red-50 border-red-400 text-red-950'
-                              : etaBadge.urgent
-                              ? 'bg-amber-50 border-amber-400 text-amber-950'
-                              : 'bg-purple-50 border-purple-400 text-purple-950'
-                          }`}>
-                            <Clock className={`w-4 h-4 shrink-0 ${
-                              etaBadge.pastDue ? 'text-red-600' : etaBadge.urgent ? 'text-amber-600' : 'text-purple-600'
-                            }`} />
-                            <div>
-                              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                ETA
-                              </div>
-                              <div className="text-xs sm:text-sm font-black text-slate-900">
-                                {etaDisplay}
-                              </div>
-                              {etaBadge.text && etaBadge.text !== etaDisplay && (
-                                <div className={`text-[10px] font-bold ${
-                                  etaBadge.pastDue ? 'text-red-600' : etaBadge.urgent ? 'text-amber-700' : 'text-purple-700'
-                                }`}>
-                                  {etaBadge.text}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                            Parts Logistics, Quotes & ETA Tracker
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            Comprehensive view of quoted estimate parts, pending requests, ordered components, and live ETA delivery tracking.
+                          </p>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {quoteParts.length > 0 && (
+                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
+                            📋 {quoteParts.length} on Quote
+                          </span>
+                        )}
+                        {orderedParts.length > 0 && (
+                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                            🚚 {orderedParts.length} Ordered
+                          </span>
+                        )}
+                        {inStockParts.length > 0 && (
+                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            ✓ {inStockParts.length} In Stock / In Bay
+                          </span>
+                        )}
+                        {declinedParts.length > 0 && (
+                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-red-100 text-red-900 border border-red-300">
+                            🛑 {declinedParts.length} Declined
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {allPartsList.length === 0 ? (
+                      <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-slate-300">
+                        <Package className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                        <h5 className="text-sm font-bold text-slate-800">No Parts Recorded</h5>
+                        <p className="text-xs text-slate-500 mt-1">There are no parts requested, quoted, or ordered for this repair order yet.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {allPartsList.sort((a, b) => (a.roLineNumber || 1) - (b.roLineNumber || 1)).map(part => {
+                          const isDeclined = part.status === 'DECLINED' || part.status === 'CANCELLED';
+                          const isQuote = !isDeclined && (part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY' || (!isROApproved && part.source === 'QUOTE_PART'));
+                          const isOrdered = !isDeclined && !isQuote && ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT'].includes(part.status);
+                          const isInStock = !isDeclined && !isQuote && ['IN_STOCK', 'RECEIVED', 'ISSUED_TO_TECH'].includes(part.status);
+                          const isRequested = !isDeclined && !isQuote && !isOrdered && !isInStock;
+
+                          const etaBadge = formatEtaBadge(part.estimatedArrival);
+                          const etaDisplay = part.estimatedArrival ? (
+                            !isNaN(new Date(part.estimatedArrival).getTime())
+                              ? `${new Date(part.estimatedArrival).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${formatTimeOnly(new Date(part.estimatedArrival))}`
+                              : part.estimatedArrival
+                          ) : 'Pending ETA';
+
+                          return (
+                            <div 
+                              key={part.id}
+                              className={`p-4 rounded-xl border-2 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                                isDeclined 
+                                  ? 'bg-red-50/60 border-red-300'
+                                  : isQuote
+                                  ? 'bg-purple-50/70 border-purple-300'
+                                  : isOrdered
+                                  ? 'bg-amber-50/70 border-amber-300'
+                                  : isInStock
+                                  ? 'bg-emerald-50/70 border-emerald-300'
+                                  : 'bg-blue-50/70 border-blue-300'
+                              }`}
+                            >
+                              {/* Part Details */}
+                              <div className="space-y-1.5 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {part.roLineNumber && (
+                                    <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
+                                      Line {part.roLineNumber}
+                                    </span>
+                                  )}
+                                  {part.partNumber && (
+                                    <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-300">
+                                      #{part.partNumber}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    Qty: {part.quantity}
+                                  </span>
+                                  {part.price !== undefined && part.price > 0 && (
+                                    <span className="text-xs font-black font-mono text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                                      ${part.price.toFixed(2)} ea
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="text-base font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                                  <span>{part.name}</span>
+                                </div>
+
+                                {/* Status Explanation Note */}
+                                <div className="text-xs font-medium">
+                                  {isQuote ? (
+                                    <span className="text-purple-900 font-semibold flex items-center gap-1">
+                                      <span>📋 <strong>On Quote / Estimate:</strong> Part pricing quoted for customer approval. Not ordered yet.</span>
+                                    </span>
+                                  ) : isDeclined ? (
+                                    <span className="text-red-900 font-bold flex items-center gap-1">
+                                      <span>🛑 <strong>Declined by Customer:</strong> Do not order.</span>
+                                    </span>
+                                  ) : isInStock ? (
+                                    <span className="text-emerald-900 font-semibold flex items-center gap-1">
+                                      <span>✓ <strong>{part.status === 'ISSUED_TO_TECH' ? 'Issued to Technician' : 'In Stock / In Bay'}</strong></span>
+                                    </span>
+                                  ) : isOrdered ? (
+                                    <span className="text-amber-900 font-semibold flex items-center gap-1">
+                                      <span>🚚 <strong>Ordered from {part.vendor || 'Supplier'}:</strong> Tracking live delivery arrival.</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-blue-900 font-semibold flex items-center gap-1">
+                                      <span>📦 <strong>Parts Requested:</strong> Awaiting classification & ordering by Parts Department.</span>
+                                    </span>
+                                  )}
+                                </div>
+
+                                {part.notes && !part.notes.startsWith('For Line') && (
+                                  <p className="text-[11px] text-slate-500 italic mt-0.5">{part.notes}</p>
+                                )}
+                              </div>
+
+                              {/* Status / ETA Badge Box */}
+                              <div className="shrink-0 flex items-center sm:text-right">
+                                {isQuote ? (
+                                  <div className="px-3.5 py-2 rounded-lg border-2 bg-purple-100 border-purple-400 text-purple-950 flex items-center gap-2 shadow-2xs">
+                                    <Calculator className="w-4 h-4 text-purple-700 shrink-0" />
+                                    <div className="text-left sm:text-right">
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-purple-800">
+                                        Estimate Status
+                                      </div>
+                                      <div className="text-xs font-black text-purple-950">
+                                        On Quote (Pending Approval)
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : isDeclined ? (
+                                  <div className="px-3.5 py-2 rounded-lg border-2 bg-red-100 border-red-400 text-red-950 flex items-center gap-2 shadow-2xs">
+                                    <Ban className="w-4 h-4 text-red-700 shrink-0" />
+                                    <div className="text-left sm:text-right">
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-red-800">
+                                        Authorization
+                                      </div>
+                                      <div className="text-xs font-black text-red-950">
+                                        Declined by Customer
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : isInStock ? (
+                                  <div className="px-3.5 py-2 rounded-lg border-2 bg-emerald-100 border-emerald-400 text-emerald-950 flex items-center gap-2 shadow-2xs">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                                    <div className="text-left sm:text-right">
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                                        Availability
+                                      </div>
+                                      <div className="text-xs font-black text-emerald-950">
+                                        {part.status === 'ISSUED_TO_TECH' ? 'Issued to Tech' : 'In Stock / Received'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : isOrdered ? (
+                                  <div className={`px-3.5 py-2 rounded-lg border-2 flex items-center gap-2.5 ${
+                                    etaBadge.pastDue 
+                                      ? 'bg-red-50 border-red-400 text-red-950'
+                                      : etaBadge.urgent
+                                      ? 'bg-amber-50 border-amber-400 text-amber-950'
+                                      : 'bg-purple-50 border-purple-400 text-purple-950'
+                                  }`}>
+                                    <Clock className={`w-4 h-4 shrink-0 ${
+                                      etaBadge.pastDue ? 'text-red-600' : etaBadge.urgent ? 'text-amber-600' : 'text-purple-600'
+                                    }`} />
+                                    <div className="text-left sm:text-right">
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                        ETA Arrival
+                                      </div>
+                                      <div className="text-xs sm:text-sm font-black text-slate-900">
+                                        {etaDisplay}
+                                      </div>
+                                      {etaBadge.text && etaBadge.text !== etaDisplay && (
+                                        <div className={`text-[10px] font-bold ${
+                                          etaBadge.pastDue ? 'text-red-600' : etaBadge.urgent ? 'text-amber-700' : 'text-purple-700'
+                                        }`}>
+                                          {etaBadge.text}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="px-3.5 py-2 rounded-lg border-2 bg-blue-100 border-blue-400 text-blue-950 flex items-center gap-2 shadow-2xs">
+                                    <Package className="w-4 h-4 text-blue-700 shrink-0" />
+                                    <div className="text-left sm:text-right">
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-blue-800">
+                                        Parts Dept Status
+                                      </div>
+                                      <div className="text-xs font-black text-blue-950">
+                                        Parts Requested
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
           {/* TAB 4: AUDIT HISTORY */}
-          {activeTab === 'HISTORY' && (
+          {activeTab === 'HISTORY' && !isAdvisorScreen && (
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">
                 Real-Time Event & Status Audit Trail
@@ -2422,26 +2782,6 @@ export const RODetailModal: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openQuotePrintModal(selectedRO.id)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer shadow-2xs"
-              title="Preview and print official repair estimate & customer quote"
-            >
-              <Printer className="w-3.5 h-3.5 text-blue-600" />
-              <span>Print Quote</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openWarrantyPrintModal(selectedRO.id)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition-colors cursor-pointer shadow-2xs"
-              title="Print official warranty claim sheet with start/end punches, total hours, cause, and correction"
-            >
-              <Printer className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Print Warranty Sheet</span>
-            </button>
-
             {isManager && (
               <button
                 type="button"

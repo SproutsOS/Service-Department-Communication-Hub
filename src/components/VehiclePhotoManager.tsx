@@ -41,7 +41,6 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
   onDeletePhoto,
   maxPhotos = 12
 }) => {
-  const [caption, setCaption] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<VehiclePhoto | null>(null);
@@ -74,7 +73,7 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
       const processed = await processAndCompressImageFile(
         file,
         currentUser,
-        caption.trim() || 'Vehicle Check-in Photo'
+        'Vehicle Photo'
       );
 
       const success = onAddPhoto(roId, processed);
@@ -83,7 +82,6 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
           type: 'success',
           message: `Photo added! Compressed ${formatImageSize(initialBytes)} down to ${formatImageSize(processed.fileSizeBytes || 0)}.`
         });
-        setCaption('');
       } else {
         setUploadFeedback({
           type: 'error',
@@ -103,17 +101,6 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
       setTimeout(() => setUploadFeedback(null), 4500);
     }
   };
-
-  const quickCaptions = [
-    'Front Walkaround',
-    'Rear Walkaround',
-    'Driver Side',
-    'Passenger Side',
-    'Odometer & Fuel',
-    'Pre-existing Scratch/Dent',
-    'Tire Tread & Rims',
-    'VIN Barcode & Door Tag'
-  ];
 
   return (
     <div className="bg-white rounded-xl border-2 border-slate-700 p-4 sm:p-5 space-y-4 shadow-2xs">
@@ -160,37 +147,7 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
       )}
 
       {/* Upload Controls for Advisors */}
-      <div className="bg-slate-50 p-3.5 rounded-xl border-2 border-slate-300 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <div className="flex-1">
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Photo Description / Tag (Optional)
-            </label>
-            <input
-              type="text"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="e.g. Front bumper scrape, Odometer 45,210, Right rear tire..."
-              disabled={isProcessing}
-              className="w-full px-3 py-1.5 bg-white border-2 border-slate-400 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            />
-          </div>
-
-          {/* Quick Caption Buttons */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 pt-1 sm:pt-4">
-            {quickCaptions.slice(0, 4).map((qCap) => (
-              <button
-                key={qCap}
-                type="button"
-                onClick={() => setCaption(qCap)}
-                className="text-[10px] font-bold px-2 py-1 rounded bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-300 transition-colors shrink-0 cursor-pointer"
-              >
-                + {qCap}
-              </button>
-            ))}
-          </div>
-        </div>
-
+      <div className="bg-slate-50 p-3.5 rounded-xl border-2 border-slate-300">
         {/* Capture Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap">
           
@@ -266,7 +223,7 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
                 {/* Image */}
                 <img
                   src={photo.thumbnailUrl || photo.dataUrl}
-                  alt={photo.caption || `Vehicle Photo ${index + 1}`}
+                  alt={`Vehicle Photo ${index + 1}`}
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                   loading="lazy"
                 />
@@ -283,12 +240,8 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
                   )}
                 </div>
 
-                {/* Bottom Caption & Action bar */}
-                <div className="relative z-10 p-1.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-bold text-white truncate max-w-[70%]">
-                    {photo.caption || 'Vehicle Photo'}
-                  </span>
-                  
+                {/* Bottom Action bar */}
+                <div className="relative z-10 p-1.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-end gap-1">
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
@@ -347,7 +300,7 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
                 className="w-14 h-14 object-cover rounded-lg border border-slate-300 shrink-0"
               />
               <div className="text-xs text-slate-700 min-w-0 flex-1">
-                <p className="font-bold truncate">{photoToDelete.caption || 'Vehicle Photo'}</p>
+                <p className="font-bold">Vehicle Photo #{photos.findIndex(p => p.id === photoToDelete.id) + 1}</p>
                 <p className="text-[10px] text-slate-400">Captured by {photoToDelete.uploadedByName || 'Staff'}</p>
               </div>
             </div>
@@ -394,7 +347,7 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
               <div className="flex items-center gap-2 truncate">
                 <Camera className="w-4 h-4 text-blue-400 shrink-0" />
                 <span className="font-bold text-sm truncate">
-                  {previewPhoto.caption || 'Vehicle Inspection Photo'}
+                  Vehicle Inspection Photo #{photos.findIndex(p => p.id === previewPhoto.id) + 1}
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
                   ({vehicleYear} {vehicleMake} {vehicleModel}{vin ? ` • VIN: ${vin}` : ''})
@@ -413,7 +366,7 @@ export const VehiclePhotoManager: React.FC<VehiclePhotoManagerProps> = ({
             <div className="flex-1 min-h-0 bg-black flex items-center justify-center p-2 overflow-auto">
               <img
                 src={previewPhoto.dataUrl}
-                alt={previewPhoto.caption || 'Vehicle Inspection Photo'}
+                alt={`Vehicle Inspection Photo`}
                 className="max-h-[75vh] w-auto object-contain rounded"
               />
             </div>

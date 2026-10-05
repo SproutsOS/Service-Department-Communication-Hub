@@ -34,7 +34,7 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
   showCadence = true,
   onOpenFollowUp
 }) => {
-  const { setSelectedRO, hasROChange, roChangeAlerts } = useApp();
+  const { setSelectedRO, currentUser, hasROChange, roChangeAlerts } = useApp();
   const ro = cleanRO3700(rawRO);
   const hasChangeAlert = hasROChange ? hasROChange(ro.id, ro) : false;
   const changeAlert = roChangeAlerts ? roChangeAlerts[ro.id] : undefined;
@@ -58,14 +58,18 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
     ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
   );
 
-  const hasQuotedParts = !isApproved && Boolean(
-    (ro.quote?.partsItems && ro.quote.partsItems.length > 0) ||
-    ro.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')
+  const hasQuotedParts = Boolean(
+    ro.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') ||
+    (!isApproved && ro.quote?.partsItems && ro.quote.partsItems.length > 0)
   );
   const hasOrderedParts = Boolean(
-    isApproved
-      ? (ro.parts.length > 0 || (ro.quote?.partsItems && ro.quote.partsItems.length > 0))
-      : ro.parts.some(p => p.status !== 'QUOTE_ONLY' && (p.requestType === 'ORDER_NOW' || ['ORDERED', 'DAILY_ORDER', 'IN_STOCK', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'LOCAL_PURCHASE'].includes(p.status)))
+    ro.parts.some(p => 
+      p.status !== 'DECLINED' && 
+      p.status !== 'CANCELLED' && 
+      p.status !== 'QUOTE_ONLY' && 
+      p.requestType !== 'QUOTE_ONLY' &&
+      (p.requestType === 'ORDER_NOW' || ['ORDERED', 'DAILY_ORDER', 'IN_STOCK', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'LOCAL_PURCHASE'].includes(p.status))
+    )
   );
 
   return (
@@ -192,66 +196,9 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
       {/* 5. Status & Diag Stage */}
       <td className="px-3 py-3 whitespace-nowrap align-top">
         <div className="flex flex-col gap-1 items-start">
-          {ro.status === 'PARTS_ORDERED' ? (
-            hasQuotedParts && hasOrderedParts ? (
-              <div className="flex flex-col gap-1">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400">
-                  Parts on Estimate
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedRO(ro, 'PARTS');
-                  }}
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400 hover:bg-purple-200 transition-colors cursor-pointer"
-                  title="Click to view parts ordered & ETA"
-                >
-                  Parts Ordered (ETA)
-                </button>
-              </div>
-            ) : hasQuotedParts ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-100 text-indigo-900 border-indigo-400">
-                Parts on Estimate
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRO(ro, 'PARTS');
-                }}
-                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-100 text-purple-900 border-purple-400 hover:bg-purple-200 transition-colors cursor-pointer"
-                title="Click to view parts ordered & ETA"
-              >
-                Parts Ordered (ETA)
-              </button>
-            )
-          ) : (
-            <>
-              {!isCompleted && hasQuotedParts && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-indigo-50 text-indigo-800 border-indigo-300">
-                  Parts on Estimate
-                </span>
-              )}
-              {!isCompleted && hasOrderedParts && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedRO(ro, 'PARTS');
-                  }}
-                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 bg-purple-50 text-purple-800 border-purple-300 hover:bg-purple-100 transition-colors cursor-pointer"
-                  title="Click to view parts ordered & ETA"
-                >
-                  Parts Ordered (ETA)
-                </button>
-              )}
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
-                {statusInfo.label}
-              </span>
-            </>
-          )}
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
+            {statusInfo.label}
+          </span>
           {diagInfo && (
             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
               diagInfo.isWaiting 
@@ -372,15 +319,28 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
               <span>{ro.vehiclePhotos.length}</span>
             </span>
           )}
-          {ro.messages && ro.messages.length > 0 && (
-            <span 
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200"
-              title={`${ro.messages.length} Messages`}
-            >
-              <MessageSquare className="w-3 h-3 text-slate-500" />
-              <span>{ro.messages.length}</span>
-            </span>
-          )}
+          {(() => {
+            const unreadMessages = (ro.messages || []).filter(m => !(m.readBy || []).includes(currentUser.id));
+            const hasUnreadUrgent = unreadMessages.some(m => m.isUrgent);
+            const hasUnread = unreadMessages.length > 0;
+            if (!ro.messages || ro.messages.length === 0) return null;
+
+            return (
+              <span 
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                  hasUnreadUrgent
+                    ? 'bg-red-600 text-white border-red-500 animate-pulse font-black shadow-xs ring-1 ring-red-400'
+                    : hasUnread
+                    ? 'bg-blue-600 text-white border-blue-500 font-bold'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+                title={hasUnread ? `Unread Messages` : `Messages`}
+              >
+                <MessageSquare className="w-3 h-3" />
+                {hasUnreadUrgent ? <span>URGENT</span> : hasUnread ? <span>NEW</span> : null}
+              </span>
+            );
+          })()}
           {hasChangeAlert && (
             <span
               id={`ro-line-change-bell-${ro.id}`}

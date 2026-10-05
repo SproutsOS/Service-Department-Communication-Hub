@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   User,
   Edit3,
-  Camera
+  Camera,
+  Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RepairQuote, LaborLineItem, QuotePartItem, QuoteStatus, ConcernPayType, LineApprovalStatus } from '../types';
@@ -562,8 +563,8 @@ export const RepairQuoteModal: React.FC = () => {
     });
     partsItems.forEach(p => {
       const pNum = p.roLineNumber || 1;
-      const st = lineStatuses[pNum] || 'PENDING';
-      if (st !== 'DECLINED') {
+      const lineSt = lineStatuses[pNum] || 'PENDING';
+      if (lineSt !== 'DECLINED' && p.status !== 'DECLINED') {
         sum += Number(p.subtotal) || 0;
       }
     });
@@ -581,8 +582,8 @@ export const RepairQuoteModal: React.FC = () => {
     });
     partsItems.forEach(p => {
       const pNum = p.roLineNumber || 1;
-      const st = lineStatuses[pNum] || 'PENDING';
-      if (st === 'DECLINED') {
+      const lineSt = lineStatuses[pNum] || 'PENDING';
+      if (lineSt === 'DECLINED' || p.status === 'DECLINED') {
         sum += Number(p.subtotal) || 0;
       }
     });
@@ -1607,13 +1608,13 @@ export const RepairQuoteModal: React.FC = () => {
                         </div>
 
                         {/* Labor Hours (ProDemand) */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-black text-slate-950 uppercase">Hours:</label>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="text-xs font-black text-slate-950 uppercase">Hours:</label>
                           <input
                             type="number"
                             step="0.1"
                             min="0"
-                            placeholder=""
+                            placeholder="0.0"
                             value={item.laborHours === 0 || item.laborHours === undefined || (item.laborHours as any) === '' ? '' : item.laborHours}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1622,7 +1623,7 @@ export const RepairQuoteModal: React.FC = () => {
                               });
                             }}
                             onFocus={(e) => e.target.select()}
-                            className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-24 px-3 py-2 bg-white border-2 border-slate-400 rounded-lg text-sm font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-600 focus:outline-none shadow-2xs"
                           />
                         </div>
 
@@ -1710,56 +1711,107 @@ export const RepairQuoteModal: React.FC = () => {
                       {/* Parts assigned to this Line and Line Total (Labor + Parts) */}
                       {(() => {
                         const partsForThisLine = partsItems.filter(p => (p.roLineNumber || 1) === roLineNum);
-                        const linePartsSubtotal = partsForThisLine.reduce((sum, p) => sum + (Number(p.subtotal) || 0), 0);
+                        const approvedPartsForThisLine = partsForThisLine.filter(p => p.status !== 'DECLINED');
+                        const linePartsSubtotal = approvedPartsForThisLine.reduce((sum, p) => sum + (Number(p.subtotal) || 0), 0);
                         const lineTotal = (Number(item.subtotal) || 0) + linePartsSubtotal;
 
                         return (
                           <div className="pt-2 border-t border-slate-200/80 space-y-1.5 pl-8">
                             {partsForThisLine.length > 0 && (
-                              <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-200 text-xs">
-                                <div className="flex items-center justify-between font-bold text-amber-950 text-[11px] mb-1">
-                                  <span className="flex items-center gap-1">
+                              <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 text-xs space-y-2">
+                                <div className="flex items-center justify-between font-bold text-amber-950 text-[11px]">
+                                  <span className="flex items-center gap-1.5">
                                     <Package className="w-3.5 h-3.5 text-amber-600" />
-                                    <span>Parts for Line #{roLineNum} ({partsForThisLine.length}):</span>
+                                    <span>Parts for Line #{roLineNum} ({partsForThisLine.length} item{partsForThisLine.length === 1 ? '' : 's'}):</span>
                                   </span>
-                                  <span className="font-mono">${linePartsSubtotal.toFixed(2)}</span>
+                                  <span className="font-mono text-xs font-black">
+                                    Approved Parts: <strong className="text-emerald-800 font-mono">${linePartsSubtotal.toFixed(2)}</strong>
+                                  </span>
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                   {partsForThisLine.map(p => {
                                     const roPart = cleanRO.parts?.find(rp => rp.id === p.sourcePartId || rp.partNumber === p.partNumber || rp.description.toLowerCase() === p.description.toLowerCase());
                                     const availability = roPart ? (roPart.status === 'IN_STOCK' ? 'In Stock' : roPart.estimatedArrival || roPart.status.replace(/_/g, ' ')) : 'Quoted on Estimate';
                                     const isQuoteOnly = roPart?.status === 'QUOTE_ONLY' || roPart?.requestType === 'QUOTE_ONLY';
+                                    const isPartDeclined = p.status === 'DECLINED';
 
                                     return (
-                                      <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-900 font-medium bg-white p-1.5 rounded border border-amber-200 gap-1.5 shadow-2xs">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="font-extrabold text-slate-950">{p.description}</span>
+                                      <div 
+                                        key={p.id} 
+                                        className={`flex flex-col sm:flex-row sm:items-center justify-between text-[11px] font-medium p-2 rounded-lg border gap-2 shadow-2xs transition-all ${
+                                          isPartDeclined
+                                            ? 'bg-rose-50/60 border-rose-200 text-slate-500'
+                                            : 'bg-white border-amber-200 text-slate-900'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                                          <span className={`font-extrabold ${isPartDeclined ? 'line-through text-slate-500' : 'text-slate-950'}`}>
+                                            {p.description}
+                                          </span>
                                           {p.partNumber && (
                                             <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
                                               #{p.partNumber}
                                             </span>
                                           )}
-                                          <span className="text-slate-400">•</span>
+                                          <span className="text-slate-300">•</span>
                                           <span className="text-slate-700 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
                                             Qty: {p.quantity}
                                           </span>
-                                          <span className="text-slate-400">•</span>
-                                          <span className="font-mono font-bold text-emerald-800">
+                                          <span className="text-slate-300">•</span>
+                                          <span className={`font-mono font-bold ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-800'}`}>
                                             ${(Number(p.unitPrice) || 0).toFixed(2)} ea
                                           </span>
                                         </div>
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                          {isQuoteOnly && (
-                                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-300">
-                                              Quote Only
+
+                                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                          {isPartDeclined ? (
+                                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                                              🛑 Declined by Customer ($0.00)
                                             </span>
+                                          ) : (
+                                            <>
+                                              {isQuoteOnly && (
+                                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-300">
+                                                  Quote Only
+                                                </span>
+                                              )}
+                                              <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">
+                                                Avail: {availability}
+                                              </span>
+                                              <span className="font-mono font-black text-slate-950 text-xs">
+                                                ${(Number(p.subtotal) || 0).toFixed(2)}
+                                              </span>
+                                            </>
                                           )}
-                                          <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">
-                                            Avail: {availability}
-                                          </span>
-                                          <span className="font-mono font-black text-slate-950 text-xs">
-                                            ${(Number(p.subtotal) || 0).toFixed(2)}
-                                          </span>
+
+                                          {/* Individual Part Approve / Decline Action (for Advisor/Manager) */}
+                                          {!isTech && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const nextStatus: LineApprovalStatus = isPartDeclined ? 'APPROVED' : 'DECLINED';
+                                                handleUpdatePartItem(p.id, { status: nextStatus });
+                                              }}
+                                              className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                                                isPartDeclined
+                                                  ? 'bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-300'
+                                                  : 'bg-white hover:bg-rose-50 text-rose-700 border-rose-300'
+                                              }`}
+                                              title={isPartDeclined ? 'Customer wants this part: Click to approve/include' : 'Customer declined this specific part: Click to decline'}
+                                            >
+                                              {isPartDeclined ? (
+                                                <>
+                                                  <Check className="w-3 h-3 text-emerald-600" />
+                                                  <span>Approve Part</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Ban className="w-3 h-3 text-rose-600" />
+                                                  <span>Decline Part</span>
+                                                </>
+                                              )}
+                                            </button>
+                                          )}
                                         </div>
                                       </div>
                                     );

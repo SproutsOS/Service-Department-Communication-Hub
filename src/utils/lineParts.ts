@@ -42,39 +42,53 @@ export function getLineParts(ro: RepairOrder, lineNum: number): IntegratedLinePa
 
     if (matchesLine) {
       seenIds.add(p.id);
-      const isQuoteOnly = p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY';
+      const isLineDeclined = ro.status === 'DENIED' || 
+                             ro.quote?.status === 'DECLINED' || 
+                             ro.quote?.lineStatuses?.[lineNum] === 'DECLINED';
+      const isQuote = (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') && 
+                      p.status !== 'ORDERED' && 
+                      p.status !== 'IN_STOCK' && 
+                      p.status !== 'RECEIVED' && 
+                      p.status !== 'ISSUED_TO_TECH';
       const unitPrice = typeof p.price === 'number' ? p.price : (p.price ? parseFloat(String(p.price)) : 0);
       const qty = p.quantity && p.quantity > 0 ? p.quantity : 1;
 
-      // Determine availability & badge style
-      let availability = 'Pending Parts Dept';
-      let badgeClass = 'bg-slate-100 text-slate-700 border-slate-300';
-
       const upperStatus = (p.status || '').toUpperCase();
-      if (upperStatus === 'IN_STOCK') {
+
+      // Determine availability, status & badge style accurately per part
+      let availability = 'Parts Requested';
+      let badgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
+      let isQuoteOnly = false;
+      let finalStatus = p.status;
+
+      if (upperStatus === 'DECLINED' || upperStatus === 'CANCELLED' || (isLineDeclined && !['ORDERED', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK'].includes(upperStatus))) {
+        availability = 'Declined by Customer';
+        badgeClass = 'bg-red-100 text-red-900 border-red-300 font-extrabold';
+        finalStatus = 'DECLINED';
+      } else if (upperStatus === 'IN_STOCK') {
         availability = 'In Stock (Ready Now)';
         badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold';
-      } else if (upperStatus === 'RECEIVED') {
-        availability = 'Received (Parts Counter)';
+      } else if (upperStatus === 'RECEIVED' || upperStatus === 'ISSUED_TO_TECH') {
+        availability = upperStatus === 'ISSUED_TO_TECH' ? 'Issued to Tech' : 'Parts In / Received';
         badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold';
-      } else if (upperStatus === 'ISSUED_TO_TECH') {
-        availability = 'Issued to Tech';
-        badgeClass = 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
       } else if (upperStatus === 'BACKORDERED') {
         availability = p.estimatedArrival ? `Backordered (${p.estimatedArrival})` : 'Backordered';
         badgeClass = 'bg-red-100 text-red-800 border-red-300 font-bold';
-      } else if (upperStatus === 'ORDERED' || upperStatus === 'IN_TRANSIT') {
-        availability = p.estimatedArrival ? `Ordered (${p.estimatedArrival})` : 'Ordered';
-        badgeClass = 'bg-blue-50 text-blue-800 border-blue-300 font-medium';
-      } else if (p.estimatedArrival && p.estimatedArrival !== 'Price Quote Needed') {
+      } else if (upperStatus === 'ORDERED' || upperStatus === 'IN_TRANSIT' || upperStatus === 'DAILY_ORDER' || upperStatus === 'LOCAL_PURCHASE' || upperStatus === 'SPECIAL_ORDER' || upperStatus === 'SPECIAL_ORDER_1_5_DAYS' || upperStatus === 'VOR_UPGRADE') {
+        availability = p.estimatedArrival && p.estimatedArrival !== 'Price Quote Needed' && p.estimatedArrival !== 'Pending Parts Counter'
+          ? `Ordered (${p.estimatedArrival})` 
+          : 'Parts Ordered';
+        badgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+      } else if (isQuote) {
+        availability = 'On Quote (Pending Approval)';
+        badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold';
+        isQuoteOnly = true;
+      } else if (p.estimatedArrival && p.estimatedArrival !== 'Price Quote Needed' && p.estimatedArrival !== 'Pending Parts Counter') {
         availability = p.estimatedArrival;
         badgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-medium';
-      } else if (isQuoteOnly) {
-        availability = 'Quote Only (Pricing Estimate)';
-        badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-bold';
-      } else if (upperStatus === 'REQUESTED' || upperStatus === 'NEEDED') {
-        availability = 'Requested by Tech';
-        badgeClass = 'bg-amber-100 text-amber-900 border-amber-300';
+      } else {
+        availability = 'Parts Requested';
+        badgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
       }
 
       lineParts.push({
@@ -85,7 +99,7 @@ export function getLineParts(ro: RepairOrder, lineNum: number): IntegratedLinePa
         price: unitPrice,
         subtotal: unitPrice * qty,
         availability,
-        status: p.status,
+        status: finalStatus,
         isQuoteOnly,
         badgeClass,
         vendor: p.vendor,
@@ -115,6 +129,32 @@ export function getLineParts(ro: RepairOrder, lineNum: number): IntegratedLinePa
       const qty = qp.quantity || 1;
       const subtotal = typeof qp.subtotal === 'number' ? qp.subtotal : unitPrice * qty;
 
+      const isLineDeclined = ro.status === 'DENIED' || 
+                             ro.quote?.status === 'DECLINED' || 
+                             ro.quote?.lineStatuses?.[lineNum] === 'DECLINED';
+
+      const isROApproved = Boolean(
+        !isLineDeclined && (
+          ro.status === 'APPROVED' || 
+          ro.quote?.status === 'APPROVED' || 
+          ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(ro.status)
+        )
+      );
+
+      let availability = isROApproved ? 'Approved (Order Now)' : 'On Quote (Pending Approval)';
+      let status = isROApproved ? 'APPROVED' : 'QUOTE_ONLY';
+      let isQuoteOnly = !isROApproved;
+      let badgeClass = isROApproved 
+        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold' 
+        : 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold';
+
+      if (isLineDeclined) {
+        availability = 'Declined by Customer';
+        status = 'DECLINED';
+        isQuoteOnly = false;
+        badgeClass = 'bg-red-100 text-red-900 border-red-300 font-extrabold';
+      }
+
       lineParts.push({
         id: qp.id,
         name: qp.description,
@@ -122,10 +162,10 @@ export function getLineParts(ro: RepairOrder, lineNum: number): IntegratedLinePa
         quantity: qty,
         price: unitPrice,
         subtotal,
-        availability: 'Quoted on Estimate',
-        status: 'QUOTE_ONLY',
-        isQuoteOnly: true,
-        badgeClass: 'bg-purple-100 text-purple-900 border-purple-300 font-bold',
+        availability,
+        status,
+        isQuoteOnly,
+        badgeClass,
         source: 'QUOTE_PART',
       });
     }

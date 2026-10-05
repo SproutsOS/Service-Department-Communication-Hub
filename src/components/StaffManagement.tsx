@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole } from '../types';
+import { STANDARD_JOB_TITLES, STANDARD_CERTIFICATION_LEVELS } from '../data/mockData';
 
 export const StaffManagement: React.FC = () => {
   const { 
@@ -853,7 +854,8 @@ export const StaffManagement: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Master Diagnostic Technician, Senior Advisor"
+                  list="standard-job-titles-list"
+                  placeholder="e.g. Oil Bay, PDI Tech, UCI Tech, Master Diagnostic Technician"
                   value={titleInput}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -862,8 +864,37 @@ export const StaffManagement: React.FC = () => {
                       triggerAutoSave({ title: val.trim() });
                     }
                   }}
-                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                 />
+                <datalist id="standard-job-titles-list">
+                  {STANDARD_JOB_TITLES.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
+
+                {/* Quick Selection Chips */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                  <span className="text-[10px] font-bold text-slate-500">Quick:</span>
+                  {['Oil Bay', 'PDI Tech', 'UCI Tech', 'Master Tech', 'A-Level Tech', 'Service Advisor', 'Parts Specialist'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        setTitleInput(preset);
+                        if (editingUserId) {
+                          triggerAutoSave({ title: preset });
+                        }
+                      }}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                        titleInput === preset
+                          ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Technician Certification Level (Conditional) */}
@@ -875,7 +906,8 @@ export const StaffManagement: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Master Tech, ASE Master, A-Level, L1 Diagnostics"
+                    list="standard-cert-levels-list"
+                    placeholder="e.g. Oil Bay, PDI Tech, UCI Tech, Master Tech, ASE Master, A-Level"
                     value={certInput}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -888,8 +920,40 @@ export const StaffManagement: React.FC = () => {
                         });
                       }
                     }}
-                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                   />
+                  <datalist id="standard-cert-levels-list">
+                    {STANDARD_CERTIFICATION_LEVELS.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+
+                  {/* Quick Selection Chips for Techs */}
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                    <span className="text-[10px] font-bold text-slate-500">Quick:</span>
+                    {['Oil Bay', 'PDI Tech', 'UCI Tech', 'Master Tech', 'ASE Master Tech', 'A-Level Tech', 'B-Level Tech'].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          setCertInput(preset);
+                          if (editingUserId) {
+                            triggerAutoSave({ 
+                              certificationLevel: preset,
+                              bayNumber: preset 
+                            });
+                          }
+                        }}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                          certInput === preset
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
                   <p className="text-[11px] text-slate-400 mt-1">
                     Shows in technician dispatch lists, work orders, and shop management.
                   </p>

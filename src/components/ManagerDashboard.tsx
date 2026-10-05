@@ -20,7 +20,8 @@ import {
   Award,
   Calculator,
   ShieldCheck,
-  PhoneCall
+  PhoneCall,
+  ExternalLink
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -29,6 +30,7 @@ import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince, sortROsNumerically, matchesROSearch } from '../utils/formatters';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { ManagerPartsOnOrderModal } from './ManagerPartsOnOrderModal';
 import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
@@ -47,6 +49,7 @@ export const ManagerDashboard: React.FC = () => {
   } = useApp();
 
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
+  const [isPartsOnOrderModalOpen, setIsPartsOnOrderModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
   const [techFilter, setTechFilter] = useState<string>('ALL');
@@ -113,12 +116,20 @@ export const ManagerDashboard: React.FC = () => {
   const readyPickupCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
   const completedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'CLOSED' || r.status === 'COMPLETED').length;
 
-  // Parts arriving today
+  // Parts in transit / courier deliveries expected today
   const partsInTransit = repairOrders.flatMap(ro => 
     ro.parts
-      .filter(p => p.status === 'IN_TRANSIT' || p.status === 'ORDERED')
+      .filter(p => p.status === 'IN_TRANSIT')
       .map(p => ({ ...p, roId: ro.id, customerName: ro.customerName, techName: ro.techName }))
   );
+
+  // Total active parts on order across all open ROs
+  const totalPartsOnOrderCount = useMemo(() => {
+    return repairOrders.reduce((acc, ro) => {
+      const active = (ro.parts || []).filter(p => p.status !== 'QUOTE_ONLY' && p.requestType !== 'QUOTE_ONLY' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH');
+      return acc + active.length;
+    }, 0);
+  }, [repairOrders]);
 
   // Filter & Sort ROs in numerical order
   const filteredROs = sortROsNumerically(repairOrders.filter(ro => {
@@ -161,6 +172,21 @@ export const ManagerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            id="open-parts-on-order-report-mgr"
+            onClick={() => setIsPartsOnOrderModalOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 bg-orange-600 hover:bg-orange-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
+            title="Open Service Manager Master Parts on Order & ETA Control Report"
+          >
+            <Package className="w-4 h-4 text-orange-200" />
+            <span>Parts on Order Report</span>
+            {totalPartsOnOrderCount > 0 && (
+              <span className="bg-orange-950 text-orange-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-orange-400">
+                {totalPartsOnOrderCount}
+              </span>
+            )}
+          </button>
+
           <button
             id="open-appointment-calendar-mgr"
             onClick={() => setIsAppointmentCalendarOpen(true)}
@@ -565,16 +591,26 @@ export const ManagerDashboard: React.FC = () => {
       {/* Live Parts Tracking & ETA Strip */}
       {partsInTransit.length > 0 && (
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Truck className="w-4 h-4 text-orange-600" />
               <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                 Live Parts Tracking & Estimated Arrivals
               </h2>
             </div>
-            <span className="text-xs text-orange-600 font-bold">
-              {partsInTransit.length} deliveries expected today
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-orange-600 font-bold">
+                {partsInTransit.length} deliveries expected today
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsPartsOnOrderModalOpen(true)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center gap-1 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200"
+              >
+                <span>Open Full Master Report</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -954,6 +990,13 @@ export const ManagerDashboard: React.FC = () => {
           onClose={() => setSelectedFollowUpRO(null)}
         />
       )}
+
+      {/* Service Manager Master Parts on Order & ETA Control Report */}
+      <ManagerPartsOnOrderModal
+        isOpen={isPartsOnOrderModalOpen}
+        onClose={() => setIsPartsOnOrderModalOpen(false)}
+        onOpenRO={(ro) => setSelectedRO(ro)}
+      />
 
     </div>
   );

@@ -509,15 +509,23 @@ export const QuotePrintModal: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 bg-white">
-                                {effectiveParts.map((part, pIdx) => (
-                                  <tr key={pIdx}>
-                                    <td className="p-1.5 font-mono font-bold text-slate-900">{part.partNumber}</td>
-                                    <td className="p-1.5 font-medium text-slate-800">{part.description}</td>
-                                    <td className="p-1.5 text-center font-mono font-bold">{part.quantity}</td>
-                                    <td className="p-1.5 text-right font-mono text-slate-600">${(Number(part.unitPrice) || 0).toFixed(2)}</td>
-                                    <td className="p-1.5 text-right font-mono font-bold text-slate-900">${(Number(part.subtotal) || 0).toFixed(2)}</td>
-                                  </tr>
-                                ))}
+                                {effectiveParts.map((part, pIdx) => {
+                                  const isPartDeclined = part.status === 'DECLINED';
+                                  return (
+                                    <tr key={pIdx} className={isPartDeclined ? 'bg-rose-50/40 text-slate-500' : ''}>
+                                      <td className="p-1.5 font-mono font-bold text-slate-900">{part.partNumber}</td>
+                                      <td className="p-1.5 font-medium text-slate-800">
+                                        <span className={isPartDeclined ? 'line-through text-slate-500' : ''}>{part.description}</span>
+                                        {isPartDeclined && <span className="ml-1.5 text-[10px] font-black text-rose-700 uppercase font-sans">[Declined by Customer]</span>}
+                                      </td>
+                                      <td className="p-1.5 text-center font-mono font-bold">{part.quantity}</td>
+                                      <td className="p-1.5 text-right font-mono text-slate-600">${(Number(part.unitPrice) || 0).toFixed(2)}</td>
+                                      <td className="p-1.5 text-right font-mono font-bold text-slate-900">
+                                        {isPartDeclined ? <span className="text-rose-700 font-black">$0.00</span> : `$${(Number(part.subtotal) || 0).toFixed(2)}`}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

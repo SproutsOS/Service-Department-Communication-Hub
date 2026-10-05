@@ -229,9 +229,26 @@ export const PartsDashboard: React.FC = () => {
     return repairOrders.find(ro => ro.id === selectedTargetRoId) || null;
   }, [repairOrders, selectedTargetRoId]);
 
-  // Helper to identify technician requested parts (both Order Now and Quote Only)
-  const isTechRequestedPart = (p: PartItem) => 
-    p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY' || p.status === 'NEEDED' || p.requestType === 'ORDER_NOW' || p.requestType === 'QUOTE_ONLY';
+  // Helper to identify technician requested parts that are still pending / not yet ordered
+  const isTechRequestedPart = (p: PartItem) => {
+    if (p.status === 'DECLINED' || p.status === 'CANCELLED') return false;
+    // Exclude parts that are already ordered or received
+    const isOrderedOrComplete = [
+      'ORDERED', 
+      'DAILY_ORDER', 
+      'LOCAL_PURCHASE', 
+      'SPECIAL_ORDER', 
+      'SPECIAL_ORDER_1_5_DAYS', 
+      'VOR_UPGRADE', 
+      'IN_TRANSIT', 
+      'RECEIVED', 
+      'ISSUED_TO_TECH', 
+      'IN_STOCK'
+    ].includes(p.status);
+    if (isOrderedOrComplete) return false;
+
+    return p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY' || p.status === 'NEEDED' || p.requestType === 'ORDER_NOW' || p.requestType === 'QUOTE_ONLY';
+  };
 
   // Helper to get numeric line order for a part (Line 1, Line 2, etc.)
   const getPartLineOrder = (part: PartItem): number => {
@@ -269,13 +286,14 @@ export const PartsDashboard: React.FC = () => {
 
   // 1. Pending Quoting Queue: Tech-requested parts awaiting parts counter pricing & quote submission
   const isROInPendingQuoteQueue = (ro: RepairOrder): boolean => {
-    if (ro.status === 'COMPLETED' || ro.status === 'CLOSED') return false;
+    if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
     if (submittedQuoteRoIds.has(ro.id)) return false;
 
-    // If quote is already submitted to advisor or approved, it is no longer pending quote
+    // If quote is already submitted to advisor, approved, or declined, it is no longer pending quote
     if (
       ro.quote?.status === 'SUBMITTED' || 
       ro.quote?.status === 'APPROVED' || 
+      ro.quote?.status === 'DECLINED' || 
       ro.status === 'ESTIMATE_DONE' || 
       ro.status === 'WAITING_FOR_APPROVAL' || 
       ro.status === 'APPROVED' || 
@@ -300,8 +318,9 @@ export const PartsDashboard: React.FC = () => {
 
   // 2. Approved ROs Queue: ROs authorized by customer/advisor that have parts ready to be ordered
   const isROApprovedReadyToOrder = (ro: RepairOrder): boolean => {
-    if (ro.status === 'COMPLETED' || ro.status === 'CLOSED') return false;
+    if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
     if (orderedRoIds.has(ro.id)) return false;
+    if (ro.quote?.status === 'DECLINED') return false;
 
     const isApproved = ro.quote?.status === 'APPROVED' || 
                        ro.status === 'APPROVED' || 
@@ -313,8 +332,20 @@ export const PartsDashboard: React.FC = () => {
 
     const hasUnorderedParts = (ro.parts || []).some(p => {
       const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
-      if (lineStatus === 'DECLINED') return false;
-      return p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK';
+      if (lineStatus === 'DECLINED' || p.status === 'DECLINED' || p.status === 'CANCELLED') return false;
+      const isAlreadyOrdered = [
+        'ORDERED', 
+        'DAILY_ORDER', 
+        'LOCAL_PURCHASE', 
+        'SPECIAL_ORDER', 
+        'SPECIAL_ORDER_1_5_DAYS', 
+        'VOR_UPGRADE', 
+        'IN_TRANSIT', 
+        'RECEIVED', 
+        'ISSUED_TO_TECH', 
+        'IN_STOCK'
+      ].includes(p.status);
+      return !isAlreadyOrdered;
     });
 
     return hasUnorderedParts;
@@ -1177,6 +1208,10 @@ export const PartsDashboard: React.FC = () => {
         return 'QUOTE ONLY (TECH)';
       case 'REQUESTED':
         return 'REQUESTED BY TECH';
+      case 'DECLINED':
+        return 'DECLINED (DO NOT ORDER)';
+      case 'CANCELLED':
+        return 'CANCELLED';
       default:
         return status.replace(/_/g, ' ');
     }
@@ -1207,6 +1242,9 @@ export const PartsDashboard: React.FC = () => {
         return 'bg-purple-100 text-purple-900 border-purple-400 font-black';
       case 'REQUESTED':
         return 'bg-amber-100 text-amber-900 border-amber-400 font-black animate-pulse';
+      case 'DECLINED':
+      case 'CANCELLED':
+        return 'bg-red-100 text-red-800 border-red-300 font-bold';
       default:
         return 'bg-indigo-100 text-indigo-800 border-indigo-300 font-bold';
     }
@@ -1630,7 +1668,11 @@ export const PartsDashboard: React.FC = () => {
                                           placeholder="Part Description"
                                           className="font-bold text-xs text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white px-1 py-0.5 rounded focus:outline-none min-w-[140px]"
                                         />
-                                        {isQuoteOnly ? (
+                                        {rp.status === 'DECLINED' ? (
+                                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border bg-red-100 text-red-800 border-red-300 shadow-2xs">
+                                            🛑 Declined
+                                          </span>
+                                        ) : isQuoteOnly ? (
                                           <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border bg-purple-100 text-purple-900 border-purple-400 shadow-2xs">
                                             💬 Quote Only
                                           </span>
@@ -2415,6 +2457,7 @@ export const PartsDashboard: React.FC = () => {
                 <option value="IN_TRANSIT">IN TRANSIT</option>
                 <option value="RECEIVED">RECEIVED</option>
                 <option value="ISSUED_TO_TECH">ISSUED TO TECH</option>
+                <option value="DECLINED">🛑 Customer Declined ({allParts.filter(p => p.status === 'DECLINED').length})</option>
                 {existingCustomStatuses.map(st => (
                   <option key={st} value={st}>{st.replace(/_/g, ' ')}</option>
                 ))}

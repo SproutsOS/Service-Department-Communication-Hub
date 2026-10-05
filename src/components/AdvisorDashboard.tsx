@@ -658,7 +658,7 @@ export const AdvisorDashboard: React.FC = () => {
                 </p>
               </div>
             ) : displayMode === 'CARD' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {displayROs.map(ro => (
                   <ROCard 
                     key={ro.id} 

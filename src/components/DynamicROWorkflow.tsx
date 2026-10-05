@@ -366,11 +366,6 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                     </span>
                   )}
                 </div>
-                {!ro.techId && (
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    Select a technician from the shop roster to assign primary responsibility for this repair order.
-                  </p>
-                )}
               </div>
             </div>
 
@@ -400,25 +395,6 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                     </option>
                   ))}
                 </select>
-
-                {!ro.techId && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick:</span>
-                    {technicians.slice(0, 3).map((tech) => (
-                      <button
-                        key={tech.id}
-                        type="button"
-                        onClick={() => {
-                          handleAssignTech(tech.id);
-                          triggerActionNotice(`✓ Assigned to ${tech.name}! Step completed & returned to workflow.`);
-                        }}
-                        className="px-2 py-1 bg-white hover:bg-blue-50 text-blue-700 hover:text-blue-800 border border-blue-300 rounded-md text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
-                      >
-                        {tech.name.split(' ')[0]} {tech.employeeNumber ? `#${tech.employeeNumber}` : ''}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -1435,7 +1411,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Mark All Parts In to Tech</span>
+                  <span>Mark All Parts In and to Tech</span>
                 </button>
               )}
             </div>
