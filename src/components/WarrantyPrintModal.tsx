@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -21,7 +21,6 @@ import {
 import { useApp } from '../context/AppContext';
 import { WarrantyLaborTimePunch } from '../types';
 import { formatMilitaryDate, formatMilitaryTime, formatMilitaryDateTime } from '../utils/formatters';
-import { printIsolatedDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -36,20 +35,48 @@ export const WarrantyPrintModal: React.FC = () => {
 
   const [copied, setCopied] = useState(false);
 
-  // Close on Escape key
+  const ro = activeWarrantyPrintRO;
+
+  // Add printing-warranty class whenever the modal is open so print previews are instantly ready
+  useEffect(() => {
+    document.body.classList.add('printing-warranty');
+    return () => {
+      document.body.classList.remove('printing-warranty');
+    };
+  }, []);
+
+  const handlePrint = useCallback(() => {
+    if (!ro) return;
+    const title = `Warranty Verification - RO #${ro.id} - ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`;
+    const prevTitle = document.title;
+    document.title = title;
+    document.body.classList.add('printing-warranty');
+
+    const cleanup = () => {
+      document.title = prevTitle;
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  }, [ro]);
+
+  // Close on Escape key or print on Ctrl+P / Cmd+P
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         closeWarrantyPrintModal();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [closeWarrantyPrintModal]);
+  }, [closeWarrantyPrintModal, handlePrint]);
 
   if (!activeWarrantyPrintRO) return null;
 
-  const ro = activeWarrantyPrintRO;
   const punches: WarrantyLaborTimePunch[] = ro.timePunches || [];
 
   const inMiles = ro.vehicle.mileage ?? 0;
@@ -75,14 +102,6 @@ export const WarrantyPrintModal: React.FC = () => {
   const displayConcerns = (ro.concerns && ro.concerns.length > 0) 
     ? ro.concerns 
     : (ro.primaryConcern ? [ro.primaryConcern] : ['Customer reported vehicle performance concern']);
-
-  const handlePrint = () => {
-    document.body.classList.add('printing-warranty');
-    window.print();
-    setTimeout(() => {
-      document.body.classList.remove('printing-warranty');
-    }, 1000);
-  };
 
   const formatDateTime = (isoString?: string) => {
     if (!isoString) return 'Active / In-Progress';

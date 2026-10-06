@@ -179,6 +179,7 @@ export function getContactCadenceStatus(ro: RepairOrder): CadenceStatusInfo {
 }
 
 export function isROCompleted(roOrStatus: RepairOrder | string): boolean {
+  if (typeof roOrStatus !== 'string' && roOrStatus.isArchived) return true;
   const status = typeof roOrStatus === 'string' ? roOrStatus : roOrStatus.status;
   const norm = normalizeROStatus(status);
   return norm === 'CLOSED' || status === 'COMPLETED';

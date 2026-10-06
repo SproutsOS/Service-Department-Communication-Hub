@@ -82,13 +82,15 @@ export const SalesDashboard: React.FC = () => {
   // Filter logic
   const filteredROs = repairOrders.filter(ro => {
     const norm = normalizeROStatus(ro.status);
+    const isClosed = ro.status === 'CLOSED' || ro.status === 'COMPLETED' || ro.isArchived;
 
     // Tab filter
+    if (statusFilter === 'ALL' && isClosed) return false;
     if (statusFilter === 'READY' && norm !== 'READY_FOR_PICKUP') return false;
     if (statusFilter === 'REPAIR' && !(norm === 'REPAIR_IN_PROGRESS' || norm === 'REPAIR_COMPLETE' || ro.status === 'IN_BAY' || ro.status === 'IN_REPAIR')) return false;
     if (statusFilter === 'PARTS' && !(norm === 'PARTS_ORDERED' || norm === 'PARTS_IN_TO_TECH' || ro.status === 'WAITING_PARTS')) return false;
     if (statusFilter === 'DIAG' && !(norm === 'WAITING_DIAGNOSTICS' || norm === 'IN_DIAG' || norm === 'ESTIMATE_DONE' || norm === 'WAITING_FOR_APPROVAL')) return false;
-    if (statusFilter === 'COMPLETED' && !(ro.status === 'CLOSED' || ro.status === 'COMPLETED')) return false;
+    if (statusFilter === 'COMPLETED' && !isClosed) return false;
 
     // Search query
     if (searchQuery.trim()) {

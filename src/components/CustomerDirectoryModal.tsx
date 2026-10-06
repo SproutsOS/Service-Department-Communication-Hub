@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Customer, VehicleInfo, RepairOrder } from '../types';
+import { CustomerVehiclesModal } from './CustomerVehiclesModal';
 import { 
   Users, 
   Search, 
@@ -46,6 +47,7 @@ export const CustomerDirectoryModal: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'TAX_EXEMPT' | 'MULTI_VEHICLE'>('ALL');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [vehiclesModalCustomer, setVehiclesModalCustomer] = useState<Customer | null>(null);
 
   // New Customer Form State
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -522,17 +524,27 @@ export const CustomerDirectoryModal: React.FC = () => {
                           </p>
 
                           {firstVehicle && (
-                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1 truncate">
-                              <Car className="w-3 h-3 text-blue-600 shrink-0" />
-                              <span className="truncate">
-                                {firstVehicle.year} {firstVehicle.make} {firstVehicle.model}
-                              </span>
-                              {totalVehicles > 1 && (
-                                <span className="bg-slate-200 text-slate-700 text-[10px] font-bold px-1 rounded-full shrink-0">
-                                  +{totalVehicles - 1}
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
+                                <Car className="w-3 h-3 text-blue-600 shrink-0" />
+                                <span className="truncate">
+                                  {firstVehicle.year} {firstVehicle.make} {firstVehicle.model}
                                 </span>
+                              </p>
+                              {totalVehicles > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setVehiclesModalCustomer(cust);
+                                  }}
+                                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-300 transition-colors cursor-pointer shrink-0"
+                                  title="View all vehicles for this customer"
+                                >
+                                  🚗 All {totalVehicles} Vehicles
+                                </button>
                               )}
-                            </p>
+                            </div>
                           )}
                         </div>
 
@@ -946,19 +958,31 @@ export const CustomerDirectoryModal: React.FC = () => {
 
                 {/* Registered Vehicles Section */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                       <Car className="w-4 h-4 text-blue-600" />
                       <span>Registered Customer Vehicles ({activeCustomer.vehicles?.length || 0})</span>
                     </h4>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingVehicle(!isAddingVehicle)}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Vehicle</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {activeCustomer.vehicles && activeCustomer.vehicles.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setVehiclesModalCustomer(activeCustomer)}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-lg border border-blue-300 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <Car className="w-3.5 h-3.5" />
+                          <span>View All Vehicles ({activeCustomer.vehicles.length})</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingVehicle(!isAddingVehicle)}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Vehicle</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Add Vehicle Form */}
@@ -1167,6 +1191,14 @@ export const CustomerDirectoryModal: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Customer Vehicles Fleet Selection Modal */}
+      <CustomerVehiclesModal
+        isOpen={Boolean(vehiclesModalCustomer)}
+        onClose={() => setVehiclesModalCustomer(null)}
+        customer={vehiclesModalCustomer}
+        title={vehiclesModalCustomer ? `All Registered Vehicles: ${vehiclesModalCustomer.name}` : undefined}
+      />
     </div>
   );
 };

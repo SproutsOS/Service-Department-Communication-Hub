@@ -173,9 +173,9 @@ export const PartsDashboard: React.FC = () => {
   const [roSearchQuery, setRoSearchQuery] = useState('');
   const roDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Active Repair Orders
+  // Active Repair Orders (exclude closed, completed, and archived)
   const activeROs = useMemo(() => {
-    return repairOrders.filter(ro => ro.status !== 'COMPLETED');
+    return repairOrders.filter(ro => ro.status !== 'COMPLETED' && ro.status !== 'CLOSED' && !ro.isArchived);
   }, [repairOrders]);
 
   // Filtered ROs for Searchable Dropdown by RO #, customer name, phone, year, make, model, VIN, tech, advisor
@@ -864,9 +864,9 @@ export const PartsDashboard: React.FC = () => {
     return list;
   }, [existingCustomStatuses]);
 
-  // Flatten all parts with RO metadata for Logistics Tab
+  // Flatten all parts with RO metadata for Logistics Tab (from active open ROs only)
   const allParts = useMemo(() => {
-    return repairOrders.flatMap(ro => 
+    return activeROs.flatMap(ro => 
       ro.parts.map(part => ({
         ...part,
         customerName: ro.customerName,
@@ -878,7 +878,7 @@ export const PartsDashboard: React.FC = () => {
         roPromisedTime: ro.promisedTime,
       }))
     );
-  }, [repairOrders]);
+  }, [activeROs]);
 
   // Metrics
   const totalRoCount = activeROs.length;
@@ -1799,7 +1799,8 @@ export const PartsDashboard: React.FC = () => {
                                           type="text"
                                           placeholder="Enter Part #"
                                           value={draft.partNumber}
-                                          onChange={(e) => handleUpdatePartField(ro.id, rp, 'partNumber', e.target.value.toUpperCase())}
+                                          onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
+                                          onBlur={(e) => handleUpdatePartField(ro.id, rp, 'partNumber', e.target.value.toUpperCase())}
                                           className="w-full px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 text-slate-900 shadow-2xs"
                                         />
                                       </div>
@@ -3417,7 +3418,15 @@ export const PartsDashboard: React.FC = () => {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleAddPartSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+            <form 
+              onSubmit={handleAddPartSubmit} 
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+                  e.preventDefault();
+                }
+              }}
+              className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5"
+            >
               
               {/* Repair Order Selector (Standard Search Bar Combobox) */}
               <div ref={roDropdownRef} className="relative">

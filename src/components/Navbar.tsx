@@ -18,7 +18,8 @@ import {
   X,
   CalendarDays,
   CalendarCheck,
-  Receipt
+  Receipt,
+  Archive
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -51,7 +52,12 @@ export const Navbar: React.FC = () => {
     clearAllROChangeAlerts,
     openQuoteBuilder,
     quotes,
+    openArchivedROsModal,
   } = useApp();
+
+  const archivedCount = useMemo(() => {
+    return repairOrders.filter(r => r.status === 'CLOSED' || r.status === 'COMPLETED' || Boolean(r.isArchived)).length;
+  }, [repairOrders]);
 
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -262,6 +268,23 @@ export const Navbar: React.FC = () => {
         >
           <Search className="w-4 h-4 text-blue-400" />
           <span>Customer Search</span>
+        </button>
+
+        {/* Closed & Archived Repair Orders Repository Button */}
+        <button
+          id="navbar-archived-ros-btn"
+          onClick={() => openArchivedROsModal()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-slate-750 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-600 shadow-xs"
+          title="Archived Repair Orders Repository (Search & View all closed/settled ROs, invoices, and warranty punch records)"
+        >
+          <Archive className="w-4 h-4 text-amber-400" />
+          <span className="hidden sm:inline">Archived ROs</span>
+          <span className="sm:hidden">Archive</span>
+          {archivedCount > 0 && (
+            <span className="bg-slate-900 text-amber-300 text-[10px] font-black px-1.5 py-0.2 rounded-full border border-slate-600">
+              {archivedCount}
+            </span>
+          )}
         </button>
 
         {/* Appointments Calendar Button (Advisors & Service Manager) */}

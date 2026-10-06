@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Plus, FileText, Send, User, UserCheck, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench, ShieldCheck, Search, Users } from 'lucide-react';
+import { X, Plus, FileText, Send, User, UserCheck, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench, ShieldCheck, Search, Users, ExternalLink } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { decodeVin } from '../utils/vinDecoder';
-import { ConcernPayType, Customer, VehicleInfo } from '../types';
+import { ConcernPayType, Customer, VehicleInfo, Vehicle } from '../types';
+import { CustomerVehiclesModal } from './CustomerVehiclesModal';
 
 
 export const NewROModal: React.FC = () => {
@@ -53,6 +54,7 @@ export const NewROModal: React.FC = () => {
   const [isUrgent, setIsUrgent] = useState(false);
   const [isWaiter, setIsWaiter] = useState(false);
   const [isTaxExempt, setIsTaxExempt] = useState(false);
+  const [isCustomerVehiclesModalOpen, setIsCustomerVehiclesModalOpen] = useState(false);
 
   // Initialize all fields or pre-populate from Customer Cloud Directory
   useEffect(() => {
@@ -735,14 +737,19 @@ export const NewROModal: React.FC = () => {
             {/* Saved Fleet Vehicles Chip Bar */}
             {activeCustomerRecord && activeCustomerRecord.vehicles && activeCustomerRecord.vehicles.length > 0 && (
               <div className="mt-3 pt-3 border-t border-slate-300">
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                   <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                     <Car className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Customer Saved Fleet in Cloud (Click any vehicle to auto-populate):</span>
+                    <span>Customer Fleet ({activeCustomerRecord.vehicles.length} Saved Vehicles):</span>
                   </span>
-                  <span className="text-[10px] text-slate-500 font-semibold">
-                    {activeCustomerRecord.vehicles.length} Vehicle{activeCustomerRecord.vehicles.length === 1 ? '' : 's'} on file
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerVehiclesModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-100/90 hover:bg-blue-200 px-3 py-1 rounded-lg border border-blue-300 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Car className="w-3.5 h-3.5" />
+                    <span>View & Select All Vehicles ({activeCustomerRecord.vehicles.length}) →</span>
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {activeCustomerRecord.vehicles.map((v, idx) => {
@@ -782,10 +789,22 @@ export const NewROModal: React.FC = () => {
 
           {/* Vehicle Section */}
           <div className="bg-slate-50 p-4 rounded-xl border-2 border-slate-400">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Car className="w-3.5 h-3.5 text-blue-600" /> Vehicle Information
-              </h3>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Car className="w-3.5 h-3.5 text-blue-600" /> Vehicle Information
+                </h3>
+                {activeCustomerRecord && activeCustomerRecord.vehicles && activeCustomerRecord.vehicles.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerVehiclesModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-white hover:bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-300 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Car className="w-3 h-3 text-blue-600" />
+                    <span>Switch Customer Vehicle ({activeCustomerRecord.vehicles.length})</span>
+                  </button>
+                )}
+              </div>
               <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> Auto-Decodes Year, Make & Model
               </span>
@@ -1100,6 +1119,25 @@ export const NewROModal: React.FC = () => {
         </form>
 
       </div>
+
+      {/* Customer Vehicles Fleet Selection Modal */}
+      {activeCustomerRecord && (
+        <CustomerVehiclesModal
+          isOpen={isCustomerVehiclesModalOpen}
+          onClose={() => setIsCustomerVehiclesModalOpen(false)}
+          customer={activeCustomerRecord}
+          selectedVin={typeof vin === 'string' ? vin : undefined}
+          title={`All Registered Vehicles: ${activeCustomerRecord.name}`}
+          onSelectVehicle={(veh) => {
+            setYear(veh.year || '');
+            setMake(veh.make || '');
+            setModel(veh.model || '');
+            setVin(veh.vin || '');
+            if (veh.mileage) setMileage(veh.mileage);
+            setVinDecodedMsg(null);
+          }}
+        />
+      )}
     </div>
   );
 };

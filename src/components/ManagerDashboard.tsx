@@ -22,7 +22,8 @@ import {
   ShieldCheck,
   PhoneCall,
   ExternalLink,
-  Receipt
+  Receipt,
+  Archive
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -48,7 +49,8 @@ export const ManagerDashboard: React.FC = () => {
     managerViewSection: viewSection,
     setManagerViewSection: setViewSection,
     openQuoteBuilder,
-    quotes
+    quotes,
+    openArchivedROsModal,
   } = useApp();
 
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
@@ -102,25 +104,26 @@ export const ManagerDashboard: React.FC = () => {
   );
 
   // Cadence tracking (Twice-per-week policy dealership overview)
-  const eligibleROs = repairOrders.filter(r => isEligibleForCadence(r));
+  const activeROsList = repairOrders.filter(r => r.status !== 'CLOSED' && r.status !== 'COMPLETED' && !r.isArchived);
+  const eligibleROs = activeROsList.filter(r => isEligibleForCadence(r));
   const overdueCallsCount = eligibleROs.filter(r => getContactCadenceStatus(r).isOverdue).length;
   const dueTodayCallsCount = eligibleROs.filter(r => getContactCadenceStatus(r).isDueToday).length;
   const totalCallsDue = overdueCallsCount + dueTodayCallsCount;
 
   // Metrics matching user flow (Uniform with Service Advisor)
-  const openROsCount = repairOrders.filter(r => r.status !== 'CLOSED' && r.status !== 'COMPLETED').length;
-  const waitingDiagCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
-  const inDiagCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
-  const estimateDoneCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
-  const waitingApprovalCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
-  const approvedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
-  const partsOrderedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
-  const inRepairCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
-  const readyPickupCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
-  const completedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'CLOSED' || r.status === 'COMPLETED').length;
+  const openROsCount = activeROsList.length;
+  const waitingDiagCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
+  const inDiagCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
+  const estimateDoneCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'ESTIMATE_DONE').length;
+  const waitingApprovalCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'WAITING_FOR_APPROVAL').length;
+  const approvedCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'APPROVED').length;
+  const partsOrderedCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'PARTS_ORDERED' || normalizeROStatus(r.status) === 'PARTS_IN_TO_TECH').length;
+  const inRepairCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'REPAIR_IN_PROGRESS' || normalizeROStatus(r.status) === 'REPAIR_COMPLETE').length;
+  const readyPickupCount = activeROsList.filter(r => normalizeROStatus(r.status) === 'READY_FOR_PICKUP').length;
+  const completedCount = repairOrders.filter(r => normalizeROStatus(r.status) === 'CLOSED' || r.status === 'COMPLETED' || r.isArchived).length;
 
-  // Parts in transit / courier deliveries expected today
-  const partsInTransit = repairOrders.flatMap(ro => 
+  // Parts in transit / courier deliveries expected today (active ROs only)
+  const partsInTransit = activeROsList.flatMap(ro => 
     ro.parts
       .filter(p => p.status === 'IN_TRANSIT')
       .map(p => ({ ...p, roId: ro.id, customerName: ro.customerName, techName: ro.techName }))
@@ -128,27 +131,34 @@ export const ManagerDashboard: React.FC = () => {
 
   // Total active parts on order across all open ROs
   const totalPartsOnOrderCount = useMemo(() => {
-    return repairOrders.reduce((acc, ro) => {
+    return activeROsList.reduce((acc, ro) => {
       const active = (ro.parts || []).filter(p => p.status !== 'QUOTE_ONLY' && p.requestType !== 'QUOTE_ONLY' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH');
       return acc + active.length;
     }, 0);
-  }, [repairOrders]);
+  }, [activeROsList]);
 
   // Filter & Sort ROs in numerical order
   const filteredROs = sortROsNumerically(repairOrders.filter(ro => {
+    const isClosed = ro.status === 'CLOSED' || ro.status === 'COMPLETED' || ro.isArchived;
     if (urgentOnly && !ro.isUrgent) return false;
     if (statusFilter === 'CALLS_DUE') {
       const cadence = getContactCadenceStatus(ro);
       if (!cadence.needsCall) return false;
-    } else if (statusFilter !== 'ALL') {
+    } else if (statusFilter === 'ALL') {
+      // Default view ONLY shows active open tickets, never closed archived ones
+      if (isClosed) return false;
+    } else if (statusFilter === 'CLOSED') {
+      if (!isClosed) return false;
+    } else {
       const roNorm = normalizeROStatus(ro.status);
       const filterNorm = normalizeROStatus(statusFilter);
+      if (isClosed) return false;
       if (filterNorm === 'PARTS_ORDERED') {
         if (roNorm !== 'PARTS_ORDERED' && roNorm !== 'PARTS_IN_TO_TECH') return false;
       } else if (filterNorm === 'REPAIR_IN_PROGRESS') {
         if (roNorm !== 'REPAIR_IN_PROGRESS' && roNorm !== 'REPAIR_COMPLETE') return false;
       } else if (filterNorm === 'READY_FOR_PICKUP') {
-        if (roNorm !== 'READY_FOR_PICKUP' && roNorm !== 'CLOSED' && ro.status !== 'COMPLETED') return false;
+        if (roNorm !== 'READY_FOR_PICKUP') return false;
       } else {
         if (roNorm !== filterNorm) return false;
       }
@@ -175,6 +185,21 @@ export const ManagerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            id="open-archived-ros-mgr"
+            onClick={() => openArchivedROsModal()}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600"
+            title="Open Archived Closed Repair Orders Repository"
+          >
+            <Archive className="w-4 h-4 text-amber-400" />
+            <span>Archived ROs</span>
+            {completedCount > 0 && (
+              <span className="bg-slate-900 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-slate-700">
+                {completedCount}
+              </span>
+            )}
+          </button>
+
           <button
             id="open-parts-on-order-report-mgr"
             onClick={() => setIsPartsOnOrderModalOpen(true)}

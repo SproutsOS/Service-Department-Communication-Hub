@@ -33,7 +33,9 @@ import {
   Car,
   History,
   Search,
-  Ban
+  Ban,
+  PauseCircle,
+  CheckCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
@@ -2540,9 +2542,398 @@ export const TechPartsRequestModal: React.FC<TechPartsRequestModalProps> = ({ ro
   );
 };
 
+interface TechWorkflowStepperProps {
+  ro: RepairOrder;
+  compact?: boolean;
+  onRequestParts?: (lineIndex?: number, lineText?: string) => void;
+  onTestDrive?: (ro: RepairOrder) => void;
+}
+
+export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
+  ro,
+  compact = false,
+  onRequestParts,
+  onTestDrive
+}) => {
+  const { updateROStatus, startDiagnosis } = useApp();
+  const normStatus = normalizeROStatus(ro.status);
+
+  // Workflow Stages:
+  // 1: Diag (WAITING_DIAGNOSTICS, IN_DIAG, DIAG_PAUSED)
+  // 2: Estimate & Parts (ESTIMATE_DONE, WAITING_FOR_APPROVAL, APPROVED, PARTS_ORDERED, PARTS_IN_TO_TECH)
+  // 3: Repair (REPAIR_IN_PROGRESS)
+  // 4: Finish & Complete (REPAIR_COMPLETE, READY_FOR_PICKUP, COMPLETED, CLOSED)
+
+  const isDiag = normStatus === 'WAITING_DIAGNOSTICS' || normStatus === 'IN_DIAG' || normStatus === 'DIAG_PAUSED';
+  const isEstimateParts = normStatus === 'ESTIMATE_DONE' || normStatus === 'WAITING_FOR_APPROVAL' || normStatus === 'APPROVED' || normStatus === 'PARTS_ORDERED' || normStatus === 'PARTS_IN_TO_TECH';
+  const isRepair = normStatus === 'REPAIR_IN_PROGRESS';
+  const isComplete = normStatus === 'REPAIR_COMPLETE' || normStatus === 'READY_FOR_PICKUP' || normStatus === 'COMPLETED' || normStatus === 'CLOSED';
+
+  const handleStartDiag = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startDiagnosis(ro.id);
+  };
+
+  const handlePauseDiag = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateROStatus(ro.id, 'DIAG_PAUSED');
+  };
+
+  const handleFinishDiag = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRequestParts) {
+      onRequestParts(1, ro.primaryConcern || 'Diagnosis Complete');
+    } else {
+      updateROStatus(ro.id, 'ESTIMATE_DONE');
+    }
+  };
+
+  const handleStartRepair = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateROStatus(ro.id, 'REPAIR_IN_PROGRESS');
+  };
+
+  const handleRoadTest = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onTestDrive) {
+      onTestDrive(ro);
+    }
+  };
+
+  const handleFinishRepair = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const hasOutMiles = ro.outMileage !== undefined || ro.vehicle?.outMileage !== undefined;
+    if (!hasOutMiles) {
+      const confirmFinish = confirm(`RO #${ro.id} does not have Out Miles recorded yet. Would you like to mark the repair complete now?`);
+      if (!confirmFinish) return;
+    }
+    updateROStatus(ro.id, 'REPAIR_COMPLETE');
+  };
+
+  if (compact) {
+    return (
+      <div 
+        onClick={e => e.stopPropagation()} 
+        className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5 mt-2"
+      >
+        <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          <span>Workflow Stage:</span>
+          <span className="font-extrabold text-blue-700">
+            {isDiag ? '1. Diagnostics' : isEstimateParts ? '2. Parts & Approval' : isRepair ? '3. Repair' : '4. Completed'}
+          </span>
+        </div>
+
+        {/* Quick Transition Action Buttons */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Diag Actions */}
+          {normStatus === 'WAITING_DIAGNOSTICS' && (
+            <button
+              type="button"
+              onClick={handleStartDiag}
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+            >
+              <Play className="w-3 h-3 fill-current" />
+              <span>Start Diag</span>
+            </button>
+          )}
+
+          {normStatus === 'IN_DIAG' && (
+            <>
+              <button
+                type="button"
+                onClick={handlePauseDiag}
+                className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-[10px] rounded flex items-center gap-1"
+                title="Pause Diagnosis"
+              >
+                <PauseCircle className="w-3 h-3" />
+                <span>Pause</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFinishDiag}
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                title="Finish Diagnosis & Request Parts / Quote"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Diag Done & Parts</span>
+              </button>
+            </>
+          )}
+
+          {normStatus === 'DIAG_PAUSED' && (
+            <button
+              type="button"
+              onClick={handleStartDiag}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] rounded flex items-center gap-1 shadow-2xs"
+            >
+              <Play className="w-3 h-3 fill-current" />
+              <span>Resume Diag</span>
+            </button>
+          )}
+
+          {/* Parts / Estimate Stages */}
+          {isEstimateParts && normStatus !== 'APPROVED' && normStatus !== 'PARTS_IN_TO_TECH' && (
+            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded border border-slate-300">
+              <Package className="w-3.5 h-3.5 text-purple-600" />
+              <span>Awaiting Parts / Approval</span>
+            </div>
+          )}
+
+          {/* Repair Stage Start Button */}
+          {(normStatus === 'APPROVED' || normStatus === 'PARTS_IN_TO_TECH') && (
+            <button
+              type="button"
+              onClick={handleStartRepair}
+              className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+            >
+              <Wrench className="w-3 h-3" />
+              <span>Start Repair</span>
+            </button>
+          )}
+
+          {/* In Repair Actions */}
+          {normStatus === 'REPAIR_IN_PROGRESS' && (
+            <>
+              {onTestDrive && (
+                <button
+                  type="button"
+                  onClick={handleRoadTest}
+                  className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] rounded flex items-center gap-1 shadow-2xs"
+                  title="Test Drive & Mileage Verification"
+                >
+                  <Car className="w-3 h-3" />
+                  <span>Road Test</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleFinishRepair}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                title="Mark all repairs complete"
+              >
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <span>Finish & Complete</span>
+              </button>
+            </>
+          )}
+
+          {/* Complete Stage */}
+          {isComplete && (
+            <div className="flex items-center gap-1 text-[11px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Repair Complete ✓</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Full Station Banner Stepper Mode
+  return (
+    <div className="bg-white rounded-xl border-2 border-slate-300 p-3 sm:p-4 shadow-sm space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+            Technician Stage Workflow Progression
+          </span>
+          <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+            <span>Current Status:</span>
+            <span className="px-2 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800 border border-blue-300">
+              {STATUS_CONFIG[ro.status]?.label || ro.status.replace(/_/g, ' ')}
+            </span>
+          </h4>
+        </div>
+
+        {/* Action Controls for Active Stage */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 1. Diag buttons */}
+          {normStatus === 'WAITING_DIAGNOSTICS' && (
+            <button
+              type="button"
+              onClick={handleStartDiag}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Start Diagnosis (Clock In)</span>
+            </button>
+          )}
+
+          {normStatus === 'IN_DIAG' && (
+            <>
+              <button
+                type="button"
+                onClick={handlePauseDiag}
+                className="px-2.5 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+              >
+                <PauseCircle className="w-3.5 h-3.5" />
+                <span>Pause Diag</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFinishDiag}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Finish Diag & Request Parts</span>
+              </button>
+            </>
+          )}
+
+          {normStatus === 'DIAG_PAUSED' && (
+            <button
+              type="button"
+              onClick={handleStartDiag}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Resume Diagnosis</span>
+            </button>
+          )}
+
+          {/* 2. Repair buttons */}
+          {(normStatus === 'APPROVED' || normStatus === 'PARTS_IN_TO_TECH') && (
+            <button
+              type="button"
+              onClick={handleStartRepair}
+              className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-700 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              <span>Start Repair (In Progress)</span>
+            </button>
+          )}
+
+          {normStatus === 'REPAIR_IN_PROGRESS' && (
+            <>
+              {onTestDrive && (
+                <button
+                  type="button"
+                  onClick={handleRoadTest}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                >
+                  <Car className="w-3.5 h-3.5" />
+                  <span>Road Test & Out Miles</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleFinishRepair}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Finish & Complete RO ✓</span>
+              </button>
+            </>
+          )}
+
+          {isComplete && (
+            <div className="flex items-center gap-1.5 text-xs font-black text-emerald-800 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Repair Finished & Verified Complete ✓</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stepper Progress Visual Nodes */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        {/* Step 1: Diag */}
+        <div className={`p-2.5 rounded-lg border-2 flex items-center gap-2.5 ${
+          isDiag
+            ? 'border-amber-500 bg-amber-50/70 ring-2 ring-amber-300/40 text-amber-950 font-bold'
+            : (isEstimateParts || isRepair || isComplete)
+            ? 'border-emerald-400 bg-emerald-50/40 text-emerald-900 font-semibold'
+            : 'border-slate-200 bg-slate-50 text-slate-500'
+        }`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+            isDiag
+              ? 'bg-amber-600 text-white animate-pulse'
+              : (isEstimateParts || isRepair || isComplete)
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-300 text-slate-700'
+          }`}>
+            {(isEstimateParts || isRepair || isComplete) ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '1'}
+          </div>
+          <div className="min-w-0">
+            <div className="font-extrabold text-xs">1. Diagnostics</div>
+            <div className="text-[10px] text-slate-500 truncate">Scan & diagnose</div>
+          </div>
+        </div>
+
+        {/* Step 2: Parts & Estimate */}
+        <div className={`p-2.5 rounded-lg border-2 flex items-center gap-2.5 ${
+          isEstimateParts
+            ? 'border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-300/40 text-indigo-950 font-bold'
+            : (isRepair || isComplete)
+            ? 'border-emerald-400 bg-emerald-50/40 text-emerald-900 font-semibold'
+            : 'border-slate-200 bg-slate-50 text-slate-500'
+        }`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+            isEstimateParts
+              ? 'bg-indigo-600 text-white animate-pulse'
+              : (isRepair || isComplete)
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-300 text-slate-700'
+          }`}>
+            {(isRepair || isComplete) ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '2'}
+          </div>
+          <div className="min-w-0">
+            <div className="font-extrabold text-xs">2. Parts & Quote</div>
+            <div className="text-[10px] text-slate-500 truncate">Pricing & approval</div>
+          </div>
+        </div>
+
+        {/* Step 3: Repair */}
+        <div className={`p-2.5 rounded-lg border-2 flex items-center gap-2.5 ${
+          isRepair
+            ? 'border-cyan-500 bg-cyan-50/70 ring-2 ring-cyan-300/40 text-cyan-950 font-bold'
+            : isComplete
+            ? 'border-emerald-400 bg-emerald-50/40 text-emerald-900 font-semibold'
+            : 'border-slate-200 bg-slate-50 text-slate-500'
+        }`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+            isRepair
+              ? 'bg-cyan-600 text-white animate-pulse'
+              : isComplete
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-300 text-slate-700'
+          }`}>
+            {isComplete ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '3'}
+          </div>
+          <div className="min-w-0">
+            <div className="font-extrabold text-xs">3. In Repair</div>
+            <div className="text-[10px] text-slate-500 truncate">Perform repair</div>
+          </div>
+        </div>
+
+        {/* Step 4: Finish */}
+        <div className={`p-2.5 rounded-lg border-2 flex items-center gap-2.5 ${
+          isComplete
+            ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-400/40 text-emerald-950 font-bold'
+            : 'border-slate-200 bg-slate-50 text-slate-500'
+        }`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+            isComplete
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-300 text-slate-700'
+          }`}>
+            {isComplete ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : '4'}
+          </div>
+          <div className="min-w-0">
+            <div className="font-extrabold text-xs">4. Complete</div>
+            <div className="text-[10px] text-slate-500 truncate">Verified & finished</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface TechCompactCardProps {
   ro: RepairOrder;
   onClick: () => void;
+  onRequestParts?: (lineIndex?: number, lineText?: string) => void;
+  onTestDrive?: (ro: RepairOrder) => void;
 }
 
 export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick }) => {
@@ -2682,6 +3073,9 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
             )}
           </div>
         </div>
+
+        {/* Quick Workflow Stage Progression Bar (Diag -> Parts -> Repair -> Finish) */}
+        <TechWorkflowStepper ro={ro} compact={true} />
       </div>
 
       {/* Footer Details & Action indicator */}
@@ -2958,6 +3352,13 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
 
         {/* Modal Scrollable Body - Full Screen View */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Main Technician Workflow Progression Stepper (Diag -> Parts -> Repair -> Road Test -> Finish) */}
+          <TechWorkflowStepper 
+            ro={ro} 
+            onRequestParts={onRequestParts} 
+            onTestDrive={onTestDrive} 
+          />
+
           {/* Inter-Department Live Communication Thread Section (Only visible when user clicks Live Chat button) */}
           {isChatOpen && (
             <div className={`p-4 bg-white rounded-xl border-2 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 ${
@@ -3126,12 +3527,15 @@ export const TechDashboard: React.FC = () => {
   const [testDriveModalRO, setTestDriveModalRO] = useState<RepairOrder | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter to this technician's assigned ROs (primary tech or assigned to an individual line)
-  const myROs = repairOrders.filter(ro => ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id));
+  // Filter to this technician's assigned active ROs (exclude closed, completed, and archived)
+  const myROs = repairOrders.filter(ro => 
+    (ro.techId === currentUser.id || ro.concernTechIds?.includes(currentUser.id)) &&
+    ro.status !== 'CLOSED' &&
+    ro.status !== 'COMPLETED' &&
+    !ro.isArchived
+  );
 
   const activeROs = myROs.filter(ro => 
-    ro.status !== 'CLOSED' && 
-    ro.status !== 'COMPLETED' && 
     normalizeROStatus(ro.status) !== 'REPAIR_COMPLETE' && 
     normalizeROStatus(ro.status) !== 'READY_FOR_PICKUP'
   );

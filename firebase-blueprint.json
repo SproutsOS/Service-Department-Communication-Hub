@@ -31,6 +31,10 @@
         "outMileage": { "type": "number" },
         "testDriveCompleted": { "type": "boolean" },
         "testDriveNotes": { "type": "string" },
+        "isArchived": { "type": "boolean" },
+        "archivedAt": { "type": "string" },
+        "archivedBy": { "type": "string" },
+        "closedAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "customerName", "status", "advisorName"]

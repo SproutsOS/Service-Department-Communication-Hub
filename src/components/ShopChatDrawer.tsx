@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   MessageSquare, 
@@ -16,7 +16,10 @@ import {
   ChevronRight,
   Bell,
   Clock,
-  Trash2
+  Trash2,
+  GripHorizontal,
+  RotateCcw,
+  Move
 } from 'lucide-react';
 import { UserRole, User as UserType } from '../types';
 import { formatRelativeTime, formatMilitaryTime } from '../utils/formatters';
@@ -88,8 +91,111 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
   const [isUrgent, setIsUrgent] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
 
+  // Draggable window state
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem('shop_chat_position');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+          return parsed;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return null;
+  });
+
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number }>({ mouseX: 0, mouseY: 0, startX: 0, startY: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartDrag = (clientX: number, clientY: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    dragStartRef.current = {
+      mouseX: clientX,
+      mouseY: clientY,
+      startX: rect.left,
+      startY: rect.top
+    };
+    setIsDragging(true);
+  };
+
+  const onMouseDownHeader = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return;
+    e.preventDefault();
+    handleStartDrag(e.clientX, e.clientY);
+  };
+
+  const onTouchStartHeader = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return;
+    const touch = e.touches[0];
+    handleStartDrag(touch.clientX, touch.clientY);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStartRef.current.mouseX;
+      const dy = e.clientY - dragStartRef.current.mouseY;
+      const newX = Math.max(10, Math.min(window.innerWidth - 300, dragStartRef.current.startX + dx));
+      const newY = Math.max(10, Math.min(window.innerHeight - 60, dragStartRef.current.startY + dy));
+      const nextPos = { x: newX, y: newY };
+      setPosition(nextPos);
+      try {
+        localStorage.setItem('shop_chat_position', JSON.stringify(nextPos));
+      } catch {
+        // fallback
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      const dx = touch.clientX - dragStartRef.current.mouseX;
+      const dy = touch.clientY - dragStartRef.current.mouseY;
+      const newX = Math.max(10, Math.min(window.innerWidth - 300, dragStartRef.current.startX + dx));
+      const newY = Math.max(10, Math.min(window.innerHeight - 60, dragStartRef.current.startY + dy));
+      const nextPos = { x: newX, y: newY };
+      setPosition(nextPos);
+      try {
+        localStorage.setItem('shop_chat_position', JSON.stringify(nextPos));
+      } catch {
+        // fallback
+      }
+    };
+
+    const handleEndDrag = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleEndDrag);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleEndDrag);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleEndDrag);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEndDrag);
+    };
+  }, [isDragging]);
+
+  const handleResetPosition = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPosition(null);
+    try {
+      localStorage.removeItem('shop_chat_position');
+    } catch {
+      // fallback
+    }
+  };
 
   // Recipient User details
   const activeRecipient: UserType | undefined = useMemo(() => {
@@ -270,19 +376,37 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
 
   return (
     <div 
+      ref={containerRef}
       id="shop-chat-drawer-container"
-      className={`fixed bottom-0 right-0 z-50 transition-all duration-200 ${
+      style={position ? {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        right: 'auto',
+        bottom: 'auto',
+        position: 'fixed'
+      } : undefined}
+      className={`fixed ${!position ? 'bottom-0 right-0' : ''} z-50 transition-all duration-75 ${
         isMinimized 
           ? 'w-80 h-14' 
           : 'w-full sm:w-[480px] md:w-[520px] h-[92vh] sm:h-[660px] max-h-[88vh]'
-      } bg-white shadow-2xl rounded-t-2xl sm:rounded-tl-2xl border-t-2 sm:border-l-2 sm:border-t-2 border-slate-300 flex flex-col overflow-hidden`}
+      } bg-white shadow-2xl rounded-t-2xl sm:rounded-2xl border-2 border-slate-400 flex flex-col overflow-hidden ${
+        isDragging ? 'opacity-90 ring-4 ring-blue-500/40 select-none' : ''
+      }`}
     >
-      {/* Header Bar */}
+      {/* Header Bar (Draggable) */}
       <div 
-        className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0 cursor-pointer select-none border-b border-slate-800"
+        onMouseDown={onMouseDownHeader}
+        onTouchStart={onTouchStartHeader}
+        className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0 cursor-move select-none border-b border-slate-800"
         onClick={() => isMinimized && setIsMinimized(false)}
+        title="Drag header to move chat anywhere on screen"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Drag Handle Indicator */}
+          <div className="p-1 -ml-1 text-slate-400 hover:text-slate-200 cursor-move" title="Drag to move chat">
+            <GripHorizontal className="w-4 h-4" />
+          </div>
+
           <div className="relative shrink-0">
             {isGeneralChannel ? (
               <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
@@ -332,6 +456,18 @@ export const ShopChatDrawer: React.FC<ShopChatDrawerProps> = ({ isOpen, onClose 
         </div>
 
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          {/* Reset position button if dragged */}
+          {position !== null && (
+            <button
+              type="button"
+              onClick={handleResetPosition}
+              className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition-colors"
+              title="Reset position / Re-dock to bottom right"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           {/* Mute/Unmute sound */}
           <button
             type="button"

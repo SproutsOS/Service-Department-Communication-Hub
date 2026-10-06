@@ -126,6 +126,9 @@ export interface VehicleInfo {
   engine?: string;
 }
 
+export type Vehicle = VehicleInfo;
+export type CustomerVehicle = VehicleInfo;
+
 export type CustomerContactType = 
   | 'PHONE_CALL' 
   | 'LEFT_VOICEMAIL' 
@@ -201,6 +204,10 @@ export interface RepairOrder {
   contactHistory?: CustomerContactRecord[];
   // 3-Day Post-Repair Customer Follow-Up & Quality Verification
   completedAt?: string; // Timestamp when repair order was completed/closed
+  closedAt?: string; // Timestamp when invoice was settled and ticket closed
+  isArchived?: boolean; // Whether RO is archived and removed from active work stations
+  archivedAt?: string; // Timestamp when archived
+  archivedBy?: string; // Name/ID of staff who archived
   outMileage?: number; // Out Miles (Post test drive / repair completion)
   testDriveCompleted?: boolean;
   testDriveNotes?: string;

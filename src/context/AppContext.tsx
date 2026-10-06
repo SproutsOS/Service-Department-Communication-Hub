@@ -362,6 +362,14 @@ interface AppContextType {
   clearROChangeAlert: (roId: string) => void;
   clearAllROChangeAlerts: () => void;
   recordROChange: (roId: string, changeSummary: string) => void;
+
+  // Archived Repair Orders Hub
+  isArchivedROsModalOpen: boolean;
+  setIsArchivedROsModalOpen: (open: boolean) => void;
+  openArchivedROsModal: () => void;
+  closeArchivedROsModal: () => void;
+  archiveRepairOrder: (roId: string, notes?: string) => boolean;
+  unarchiveRepairOrder: (roId: string, targetStatus?: ROStatus, notes?: string) => boolean;
 }
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
@@ -540,6 +548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [isCustomerDirectoryOpen, setIsCustomerDirectoryOpen] = useState(false);
+  const [isArchivedROsModalOpen, setIsArchivedROsModalOpen] = useState(false);
   const [prefilledCustomerForNewRO, setPrefilledCustomerForNewRO] = useState<Customer | null>(null);
 
   useEffect(() => {
@@ -1341,6 +1350,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQuotePrintROId(null);
   };
 
+  const openArchivedROsModal = () => {
+    setIsArchivedROsModalOpen(true);
+  };
+
+  const closeArchivedROsModal = () => {
+    setIsArchivedROsModalOpen(false);
+  };
+
+  const archiveRepairOrder = (roId: string, notes?: string): boolean => {
+    const target = repairOrders.find(r => r.id === roId);
+    if (!target) return false;
+    updateROStatus(roId, 'CLOSED', notes || 'Archived and removed from active work stations');
+    return true;
+  };
+
+  const unarchiveRepairOrder = (roId: string, targetStatus: ROStatus = 'READY_FOR_PICKUP', notes?: string): boolean => {
+    const target = repairOrders.find(r => r.id === roId);
+    if (!target) return false;
+    const now = new Date().toISOString();
+    const newHistoryItem = {
+      id: `hist_${Date.now()}`,
+      status: targetStatus,
+      updatedBy: currentUser.id,
+      updatedByName: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now,
+      notes: notes || `Reopened & unarchived from Closed Archive by ${currentUser.name}`,
+    };
+
+    const updatedRO: RepairOrder = {
+      ...target,
+      status: targetStatus,
+      isArchived: false,
+      archivedAt: undefined,
+      archivedBy: undefined,
+      closedAt: undefined,
+      history: [...target.history, newHistoryItem],
+      updatedAt: now,
+      lastChangeSummary: `Unarchived & Reopened: ${STATUS_CONFIG[targetStatus]?.label || targetStatus}`,
+    };
+
+    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
+    syncRepairOrder(updatedRO);
+    recordROChange(roId, `Unarchived & Reopened to ${STATUS_CONFIG[targetStatus]?.label || targetStatus}`);
+    if (selectedRO && selectedRO.id === roId) {
+      setSelectedRO(updatedRO);
+    }
+    return true;
+  };
+
   const setCurrentUser = (user: User) => {
     setCurrentUserState(user);
     try {
@@ -1552,8 +1611,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    const isClosedOrCompleted = newStatus === 'CLOSED' || newStatus === 'COMPLETED';
     const statusLabel = STATUS_CONFIG[newStatus]?.label || newStatus.replace(/_/g, ' ');
-    const changeSummary = `Status: ${statusLabel}`;
+    const changeSummary = isClosedOrCompleted 
+      ? `RO Closed & Archived: ${statusLabel}`
+      : `Status: ${statusLabel}`;
 
     const updatedRO: RepairOrder = {
       ...targetRO,
@@ -1563,9 +1625,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       waitingDiagnosisAt,
       diagnosisStartedAt,
       completedAt,
+      closedAt: isClosedOrCompleted ? (targetRO.closedAt || now) : undefined,
+      isArchived: isClosedOrCompleted,
+      archivedAt: isClosedOrCompleted ? (targetRO.archivedAt || now) : undefined,
+      archivedBy: isClosedOrCompleted ? (targetRO.archivedBy || currentUser.name) : undefined,
       postRepairFollowUpDate,
       postRepairFollowUpCompleted,
-      isUrgent: isNowUrgent,
+      isUrgent: isClosedOrCompleted ? false : isNowUrgent,
       history: [...targetRO.history, newHistoryItem],
       updatedAt: now,
       lastChangeSummary: changeSummary,
@@ -1575,6 +1641,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
     recordROChange(roId, changeSummary);
+
+    // If active selected RO is closed, update it in state
+    if (selectedRO && selectedRO.id === roId) {
+      setSelectedRO(updatedRO);
+    }
 
     if (newStatus === 'APPROVED') {
       // Specifically target Service Manager, Parts Specialists, and the assigned Tech on this RO only
@@ -6434,6 +6505,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearROChangeAlert,
         clearAllROChangeAlerts,
         recordROChange,
+        isArchivedROsModalOpen,
+        setIsArchivedROsModalOpen,
+        openArchivedROsModal,
+        closeArchivedROsModal,
+        archiveRepairOrder,
+        unarchiveRepairOrder,
       }}
     >
       {children}
