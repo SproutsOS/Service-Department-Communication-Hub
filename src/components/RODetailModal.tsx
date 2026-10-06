@@ -60,6 +60,7 @@ import { getContactCadenceStatus, formatContactType, formatContactOutcome } from
 import { decodeVin } from '../utils/vinDecoder';
 import { DynamicROWorkflow } from './DynamicROWorkflow';
 import { EditPartModal } from './EditPartModal';
+import { ROStickyNoteBanner, AddStickyNoteButton } from './ROStickyNoteBadge';
 
 export const RODetailModal: React.FC = () => {
   const { 
@@ -1071,6 +1072,12 @@ export const RODetailModal: React.FC = () => {
               </button>
             )}
 
+            {/* Sticky Note Quick Header Button */}
+            <AddStickyNoteButton 
+              roId={selectedRO.id} 
+              hasNote={Boolean(selectedRO.stickyNote)}
+            />
+
             {/* Edit RO Info (Service Advisor & Service Manager) */}
             {(isManager || isAdvisor) && (
               <button
@@ -1374,6 +1381,14 @@ export const RODetailModal: React.FC = () => {
 
         {/* Tab Content Area */}
         <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Pinned Digital Sticky Note Banner (At Top of RO View) */}
+          {selectedRO.stickyNote && (
+            <ROStickyNoteBanner 
+              roId={selectedRO.id} 
+              stickyNote={selectedRO.stickyNote} 
+              allowAdd={false}
+            />
+          )}
 
           {/* TAB 1: DETAILS & ASSIGNMENT & QUICK STATUS CHANGE */}
           {activeTab === 'DETAILS' && (

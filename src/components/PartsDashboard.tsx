@@ -38,6 +38,7 @@ import { PartItem, PartStatus, RepairOrder, QuotePartItem, RepairQuote } from '.
 import { formatEtaBadge, formatDateTime, formatPrice, formatCurrency } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { computeEtaAndStatus } from '../utils/partArrivalOptions';
+import { ROStickyNoteChip, AddStickyNoteButton } from './ROStickyNoteBadge';
 
 const getSavedVendorsFromStorage = (): string[] => {
   try {
@@ -2802,10 +2803,18 @@ export const PartsDashboard: React.FC = () => {
                             </button>
                           </span>
                         </div>
+
+                        {/* Sticky Note on Parts Card */}
+                        {ro.stickyNote && (
+                          <div className="pt-1">
+                            <ROStickyNoteChip roId={ro.id} stickyNote={ro.stickyNote} />
+                          </div>
+                        )}
                       </div>
 
                       {/* Personnel Info & Fast Actions */}
                       <div className="flex flex-wrap items-center gap-2">
+                        <AddStickyNoteButton roId={ro.id} hasNote={Boolean(ro.stickyNote)} />
                         <div className="text-left sm:text-right text-xs space-y-0.5">
                           <div className="text-slate-600">
                             Tech: <strong className="text-slate-900">{ro.techName || 'Unassigned'}</strong>

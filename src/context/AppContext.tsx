@@ -38,7 +38,9 @@ import {
   StandaloneQuoteLine,
   StandaloneQuotePart,
   StandaloneQuoteStatus,
-  RollToROParams
+  RollToROParams,
+  ROStickyNote,
+  StickyNoteColor
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
@@ -370,6 +372,14 @@ interface AppContextType {
   closeArchivedROsModal: () => void;
   archiveRepairOrder: (roId: string, notes?: string) => boolean;
   unarchiveRepairOrder: (roId: string, targetStatus?: ROStatus, notes?: string) => boolean;
+
+  // RO Digital Sticky Note
+  setROStickyNote: (roId: string, note: { text: string; color?: StickyNoteColor; isUrgent?: boolean }) => boolean;
+  removeROStickyNote: (roId: string) => boolean;
+  isStickyNoteModalOpen: boolean;
+  stickyNoteModalROId: string | null;
+  openStickyNoteModal: (roId: string) => void;
+  closeStickyNoteModal: () => void;
 }
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
@@ -549,7 +559,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isCustomerDirectoryOpen, setIsCustomerDirectoryOpen] = useState(false);
   const [isArchivedROsModalOpen, setIsArchivedROsModalOpen] = useState(false);
+  const [isStickyNoteModalOpen, setIsStickyNoteModalOpen] = useState(false);
+  const [stickyNoteModalROId, setStickyNoteModalROId] = useState<string | null>(null);
   const [prefilledCustomerForNewRO, setPrefilledCustomerForNewRO] = useState<Customer | null>(null);
+
+  const openStickyNoteModal = useCallback((roId: string) => {
+    setStickyNoteModalROId(roId);
+    setIsStickyNoteModalOpen(true);
+  }, []);
+
+  const closeStickyNoteModal = useCallback(() => {
+    setIsStickyNoteModalOpen(false);
+    setStickyNoteModalROId(null);
+  }, []);
 
   useEffect(() => {
     try {
@@ -1394,6 +1416,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
     syncRepairOrder(updatedRO);
     recordROChange(roId, `Unarchived & Reopened to ${STATUS_CONFIG[targetStatus]?.label || targetStatus}`);
+    if (selectedRO && selectedRO.id === roId) {
+      setSelectedRO(updatedRO);
+    }
+    return true;
+  };
+
+  // Sticky Note on Repair Order
+  const setROStickyNote = (
+    roId: string, 
+    note: { text: string; color?: StickyNoteColor; isUrgent?: boolean }
+  ): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO) return false;
+
+    const trimmedText = note.text.trim();
+    if (!trimmedText) {
+      return removeROStickyNote(roId);
+    }
+
+    const nowIso = new Date().toISOString();
+    const existingNote = targetRO.stickyNote;
+
+    const newStickyNote: ROStickyNote = {
+      id: existingNote?.id || `sticky_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      text: trimmedText,
+      color: note.color || 'yellow',
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      authorRole: currentUser.role,
+      createdAt: existingNote?.createdAt || nowIso,
+      updatedAt: nowIso,
+      isUrgent: note.isUrgent ?? (note.color === 'red'),
+    };
+
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      stickyNote: newStickyNote,
+      updatedAt: nowIso,
+      lastChangeSummary: `Sticky note ${existingNote ? 'updated' : 'pinned'} by ${currentUser.name}`,
+    };
+
+    setRepairOrders(prev => prev.map(r => r.id === roId ? updatedRO : r));
+    syncRepairOrder(updatedRO);
+    recordROChange(roId, `Sticky Note ${existingNote ? 'updated' : 'pinned'}: "${trimmedText.length > 35 ? trimmedText.substring(0, 35) + '...' : trimmedText}"`);
+    if (selectedRO && selectedRO.id === roId) {
+      setSelectedRO(updatedRO);
+    }
+    return true;
+  };
+
+  const removeROStickyNote = (roId: string): boolean => {
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (!targetRO || !targetRO.stickyNote) return false;
+
+    const nowIso = new Date().toISOString();
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      stickyNote: null,
+      updatedAt: nowIso,
+      lastChangeSummary: `Sticky note removed by ${currentUser.name}`,
+    };
+
+    setRepairOrders(prev => prev.map(r => r.id === roId ? updatedRO : r));
+    syncRepairOrder(updatedRO);
+    recordROChange(roId, `Sticky Note removed by ${currentUser.name}`);
     if (selectedRO && selectedRO.id === roId) {
       setSelectedRO(updatedRO);
     }
@@ -6511,6 +6598,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         closeArchivedROsModal,
         archiveRepairOrder,
         unarchiveRepairOrder,
+        setROStickyNote,
+        removeROStickyNote,
+        isStickyNoteModalOpen,
+        stickyNoteModalROId,
+        openStickyNoteModal,
+        closeStickyNoteModal,
       }}
     >
       {children}

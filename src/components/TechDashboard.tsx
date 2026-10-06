@@ -46,6 +46,7 @@ import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
 import { TechTestDriveModal } from './TechTestDriveModal';
+import { ROStickyNoteBanner, ROStickyNoteChip, AddStickyNoteButton } from './ROStickyNoteBadge';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
@@ -3037,6 +3038,13 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
           </div>
         </div>
 
+        {/* Pinned Sticky Note on Tech Card */}
+        {ro.stickyNote && (
+          <div className="pt-1">
+            <ROStickyNoteChip roId={ro.id} stickyNote={ro.stickyNote} />
+          </div>
+        )}
+
         {/* Active Clocked In Banner on the card */}
         {myPunch && (
           <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-300 text-emerald-950 text-xs font-bold">
@@ -3338,6 +3346,12 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
               {!hasUnreadUrgentMessage && hasUnreadMessage && <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping"></span>}
             </button>
 
+            {/* Sticky Note Pin Button */}
+            <AddStickyNoteButton 
+              roId={ro.id} 
+              hasNote={Boolean(ro.stickyNote)} 
+            />
+
             {/* Close Button */}
             <button
               type="button"
@@ -3352,6 +3366,15 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
 
         {/* Modal Scrollable Body - Full Screen View */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Pinned Sticky Note Banner (At Top of Tech Station) */}
+          {ro.stickyNote && (
+            <ROStickyNoteBanner 
+              roId={ro.id} 
+              stickyNote={ro.stickyNote} 
+              allowAdd={false}
+            />
+          )}
+
           {/* Main Technician Workflow Progression Stepper (Diag -> Parts -> Repair -> Road Test -> Finish) */}
           <TechWorkflowStepper 
             ro={ro} 

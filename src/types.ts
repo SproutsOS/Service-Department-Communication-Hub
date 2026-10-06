@@ -218,6 +218,7 @@ export interface RepairOrder {
   postRepairFollowUpCompletedAt?: string; // Timestamp when 3-day follow-up was completed
   postRepairFollowUpOutcome?: 'SATISFIED_NO_CONCERNS' | 'HAS_NEW_CONCERNS' | 'LEFT_VOICEMAIL' | 'NO_ANSWER' | 'CUSTOMER_CALLBACK_REQUESTED';
   postRepairFollowUpNotes?: string; // Notes taken during the 3-day post-repair check
+  stickyNote?: ROStickyNote | null; // Digital Sticky Note pinned to top of RO
   quote?: RepairQuote;
   timePunches?: WarrantyLaborTimePunch[];
   inspection?: InspectionSheet; // 21-Point Multi-Point Inspection Sheet & Tech Findings
@@ -615,4 +616,19 @@ export interface ServiceAppointment {
   createdAt: string;
   updatedAt: string;
 }
+
+export type StickyNoteColor = 'yellow' | 'red' | 'blue' | 'green' | 'purple' | 'orange';
+
+export interface ROStickyNote {
+  id: string;
+  text: string;
+  color?: StickyNoteColor;
+  authorId?: string;
+  authorName: string;
+  authorRole?: string;
+  createdAt: string;
+  updatedAt?: string;
+  isUrgent?: boolean;
+}
+
 

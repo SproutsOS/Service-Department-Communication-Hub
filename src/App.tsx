@@ -18,6 +18,7 @@ import { WarrantyPrintModal } from './components/WarrantyPrintModal';
 import { QuotePrintModal } from './components/QuotePrintModal';
 import { CustomerDirectoryModal } from './components/CustomerDirectoryModal';
 import { ArchivedROsModal } from './components/ArchivedROsModal';
+import { ROStickyNoteModal } from './components/ROStickyNoteModal';
 import { UrgentToastStack } from './components/UrgentToastStack';
 import { ShopChatDrawer } from './components/ShopChatDrawer';
 import { DraggableShopChatButton } from './components/DraggableShopChatButton';
@@ -924,6 +925,7 @@ const MainContent: React.FC = () => {
       <QuotePrintModal />
       <CustomerDirectoryModal />
       <ArchivedROsModal />
+      <ROStickyNoteModal />
       <ErrorBoundary fallbackTitle="Quote Builder Error">
         <QuoteBuilderModal 
           isOpen={isQuoteBuilderOpen} 

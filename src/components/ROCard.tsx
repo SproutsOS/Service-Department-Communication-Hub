@@ -22,6 +22,7 @@ import { STATUS_CONFIG } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { formatDateTime, formatTimeOnly, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
+import { ROStickyNoteChip } from './ROStickyNoteBadge';
 
 interface ROCardProps {
   ro: RepairOrder;
@@ -244,6 +245,13 @@ export const ROCard: React.FC<ROCardProps> = ({
           </div>
         );
       })()}
+
+      {/* Pinned Sticky Note on RO Card */}
+      {ro.stickyNote && (
+        <div className="mt-1.5">
+          <ROStickyNoteChip roId={ro.id} stickyNote={ro.stickyNote} />
+        </div>
+      )}
 
       {/* Customer & Vehicle Info */}
       <div className="mt-2">
