@@ -75,6 +75,7 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
   const [isCustomVendor, setIsCustomVendor] = useState<boolean>(false);
   const [status, setStatus] = useState<PartStatus>('ORDERED');
   const [estimatedArrival, setEstimatedArrival] = useState<string>('');
+  const [timeFrameId, setTimeFrameId] = useState<string>('');
   const [trackingNumber, setTrackingNumber] = useState<string>('');
   const [roLineNumber, setRoLineNumber] = useState<number>(initialLineNumber || 1);
   const [notes, setNotes] = useState<string>('');
@@ -133,6 +134,7 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
 
       setStatus(part.status || 'ORDERED');
       setEstimatedArrival(part.estimatedArrival || '');
+      setTimeFrameId(part.timeFrameId || '');
       setTrackingNumber(part.trackingNumber || '');
       setRoLineNumber(part.roLineNumber || initialLineNumber || 1);
       setNotes(part.notes || '');
@@ -148,7 +150,8 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
       setIsCustomVendor(false);
       setCustomVendor('');
       setStatus('ORDERED');
-      setEstimatedArrival('Today 5:00 PM (Afternoon)');
+      setEstimatedArrival('');
+      setTimeFrameId('TODAY_5PM');
       setTrackingNumber('');
       setRoLineNumber(initialLineNumber || 1);
       setNotes('');
@@ -212,6 +215,7 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
         vendor: effectiveVendor,
         status,
         estimatedArrival: estimatedArrival || 'Pending ETA',
+        timeFrameId: timeFrameId || undefined,
         trackingNumber: trackingNumber.trim() || undefined,
         roLineNumber,
         notes: notes.trim() || undefined,
@@ -231,6 +235,7 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
         vendor: effectiveVendor,
         status,
         estimatedArrival: estimatedArrival || 'Pending ETA',
+        timeFrameId: timeFrameId || undefined,
         trackingNumber: trackingNumber.trim() || undefined,
         roLineNumber,
         notes: notes.trim() || undefined,
@@ -506,8 +511,9 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
                 <span>Estimated Arrival (ETA)</span>
               </label>
               <ArrivalTimeFrameDropdown
-                value={estimatedArrival}
-                onChange={({ estimatedArrival: newEta, status: newStatus }) => {
+                value={timeFrameId || estimatedArrival || status}
+                onChange={({ timeFrameId: newTfId, estimatedArrival: newEta, status: newStatus }) => {
+                  setTimeFrameId(newTfId);
                   setEstimatedArrival(newEta);
                   if (newStatus) setStatus(newStatus);
                 }}
@@ -516,7 +522,10 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
               <input
                 type="text"
                 value={estimatedArrival}
-                onChange={(e) => setEstimatedArrival(e.target.value)}
+                onChange={(e) => {
+                  setEstimatedArrival(e.target.value);
+                  setTimeFrameId('');
+                }}
                 placeholder="Or type custom ETA text / timestamp..."
                 className="mt-1.5 w-full text-[11px] font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-700"
               />

@@ -307,7 +307,13 @@ export const PartsDashboard: React.FC = () => {
     if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
     if (submittedQuoteRoIds.has(ro.id)) return false;
 
-    // If quote is already submitted to advisor, approved, or declined, it is no longer pending quote
+    // Has technician requested parts (including from add-on inspection jobs) that are pending pricing/order
+    const hasPendingParts = (ro.parts || []).some(isTechRequestedPart);
+    if (hasPendingParts) {
+      return true;
+    }
+
+    // If quote is already submitted to advisor, approved, or declined, and there are NO pending tech requested parts, it is no longer pending quote
     if (
       ro.quote?.status === 'SUBMITTED' || 
       ro.quote?.status === 'APPROVED' || 
@@ -322,9 +328,7 @@ export const PartsDashboard: React.FC = () => {
       return false;
     }
 
-    // Has technician requested parts or is in WAITING_PARTS / GETTING_ESTIMATE status
-    const hasPendingParts = ro.parts?.some(isTechRequestedPart);
-    return Boolean(hasPendingParts || ro.status === 'WAITING_PARTS' || ro.status === 'GETTING_ESTIMATE');
+    return Boolean(ro.status === 'WAITING_PARTS' || ro.status === 'GETTING_ESTIMATE');
   };
 
   const rosPendingPartsQuote = useMemo(() => {
@@ -1552,9 +1556,16 @@ export const PartsDashboard: React.FC = () => {
           <div className="grid grid-cols-1 gap-4 w-full">
             {rosPendingPartsQuote.map(ro => {
               const allROParts = ro.parts || [];
+              const baseConcernsCount = (ro.concerns && ro.concerns.length > 0) ? ro.concerns.length : (ro.primaryConcern ? 1 : 0);
+              const totalRecsCount = ro.recommendations?.length || 0;
+              const maxPartLine = allROParts.reduce((max, p) => {
+                const pLine = p.roLineNumber || (p.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(p.notes.match(/For Line (\d+)/i)![1]) : 1);
+                return Math.max(max, pLine);
+              }, 1);
               const totalConcernLines = Math.max(
-                ro.concerns?.length || 1,
-                ...allROParts.map(p => p.roLineNumber || 1)
+                baseConcernsCount + totalRecsCount,
+                maxPartLine,
+                1
               );
               const lineNumbers = Array.from({ length: totalConcernLines }, (_, i) => i + 1);
 
@@ -1640,15 +1651,25 @@ export const PartsDashboard: React.FC = () => {
                   {/* Lines Breakdown & Parts Management */}
                   <div className="space-y-4">
                     {lineNumbers.map(lineNum => {
-                      const concernDesc = ro.concerns && ro.concerns[lineNum - 1] 
+                      let concernDesc = ro.concerns && ro.concerns[lineNum - 1] 
                         ? ro.concerns[lineNum - 1] 
                         : (lineNum === 1 ? (ro.primaryConcern || 'Diagnostic & Repair') : undefined);
-                      const causeDesc = ro.concernCauses && ro.concernCauses[lineNum - 1]
+                      let causeDesc = ro.concernCauses && ro.concernCauses[lineNum - 1]
                         ? ro.concernCauses[lineNum - 1]
                         : (lineNum === 1 ? ro.cause : undefined);
-                      const correctionDesc = ro.concernCorrections && ro.concernCorrections[lineNum - 1]
+                      let correctionDesc = ro.concernCorrections && ro.concernCorrections[lineNum - 1]
                         ? ro.concernCorrections[lineNum - 1]
                         : (lineNum === 1 ? ro.correction : undefined);
+
+                      if (!concernDesc && ro.recommendations && ro.recommendations.length > 0) {
+                        const recIdx = lineNum - baseConcernsCount - 1;
+                        if (recIdx >= 0 && recIdx < ro.recommendations.length) {
+                          const matchingRec = ro.recommendations[recIdx];
+                          concernDesc = matchingRec.serviceName;
+                          if (!causeDesc) causeDesc = matchingRec.cause;
+                          if (!correctionDesc) correctionDesc = matchingRec.correction;
+                        }
+                      }
 
                       const lineParts = allROParts.filter(p => {
                         const pLine = p.roLineNumber || (p.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(p.notes.match(/For Line (\d+)/i)![1]) : 1);
@@ -3638,15 +3659,26 @@ export const PartsDashboard: React.FC = () => {
                   const isQuoteOnly = rp.status === 'QUOTE_ONLY' || rp.requestType === 'QUOTE_ONLY';
                   const isSent = isQuoteOnly && isPartSentToEstimate(rp);
                   const lineNum = rp.roLineNumber || (rp.notes?.match(/For Line (\d+)/i)?.[1] ? parseInt(rp.notes.match(/For Line (\d+)/i)![1]) : undefined);
-                  const concernDesc = lineNum && currentSelectedRO?.concerns && currentSelectedRO.concerns[lineNum - 1]
+                  const baseConcernsCount = (currentSelectedRO?.concerns && currentSelectedRO.concerns.length > 0) ? currentSelectedRO.concerns.length : (currentSelectedRO?.primaryConcern ? 1 : 0);
+                  let concernDesc = lineNum && currentSelectedRO?.concerns && currentSelectedRO.concerns[lineNum - 1]
                     ? currentSelectedRO.concerns[lineNum - 1]
                     : (lineNum === 1 ? currentSelectedRO?.primaryConcern : undefined);
-                  const causeDesc = lineNum && currentSelectedRO?.concernCauses && currentSelectedRO.concernCauses[lineNum - 1]
+                  let causeDesc = lineNum && currentSelectedRO?.concernCauses && currentSelectedRO.concernCauses[lineNum - 1]
                     ? currentSelectedRO.concernCauses[lineNum - 1]
                     : (lineNum === 1 ? currentSelectedRO?.cause : undefined);
-                  const correctionDesc = lineNum && currentSelectedRO?.concernCorrections && currentSelectedRO.concernCorrections[lineNum - 1]
+                  let correctionDesc = lineNum && currentSelectedRO?.concernCorrections && currentSelectedRO.concernCorrections[lineNum - 1]
                     ? currentSelectedRO.concernCorrections[lineNum - 1]
                     : (lineNum === 1 ? currentSelectedRO?.correction : undefined);
+
+                  if (lineNum && !concernDesc && currentSelectedRO?.recommendations && currentSelectedRO.recommendations.length > 0) {
+                    const recIdx = lineNum - baseConcernsCount - 1;
+                    if (recIdx >= 0 && recIdx < currentSelectedRO.recommendations.length) {
+                      const matchingRec = currentSelectedRO.recommendations[recIdx];
+                      concernDesc = matchingRec.serviceName;
+                      if (!causeDesc) causeDesc = matchingRec.cause;
+                      if (!correctionDesc) correctionDesc = matchingRec.correction;
+                    }
+                  }
                   const lineTotal = draft.price && !isNaN(Number(draft.price)) ? (Number(draft.price) * (draft.quantity || 1)).toFixed(2) : '0.00';
 
                   return (

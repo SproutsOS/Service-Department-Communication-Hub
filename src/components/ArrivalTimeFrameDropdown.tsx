@@ -31,6 +31,7 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
   disabled = false,
 }) => {
   const [options, setOptions] = useState<ArrivalTimeFrameOption[]>([]);
+  const [selectedOptionId, setSelectedOptionId] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState('');
   const [customDate, setCustomDate] = useState('');
@@ -46,10 +47,81 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
     reloadOptions();
   }, []);
 
+  // Sync selectedOptionId when value prop changes from outside
+  useEffect(() => {
+    if (value) {
+      const matched = findMatchingOption(value, getAllArrivalTimeFrames());
+      if (matched) {
+        setSelectedOptionId(matched.id);
+      }
+    }
+  }, [value]);
+
   // Determine current active selection matching the value
-  const matchedOption = options.find(
-    opt => opt.id === value || opt.label === value || opt.status === value
-  ) || options.find(opt => opt.id === 'DAILY_ORDER' || opt.id === 'TODAY_5PM') || options[0];
+  const findMatchingOption = (val: string, opts: ArrivalTimeFrameOption[]): ArrivalTimeFrameOption | undefined => {
+    if (!val || !opts.length) return opts[0];
+
+    // 1. Direct ID match
+    const byId = opts.find(opt => opt.id.toLowerCase() === val.toLowerCase());
+    if (byId) return byId;
+
+    // 2. Direct Label match
+    const byLabel = opts.find(opt => opt.label.toLowerCase() === val.toLowerCase() || opt.shortLabel.toLowerCase() === val.toLowerCase());
+    if (byLabel) return byLabel;
+
+    // 3. Status match if val is a PartStatus
+    if (val === 'IN_STOCK') return opts.find(o => o.id === 'IN_STOCK');
+    if (val === 'LOCAL_PURCHASE') return opts.find(o => o.id === 'LOCAL_PURCHASE');
+    if (val === 'VOR_UPGRADE') return opts.find(o => o.id === 'VOR_UPGRADE');
+    if (val === 'BACKORDERED') return opts.find(o => o.id === 'BACKORDERED');
+    if (val === 'SPECIAL_ORDER_1_5_DAYS') return opts.find(o => o.id === '1_2_DAYS' || o.id === 'TOMORROW_5PM');
+    if (val === 'SPECIAL_ORDER') return opts.find(o => o.id === '3_5_DAYS' || o.id === '1_2_WEEKS');
+
+    // 4. ISO Date or Timestamp parsing
+    if (!isNaN(Date.parse(val)) && val.includes('-')) {
+      const targetDate = new Date(val);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const targetDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+      const diffDays = Math.round((targetDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const hours = targetDate.getHours();
+
+      if (diffDays <= 0) {
+        if (hours <= 14) return opts.find(o => o.id === 'TODAY_2PM') || opts.find(o => o.id === 'TODAY_5PM');
+        return opts.find(o => o.id === 'TODAY_5PM');
+      } else if (diffDays === 1) {
+        if (hours <= 10) return opts.find(o => o.id === 'TOMORROW_MORNING');
+        return opts.find(o => o.id === 'TOMORROW_5PM');
+      } else if (diffDays === 2) {
+        return opts.find(o => o.id === '1_2_DAYS');
+      } else if (diffDays >= 3 && diffDays <= 5) {
+        return opts.find(o => o.id === '3_5_DAYS');
+      } else if (diffDays > 5) {
+        return opts.find(o => o.id === '1_2_WEEKS');
+      }
+    }
+
+    // 5. Text containment matching
+    const lower = val.toLowerCase();
+    if (lower.includes('in stock') || lower === 'stock') return opts.find(o => o.id === 'IN_STOCK');
+    if (lower.includes('local') || lower.includes('hot shot')) return opts.find(o => o.id === 'LOCAL_PURCHASE');
+    if (lower.includes('vor') || lower.includes('overnight') || lower.includes('air')) return opts.find(o => o.id === 'VOR_UPGRADE');
+    if (lower.includes('backorder')) return opts.find(o => o.id === 'BACKORDERED');
+    if (lower.includes('tomorrow') && (lower.includes('morning') || lower.includes('9') || lower.includes('8') || lower.includes('10'))) return opts.find(o => o.id === 'TOMORROW_MORNING');
+    if (lower.includes('tomorrow')) return opts.find(o => o.id === 'TOMORROW_5PM');
+    if (lower.includes('1 - 2') || lower.includes('1-2') || lower.includes('1 to 2') || lower.includes('1-2 days')) return opts.find(o => o.id === '1_2_DAYS');
+    if (lower.includes('3 - 5') || lower.includes('3-5') || lower.includes('3 to 5') || lower.includes('3-5 days')) return opts.find(o => o.id === '3_5_DAYS');
+    if (lower.includes('week') || lower.includes('factory')) return opts.find(o => o.id === '1_2_WEEKS');
+    if (lower.includes('2:00') || lower.includes('2pm') || lower.includes('noon') || lower.includes('shuttle')) return opts.find(o => o.id === 'TODAY_2PM');
+    if (lower.includes('5:00') || lower.includes('5pm') || lower.includes('today') || lower.includes('daily')) return opts.find(o => o.id === 'TODAY_5PM');
+
+    return opts.find(opt => opt.id === 'DAILY_ORDER' || opt.id === 'TODAY_5PM') || opts[0];
+  };
+
+  const matchedOption = (selectedOptionId ? options.find(o => o.id === selectedOptionId) : undefined) ||
+    findMatchingOption(value, options) ||
+    options.find(opt => opt.id === 'DAILY_ORDER' || opt.id === 'TODAY_5PM') ||
+    options[0];
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
@@ -57,6 +129,8 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
       setIsModalOpen(true);
       return;
     }
+
+    setSelectedOptionId(selectedId);
 
     const opt = options.find(o => o.id === selectedId);
     if (opt) {
@@ -95,6 +169,8 @@ export const ArrivalTimeFrameDropdown: React.FC<ArrivalTimeFrameDropdownProps> =
       customDate || undefined, 
       customTime || undefined
     );
+
+    setSelectedOptionId(effectiveOpt.id);
 
     onChange({
       timeFrameId: effectiveOpt.id,

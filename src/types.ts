@@ -82,6 +82,7 @@ export interface PartItem {
   requestType?: 'ORDER_NOW' | 'QUOTE_ONLY'; // Whether technician requests immediate order or pricing quote only
   orderedAt?: string;
   estimatedArrival: string; // ISO string or human-readable format
+  timeFrameId?: string; // Standard timeframe identifier e.g. 'TOMORROW_MORNING', '1_2_DAYS'
   vendor: string;
   trackingNumber?: string;
   cost?: number;
