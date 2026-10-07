@@ -191,7 +191,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
     if (status === 'PASSED') {
       setStatusFeedback(`Marked "${item.name}" as Checked & OK.`);
     } else if (status === 'FUTURE_ATTENTION') {
-      setStatusFeedback(`Marked "${item.name}" for Future Attention (Yellow). Added to Lines above.`);
+      setStatusFeedback(`Marked "${item.name}" for Future Attention (Yellow) — enter advisory notes below.`);
     } else if (status === 'IMMEDIATE_ATTENTION') {
       setStatusFeedback(`Marked "${item.name}" for Immediate Attention (Red). Added to Lines above.`);
     } else if (status === 'NOT_APPLICABLE') {
@@ -413,16 +413,16 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                           const isFuture = hasResult && status === 'FUTURE_ATTENTION';
                           const isImmediate = hasResult && status === 'IMMEDIATE_ATTENTION';
                           const isNA = hasResult && status === 'NOT_APPLICABLE';
-                          const linkedLineNum = (isImmediate || isFuture) ? findLinkedLineNumber(item.id, item) : -1;
+                          const linkedLineNum = isImmediate ? findLinkedLineNumber(item.id, item) : -1;
 
                           return (
                             <div 
                               key={item.id}
-                              className={`rounded-lg border transition-all shadow-2xs p-2 ${
+                              className={`rounded-lg border transition-all shadow-2xs p-2.5 ${
                                 isImmediate
                                   ? 'bg-red-50/70 border-red-400 border-l-4 border-l-red-600'
                                   : isFuture
-                                  ? 'bg-amber-50/70 border-amber-400 border-l-4 border-l-amber-500'
+                                  ? 'bg-amber-50/80 border-amber-400 border-l-4 border-l-amber-500'
                                   : isPassed
                                   ? 'bg-emerald-50/40 border-emerald-300 border-l-4 border-l-emerald-600'
                                   : isNA
@@ -485,7 +485,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                         ? 'bg-yellow-400 text-black border-2 border-yellow-500 shadow-md font-black ring-2 ring-yellow-300 scale-[1.03]'
                                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-yellow-50 hover:border-yellow-400 font-bold shadow-2xs'
                                     }`}
-                                    title="May require future attention (Recommended)"
+                                    title="May require future attention (Recommended - saves notes without creating RO job line)"
                                   >
                                     <span>🟡</span>
                                     <span>Future</span>
@@ -500,7 +500,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                         ? 'bg-red-600 text-white border-2 border-red-700 shadow-md font-black ring-2 ring-red-400 scale-[1.03]'
                                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-red-50 hover:border-red-400 font-bold shadow-2xs'
                                     }`}
-                                    title="Immediate safety or mechanical concern (Critical)"
+                                    title="Immediate safety or mechanical concern (Creates active RO Line & parts request)"
                                   >
                                     <span>🔴</span>
                                     <span>Immediate</span>
@@ -522,6 +522,36 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                   </button>
                                 </div>
                               </div>
+
+                              {/* In-Place Notes Box for Future Attention (Yellow) */}
+                              {isFuture && (
+                                <div className="mt-2.5 pt-2 border-t border-amber-300/80 space-y-1.5 animate-fadeIn">
+                                  <div className="flex items-center justify-between text-[11px] font-bold text-amber-950">
+                                    <span className="flex items-center gap-1">
+                                      <span>📝</span>
+                                      <span>Future Attention Notes & Advisory:</span>
+                                    </span>
+                                    <span className="text-[10px] text-amber-800 font-medium">
+                                      Saved to 21-Point Inspection Report
+                                    </span>
+                                  </div>
+                                  <textarea
+                                    value={result?.notes || ''}
+                                    onChange={(e) => {
+                                      setInspectionItemResult(ro.id, item.id, {
+                                        notes: e.target.value,
+                                        status: 'FUTURE_ATTENTION',
+                                        name: item.name,
+                                        category: item.category,
+                                        measurementValue: result?.measurementValue || '',
+                                      });
+                                    }}
+                                    placeholder={`Enter future maintenance / advisory notes for ${item.name} (e.g., "Pads at 4mm — recheck next service", "Tires at 4/32 tread — recommend replacement in 5,000 miles")...`}
+                                    rows={2}
+                                    className="w-full text-xs p-2 bg-white border border-amber-300 rounded-lg text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-amber-500 shadow-2xs"
+                                  />
+                                </div>
+                              )}
                             </div>
                           );
                         })}

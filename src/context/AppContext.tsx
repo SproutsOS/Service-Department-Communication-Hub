@@ -4698,7 +4698,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       });
 
-      if (updatedItem.status === 'PASSED' || updatedItem.status === 'NOT_APPLICABLE') {
+      if (updatedItem.status === 'PASSED' || updatedItem.status === 'NOT_APPLICABLE' || updatedItem.status === 'FUTURE_ATTENTION') {
         const recsToRemove = updatedRecommendations.filter(r => {
           if (r.inspectionItemId && r.inspectionItemId === itemId) return true;
           if (updatedItem.recommendationId && r.id === updatedItem.recommendationId) return true;
@@ -4763,9 +4763,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       } else if (
-        updatedItem.status === 'IMMEDIATE_ATTENTION' || updatedItem.status === 'FUTURE_ATTENTION'
+        updatedItem.status === 'IMMEDIATE_ATTENTION'
       ) {
-        const urgency = updatedItem.status === 'IMMEDIATE_ATTENTION' ? 'SAFETY' : 'RECOMMENDED';
+        const urgency = 'SAFETY';
         const recName = checklistItem?.defaultRecommendationName || updatedItem.name;
         possibleNames.add(recName.toLowerCase().trim());
 
