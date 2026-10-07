@@ -37,10 +37,19 @@ export const WarrantyPrintModal: React.FC = () => {
 
   const ro = activeWarrantyPrintRO;
 
-  // Add printing-warranty class whenever the modal is open so print previews are instantly ready
+  // System beforeprint and afterprint lifecycle handling
   useEffect(() => {
-    document.body.classList.add('printing-warranty');
+    const handleBeforePrint = () => {
+      document.body.classList.add('printing-warranty');
+    };
+    const handleAfterPrint = () => {
+      document.body.classList.remove('printing-warranty');
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
     return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
       document.body.classList.remove('printing-warranty');
     };
   }, []);
@@ -53,12 +62,18 @@ export const WarrantyPrintModal: React.FC = () => {
     document.body.classList.add('printing-warranty');
 
     const cleanup = () => {
+      document.body.classList.remove('printing-warranty');
       document.title = prevTitle;
       window.removeEventListener('afterprint', cleanup);
     };
 
     window.addEventListener('afterprint', cleanup);
-    window.print();
+
+    // Allow browser 60ms render tick to compute printable stylesheet before snapshot
+    setTimeout(() => {
+      window.print();
+      setTimeout(cleanup, 1500);
+    }, 60);
   }, [ro]);
 
   // Close on Escape key or print on Ctrl+P / Cmd+P

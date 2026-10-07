@@ -437,10 +437,12 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
   // Print schedule
   const handlePrint = () => {
     document.body.classList.add('printing-attendance');
-    window.print();
     setTimeout(() => {
-      document.body.classList.remove('printing-attendance');
-    }, 1000);
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('printing-attendance');
+      }, 1000);
+    }, 60);
   };
 
   // Security Gate: Service Manager only

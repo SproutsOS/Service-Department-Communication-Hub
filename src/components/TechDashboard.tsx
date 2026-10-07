@@ -2556,7 +2556,7 @@ export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
   onRequestParts,
   onTestDrive
 }) => {
-  const { updateROStatus, startDiagnosis } = useApp();
+  const { updateROStatus, startDiagnosis, currentUser } = useApp();
   const normStatus = normalizeROStatus(ro.status);
 
   // Workflow Stages:
@@ -2578,6 +2578,17 @@ export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
   const handlePauseDiag = (e: React.MouseEvent) => {
     e.stopPropagation();
     updateROStatus(ro.id, 'DIAG_PAUSED');
+  };
+
+  const handleDiagDoneNoParts = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isAlreadyApproved = ro.status === 'APPROVED' || ro.quote?.status === 'APPROVED' || (ro.concernStatuses && ro.concernStatuses.length > 0 && ro.concernStatuses.every(s => s === 'APPROVED'));
+    const targetStatus = isAlreadyApproved ? 'APPROVED' : 'ESTIMATE_DONE';
+    updateROStatus(
+      ro.id, 
+      targetStatus, 
+      `Diagnosis completed by tech ${currentUser.name} — No parts required (Labor Only).`
+    );
   };
 
   const handleFinishDiag = (e: React.MouseEvent) => {
@@ -2643,7 +2654,7 @@ export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
               <button
                 type="button"
                 onClick={handlePauseDiag}
-                className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-[10px] rounded flex items-center gap-1"
+                className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-[10px] rounded flex items-center gap-1 cursor-pointer"
                 title="Pause Diagnosis"
               >
                 <PauseCircle className="w-3 h-3" />
@@ -2651,12 +2662,21 @@ export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
               </button>
               <button
                 type="button"
+                onClick={handleDiagDoneNoParts}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs cursor-pointer"
+                title="Finish Diagnosis — No parts needed (Labor Only)"
+              >
+                <Check className="w-3 h-3 stroke-[3]" />
+                <span>Diag Done (No Parts)</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleFinishDiag}
-                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] rounded flex items-center gap-1 transition-all active:scale-95 shadow-2xs cursor-pointer"
                 title="Finish Diagnosis & Request Parts / Quote"
               >
-                <CheckCircle2 className="w-3 h-3" />
-                <span>Diag Done & Parts</span>
+                <Package className="w-3 h-3" />
+                <span>Diag & Parts</span>
               </button>
             </>
           )}
@@ -2772,10 +2792,20 @@ export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
               </button>
               <button
                 type="button"
+                onClick={handleDiagDoneNoParts}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                title="Complete diagnosis with labor only — No parts needed"
+              >
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <span>Diag Done (No Parts Needed)</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleFinishDiag}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                title="Complete diagnosis and request parts from Parts Department"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
+                <Package className="w-3.5 h-3.5" />
                 <span>Finish Diag & Request Parts</span>
               </button>
             </>

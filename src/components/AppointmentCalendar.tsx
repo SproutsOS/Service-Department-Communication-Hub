@@ -2117,10 +2117,12 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
                   type="button"
                   onClick={() => {
                     document.body.classList.add('printing-appointment');
-                    window.print();
                     setTimeout(() => {
-                      document.body.classList.remove('printing-appointment');
-                    }, 1000);
+                      window.print();
+                      setTimeout(() => {
+                        document.body.classList.remove('printing-appointment');
+                      }, 1000);
+                    }, 60);
                   }}
                   className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >

@@ -4674,7 +4674,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         completedAt: new Date().toISOString(),
       };
 
-      // If status is changed to PASSED or NOT_APPLICABLE, remove any auto-generated recommendation line for this inspection item
+      // Collect all possible name aliases for this inspection item to prevent duplicate lines
+      const possibleNames = new Set<string>();
+      if (checklistItem?.name) possibleNames.add(checklistItem.name.toLowerCase().trim());
+      if (checklistItem?.defaultRecommendationName) possibleNames.add(checklistItem.defaultRecommendationName.toLowerCase().trim());
+      if (updatedItem.name) possibleNames.add(updatedItem.name.toLowerCase().trim());
+      if (existingItem.name) possibleNames.add(existingItem.name.toLowerCase().trim());
+
       let updatedRecommendations = targetRO.recommendations ? [...targetRO.recommendations] : [];
       let updatedConcerns = targetRO.concerns ? [...targetRO.concerns] : (targetRO.primaryConcern ? [targetRO.primaryConcern] : []);
       let updatedPayTypes = targetRO.concernPayTypes ? [...targetRO.concernPayTypes] : undefined;
@@ -4685,25 +4691,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let updatedStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : undefined;
       let updatedQuote = targetRO.quote;
 
+      // Include any previously linked recommendation names
+      updatedRecommendations.forEach(r => {
+        if (r.inspectionItemId === itemId || (updatedItem.recommendationId && r.id === updatedItem.recommendationId)) {
+          if (r.serviceName) possibleNames.add(r.serviceName.toLowerCase().trim());
+        }
+      });
+
       if (updatedItem.status === 'PASSED' || updatedItem.status === 'NOT_APPLICABLE') {
-        const defaultName = (checklistItem?.defaultRecommendationName || updatedItem.name || '').toLowerCase().trim();
         const recsToRemove = updatedRecommendations.filter(r => {
           if (r.inspectionItemId && r.inspectionItemId === itemId) return true;
           if (updatedItem.recommendationId && r.id === updatedItem.recommendationId) return true;
-          if (r.serviceName && defaultName && r.serviceName.toLowerCase().trim() === defaultName) return true;
+          if (r.serviceName && possibleNames.has(r.serviceName.toLowerCase().trim())) return true;
           return false;
         });
 
         const removedRecIds = new Set(recsToRemove.map(r => r.id));
         const removedRecNames = new Set(recsToRemove.map(r => r.serviceName.toLowerCase().trim()));
-        if (defaultName) removedRecNames.add(defaultName);
+        possibleNames.forEach(n => removedRecNames.add(n));
 
-        updatedRecommendations = updatedRecommendations.filter(r => !removedRecIds.has(r.id));
+        updatedRecommendations = updatedRecommendations.filter(r => !removedRecIds.has(r.id) && !possibleNames.has(r.serviceName.toLowerCase().trim()));
         updatedItem.recommendationId = undefined;
 
-        // Clean up from concerns if present
+        // Clean up from concerns if present (prevent removing original primary concern if not created by this inspection point)
         if (removedRecNames.size > 0 && updatedConcerns.length > 0) {
-          const keepIndices = updatedConcerns.map((c, i) => (!removedRecNames.has(c.toLowerCase().trim()) ? i : -1)).filter(i => i >= 0);
+          const keepIndices = updatedConcerns
+            .map((c, i) => (!removedRecNames.has(c.toLowerCase().trim()) ? i : -1))
+            .filter(i => i >= 0);
+
           if (keepIndices.length > 0 && keepIndices.length < updatedConcerns.length) {
             updatedConcerns = keepIndices.map(i => updatedConcerns[i]);
             if (updatedPayTypes) updatedPayTypes = keepIndices.map(i => updatedPayTypes![i]);
@@ -4722,8 +4737,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const filteredLabor = targetRO.quote.laborItems.filter(l => {
             if (removedRecIds.has(l.id.replace('labor_rec_', ''))) return false;
             if (l.concernText && removedRecNames.has(l.concernText.toLowerCase().trim())) return false;
+            if (l.description && removedRecNames.has(l.description.toLowerCase().trim())) return false;
             return true;
           });
+
           if (filteredLabor.length !== targetRO.quote.laborItems.length) {
             const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
             const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
@@ -4749,12 +4766,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedItem.status === 'IMMEDIATE_ATTENTION' || updatedItem.status === 'FUTURE_ATTENTION'
       ) {
         const urgency = updatedItem.status === 'IMMEDIATE_ATTENTION' ? 'SAFETY' : 'RECOMMENDED';
-        const existingRecIdx = updatedRecommendations.findIndex(r => 
-          (r.inspectionItemId && r.inspectionItemId === itemId) || 
-          (updatedItem.recommendationId && r.id === updatedItem.recommendationId) ||
-          r.serviceName.toLowerCase() === (checklistItem?.defaultRecommendationName || updatedItem.name).toLowerCase()
-        );
         const recName = checklistItem?.defaultRecommendationName || updatedItem.name;
+        possibleNames.add(recName.toLowerCase().trim());
+
         const defaultHours = updatedItem.category === 'TIRES_WHEELS' ? 1.0 : updatedItem.category === 'BRAKES_SUSPENSION' ? 2.0 : 0.5;
 
         const recNotes = [
@@ -4766,11 +4780,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         let activeRecId = '';
 
+        // Find single existing recommendation to update in place
+        const existingRecIdx = updatedRecommendations.findIndex(r => 
+          (r.inspectionItemId && r.inspectionItemId === itemId) || 
+          (updatedItem.recommendationId && r.id === updatedItem.recommendationId) ||
+          (r.serviceName && possibleNames.has(r.serviceName.toLowerCase().trim()))
+        );
+
         if (existingRecIdx >= 0) {
           activeRecId = updatedRecommendations[existingRecIdx].id;
           updatedRecommendations[existingRecIdx] = {
             ...updatedRecommendations[existingRecIdx],
-            serviceName: updatedRecommendations[existingRecIdx].serviceName || recName,
+            serviceName: recName,
             urgency,
             notes: recNotes || updatedRecommendations[existingRecIdx].notes,
             cause: updatedItem.cause || updatedRecommendations[existingRecIdx].cause || '',
@@ -4801,9 +4822,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedItem.recommendationId = newRecId;
         }
 
-        // Synchronize into updatedConcerns so Service Advisor immediately sees the new job line on the RO
-        const existingConcernIdx = updatedConcerns.findIndex(c => c.toLowerCase().trim() === recName.toLowerCase().trim());
+        // Single Job Line Sync: Update existing concern in place or add exactly one new concern line
+        const existingConcernIdx = updatedConcerns.findIndex(c => possibleNames.has(c.toLowerCase().trim()));
+
         if (existingConcernIdx >= 0) {
+          // Update the existing concern line name & diagnostic findings without creating a duplicate
+          updatedConcerns[existingConcernIdx] = recName;
           if (updatedCauses && updatedCauses[existingConcernIdx] !== undefined) {
             updatedCauses[existingConcernIdx] = updatedItem.cause || updatedCauses[existingConcernIdx];
           }
@@ -4811,6 +4835,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updatedCorrections[existingConcernIdx] = updatedItem.correction || updatedCorrections[existingConcernIdx];
           }
         } else {
+          // Add exactly one new concern line
           updatedConcerns.push(recName);
           if (!updatedPayTypes) updatedPayTypes = updatedConcerns.slice(0, -1).map(() => 'CUSTOMER_PAY');
           updatedPayTypes.push('CUSTOMER_PAY');
@@ -4826,16 +4851,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedStatuses.push('PENDING');
         }
 
-        // Mirror into quote labor items if quote exists
+        // Mirror into quote labor items without duplicating
         if (updatedQuote) {
-          const newLineNum = updatedConcerns.length;
+          const targetLineNum = existingConcernIdx >= 0 ? existingConcernIdx + 1 : updatedConcerns.length;
           const existingLabor = updatedQuote.laborItems || [];
-          const matchedLabor = existingLabor.find(l => 
+          const matchedLaborIdx = existingLabor.findIndex(l => 
             l.id === `labor_rec_${activeRecId}` || 
-            (l.concernText && l.concernText.toLowerCase().trim() === recName.toLowerCase().trim())
+            (l.concernText && possibleNames.has(l.concernText.toLowerCase().trim())) ||
+            (l.description && possibleNames.has(l.description.toLowerCase().trim()))
           );
 
-          if (!matchedLabor) {
+          if (matchedLaborIdx >= 0) {
+            // Update existing labor line in place
+            const updatedLaborList = [...existingLabor];
+            updatedLaborList[matchedLaborIdx] = {
+              ...updatedLaborList[matchedLaborIdx],
+              description: recName,
+              concernText: recName,
+              roLineNumber: targetLineNum,
+            };
+            updatedQuote = {
+              ...updatedQuote,
+              laborItems: updatedLaborList,
+              updatedAt: new Date().toISOString(),
+            };
+          } else {
+            // Create a single labor item for this new finding
             const laborRate = existingLabor[0]?.hourlyRate || 150;
             const subtotal = Number((defaultHours * laborRate).toFixed(2));
             const newLaborItem: LaborLineItem = {
@@ -4846,7 +4887,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               hourlyRate: laborRate,
               subtotal,
               payType: 'CUSTOMER_PAY',
-              roLineNumber: newLineNum,
+              roLineNumber: targetLineNum,
             };
 
             const newLaborList = [...existingLabor, newLaborItem];

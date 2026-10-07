@@ -163,12 +163,41 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
     else passedCount++;
   });
 
-  const handlePrint = () => {
-    document.body.classList.add('printing-inspection');
-    window.print();
-    setTimeout(() => {
+  // System beforeprint and afterprint lifecycle handling
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      document.body.classList.add('printing-inspection');
+    };
+    const handleAfterPrint = () => {
       document.body.classList.remove('printing-inspection');
-    }, 1000);
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+      document.body.classList.remove('printing-inspection');
+    };
+  }, []);
+
+  const handlePrint = () => {
+    const title = `Multi-Point Inspection - RO #${ro.id} - ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`;
+    const prevTitle = document.title;
+    document.title = title;
+    document.body.classList.add('printing-inspection');
+
+    const cleanup = () => {
+      document.body.classList.remove('printing-inspection');
+      document.title = prevTitle;
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    window.addEventListener('afterprint', cleanup);
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(cleanup, 1500);
+    }, 60);
   };
 
   const handleCopySummary = () => {
