@@ -45,6 +45,7 @@ import { ROCard } from './ROCard';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
+import { LineTimePunchesSection } from './LineTimePunchesSection';
 import { TechTestDriveModal } from './TechTestDriveModal';
 import { ROStickyNoteBanner, ROStickyNoteChip, AddStickyNoteButton } from './ROStickyNoteBadge';
 
@@ -139,6 +140,7 @@ export const TechPastPunchModal: React.FC<PastPunchModalProps> = ({ ro, lineNum,
         clockIn: clockInISO,
         clockOut: clockOutISO,
         operationType: manualOpType,
+        roLineNumber: lineNum ? Number(lineNum) : undefined,
         notes: manualNotes.trim() || (lineNum ? `Line ${lineNum}` : undefined),
       });
 
@@ -1513,6 +1515,14 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                     />
                   </div>
 
+                  {/* Line Labor Time Clock Logs per Line */}
+                  <LineTimePunchesSection 
+                    ro={ro} 
+                    lineNum={idx + 1} 
+                    lineTitle={concernText} 
+                    onAddPastPunch={(num, title) => setPastPunchModal({ isOpen: true, lineNum: num, concernText: title })} 
+                  />
+
                   {/* Integrated Line Parts: Part Name, Price, Qty, Availability */}
                   <LinePartsSection ro={ro} lineNum={idx + 1} />
 
@@ -1905,6 +1915,14 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
+
+                  {/* Line Labor Time Clock Logs for this Recommendation Line */}
+                  <LineTimePunchesSection 
+                    ro={ro} 
+                    lineNum={globalLineNum} 
+                    lineTitle={rec.serviceName} 
+                    onAddPastPunch={(num, title) => setPastPunchModal({ isOpen: true, lineNum: num, concernText: title })} 
+                  />
 
                   {/* Integrated Line Parts for this Recommendation Line */}
                   <LinePartsSection ro={ro} lineNum={globalLineNum} />

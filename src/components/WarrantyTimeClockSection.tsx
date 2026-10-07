@@ -141,6 +141,7 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
         clockIn: clockInISO,
         clockOut: clockOutISO,
         operationType: manualOpType,
+        roLineNumber: manualLineNum ? Number(manualLineNum) : undefined,
         notes: manualNotes.trim() || undefined,
       });
 
@@ -525,19 +526,40 @@ export const WarrantyTimeClockSection: React.FC<WarrantyTimeClockSectionProps> =
                 />
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Operation / Phase</label>
-                <select
-                  value={manualOpType}
-                  onChange={(e) => setManualOpType(e.target.value as WarrantyOperationType)}
-                  className="w-full px-3 py-2 font-bold border-2 border-slate-400 rounded-lg text-slate-800"
-                >
-                  <option value="DIAGNOSTIC">Diagnostic Scan & Testing</option>
-                  <option value="REPAIR">Component Repair / Assembly</option>
-                  <option value="ROAD_TEST">Road Test & Verification</option>
-                  <option value="WAITING_PARTS">Teardown / Staging</option>
-                  <option value="GENERAL">General Warranty Service</option>
-                </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Operation / Phase</label>
+                  <select
+                    value={manualOpType}
+                    onChange={(e) => setManualOpType(e.target.value as WarrantyOperationType)}
+                    className="w-full px-3 py-2 font-bold border-2 border-slate-400 rounded-lg text-slate-800"
+                  >
+                    <option value="DIAGNOSTIC">Diagnostic Scan & Testing</option>
+                    <option value="REPAIR">Component Repair / Assembly</option>
+                    <option value="ROAD_TEST">Road Test & Verification</option>
+                    <option value="WAITING_PARTS">Teardown / Staging</option>
+                    <option value="GENERAL">General Warranty Service</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Target RO Job Line</label>
+                  <select
+                    value={manualLineNum || ''}
+                    onChange={(e) => setManualLineNum(e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full px-3 py-2 font-bold border-2 border-slate-400 rounded-lg text-slate-800"
+                  >
+                    <option value="">General / Entire RO</option>
+                    {(ro.concerns && ro.concerns.length > 0 ? ro.concerns : (ro.primaryConcern ? [ro.primaryConcern] : ['Customer Concern'])).map((c, i) => (
+                      <option key={i} value={i + 1}>Line {i + 1}: {c.slice(0, 35)}</option>
+                    ))}
+                    {(ro.recommendations || []).map((rec, rIdx) => {
+                      const lNum = (ro.concerns?.length || (ro.primaryConcern ? 1 : 0)) + rIdx + 1;
+                      return (
+                        <option key={rec.id} value={lNum}>Line {lNum}: {rec.serviceName.slice(0, 35)}</option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
