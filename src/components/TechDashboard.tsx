@@ -399,8 +399,6 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
       clearTimeout(recDebounceTimersRef.current[`hours_${recId}`]);
     }
     recDebounceTimersRef.current[`hours_${recId}`] = setTimeout(() => {
-      const num = Math.max(0, Number(val) || 0);
-      updateRecommendedService(ro.id, recId, { laborHours: num });
       updateLineLaborHours(ro.id, globalLineNum - 1, val);
     }, 600);
   };
@@ -1782,9 +1780,12 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           onChange={(e) => handleRecHoursChange(rec.id, e.target.value, globalLineNum)}
                           onBlur={() => {
                             focusedRecFieldRef.current = null;
-                            const num = Math.max(0, Number(recHrs) || 0);
-                            updateRecommendedService(ro.id, rec.id, { laborHours: num });
-                            updateLineLaborHours(ro.id, globalLineNum - 1, recHrs || '0');
+                            if (recDebounceTimersRef.current[`hours_${rec.id}`]) {
+                              clearTimeout(recDebounceTimersRef.current[`hours_${rec.id}`]);
+                              delete recDebounceTimersRef.current[`hours_${rec.id}`];
+                            }
+                            const currentVal = recHours[rec.id] !== undefined ? recHours[rec.id] : (recHrs || '0');
+                            updateLineLaborHours(ro.id, globalLineNum - 1, currentVal);
                           }}
                           className="w-16 sm:w-20 text-sm font-black text-slate-950 bg-slate-100 hover:bg-slate-50 focus:bg-white px-2 py-1 rounded border border-slate-300 focus:border-blue-600 text-center focus:outline-none transition-colors"
                         />

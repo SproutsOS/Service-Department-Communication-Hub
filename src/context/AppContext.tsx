@@ -5193,88 +5193,124 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       submittedAt: submitToAdvisor ? (quote.submittedAt || now) : quote.submittedAt,
     };
 
-    // Sync lineStatuses to RO concernStatuses
-    let nextConcernStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : [];
-    if (quote.lineStatuses) {
-      Object.entries(quote.lineStatuses).forEach(([lineStr, st]) => {
-        const idx = parseInt(lineStr, 10) - 1;
-        if (idx >= 0) {
-          while (nextConcernStatuses.length <= idx) {
-            nextConcernStatuses.push('PENDING');
-          }
-          nextConcernStatuses[idx] = st;
-        }
-      });
-    }
-
-    // Sync individual parts items statuses from quote.partsItems into updatedRO.parts
-    let updatedParts = targetRO.parts ? [...targetRO.parts] : [];
-    if (quote.partsItems && quote.partsItems.length > 0) {
-      updatedParts = updatedParts.map(p => {
-        const matchingQuotePart = quote.partsItems.find(qp => 
-          (qp.sourcePartId && qp.sourcePartId === p.id) ||
-          (qp.partNumber && p.partNumber && qp.partNumber.trim().toUpperCase() === p.partNumber.trim().toUpperCase()) ||
-          (qp.description && p.description && qp.description.trim().toLowerCase() === p.description.trim().toLowerCase())
-        );
-        if (matchingQuotePart) {
-          if (matchingQuotePart.status === 'DECLINED') {
-            return {
-              ...p,
-              status: 'DECLINED' as PartStatus,
-              notes: p.notes ? `${p.notes} (Declined by customer)` : 'Declined by customer',
-            };
-          }
-        }
-        return p;
-      });
-    }
-
-    const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : targetRO.status;
-
-    let newHistory = [...targetRO.history];
-    const isTechUser = currentUser.role === 'TECHNICIAN';
-    if (submitToAdvisor) {
-      newHistory.push({
-        id: `hist_${Date.now()}`,
-        status: nextROStatus,
-        updatedBy: currentUser.id,
-        updatedByName: currentUser.name,
-        userRole: currentUser.role,
-        timestamp: now,
-        notes: isTechUser
-          ? `Tech ${currentUser.name} submitted job labor time (${nextQuote.totalLaborHours} hrs) for RO #${targetRO.id}. Sent to Service Advisor to merge with parts pricing.`
-          : `Quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts) submitted to Service Advisor for customer authorization.`,
-      });
-    } else if (!isAutoSave) {
-      newHistory.push({
-        id: `hist_${Date.now()}`,
-        status: nextROStatus,
-        updatedBy: currentUser.id,
-        updatedByName: currentUser.name,
-        userRole: currentUser.role,
-        timestamp: now,
-        notes: isTechUser
-          ? `Tech ${currentUser.name} saved labor time draft (${nextQuote.totalLaborHours} hrs).`
-          : `Saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)}).`,
-      });
-    }
-
-    const changeSummary = submitToAdvisor 
-      ? `Labor time submitted (${nextQuote.totalLaborHours} hrs)` 
-      : `Quote estimate updated ($${nextQuote.grandTotal.toFixed(2)})`;
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      status: nextROStatus,
-      parts: updatedParts,
-      concernStatuses: nextConcernStatuses.length > 0 ? nextConcernStatuses : targetRO.concernStatuses,
-      quote: nextQuote,
-      history: newHistory,
-      updatedAt: now,
-      lastChangeSummary: changeSummary,
-    };
+    let syncedRO: RepairOrder | null = null;
 
     setRepairOrders(prev => {
+      const currentTargetRO = prev.find(r => r.id === roId);
+      if (!currentTargetRO) return prev;
+
+      // Sync lineStatuses to RO concernStatuses
+      let nextConcernStatuses = currentTargetRO.concernStatuses ? [...currentTargetRO.concernStatuses] : [];
+      if (quote.lineStatuses) {
+        Object.entries(quote.lineStatuses).forEach(([lineStr, st]) => {
+          const idx = parseInt(lineStr, 10) - 1;
+          if (idx >= 0) {
+            while (nextConcernStatuses.length <= idx) {
+              nextConcernStatuses.push('PENDING');
+            }
+            nextConcernStatuses[idx] = st;
+          }
+        });
+      }
+
+      // Sync individual parts items statuses from quote.partsItems into updatedRO.parts
+      let updatedParts = currentTargetRO.parts ? [...currentTargetRO.parts] : [];
+      if (quote.partsItems && quote.partsItems.length > 0) {
+        updatedParts = updatedParts.map(p => {
+          const matchingQuotePart = quote.partsItems.find(qp => 
+            (qp.sourcePartId && qp.sourcePartId === p.id) ||
+            (qp.partNumber && p.partNumber && qp.partNumber.trim().toUpperCase() === p.partNumber.trim().toUpperCase()) ||
+            (qp.description && p.description && qp.description.trim().toLowerCase() === p.description.trim().toLowerCase())
+          );
+          if (matchingQuotePart) {
+            if (matchingQuotePart.status === 'DECLINED') {
+              return {
+                ...p,
+                status: 'DECLINED' as PartStatus,
+                notes: p.notes ? `${p.notes} (Declined by customer)` : 'Declined by customer',
+              };
+            }
+          }
+          return p;
+        });
+      }
+
+      // Sync recommendation hours and line details from quote.laborItems
+      let updatedRecommendations = currentTargetRO.recommendations ? [...currentTargetRO.recommendations] : [];
+      const baseConcernsCount = (currentTargetRO.concerns && currentTargetRO.concerns.length > 0)
+        ? currentTargetRO.concerns.length
+        : (currentTargetRO.primaryConcern ? 1 : 0);
+
+      if (updatedRecommendations.length > 0 && quote.laborItems && quote.laborItems.length > 0) {
+        updatedRecommendations = updatedRecommendations.map((rec, rIdx) => {
+          const globalLineNum = baseConcernsCount + rIdx + 1;
+          const matchedLabor = quote.laborItems?.find(l => 
+            l.id === `labor_rec_${rec.id}` || 
+            l.roLineNumber === globalLineNum || 
+            (l.concernText && l.concernText.trim().toLowerCase() === rec.serviceName.trim().toLowerCase())
+          );
+          if (matchedLabor && matchedLabor.laborHours !== undefined && (matchedLabor.laborHours as any) !== '') {
+            return {
+              ...rec,
+              laborHours: Number(matchedLabor.laborHours) || 0,
+              correction: matchedLabor.correctionText || matchedLabor.description || rec.correction,
+              cause: (matchedLabor.techNotes && matchedLabor.techNotes.startsWith('Cause:'))
+                ? matchedLabor.techNotes.replace(/^Cause:\s*/i, '')
+                : rec.cause,
+            };
+          }
+          return rec;
+        });
+      }
+
+      const nextROStatus: ROStatus = submitToAdvisor ? 'ESTIMATE_DONE' : currentTargetRO.status;
+
+      let newHistory = [...currentTargetRO.history];
+      const isTechUser = currentUser.role === 'TECHNICIAN';
+      if (submitToAdvisor) {
+        newHistory.push({
+          id: `hist_${Date.now()}`,
+          status: nextROStatus,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: now,
+          notes: isTechUser
+            ? `Tech ${currentUser.name} submitted job labor time (${nextQuote.totalLaborHours} hrs) for RO #${currentTargetRO.id}. Sent to Service Advisor to merge with parts pricing.`
+            : `Quote totaling $${nextQuote.grandTotal.toFixed(2)} (${nextQuote.totalLaborHours} hrs labor + $${nextQuote.totalPartsCost.toFixed(2)} parts) submitted to Service Advisor for customer authorization.`,
+        });
+      } else if (!isAutoSave) {
+        newHistory.push({
+          id: `hist_${Date.now()}`,
+          status: nextROStatus,
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          timestamp: now,
+          notes: isTechUser
+            ? `Tech ${currentUser.name} saved labor time draft (${nextQuote.totalLaborHours} hrs).`
+            : `Saved repair quote draft ($${nextQuote.grandTotal.toFixed(2)}).`,
+        });
+      }
+
+      const changeSummary = submitToAdvisor 
+        ? `Labor time submitted (${nextQuote.totalLaborHours} hrs)` 
+        : `Quote estimate updated ($${nextQuote.grandTotal.toFixed(2)})`;
+
+      const updatedRO: RepairOrder = {
+        ...currentTargetRO,
+        status: nextROStatus,
+        parts: updatedParts,
+        concernStatuses: nextConcernStatuses.length > 0 ? nextConcernStatuses : currentTargetRO.concernStatuses,
+        recommendations: updatedRecommendations,
+        quote: nextQuote,
+        history: newHistory,
+        updatedAt: now,
+        lastChangeSummary: changeSummary,
+      };
+
+      syncedRO = updatedRO;
+
       const updated = prev.map(r => r.id === roId ? updatedRO : r);
       try {
         localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
@@ -5284,19 +5320,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    syncRepairOrder(updatedRO);
-    if (!isAutoSave) {
-      recordROChange(roId, changeSummary);
+    if (syncedRO) {
+      syncRepairOrder(syncedRO);
+      if (!isAutoSave) {
+        recordROChange(roId, (syncedRO as RepairOrder).lastChangeSummary || 'Quote updated');
+      }
     }
 
-    if (submitToAdvisor) {
+    if (submitToAdvisor && syncedRO) {
+      const isTech = currentUser.role === 'TECHNICIAN';
       playNotificationChime(true);
       triggerNotification(
-        updatedRO,
-        isTechUser 
+        syncedRO,
+        isTech 
           ? `Labor Time Ready: ${nextQuote.totalLaborHours} hrs`
           : `Quote Ready: $${nextQuote.grandTotal.toFixed(2)}`,
-        isTechUser
+        isTech
           ? `Tech ${currentUser.name} submitted ${nextQuote.totalLaborHours} hrs labor time for RO #${targetRO.id}. Ready for Service Advisor to review and merge with parts pricing.`
           : `Repair quote for RO #${targetRO.id} ($${nextQuote.grandTotal.toFixed(2)}: ${nextQuote.totalLaborHours} hrs labor, $${nextQuote.totalPartsCost.toFixed(2)} parts). Awaiting customer authorization.`,
         true,
@@ -5317,15 +5356,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? targetRO.concerns
       : [targetRO.primaryConcern || 'General Diagnostic & Service'];
     const recsList = targetRO.recommendations || [];
-
-    // If updating a recommendation line (lineIndex >= concernsList.length)
-    if (lineIndex >= concernsList.length) {
-      const recIdx = lineIndex - concernsList.length;
-      const targetRec = recsList[recIdx];
-      if (targetRec) {
-        updateRecommendedService(roId, targetRec.id, { laborHours: numHours });
-      }
-    }
 
     const linePayType: ConcernPayType = targetRO.concernPayTypes?.[lineIndex] || targetRO.quote?.payType || 'CUSTOMER_PAY';
     const hourlyRate = PAY_TYPE_RATES[linePayType] || targetRO.quote?.defaultLaborRate || 165.00;
