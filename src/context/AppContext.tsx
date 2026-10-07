@@ -4713,26 +4713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedRecommendations = updatedRecommendations.filter(r => !removedRecIds.has(r.id) && !possibleNames.has(r.serviceName.toLowerCase().trim()));
         updatedItem.recommendationId = undefined;
 
-        // Clean up from concerns if present (prevent removing original primary concern if not created by this inspection point)
-        if (removedRecNames.size > 0 && updatedConcerns.length > 0) {
-          const keepIndices = updatedConcerns
-            .map((c, i) => (!removedRecNames.has(c.toLowerCase().trim()) ? i : -1))
-            .filter(i => i >= 0);
-
-          if (keepIndices.length > 0 && keepIndices.length < updatedConcerns.length) {
-            updatedConcerns = keepIndices.map(i => updatedConcerns[i]);
-            if (updatedPayTypes) updatedPayTypes = keepIndices.map(i => updatedPayTypes![i]);
-            if (updatedTechIds) updatedTechIds = keepIndices.map(i => updatedTechIds![i]);
-            if (updatedTechNames) updatedTechNames = keepIndices.map(i => updatedTechNames![i]);
-            if (updatedCauses) updatedCauses = keepIndices.map(i => updatedCauses![i]);
-            if (updatedCorrections) updatedCorrections = keepIndices.map(i => updatedCorrections![i]);
-            if (updatedStatuses) updatedStatuses = keepIndices.map(i => updatedStatuses![i]);
-          } else if (keepIndices.length === 0 && targetRO.primaryConcern && !removedRecNames.has(targetRO.primaryConcern.toLowerCase().trim())) {
-            updatedConcerns = [targetRO.primaryConcern];
-          }
-        }
-
-        // Clean up from quote labor items
+        // Clean up from quote labor items if linked to this recommendation
         if (targetRO.quote?.laborItems && targetRO.quote.laborItems.length > 0 && (removedRecIds.size > 0 || removedRecNames.size > 0)) {
           const filteredLabor = targetRO.quote.laborItems.filter(l => {
             if (removedRecIds.has(l.id.replace('labor_rec_', ''))) return false;
@@ -4766,15 +4747,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedItem.status === 'IMMEDIATE_ATTENTION'
       ) {
         const urgency = 'SAFETY';
-        const recName = checklistItem?.defaultRecommendationName || updatedItem.name;
+        // Use the technician-provided concern or note, fallback to the checklist item name
+        const recName = (updatedItem.concern || updatedItem.notes || '').trim() || updatedItem.name;
         possibleNames.add(recName.toLowerCase().trim());
+        if (checklistItem?.name) possibleNames.add(checklistItem.name.toLowerCase().trim());
 
         const defaultHours = updatedItem.category === 'TIRES_WHEELS' ? 1.0 : updatedItem.category === 'BRAKES_SUSPENSION' ? 2.0 : 0.5;
 
         const recNotes = [
+          updatedItem.concern ? `Finding: ${updatedItem.concern}` : '',
           updatedItem.cause ? `Cause: ${updatedItem.cause}` : '',
           updatedItem.correction ? `Correction: ${updatedItem.correction}` : '',
-          updatedItem.notes ? `Notes: ${updatedItem.notes}` : '',
+          updatedItem.notes && updatedItem.notes !== updatedItem.concern ? `Notes: ${updatedItem.notes}` : '',
           updatedItem.measurementValue ? `Measurement: ${updatedItem.measurementValue}` : '',
         ].filter(Boolean).join(' | ');
 
@@ -4820,96 +4804,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             requestedAt: new Date().toISOString(),
           });
           updatedItem.recommendationId = newRecId;
-        }
-
-        // Single Job Line Sync: Update existing concern in place or add exactly one new concern line
-        const existingConcernIdx = updatedConcerns.findIndex(c => possibleNames.has(c.toLowerCase().trim()));
-
-        if (existingConcernIdx >= 0) {
-          // Update the existing concern line name & diagnostic findings without creating a duplicate
-          updatedConcerns[existingConcernIdx] = recName;
-          if (updatedCauses && updatedCauses[existingConcernIdx] !== undefined) {
-            updatedCauses[existingConcernIdx] = updatedItem.cause || updatedCauses[existingConcernIdx];
-          }
-          if (updatedCorrections && updatedCorrections[existingConcernIdx] !== undefined) {
-            updatedCorrections[existingConcernIdx] = updatedItem.correction || updatedCorrections[existingConcernIdx];
-          }
-        } else {
-          // Add exactly one new concern line
-          updatedConcerns.push(recName);
-          if (!updatedPayTypes) updatedPayTypes = updatedConcerns.slice(0, -1).map(() => 'CUSTOMER_PAY');
-          updatedPayTypes.push('CUSTOMER_PAY');
-          if (!updatedTechIds) updatedTechIds = updatedConcerns.slice(0, -1).map(() => targetRO.techId);
-          updatedTechIds.push(currentUser.id);
-          if (!updatedTechNames) updatedTechNames = updatedConcerns.slice(0, -1).map(() => targetRO.techName);
-          updatedTechNames.push(currentUser.name);
-          if (!updatedCauses) updatedCauses = updatedConcerns.slice(0, -1).map((_, i) => i === 0 ? (targetRO.cause || '') : '');
-          updatedCauses.push(updatedItem.cause || '');
-          if (!updatedCorrections) updatedCorrections = updatedConcerns.slice(0, -1).map((_, i) => i === 0 ? (targetRO.correction || '') : '');
-          updatedCorrections.push(updatedItem.correction || '');
-          if (!updatedStatuses) updatedStatuses = updatedConcerns.slice(0, -1).map(() => 'PENDING');
-          updatedStatuses.push('PENDING');
-        }
-
-        // Mirror into quote labor items without duplicating
-        if (updatedQuote) {
-          const targetLineNum = existingConcernIdx >= 0 ? existingConcernIdx + 1 : updatedConcerns.length;
-          const existingLabor = updatedQuote.laborItems || [];
-          const matchedLaborIdx = existingLabor.findIndex(l => 
-            l.id === `labor_rec_${activeRecId}` || 
-            (l.concernText && possibleNames.has(l.concernText.toLowerCase().trim())) ||
-            (l.description && possibleNames.has(l.description.toLowerCase().trim()))
-          );
-
-          if (matchedLaborIdx >= 0) {
-            // Update existing labor line in place
-            const updatedLaborList = [...existingLabor];
-            updatedLaborList[matchedLaborIdx] = {
-              ...updatedLaborList[matchedLaborIdx],
-              description: recName,
-              concernText: recName,
-              roLineNumber: targetLineNum,
-            };
-            updatedQuote = {
-              ...updatedQuote,
-              laborItems: updatedLaborList,
-              updatedAt: new Date().toISOString(),
-            };
-          } else {
-            // Create a single labor item for this new finding
-            const laborRate = existingLabor[0]?.hourlyRate || 150;
-            const subtotal = Number((defaultHours * laborRate).toFixed(2));
-            const newLaborItem: LaborLineItem = {
-              id: `labor_rec_${activeRecId}`,
-              description: recName,
-              concernText: recName,
-              laborHours: defaultHours,
-              hourlyRate: laborRate,
-              subtotal,
-              payType: 'CUSTOMER_PAY',
-              roLineNumber: targetLineNum,
-            };
-
-            const newLaborList = [...existingLabor, newLaborItem];
-            const totalLaborHours = Number(newLaborList.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
-            const totalLaborCost = Number(newLaborList.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
-            const totalPartsCost = Number(updatedQuote.totalPartsCost || 0);
-            const isExempt = updatedQuote.isTaxExempt || false;
-            const taxRate = isExempt ? 0 : (updatedQuote.taxRate !== undefined ? updatedQuote.taxRate : 0.07);
-            const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
-            const shopSupplies = updatedQuote.shopSuppliesFee || 0;
-            const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
-
-            updatedQuote = {
-              ...updatedQuote,
-              laborItems: newLaborList,
-              totalLaborHours,
-              totalLaborCost,
-              taxAmount,
-              grandTotal,
-              updatedAt: new Date().toISOString(),
-            };
-          }
         }
       }
 

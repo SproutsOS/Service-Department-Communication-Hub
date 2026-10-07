@@ -532,6 +532,7 @@ export interface InspectionResultItem {
   status: InspectionItemStatus;
   measurementValue?: string; // e.g. "4", "3", "35", "12.6"
   notes?: string;
+  concern?: string; // Tech-entered inspection finding concern
   cause?: string;
   correction?: string;
   laborHours?: number;

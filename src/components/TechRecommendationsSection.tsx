@@ -193,7 +193,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
     } else if (status === 'FUTURE_ATTENTION') {
       setStatusFeedback(`Marked "${item.name}" for Future Attention (Yellow) — enter advisory notes below.`);
     } else if (status === 'IMMEDIATE_ATTENTION') {
-      setStatusFeedback(`Marked "${item.name}" for Immediate Attention (Red). Added to Lines above.`);
+      setStatusFeedback(`Marked "${item.name}" for Immediate Attention (Red) — enter inspection finding concern below.`);
     } else if (status === 'NOT_APPLICABLE') {
       setStatusFeedback(`Marked "${item.name}" as N/A.`);
     }
@@ -552,6 +552,38 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                   />
                                 </div>
                               )}
+
+                              {/* In-Place Concern Input for Immediate Attention (Red) */}
+                              {isImmediate && (
+                                <div className="mt-2.5 pt-2 border-t border-red-300/80 space-y-1.5 animate-fadeIn">
+                                  <div className="flex items-center justify-between text-[11px] font-bold text-red-950">
+                                    <span className="flex items-center gap-1">
+                                      <span>🔴</span>
+                                      <span>Inspection Finding Concern (Technician Input):</span>
+                                    </span>
+                                    <span className="text-[10px] text-red-800 font-bold bg-red-100 px-1.5 py-0.5 rounded border border-red-200">
+                                      Listed as Inspection Finding
+                                    </span>
+                                  </div>
+                                  <textarea
+                                    value={result?.concern !== undefined ? result.concern : (result?.notes || '')}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setInspectionItemResult(ro.id, item.id, {
+                                        concern: val,
+                                        notes: val,
+                                        status: 'IMMEDIATE_ATTENTION',
+                                        name: item.name,
+                                        category: item.category,
+                                        measurementValue: result?.measurementValue || '',
+                                      });
+                                    }}
+                                    placeholder={`Enter technician finding / concern for ${item.name} (e.g., "Front brake pads worn to 1mm, metal contact on rotor", "Left CV axle boot torn slinging grease")...`}
+                                    rows={2}
+                                    className="w-full text-xs p-2 bg-white border-2 border-red-300 rounded-lg text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-500 shadow-2xs"
+                                  />
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -589,7 +621,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
             {recommendations.length === 0 ? (
               <div className="p-4 rounded-lg bg-white border border-dashed border-amber-300 text-center text-xs text-slate-500 space-y-1">
                 <p className="font-semibold text-slate-700">No additional issues flagged on inspection yet.</p>
-                <p className="text-[11px] text-slate-400">When the technician marks an inspection point as 🔴 Immediate or 🟡 Future Attention, the job line is automatically created on the Repair Order.</p>
+                <p className="text-[11px] text-slate-400">When the technician marks an inspection point as 🔴 Immediate Attention, an Inspection Finding is created on the Repair Order with the technician's entered concern.</p>
               </div>
             ) : (
               <div className="space-y-2.5">

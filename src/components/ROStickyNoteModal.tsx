@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Pin, 
   X, 
@@ -120,22 +120,28 @@ export const ROStickyNoteModal: React.FC = () => {
   const [selectedColor, setSelectedColor] = useState<StickyNoteColor>('yellow');
   const [isUrgent, setIsUrgent] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const lastInitializedROIdRef = useRef<string | null>(null);
 
-  // Initialize or reset form when modal opens
+  // Initialize or reset form ONLY when modal opens or target RO ID changes
   useEffect(() => {
-    if (isStickyNoteModalOpen && currentRO) {
-      if (currentRO.stickyNote) {
-        setNoteText(currentRO.stickyNote.text || '');
-        setSelectedColor(currentRO.stickyNote.color || 'yellow');
-        setIsUrgent(Boolean(currentRO.stickyNote.isUrgent));
-      } else {
-        setNoteText('');
-        setSelectedColor('yellow');
-        setIsUrgent(false);
+    if (isStickyNoteModalOpen && stickyNoteModalROId) {
+      if (lastInitializedROIdRef.current !== stickyNoteModalROId) {
+        lastInitializedROIdRef.current = stickyNoteModalROId;
+        if (currentRO?.stickyNote) {
+          setNoteText(currentRO.stickyNote.text || '');
+          setSelectedColor(currentRO.stickyNote.color || 'yellow');
+          setIsUrgent(Boolean(currentRO.stickyNote.isUrgent));
+        } else {
+          setNoteText('');
+          setSelectedColor('yellow');
+          setIsUrgent(false);
+        }
+        setShowConfirmDelete(false);
       }
-      setShowConfirmDelete(false);
+    } else {
+      lastInitializedROIdRef.current = null;
     }
-  }, [isStickyNoteModalOpen, currentRO]);
+  }, [isStickyNoteModalOpen, stickyNoteModalROId, currentRO]);
 
   if (!isStickyNoteModalOpen || !currentRO) return null;
 
