@@ -311,6 +311,7 @@ export const RepairQuoteModal: React.FC = () => {
     const concernsList = cleanRO.concerns && cleanRO.concerns.length > 0
       ? cleanRO.concerns
       : [cleanRO.primaryConcern || 'General Diagnostic & Inspection'];
+    const recsList = cleanRO.recommendations || [];
 
     // Helper to mirror RO concern and correction into a labor line
     const createMirroredROItem = (concern: string, idx: number, existing?: LaborLineItem): LaborLineItem => {
@@ -370,15 +371,52 @@ export const RepairQuoteModal: React.FC = () => {
       const q = cleanRO.quote;
       const existingItems = q.laborItems || [];
 
-      // 1. Mirror RO concerns 1-to-1
+      // 1. Mirror RO customer concerns 1-to-1
       const mirroredLabor: LaborLineItem[] = concernsList.map((concern, idx) => {
         const matched = existingItems.find(item => item.roLineNumber === idx + 1) || existingItems[idx];
         return createMirroredROItem(concern, idx, matched);
       });
 
-      // 2. Only include additional lines IF added by the service advisor!
+      // 2. Mirror inspection recommendation lines
+      const mirroredRecs: LaborLineItem[] = recsList.map((rec, rIdx) => {
+        const globalLineNum = concernsList.length + rIdx + 1;
+        const matched = existingItems.find(item => 
+          item.id === `labor_rec_${rec.id}` || 
+          item.roLineNumber === globalLineNum || 
+          (item.concernText && item.concernText.trim().toLowerCase() === rec.serviceName.trim().toLowerCase())
+        );
+
+        const recPayType = matched?.payType || rec.payType || initialPayType;
+        const recRate = (matched?.hourlyRate && matched.hourlyRate !== 150)
+          ? matched.hourlyRate
+          : (PAY_TYPE_RATES[recPayType] || initialRate);
+
+        const hoursVal = (matched?.laborHours !== undefined && matched.laborHours !== ('' as any))
+          ? matched.laborHours
+          : (rec.laborHours !== undefined && rec.laborHours !== 0 ? rec.laborHours : ('' as any));
+
+        const subtotalVal = hoursVal !== '' ? Number(((Number(hoursVal) || 0) * recRate).toFixed(2)) : 0;
+        const recCorrection = rec.correction || cleanRO.concernCorrections?.[globalLineNum - 1] || parseLineFromCombinedText(cleanRO.correction, globalLineNum) || `Perform ${rec.serviceName}`;
+        const causeNotes = rec.cause ? `Cause: ${rec.cause}` : (cleanRO.concernCauses?.[globalLineNum - 1] ? `Cause: ${cleanRO.concernCauses[globalLineNum - 1]}` : '');
+
+        return {
+          id: matched?.id || `labor_rec_${rec.id}`,
+          description: matched?.description || recCorrection,
+          laborHours: hoursVal,
+          hourlyRate: recRate,
+          subtotal: subtotalVal,
+          payType: recPayType,
+          techNotes: causeNotes || matched?.techNotes || undefined,
+          roLineNumber: globalLineNum,
+          concernText: rec.serviceName,
+          correctionText: recCorrection,
+          addedByAdvisor: false,
+        };
+      });
+
+      // 3. Only include additional lines IF added by the service advisor!
       const advisorAddedLines: LaborLineItem[] = existingItems
-        .filter(item => item.addedByAdvisor === true)
+        .filter(item => item.addedByAdvisor === true && (!item.roLineNumber || item.roLineNumber > concernsList.length + recsList.length))
         .map(item => {
           const itemPay = item.payType || initialPayType;
           const itemRate = (item.hourlyRate && item.hourlyRate !== 150)
@@ -393,7 +431,7 @@ export const RepairQuoteModal: React.FC = () => {
           };
         });
 
-      setLaborItems([...mirroredLabor, ...advisorAddedLines]);
+      setLaborItems([...mirroredLabor, ...mirroredRecs, ...advisorAddedLines]);
 
       // Bring parts information from Parts Department together on the quote
       const existingQuoteParts: QuotePartItem[] = (q.partsItems || []).map(p => ({
@@ -445,12 +483,40 @@ export const RepairQuoteModal: React.FC = () => {
         const lineNum = idx + 1;
         initialStatuses[lineNum] = q.lineStatuses?.[lineNum] || cleanRO.concernStatuses?.[idx] || 'PENDING';
       });
+      recsList.forEach((rec, rIdx) => {
+        const lineNum = concernsList.length + rIdx + 1;
+        initialStatuses[lineNum] = q.lineStatuses?.[lineNum] || (rec.status === 'APPROVED' ? 'APPROVED' : rec.status === 'DECLINED' ? 'DECLINED' : 'PENDING');
+      });
       setLineStatuses(initialStatuses);
       setTaxRatePercent(isExemptCustomer ? 0 : (q.taxRate !== undefined ? q.taxRate * 100 : 7.0));
       setTechNotes(q.techNotes || (cleanRO.correction ? `Correction: ${cleanRO.correction}` : ''));
     } else {
       // Initiating a brand new quote — auto-populate customer concern and correction mirroring RO 1-to-1
-      const initialLabor: LaborLineItem[] = concernsList.map((concern, idx) => createMirroredROItem(concern, idx));
+      const initialLabor: LaborLineItem[] = [
+        ...concernsList.map((concern, idx) => createMirroredROItem(concern, idx)),
+        ...recsList.map((rec, rIdx) => {
+          const globalLineNum = concernsList.length + rIdx + 1;
+          const recPayType = rec.payType || initialPayType;
+          const recRate = PAY_TYPE_RATES[recPayType] || initialRate;
+          const recHoursVal = (rec.laborHours !== undefined && rec.laborHours !== 0) ? rec.laborHours : ('' as any);
+          const recSubtotal = recHoursVal !== '' ? Number(((Number(recHoursVal) || 0) * recRate).toFixed(2)) : 0;
+          const recCorrection = rec.correction || `Perform ${rec.serviceName}`;
+          const causeNotes = rec.cause ? `Cause: ${rec.cause}` : '';
+          return {
+            id: `labor_rec_${rec.id}`,
+            description: recCorrection,
+            laborHours: recHoursVal,
+            hourlyRate: recRate,
+            subtotal: recSubtotal,
+            payType: recPayType,
+            techNotes: causeNotes || undefined,
+            roLineNumber: globalLineNum,
+            concernText: rec.serviceName,
+            correctionText: recCorrection,
+            addedByAdvisor: false,
+          };
+        }),
+      ];
       setLaborItems(initialLabor);
 
       // Pre-populate parts from existing RO parts if any exist
@@ -477,6 +543,10 @@ export const RepairQuoteModal: React.FC = () => {
       concernsList.forEach((_, idx) => {
         const lineNum = idx + 1;
         initialStatuses[lineNum] = cleanRO.concernStatuses?.[idx] || 'PENDING';
+      });
+      recsList.forEach((rec, rIdx) => {
+        const lineNum = concernsList.length + rIdx + 1;
+        initialStatuses[lineNum] = (rec.status === 'APPROVED' ? 'APPROVED' : rec.status === 'DECLINED' ? 'DECLINED' : 'PENDING');
       });
       setLineStatuses(initialStatuses);
       setTaxRatePercent(isExemptCustomer ? 0 : 7.0);
@@ -1538,13 +1608,15 @@ export const RepairQuoteModal: React.FC = () => {
                       {/* Mirrored Concern & Correction Display when from RO */}
                       {isMirroredROLine && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-300">
-                          {/* 1. Customer Stated Complaint */}
+                          {/* 1. Customer Stated Complaint or Inspection Finding */}
                           <div className="space-y-0.5">
                             <span className="text-[10px] font-black text-slate-950 uppercase tracking-wider block">
-                              1. Customer Complaint:
+                              {roLineNum > (cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0)) ? '1. Inspection Finding:' : '1. Customer Complaint:'}
                             </span>
                             <p className="font-bold text-slate-950 text-xs leading-snug">
-                              {item.concernText || cleanRO.concerns?.[roLineNum - 1] || cleanRO.primaryConcern}
+                              {item.concernText || (roLineNum > (cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0)) 
+                                ? cleanRO.recommendations?.[roLineNum - (cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0)) - 1]?.serviceName 
+                                : (cleanRO.concerns?.[roLineNum - 1] || cleanRO.primaryConcern))}
                             </p>
                           </div>
 
@@ -1554,9 +1626,18 @@ export const RepairQuoteModal: React.FC = () => {
                               2. Cause:
                             </span>
                             <p className="font-bold text-amber-950 text-xs leading-snug font-mono">
-                              {cleanRO.concernCauses?.[roLineNum - 1] || parseLineFromCombinedText(cleanRO.cause, roLineNum) || (
-                                <span className="italic text-slate-800 font-sans font-medium">Pending diagnosis</span>
-                              )}
+                              {(() => {
+                                const baseCount = cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0);
+                                if (roLineNum > baseCount) {
+                                  const matchingRec = cleanRO.recommendations?.[roLineNum - baseCount - 1];
+                                  return matchingRec?.cause || cleanRO.concernCauses?.[roLineNum - 1] || (
+                                    <span className="italic text-slate-800 font-sans font-medium">Pending diagnosis</span>
+                                  );
+                                }
+                                return cleanRO.concernCauses?.[roLineNum - 1] || parseLineFromCombinedText(cleanRO.cause, roLineNum) || (
+                                  <span className="italic text-slate-800 font-sans font-medium">Pending diagnosis</span>
+                                );
+                              })()}
                             </p>
                           </div>
 

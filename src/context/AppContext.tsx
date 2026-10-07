@@ -4326,10 +4326,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let updatedStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : undefined;
       let updatedQuote = targetRO.quote;
 
+      const baseConcernsCount = (updatedConcerns && updatedConcerns.length > 0) 
+        ? updatedConcerns.length 
+        : (targetRO.primaryConcern ? 1 : 0);
+      const recIndex = updatedRecs.findIndex(r => r.id === recId);
+      const globalLineNum = recIndex >= 0 ? baseConcernsCount + recIndex + 1 : 1;
+
       if (recNameLower && updatedConcerns && updatedConcerns.length > 0) {
         const cIdx = updatedConcerns.findIndex(c => c.trim().toLowerCase() === recNameLower);
         if (cIdx >= 0) {
-          const lineNum = cIdx + 1;
           if (updates.status && updatedStatuses) {
             updatedStatuses[cIdx] = updates.status === 'APPROVED' ? 'APPROVED' : updates.status === 'DECLINED' ? 'DECLINED' : 'PENDING';
           }
@@ -4342,52 +4347,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (updates.payType && updatedPayTypes) {
             updatedPayTypes[cIdx] = updates.payType;
           }
-
-          if (updatedQuote) {
-            const updatedLineStatuses = { ...(updatedQuote.lineStatuses || {}) };
-            if (updates.status) {
-              updatedLineStatuses[lineNum] = updates.status === 'APPROVED' ? 'APPROVED' : updates.status === 'DECLINED' ? 'DECLINED' : 'PENDING';
-            }
-
-            let updatedLabor = updatedQuote.laborItems ? [...updatedQuote.laborItems] : [];
-            const lIdx = updatedLabor.findIndex(l => l.id === `labor_rec_${recId}` || (l.concernText && l.concernText.trim().toLowerCase() === recNameLower));
-            if (lIdx >= 0 && updates.laborHours !== undefined) {
-              const hourlyRate = updatedLabor[lIdx].hourlyRate || 150;
-              const subtotal = Number((Number(updates.laborHours) * hourlyRate).toFixed(2));
-              updatedLabor[lIdx] = {
-                ...updatedLabor[lIdx],
-                laborHours: Number(updates.laborHours),
-                subtotal,
-                payType: updates.payType || updatedLabor[lIdx].payType,
-              };
-
-              const totalLaborHours = Number(updatedLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
-              const totalLaborCost = Number(updatedLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
-              const totalPartsCost = Number(updatedQuote.totalPartsCost || 0);
-              const isExempt = updatedQuote.isTaxExempt || false;
-              const taxRate = isExempt ? 0 : (updatedQuote.taxRate !== undefined ? updatedQuote.taxRate : 0.07);
-              const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
-              const shopSupplies = updatedQuote.shopSuppliesFee || 0;
-              const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
-
-              updatedQuote = {
-                ...updatedQuote,
-                lineStatuses: updatedLineStatuses,
-                laborItems: updatedLabor,
-                totalLaborHours,
-                totalLaborCost,
-                taxAmount,
-                grandTotal,
-                updatedAt: new Date().toISOString(),
-              };
-            } else {
-              updatedQuote = {
-                ...updatedQuote,
-                lineStatuses: updatedLineStatuses,
-              };
-            }
-          }
         }
+      }
+
+      if (updatedQuote) {
+        const updatedLineStatuses = { ...(updatedQuote.lineStatuses || {}) };
+        if (updates.status) {
+          updatedLineStatuses[globalLineNum] = updates.status === 'APPROVED' ? 'APPROVED' : updates.status === 'DECLINED' ? 'DECLINED' : 'PENDING';
+        }
+
+        let updatedLabor = updatedQuote.laborItems ? [...updatedQuote.laborItems] : [];
+        const lIdx = updatedLabor.findIndex(l => 
+          l.id === `labor_rec_${recId}` || 
+          l.roLineNumber === globalLineNum || 
+          (l.concernText && l.concernText.trim().toLowerCase() === recNameLower)
+        );
+
+        const targetRecObj = updatedRecs.find(r => r.id === recId);
+        const hourlyRate = (lIdx >= 0 && updatedLabor[lIdx].hourlyRate) || 165.00;
+        const currentHours = updates.laborHours !== undefined ? Number(updates.laborHours) : (targetRecObj?.laborHours || (lIdx >= 0 ? updatedLabor[lIdx].laborHours : 0));
+        const subtotal = Number(((Number(currentHours) || 0) * hourlyRate).toFixed(2));
+        const corrText = updates.correction !== undefined ? updates.correction : (targetRecObj?.correction || (lIdx >= 0 ? updatedLabor[lIdx].correctionText : ''));
+        const causeNotes = updates.cause !== undefined ? `Cause: ${updates.cause}` : (targetRecObj?.cause ? `Cause: ${targetRecObj.cause}` : '');
+
+        if (lIdx >= 0) {
+          updatedLabor[lIdx] = {
+            ...updatedLabor[lIdx],
+            roLineNumber: globalLineNum,
+            description: corrText || updatedLabor[lIdx].description || targetRecObj?.serviceName || 'Inspection Finding',
+            correctionText: corrText,
+            techNotes: causeNotes || updatedLabor[lIdx].techNotes,
+            laborHours: Number(currentHours) || 0,
+            hourlyRate,
+            subtotal,
+            payType: updates.payType || updatedLabor[lIdx].payType || targetRecObj?.payType || 'CUSTOMER_PAY',
+          };
+        } else if (targetRecObj) {
+          updatedLabor.push({
+            id: `labor_rec_${recId}`,
+            description: corrText || targetRecObj.serviceName,
+            laborHours: Number(currentHours) || 0,
+            hourlyRate,
+            subtotal,
+            payType: updates.payType || targetRecObj.payType || 'CUSTOMER_PAY',
+            roLineNumber: globalLineNum,
+            concernText: targetRecObj.serviceName,
+            correctionText: corrText,
+            techNotes: causeNotes || undefined,
+            addedByAdvisor: false,
+          });
+        }
+
+        const totalLaborHours = Number(updatedLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+        const totalLaborCost = Number(updatedLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+        const totalPartsCost = Number(updatedQuote.totalPartsCost || 0);
+        const isExempt = updatedQuote.isTaxExempt || false;
+        const taxRate = isExempt ? 0 : (updatedQuote.taxRate !== undefined ? updatedQuote.taxRate : 0.07);
+        const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
+        const shopSupplies = updatedQuote.shopSuppliesFee || 0;
+        const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
+
+        updatedQuote = {
+          ...updatedQuote,
+          lineStatuses: updatedLineStatuses,
+          laborItems: updatedLabor,
+          totalLaborHours,
+          totalLaborCost,
+          taxAmount,
+          grandTotal,
+          updatedAt: new Date().toISOString(),
+        };
       }
 
       const updatedRO: RepairOrder = {
@@ -4766,6 +4795,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (existingRecIdx >= 0) {
           activeRecId = updatedRecommendations[existingRecIdx].id;
+          const existingLaborHours = updatedRecommendations[existingRecIdx].laborHours;
           updatedRecommendations[existingRecIdx] = {
             ...updatedRecommendations[existingRecIdx],
             serviceName: recName,
@@ -4773,6 +4803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             notes: recNotes || updatedRecommendations[existingRecIdx].notes,
             cause: updatedItem.cause || updatedRecommendations[existingRecIdx].cause || '',
             correction: updatedItem.correction || updatedRecommendations[existingRecIdx].correction || '',
+            laborHours: existingLaborHours !== undefined ? existingLaborHours : 0,
             inspectionItemId: itemId,
           };
           updatedItem.recommendationId = activeRecId;
@@ -4788,7 +4819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             notes: recNotes || undefined,
             cause: updatedItem.cause || '',
             correction: updatedItem.correction || '',
-            laborHours: defaultHours,
+            laborHours: 0,
             payType: 'CUSTOMER_PAY',
             inspectionItemId: itemId,
             status: 'PENDING',

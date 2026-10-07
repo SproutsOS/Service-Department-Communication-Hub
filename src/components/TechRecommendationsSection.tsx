@@ -7,10 +7,7 @@ import {
 } from '../types';
 import { useApp } from '../context/AppContext';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
-import { TechPartsRequestModal } from './TechDashboard';
 import { InspectionPrintModal } from './InspectionPrintModal';
-import { LinePartsSection } from './LinePartsSection';
-import { LinePhotoSection } from './LinePhotoSection';
 import { 
   CheckCircle, 
   CheckCircle2,
@@ -127,10 +124,6 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
   const totalInspected = passedCount + attentionCount + safetyCount + naCount;
   const isInspectionComplete = totalChecklistCount > 0 && totalInspected >= totalChecklistCount;
 
-  // Internal parts modal state (if onRequestParts is not provided externally)
-  const [internalPartsRO, setInternalPartsRO] = useState<RepairOrder | null>(null);
-  const [internalPartsLine, setInternalPartsLine] = useState<{ index?: number; text?: string }>({});
-
   // Helper to find all recommendations matching an inspection item
   const findMatchingRecs = (itemId: string, item: InspectionChecklistItem) => {
     const recName = (item.defaultRecommendationName || '').toLowerCase().trim();
@@ -167,6 +160,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
   // 21-Point Inspection Checklist Item Status change
   const handleSetInspectionStatus = (item: InspectionChecklistItem, status: InspectionItemStatus) => {
     const existing = inspectionItemsMap[item.id];
+    const existingConcern = existing?.concern || existing?.notes || '';
 
     setInspectionItemResult(ro.id, item.id, {
       status,
@@ -174,16 +168,34 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
       category: item.category,
       measurementValue: existing?.measurementValue || '',
       notes: status === 'PASSED' || status === 'NOT_APPLICABLE' ? '' : (existing?.notes || ''),
+      concern: status === 'IMMEDIATE_ATTENTION' ? existingConcern : undefined,
     });
 
-    if (status === 'PASSED') {
-      setStatusFeedback(`Marked "${item.name}" as Checked & OK.`);
-    } else if (status === 'FUTURE_ATTENTION') {
-      setStatusFeedback(`Marked "${item.name}" for Future Attention (Yellow) — enter advisory notes below.`);
-    } else if (status === 'IMMEDIATE_ATTENTION') {
-      setStatusFeedback(`Marked "${item.name}" for Immediate Attention (Red) — enter inspection finding concern below.`);
-    } else if (status === 'NOT_APPLICABLE') {
-      setStatusFeedback(`Marked "${item.name}" as N/A.`);
+    const matchingRec = findLinkedRec(item.id, item);
+
+    if (status === 'IMMEDIATE_ATTENTION') {
+      if (!matchingRec) {
+        addRecommendedService(ro.id, {
+          serviceName: existingConcern.trim() ? `${item.name}: ${existingConcern.trim()}` : item.name,
+          inspectionItemId: item.id,
+          urgency: 'SAFETY',
+          payType: 'CUSTOMER_PAY',
+          laborHours: 0,
+          notes: existingConcern,
+        });
+      }
+      setStatusFeedback(`Marked "${item.name}" for Immediate Concern (Red) — added to Job Lines.`);
+    } else {
+      if (matchingRec) {
+        deleteRecommendedService(ro.id, matchingRec.id);
+      }
+      if (status === 'PASSED') {
+        setStatusFeedback(`Marked "${item.name}" as Checked & OK.`);
+      } else if (status === 'FUTURE_ATTENTION') {
+        setStatusFeedback(`Marked "${item.name}" for Future Attention (Yellow) — enter advisory notes below.`);
+      } else if (status === 'NOT_APPLICABLE') {
+        setStatusFeedback(`Marked "${item.name}" as N/A.`);
+      }
     }
     setTimeout(() => setStatusFeedback(null), 3000);
   };
@@ -565,6 +577,13 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                         category: item.category,
                                         measurementValue: result?.measurementValue || '',
                                       });
+                                      const matchingRec = findLinkedRec(item.id, item);
+                                      if (matchingRec) {
+                                        updateRecommendedService(ro.id, matchingRec.id, {
+                                          serviceName: val.trim() ? `${item.name}: ${val.trim()}` : item.name,
+                                          notes: val,
+                                        });
+                                      }
                                     }}
                                     placeholder={`Enter technician finding / concern for ${item.name} (e.g., "Front brake pads worn to 1mm, metal contact on rotor", "Left CV axle boot torn slinging grease")...`}
                                     rows={2}
@@ -582,180 +601,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
               </div>
             )}
           </div>
-
-          {/* ========================================================================= */}
-          {/* 2. REQUESTED SERVICES & 21-POINT INSPECTION FINDINGS (JOB LINES SUMMARY) */}
-          {/* ========================================================================= */}
-          <div className="rounded-xl border-2 border-amber-400 bg-amber-50/40 p-3.5 space-y-3 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 pb-2.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
-                  <Wrench className="w-4 h-4 text-amber-700" />
-                  <span>Inspection Findings & Job Lines Created ({recommendations.length})</span>
-                </span>
-                {pendingCount > 0 && (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
-                    {pendingCount} Awaiting Authorization
-                  </span>
-                )}
-                {approvedCount > 0 && (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">
-                    {approvedCount} Authorized
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {recommendations.length === 0 ? (
-              <div className="p-4 rounded-lg bg-white border border-dashed border-amber-300 text-center text-xs text-slate-500 space-y-1">
-                <p className="font-semibold text-slate-700">No additional issues flagged on inspection yet.</p>
-                <p className="text-[11px] text-slate-400">When the technician marks an inspection point as 🔴 Immediate Attention, an Inspection Finding is created on the Repair Order with the technician's entered concern.</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {recommendations.map((rec, recIdx) => {
-                  const checkItem = effectiveChecklist.find(i => i.id === rec.inspectionItemId);
-                  const linkedLine = checkItem 
-                    ? findLinkedLineNumber(checkItem.id, checkItem) 
-                    : findLinkedLineNumber(rec.id, { id: rec.id, name: rec.serviceName, category: 'UNDER_HOOD', order: 1 });
-                  const globalLineNum = linkedLine > 0 ? linkedLine : (baseConcernsCount + recIdx + 1);
-                  const isImmediate = rec.urgency === 'SAFETY';
-                  const recPayType = rec.payType || 'CUSTOMER_PAY';
-                  const recStatus = rec.status || 'PENDING';
-
-                  return (
-                    <div 
-                      key={rec.id}
-                      className={`rounded-xl border-2 transition-all p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs bg-white ${
-                        recStatus === 'APPROVED'
-                          ? 'border-emerald-400 ring-1 ring-emerald-300'
-                          : recStatus === 'DECLINED'
-                          ? 'border-rose-300 bg-rose-50/20'
-                          : isImmediate
-                          ? 'border-red-400 ring-1 ring-red-300'
-                          : 'border-amber-300'
-                      }`}
-                    >
-                      {/* Left: Line badge, finding name, severity, tech */}
-                      <div className="flex items-center gap-2.5 flex-wrap min-w-0 flex-1">
-                        <span className="font-mono text-xs font-black px-2.5 py-1 rounded-md bg-slate-900 text-white shadow-2xs shrink-0">
-                          Line {globalLineNum}
-                        </span>
-
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-xs text-slate-900 break-words">
-                              {rec.serviceName}
-                            </span>
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border shadow-2xs flex items-center gap-1 ${
-                              isImmediate
-                                ? 'bg-red-100 text-red-950 border-red-300'
-                                : 'bg-amber-100 text-amber-950 border-amber-300'
-                            }`}>
-                              <AlertTriangle className="w-3 h-3" />
-                              <span>{isImmediate ? '🔴 Immediate Concern' : '🟡 Future Attention'}</span>
-                            </span>
-                            {recStatus === 'APPROVED' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                                <span>Approved</span>
-                              </span>
-                            ) : recStatus === 'DECLINED' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
-                                <XCircle className="w-3 h-3 text-rose-700" />
-                                <span>Declined</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-950 border border-purple-300 shadow-2xs">
-                                <Clock className="w-3 h-3 text-purple-700" />
-                                <span>Waiting on Approval</span>
-                              </span>
-                            )}
-                          </div>
-
-                          {(rec.cause || rec.correction) && (
-                            <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-2 flex-wrap">
-                              {rec.cause && <span>Cause: <strong className="font-mono text-amber-900">{rec.cause}</strong></span>}
-                              {rec.correction && <span>• Correction: <strong className="font-mono text-emerald-900">{rec.correction}</strong></span>}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Actions */}
-                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-center flex-wrap">
-                        {/* Request Parts for this line */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (onRequestParts) {
-                              onRequestParts(globalLineNum - 1, rec.serviceName);
-                            } else {
-                              setInternalPartsRO(ro);
-                              setInternalPartsLine({ index: globalLineNum - 1, text: rec.serviceName });
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                          title="Request parts for this line"
-                        >
-                          <Package className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Request Parts</span>
-                        </button>
-
-                        {/* Approve / Reset Toggle */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = recStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
-                            updateRecommendedService(ro.id, rec.id, { status: next });
-                            setStatusFeedback(next === 'APPROVED' ? `✓ Authorized Line ${globalLineNum}: ${rec.serviceName}` : `Reset Line ${globalLineNum} to Pending`);
-                            setTimeout(() => setStatusFeedback(null), 3000);
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer border ${
-                            recStatus === 'APPROVED'
-                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
-                              : 'bg-white text-slate-700 border-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-400'
-                          }`}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{recStatus === 'APPROVED' ? 'Approved ✓' : 'Authorize'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`Remove inspection recommendation for "${rec.serviceName}"?`)) {
-                              deleteRecommendedService(ro.id, rec.id);
-                              setStatusFeedback(`Removed "${rec.serviceName}"`);
-                              setTimeout(() => setStatusFeedback(null), 3000);
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                          title="Delete recommendation line"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
-      )}
-
-      {/* Internal Parts Request Modal Fallback (when opened directly inside this component) */}
-      {internalPartsRO && (
-        <TechPartsRequestModal
-          ro={internalPartsRO}
-          lineIndex={internalPartsLine.index}
-          lineText={internalPartsLine.text}
-          onClose={() => {
-            setInternalPartsRO(null);
-            setInternalPartsLine({});
-          }}
-        />
       )}
 
       {/* Official Printable 21-Point Inspection & Recommendations Modal */}
