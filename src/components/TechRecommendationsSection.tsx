@@ -154,23 +154,11 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
 
   // Helper to find exact concern line index for an inspection item
   const findLinkedLineNumber = (itemId: string, item: InspectionChecklistItem): number => {
-    const recName = (item.defaultRecommendationName || '').toLowerCase().trim();
-    const itemName = item.name.toLowerCase().trim();
-    
-    if (ro.concerns && ro.concerns.length > 0) {
-      const idx = ro.concerns.findIndex(c => {
-        const cLower = c.toLowerCase().trim();
-        return (recName && (cLower === recName || cLower.includes(recName) || recName.includes(cLower))) ||
-               (itemName && (cLower === itemName || cLower.includes(itemName) || itemName.includes(cLower)));
-      });
-      if (idx >= 0) return idx + 1;
-    }
-
     const matchingRec = findLinkedRec(itemId, item);
     if (matchingRec) {
       const recIdx = recommendations.findIndex(r => r.id === matchingRec.id);
       if (recIdx >= 0) {
-        return (ro.concerns?.length || 1);
+        return baseConcernsCount + recIdx + 1;
       }
     }
     return -1;
@@ -244,11 +232,11 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                 {totalInspected} of {totalChecklistCount} Inspected
               </span>
 
-              {/* Safety & Attention Badges */}
+              {/* Immediate & Attention Badges */}
               {safetyCount > 0 && (
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-red-600" />
-                  {safetyCount} Safety
+                  {safetyCount} Immediate
                 </span>
               )}
 
@@ -342,7 +330,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                   <span>21-Point Vehicle Multi-Point Inspection Sheet (MPI)</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                  {passedCount} OK • {attentionCount} Attention • {safetyCount} Safety
+                  {passedCount} OK • {attentionCount} Attention • {safetyCount} Immediate
                 </span>
               </div>
 
@@ -500,7 +488,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                         ? 'bg-red-600 text-white border-2 border-red-700 shadow-md font-black ring-2 ring-red-400 scale-[1.03]'
                                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-red-50 hover:border-red-400 font-bold shadow-2xs'
                                     }`}
-                                    title="Immediate safety or mechanical concern (Creates active RO Line & parts request)"
+                                    title="Immediate concern (Creates active RO Line & parts request)"
                                   >
                                     <span>🔴</span>
                                     <span>Immediate</span>
@@ -630,7 +618,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                   const linkedLine = checkItem 
                     ? findLinkedLineNumber(checkItem.id, checkItem) 
                     : findLinkedLineNumber(rec.id, { id: rec.id, name: rec.serviceName, category: 'UNDER_HOOD', order: 1 });
-                  const globalLineNum = linkedLine > 0 ? linkedLine : (recIdx + 2);
+                  const globalLineNum = linkedLine > 0 ? linkedLine : (baseConcernsCount + recIdx + 1);
                   const isImmediate = rec.urgency === 'SAFETY';
                   const recPayType = rec.payType || 'CUSTOMER_PAY';
                   const recStatus = rec.status || 'PENDING';
@@ -665,7 +653,7 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                 : 'bg-amber-100 text-amber-950 border-amber-300'
                             }`}>
                               <AlertTriangle className="w-3 h-3" />
-                              <span>{isImmediate ? '🔴 Immediate Safety' : '🟡 Future Attention'}</span>
+                              <span>{isImmediate ? '🔴 Immediate Concern' : '🟡 Future Attention'}</span>
                             </span>
                             {recStatus === 'APPROVED' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">

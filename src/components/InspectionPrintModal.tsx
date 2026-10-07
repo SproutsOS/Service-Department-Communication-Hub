@@ -74,6 +74,10 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
   const inspectionMap = ro.inspection?.items || {};
   const recommendations = ro.recommendations || [];
 
+  const baseConcernsCount = (ro.concerns && ro.concerns.length > 0)
+    ? ro.concerns.length
+    : (ro.primaryConcern ? 1 : 0);
+
   // Helper to get matching recommendation if any
   const findLinkedRec = (item: InspectionChecklistItem) => {
     const itemId = item.id;
@@ -189,7 +193,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
       `INSPECTION SCORECARD:`,
       `  • Passed / OK: ${passedCount}`,
       `  • Future Attention: ${attentionCount}`,
-      `  • Immediate Safety: ${safetyCount}`,
+      `  • Immediate Concern: ${safetyCount}`,
       `======================================================`,
       `CHECKLIST FINDINGS:`,
     ];
@@ -214,8 +218,8 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
       lines.push(`\n======================================================`);
       lines.push(`RECOMMENDED SERVICES & ESTIMATED LABOR (LINES):`);
       recommendations.forEach((rec, idx) => {
-        lines.push(`\nLINE ${idx + 1}: ${rec.serviceName}`);
-        lines.push(`  Priority: ${rec.urgency === 'SAFETY' ? 'Immediate Safety Concern' : 'Recommended Maintenance'}`);
+        lines.push(`\nLINE ${baseConcernsCount + idx + 1}: ${rec.serviceName}`);
+        lines.push(`  Priority: ${rec.urgency === 'SAFETY' ? 'Immediate Concern' : 'Recommended Maintenance'}`);
         lines.push(`  Status: ${rec.status === 'APPROVED' ? 'Customer Authorized' : rec.status === 'DECLINED' ? 'Declined' : 'Awaiting Authorization'}`);
         if (rec.laborHours) lines.push(`  Labor Hours: ${rec.laborHours} hrs`);
         if (rec.cause) lines.push(`  Cause: ${rec.cause}`);
@@ -384,7 +388,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                   🟡 {attentionCount} Future Attention
                 </span>
                 <span className="px-2 py-0.5 rounded bg-red-100 text-red-900 border border-red-300">
-                  🔴 {safetyCount} Immediate Safety
+                  🔴 {safetyCount} Immediate Concern{safetyCount === 1 ? '' : 's'}
                 </span>
                 {naCount > 0 && (
                   <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 border border-slate-300">
@@ -486,7 +490,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                         <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-200 pb-1.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-black px-2 py-0.5 bg-slate-900 text-white rounded text-xs uppercase">
-                              Line {idx + 1}
+                              Line {baseConcernsCount + idx + 1}
                             </span>
                             <span className="font-black text-slate-900 text-sm">
                               {rec.serviceName}
@@ -494,7 +498,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                             <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
                               rec.urgency === 'SAFETY' ? 'bg-red-100 text-red-800 border-red-300' : 'bg-blue-50 text-blue-800 border-blue-200'
                             }`}>
-                              {rec.urgency === 'SAFETY' ? '⚠️ Immediate Safety' : '🛡️ Recommended'}
+                              {rec.urgency === 'SAFETY' ? '⚠️ Immediate Concern' : '🛡️ Recommended'}
                             </span>
                             <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
                               {rec.payType === 'WARRANTY' ? 'Warranty' : rec.payType === 'INTERNAL' ? 'Internal' : rec.payType === 'EXTENDED_WARRANTY' ? 'Extended Warranty' : 'Customer Pay'}
@@ -675,7 +679,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
           <div className="flex items-center gap-3">
             <span>🟢 {passedCount} OK</span>
             <span>🟡 {attentionCount} Attention</span>
-            <span>🔴 {safetyCount} Immediate Safety</span>
+            <span>🔴 {safetyCount} Immediate Concern{safetyCount === 1 ? '' : 's'}</span>
             {naCount > 0 && <span>⚪ {naCount} N/A</span>}
           </div>
         </div>
@@ -756,7 +760,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                 {recommendations.map((rec, idx) => (
                   <tr key={rec.id || idx} className="border-b border-black/40">
                     <td className="py-1.5 px-2 font-mono font-black text-center border-r border-black/40">
-                      Line {idx + 1}
+                      Line {baseConcernsCount + idx + 1}
                     </td>
                     <td className="py-1.5 px-2 border-r border-black/40">
                       <div className="font-black text-black">{rec.serviceName}</div>
@@ -772,7 +776,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                       )}
                     </td>
                     <td className="py-1.5 px-2 font-mono font-bold text-[10px] uppercase border-r border-black/40">
-                      {rec.urgency === 'SAFETY' ? '⚠️ IMMEDIATE' : 'RECOMMENDED'}
+                      {rec.urgency === 'SAFETY' ? '⚠️ IMMEDIATE CONCERN' : 'RECOMMENDED'}
                     </td>
                     <td className="py-1.5 px-2 font-mono font-bold text-center border-r border-black/40">
                       {rec.laborHours !== undefined ? `${rec.laborHours} hrs` : '--'}

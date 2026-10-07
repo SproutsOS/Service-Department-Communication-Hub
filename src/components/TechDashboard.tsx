@@ -1667,7 +1667,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           : 'bg-amber-100 text-amber-800 border-amber-300'
                       }`}>
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>{rec.urgency === 'SAFETY' ? 'Immediate Safety Hazard' : 'Recommended'}</span>
+                        <span>{rec.urgency === 'SAFETY' ? 'Immediate Concern' : 'Recommended'}</span>
                       </span>
 
                       {/* Documentation Status Badge */}

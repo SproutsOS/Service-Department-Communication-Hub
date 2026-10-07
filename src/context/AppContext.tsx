@@ -4285,7 +4285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerNotification(
         syncedRO,
         `Tech Rec: ${(createdRec as RecommendedService).serviceName}`,
-        `Tech ${currentUser.name} requested "${(createdRec as RecommendedService).serviceName}" (${(createdRec as RecommendedService).urgency === 'SAFETY' ? 'Immediate Safety Concern' : 'Recommended Maintenance'}). Advisor authorization needed.`,
+        `Tech ${currentUser.name} requested "${(createdRec as RecommendedService).serviceName}" (${(createdRec as RecommendedService).urgency === 'SAFETY' ? 'Immediate Concern' : 'Recommended Maintenance'}). Advisor authorization needed.`,
         (createdRec as RecommendedService).urgency === 'SAFETY',
         'RECOMMENDED_SERVICE'
       );

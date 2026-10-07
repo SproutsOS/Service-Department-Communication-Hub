@@ -2187,7 +2187,7 @@ export const RepairQuoteModal: React.FC = () => {
                   </div>
                   <textarea
                     rows={3}
-                    placeholder="Explain findings, why parts are needed, warranty details (e.g. 12mo/12k mile warranty), or any secondary safety concerns observed during inspection..."
+                    placeholder="Explain findings, why parts are needed, warranty details (e.g. 12mo/12k mile warranty), or any secondary immediate concerns observed during inspection..."
                     value={techNotes}
                     onChange={(e) => setTechNotes(e.target.value)}
                     className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-950 placeholder:text-slate-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"

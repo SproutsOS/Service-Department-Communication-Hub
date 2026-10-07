@@ -26,6 +26,16 @@ import { printIsolatedDocument } from '../utils/printUtils';
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
 
+interface UnifiedJobLine {
+  lineNum: number;
+  title: string;
+  type: 'CUSTOMER_CONCERN' | 'INSPECTION_FINDING';
+  payType: string;
+  cause: string;
+  correction: string;
+  notes?: string;
+}
+
 export const WarrantyPrintModal: React.FC = () => {
   const { 
     activeWarrantyPrintRO, 
@@ -82,14 +92,64 @@ export const WarrantyPrintModal: React.FC = () => {
   const totalHoursInt = Math.floor(totalMinutes / 60);
   const totalMinsInt = totalMinutes % 60;
 
-  const displayConcerns = (ro.concerns && ro.concerns.length > 0) 
+  const baseConcerns = (ro.concerns && ro.concerns.length > 0) 
     ? ro.concerns 
     : (ro.primaryConcern ? [ro.primaryConcern] : ['Customer reported vehicle performance concern']);
+
+  const recommendations = ro.recommendations || [];
+
+  // Unified list of all jobs on this RO (Customer Complaints + Inspection Findings) in strict sequential order
+  const jobLines: UnifiedJobLine[] = [
+    ...baseConcerns.map((concern, idx) => ({
+      lineNum: idx + 1,
+      title: concern,
+      type: 'CUSTOMER_CONCERN' as const,
+      payType: ro.concernPayTypes?.[idx] || 'WARRANTY',
+      cause: ro.concernCauses?.[idx] || (idx === 0 && (ro.cause || ro.diagnosticNotes) ? (ro.cause || ro.diagnosticNotes) : '') || '',
+      correction: ro.concernCorrections?.[idx] || (idx === 0 && ro.correction ? ro.correction : '') || '',
+      notes: ''
+    })),
+    ...recommendations.map((rec, rIdx) => ({
+      lineNum: baseConcerns.length + rIdx + 1,
+      title: rec.serviceName,
+      type: 'INSPECTION_FINDING' as const,
+      payType: rec.payType || 'CUSTOMER_PAY',
+      cause: rec.cause || '',
+      correction: rec.correction || '',
+      notes: rec.notes || ''
+    }))
+  ];
 
   const formatDateTime = (isoString?: string) => {
     if (!isoString) return 'Active / In-Progress';
     return formatMilitaryDateTime(isoString);
   };
+
+  // Helper to get punches assigned to a specific line number (1-based lineNum)
+  const getLinePunches = (lineNum: number): WarrantyLaborTimePunch[] => {
+    if (jobLines.length === 1) {
+      return punches;
+    }
+    return punches.filter(p => p.roLineNumber === lineNum);
+  };
+
+  // Helper to calculate total minutes for specific punches
+  const getLineTotalMinutes = (linePunchesList: WarrantyLaborTimePunch[]): number => {
+    return linePunchesList.reduce((acc, p) => {
+      if (p.durationMinutes) {
+        return acc + p.durationMinutes;
+      } else if (p.clockIn && !p.clockOut) {
+        const elapsed = Math.max(1, Math.round((Date.now() - new Date(p.clockIn).getTime()) / 60000));
+        return acc + elapsed;
+      }
+      return acc;
+    }, 0);
+  };
+
+  // Unassigned punches when multiple lines exist
+  const unassignedPunches = jobLines.length > 1 
+    ? punches.filter(p => !p.roLineNumber || p.roLineNumber < 1 || p.roLineNumber > jobLines.length)
+    : [];
 
   const handleCopySummary = () => {
     const lines: string[] = [
@@ -106,47 +166,55 @@ export const WarrantyPrintModal: React.FC = () => {
       testDriveNotes ? `Road Test Notes: ${testDriveNotes}` : '',
       `Service Advisor: ${ro.advisorName} | Tech: ${ro.techName || 'Unassigned'}`,
       `======================================================`,
-      `1. COMPLAINT / CONCERNS:`,
-      ...displayConcerns.map((c, i) => `  Line ${i + 1}: ${c} [${ro.concernPayTypes?.[i] || 'WARRANTY'}]`),
-      `\n2. CAUSE (DIAGNOSTIC FINDING / ROOT CAUSE):`,
-      ...(ro.concernCauses && ro.concernCauses.some(c => c && c.trim())
-        ? ro.concernCauses.map((c, i) => `  Line ${i + 1}: ${c || 'Pending diagnosis'}`)
-        : [`  ${ro.cause || ro.diagnosticNotes || 'Pending documentation'}`]
-      ),
-      `\n3. CORRECTION (REPAIR PERFORMED / CORRECTIVE ACTION):`,
-      ...(ro.concernCorrections && ro.concernCorrections.some(c => c && c.trim())
-        ? ro.concernCorrections.map((c, i) => `  Line ${i + 1}: ${c || 'Pending repair'}`)
-        : [`  ${ro.correction || 'Pending documentation'}`]
-      ),
-      `\n4. ROAD TEST & OUT MILEAGE VERIFICATION:`,
-      `  Intake Odometer: ${inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}`,
-      `  Out Odometer: ${outMiles !== undefined ? `${outMiles.toLocaleString()} mi` : 'Not recorded'}`,
-      `  Test Drive Distance: ${testDriveDistance !== undefined ? `${testDriveDistance.toFixed(1)} miles driven` : '0 miles'}`,
-      `  Road Test Observations: ${testDriveNotes || 'Road test completed - verified resolved'}`,
-      `  Completed By: ${ro.testDriveCompletedBy || ro.techName || currentUser.name}`,
-      `\n5. WARRANTY LABOR TIME CLOCK PUNCHES (START & END TIMES):`,
+      `ITEMIZED JOB LINES (COMPLAINT, CAUSE, CORRECTION & LABOR TIME):`,
     ];
 
-    if (punches.length === 0) {
-      lines.push(`  No time clock punches recorded on this ticket yet.`);
-    } else {
-      punches.forEach((p, idx) => {
+    jobLines.forEach((job) => {
+      const linePunches = getLinePunches(job.lineNum);
+      const lineMins = getLineTotalMinutes(linePunches);
+      const lineHrsFormatted = (lineMins / 60).toFixed(2);
+      const lineHrsInt = Math.floor(lineMins / 60);
+      const lineMinsInt = lineMins % 60;
+
+      lines.push(`\n------------------------------------------------------`);
+      lines.push(`LINE ${job.lineNum} [${job.payType}] (${job.type === 'INSPECTION_FINDING' ? '21-Point Inspection Finding' : 'Customer Concern'}):`);
+      lines.push(`  • COMPLAINT:  ${job.title}`);
+      lines.push(`  • CAUSE:      ${job.cause || 'Pending diagnosis / root cause documentation'}`);
+      lines.push(`  • CORRECTION: ${job.correction || 'Pending corrective repair documentation'}`);
+      lines.push(`  • LABOR TIME: ${lineHrsFormatted} hrs (${lineHrsInt}h ${lineMinsInt}m) [${linePunches.length} punch session${linePunches.length === 1 ? '' : 's'}]`);
+      if (linePunches.length > 0) {
+        linePunches.forEach((p, pIdx) => {
+          const start = formatDateTime(p.clockIn);
+          const end = p.clockOut ? formatDateTime(p.clockOut) : 'Active / In Progress';
+          const dur = p.durationMinutes ? `${(p.durationMinutes / 60).toFixed(2)} hrs (${p.durationMinutes} min)` : 'In Progress';
+          lines.push(`     Punch #${pIdx + 1}: ${p.techName}${p.techEmployeeNumber ? ` (#${p.techEmployeeNumber})` : ''} | Phase: ${p.operationType || 'REPAIR'} | Start: ${start} | End: ${end} | Elapsed: ${dur}${p.notes ? ` | Notes: ${p.notes}` : ''}`);
+        });
+      }
+    });
+
+    if (unassignedPunches.length > 0) {
+      lines.push(`\n------------------------------------------------------`);
+      lines.push(`GENERAL / SHOP LABOR TIME PUNCHES:`);
+      unassignedPunches.forEach((p, pIdx) => {
         const start = formatDateTime(p.clockIn);
         const end = p.clockOut ? formatDateTime(p.clockOut) : 'Active / In Progress';
         const dur = p.durationMinutes ? `${(p.durationMinutes / 60).toFixed(2)} hrs (${p.durationMinutes} min)` : 'In Progress';
-        lines.push(`  Punch #${idx + 1}: Tech: ${p.techName}${p.techEmployeeNumber ? ` (#${p.techEmployeeNumber})` : ''}`);
-        lines.push(`    - Phase: ${p.operationType || 'REPAIR'}`);
-        lines.push(`    - Start (Clock In):  ${start}`);
-        lines.push(`    - End   (Clock Out): ${end}`);
-        lines.push(`    - Elapsed: ${dur}`);
-        if (p.notes) lines.push(`    - Notes: ${p.notes}`);
+        lines.push(`  Punch #${pIdx + 1}: ${p.techName} | Phase: ${p.operationType || 'REPAIR'} | Start: ${start} | End: ${end} | Elapsed: ${dur}${p.notes ? ` | Notes: ${p.notes}` : ''}`);
       });
-      lines.push(`  ----------------------------------------------------`);
-      lines.push(`  TOTAL WARRANTY LABOR TIME: ${totalHoursFormatted} hrs (${totalHoursInt}h ${totalMinsInt}m) across ${punches.length} punch sessions`);
     }
 
+    lines.push(`\n======================================================`);
+    lines.push(`TOTAL CUMULATIVE WARRANTY LABOR TIME: ${totalHoursFormatted} hrs (${totalHoursInt}h ${totalMinsInt}m) across ${punches.length} punch sessions`);
+
+    lines.push(`\nROAD TEST & OUT MILEAGE VERIFICATION:`);
+    lines.push(`  Intake Odometer: ${inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}`);
+    lines.push(`  Out Odometer: ${outMiles !== undefined ? `${outMiles.toLocaleString()} mi` : 'Not recorded'}`);
+    lines.push(`  Test Drive Distance: ${testDriveDistance !== undefined ? `${testDriveDistance.toFixed(1)} miles driven` : '0 miles'}`);
+    lines.push(`  Road Test Observations: ${testDriveNotes || 'Road test completed - verified resolved'}`);
+    lines.push(`  Completed By: ${ro.testDriveCompletedBy || ro.techName || currentUser.name}`);
+
     if (ro.parts && ro.parts.length > 0) {
-      lines.push(`\n6. INSTALLED PARTS:`);
+      lines.push(`\nINSTALLED PARTS:`);
       ro.parts.forEach(pt => {
         lines.push(`  - Part #${pt.partNumber}: ${pt.description} (Qty: ${pt.quantity}) [${pt.status}]`);
       });
@@ -180,7 +248,7 @@ export const WarrantyPrintModal: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Official Cause & Correction, Out Miles Road Test Verification, and Itemized Labor Time Punches
+                Itemized Complaint, Cause, Correction & Labor Time per Line Item, Road Test Verification, and Punch Logs
               </p>
             </div>
           </div>
@@ -312,110 +380,246 @@ export const WarrantyPrintModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Section 1: Customer Complaints */}
-            <div>
-              <div className="text-xs font-black text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between border-b border-slate-300 pb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                  <span>1. Customer Complaint / Concern (Customer Stated Symptom)</span>
+            {/* UNIFIED JOB LINES: Line 1, 2, 3... Complaint, Cause, Correction & Time Together */}
+            <div className="space-y-5">
+              <div className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center justify-between border-b-2 border-slate-900 pb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-blue-600 rounded text-white"><Wrench className="w-3.5 h-3.5" /></span>
+                  <span>Itemized Job Lines — Complaint, Cause, Correction & Labor Time</span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">{displayConcerns.length} {displayConcerns.length === 1 ? 'Line Item' : 'Line Items'}</span>
+                <span className="text-[11px] font-bold text-slate-600">
+                  {jobLines.length} {jobLines.length === 1 ? 'Job Line' : 'Job Lines'}
+                </span>
               </div>
-              <div className="space-y-1.5">
-                {displayConcerns.map((concern, idx) => (
-                  <div key={idx} className="bg-slate-50 p-2.5 rounded border border-slate-300 text-xs flex items-center justify-between gap-2">
-                    <div className="flex items-start gap-2">
-                      <span className="text-[10px] font-mono font-bold bg-slate-200 px-1.5 py-0.5 rounded shrink-0">
-                        Line {idx + 1}
-                      </span>
-                      <span className="font-medium text-slate-900">{concern}</span>
-                    </div>
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-blue-100 text-blue-900 rounded border border-blue-200 shrink-0">
-                      {ro.concernPayTypes?.[idx] || 'WARRANTY'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Section 2: Cause (Diagnostic Finding) */}
-            <div>
-              <div className="text-xs font-black text-slate-900 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 border-b border-slate-300 pb-1">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span>2. Cause (Diagnostic Finding / Root Cause of Failure)</span>
-              </div>
-              <div className="space-y-2">
-                {ro.concernCauses && ro.concernCauses.some(c => c && c.trim()) ? (
-                  ro.concernCauses.map((causeText, idx) => (
-                    <div key={idx} className="bg-amber-50/50 p-3 rounded-lg border-2 border-amber-300 text-xs">
-                      <div className="text-[10px] font-mono font-bold uppercase text-amber-900 mb-1">
-                        Line {idx + 1} Root Cause:
+              {jobLines.map((job) => {
+                const linePunches = getLinePunches(job.lineNum);
+                const lineMins = getLineTotalMinutes(linePunches);
+                const lineHrsFormatted = (lineMins / 60).toFixed(2);
+                const lineHrsInt = Math.floor(lineMins / 60);
+                const lineMinsInt = lineMins % 60;
+
+                return (
+                  <div key={job.lineNum} className="bg-white rounded-xl border-2 border-slate-300 overflow-hidden shadow-xs space-y-0">
+                    
+                    {/* Line Header */}
+                    <div className="bg-slate-900 text-white p-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-xs font-black bg-blue-600 text-white px-2.5 py-1 rounded shadow-2xs">
+                          LINE {job.lineNum}
+                        </span>
+                        <span className="font-bold text-xs uppercase tracking-wide text-slate-200">
+                          {job.type === 'INSPECTION_FINDING' ? '21-Point Inspection Finding' : `Job #${job.lineNum} Customer Complaint`}
+                        </span>
                       </div>
-                      <p className="font-mono text-slate-900 font-medium whitespace-pre-wrap leading-relaxed">
-                        {causeText || <span className="italic text-slate-400">Diagnosis pending</span>}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="bg-amber-50/50 p-3.5 rounded-lg border-2 border-amber-300 text-xs">
-                    {ro.cause ? (
-                      <p className="font-mono text-slate-900 font-medium leading-relaxed whitespace-pre-wrap">
-                        {ro.cause}
-                      </p>
-                    ) : ro.diagnosticNotes ? (
-                      <p className="font-mono text-slate-900 font-medium leading-relaxed whitespace-pre-wrap">
-                        {ro.diagnosticNotes}
-                      </p>
-                    ) : (
-                      <p className="text-slate-400 italic font-mono">
-                        No diagnostic root cause documented yet. Technician can enter cause findings in the shop terminal.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Section 3: Correction (Repair Completed) */}
-            <div>
-              <div className="text-xs font-black text-slate-900 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 border-b border-slate-300 pb-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                <span>3. Correction (Corrective Repair Performed / Action Taken)</span>
-              </div>
-              <div className="space-y-2">
-                {ro.concernCorrections && ro.concernCorrections.some(c => c && c.trim()) ? (
-                  ro.concernCorrections.map((corrText, idx) => (
-                    <div key={idx} className="bg-emerald-50/50 p-3 rounded-lg border-2 border-emerald-300 text-xs">
-                      <div className="text-[10px] font-mono font-bold uppercase text-emerald-900 mb-1">
-                        Line {idx + 1} Corrective Action:
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-500/20 text-blue-200 rounded border border-blue-400/40">
+                          {job.payType}
+                        </span>
+                        <span className="font-mono text-xs font-black bg-slate-800 text-emerald-400 px-2.5 py-0.5 rounded border border-slate-700">
+                          Time: {lineHrsInt}h {lineMinsInt}m ({lineHrsFormatted} hrs)
+                        </span>
                       </div>
-                      <p className="font-mono text-slate-900 font-medium whitespace-pre-wrap leading-relaxed">
-                        {corrText || <span className="italic text-slate-400">Repair pending</span>}
-                      </p>
                     </div>
-                  ))
-                ) : (
-                  <div className="bg-emerald-50/50 p-3.5 rounded-lg border-2 border-emerald-300 text-xs">
-                    {ro.correction ? (
-                      <p className="font-mono text-slate-900 font-medium leading-relaxed whitespace-pre-wrap">
-                        {ro.correction}
-                      </p>
-                    ) : (
-                      <p className="text-slate-400 italic font-mono">
-                        No corrective repair documented yet. Technician can document completed repairs in the shop terminal.
-                      </p>
-                    )}
+
+                    <div className="p-4 space-y-3 bg-white">
+                      {/* Complaint / Finding */}
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          1. {job.type === 'INSPECTION_FINDING' ? 'Inspection Finding / Concern:' : 'Customer Complaint / Concern:'}
+                        </span>
+                        <p className="font-bold text-slate-950 text-xs leading-relaxed">
+                          {job.title}
+                        </p>
+                      </div>
+
+                      {/* Cause */}
+                      <div className="bg-amber-50/60 p-3 rounded-lg border-2 border-amber-300 text-xs">
+                        <span className="text-[10px] font-mono font-bold uppercase text-amber-900 block mb-1">
+                          2. Cause (Diagnostic Finding / Root Cause):
+                        </span>
+                        <p className="font-mono text-slate-950 font-medium leading-relaxed whitespace-pre-wrap">
+                          {job.cause || <span className="italic text-slate-400">Diagnosis / root cause pending documentation</span>}
+                        </p>
+                      </div>
+
+                      {/* Correction */}
+                      <div className="bg-emerald-50/60 p-3 rounded-lg border-2 border-emerald-300 text-xs">
+                        <span className="text-[10px] font-mono font-bold uppercase text-emerald-900 block mb-1">
+                          3. Correction (Repair Performed / Action Taken):
+                        </span>
+                        <p className="font-mono text-slate-950 font-medium leading-relaxed whitespace-pre-wrap">
+                          {job.correction || <span className="italic text-slate-400">Corrective repair pending documentation</span>}
+                        </p>
+                      </div>
+
+                      {/* Labor Time for this Job */}
+                      <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-200 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="font-black text-slate-900 flex items-center gap-1.5 uppercase">
+                            <Clock className="w-3.5 h-3.5 text-blue-600" />
+                            <span>4. Warranty Labor Time Log for Line {job.lineNum}</span>
+                          </div>
+                          <span className="font-mono font-bold text-blue-900 text-xs">
+                            {linePunches.length} punch session{linePunches.length === 1 ? '' : 's'} logged
+                          </span>
+                        </div>
+
+                        {linePunches.length === 0 ? (
+                          <div className="p-2 bg-white rounded border border-dashed border-slate-300 text-center text-xs text-slate-500 italic">
+                            No specific time clock punches logged under Line {job.lineNum} yet.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto border border-slate-300 rounded bg-white">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold text-slate-700 uppercase">
+                                  <th className="py-1.5 px-2 text-center w-8">#</th>
+                                  <th className="py-1.5 px-2">Technician</th>
+                                  <th className="py-1.5 px-2">Phase</th>
+                                  <th className="py-1.5 px-2">Clock In</th>
+                                  <th className="py-1.5 px-2">Clock Out</th>
+                                  <th className="py-1.5 px-2 text-right">Elapsed</th>
+                                  <th className="py-1.5 px-2">Notes</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {linePunches.map((punch, pIdx) => {
+                                  const inText = formatDateTime(punch.clockIn);
+                                  const outText = punch.clockOut ? formatDateTime(punch.clockOut) : 'In Progress (Active)';
+                                  const durationHrs = punch.durationMinutes ? (punch.durationMinutes / 60).toFixed(2) : '--';
+                                  const durationFormatted = punch.durationMinutes 
+                                    ? `${Math.floor(punch.durationMinutes / 60)}h ${punch.durationMinutes % 60}m (${durationHrs} hrs)` 
+                                    : 'Active';
+
+                                  return (
+                                    <tr key={punch.id || pIdx} className="hover:bg-slate-50">
+                                      <td className="py-1 px-2 text-center font-mono font-bold text-slate-500 text-[11px]">
+                                        {pIdx + 1}
+                                      </td>
+                                      <td className="py-1 px-2 font-bold text-slate-900 whitespace-nowrap text-[11px]">
+                                        {punch.techName}
+                                        {punch.techEmployeeNumber && (
+                                          <span className="text-[10px] font-mono text-slate-500 block">
+                                            #{punch.techEmployeeNumber}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-1 px-2 text-[11px]">
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-300">
+                                          {punch.operationType || 'REPAIR'}
+                                        </span>
+                                      </td>
+                                      <td className="py-1 px-2 font-mono text-slate-800 whitespace-nowrap text-[11px]">
+                                        {inText}
+                                      </td>
+                                      <td className="py-1 px-2 font-mono text-slate-800 whitespace-nowrap text-[11px]">
+                                        {punch.clockOut ? (
+                                          outText
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-300 text-[10px]">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                            <span>Active</span>
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-1 px-2 font-mono font-bold text-slate-900 text-right whitespace-nowrap text-[11px]">
+                                        {durationFormatted}
+                                      </td>
+                                      <td className="py-1 px-2 text-slate-600 text-[11px] max-w-xs truncate">
+                                        {punch.notes || '--'}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
                   </div>
-                )}
+                );
+              })}
+            </div>
+
+            {/* General / Unassigned Punches (if any) */}
+            {unassignedPunches.length > 0 && (
+              <div className="bg-slate-50 rounded-xl border border-slate-300 p-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-slate-900 uppercase">
+                  <span>General / Shop Labor Time Punches (Unassigned to specific line)</span>
+                  <span>{unassignedPunches.length} Sessions</span>
+                </div>
+                <div className="overflow-x-auto border border-slate-300 rounded bg-white">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold text-slate-700 uppercase">
+                        <th className="py-1.5 px-2 text-center w-8">#</th>
+                        <th className="py-1.5 px-2">Technician</th>
+                        <th className="py-1.5 px-2">Phase</th>
+                        <th className="py-1.5 px-2">Clock In</th>
+                        <th className="py-1.5 px-2">Clock Out</th>
+                        <th className="py-1.5 px-2 text-right">Elapsed</th>
+                        <th className="py-1.5 px-2">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {unassignedPunches.map((punch, pIdx) => {
+                        const inText = formatDateTime(punch.clockIn);
+                        const outText = punch.clockOut ? formatDateTime(punch.clockOut) : 'In Progress (Active)';
+                        const durationHrs = punch.durationMinutes ? (punch.durationMinutes / 60).toFixed(2) : '--';
+                        const durationFormatted = punch.durationMinutes 
+                          ? `${Math.floor(punch.durationMinutes / 60)}h ${punch.durationMinutes % 60}m (${durationHrs} hrs)` 
+                          : 'Active';
+
+                        return (
+                          <tr key={punch.id || pIdx}>
+                            <td className="py-1 px-2 text-center font-mono font-bold text-slate-500 text-[11px]">{pIdx + 1}</td>
+                            <td className="py-1 px-2 font-bold text-slate-900 text-[11px]">{punch.techName}</td>
+                            <td className="py-1 px-2 text-[11px]">{punch.operationType || 'REPAIR'}</td>
+                            <td className="py-1 px-2 font-mono text-slate-800 text-[11px]">{inText}</td>
+                            <td className="py-1 px-2 font-mono text-slate-800 text-[11px]">{outText}</td>
+                            <td className="py-1 px-2 font-mono font-bold text-right text-[11px]">{durationFormatted}</td>
+                            <td className="py-1 px-2 text-slate-600 text-[11px]">{punch.notes || '--'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Total Cumulative Warranty Time Summary Banner */}
+            <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between flex-wrap gap-3 shadow-md">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-400" />
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider block text-slate-300">
+                    Total Cumulative Warranty Labor Time
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Sum of all labor sessions across all job lines on this repair order
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono font-black text-lg text-emerald-400">
+                  {totalHoursInt}h {totalMinsInt}m ({totalHoursFormatted} hrs)
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  {punches.length} total punch sessions
+                </div>
               </div>
             </div>
 
-            {/* Section 4: Road Test & Out Mileage Verification */}
+            {/* Section: Road Test & Out Mileage Verification */}
             <div>
               <div className="text-xs font-black text-slate-900 uppercase tracking-wider mb-1.5 flex items-center justify-between border-b border-slate-300 pb-1">
                 <div className="flex items-center gap-1.5">
                   <Gauge className="w-3.5 h-3.5 text-blue-600" />
-                  <span>4. Road Test & Out Mileage Verification</span>
+                  <span>Road Test & Out Mileage Verification</span>
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                   outMiles !== undefined 
@@ -455,116 +659,11 @@ export const WarrantyPrintModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Section 5: Warranty Labor Time Clock Punches */}
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-300 pb-1 mb-2">
-                <div className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-blue-600" />
-                  <span>5. Warranty Labor Time Clock Logs (Multi-Punch Start & End Times)</span>
-                </div>
-                <span className="text-[11px] font-bold text-slate-600">
-                  Total Sessions: {punches.length}
-                </span>
-              </div>
-
-              {punches.length === 0 ? (
-                <div className="p-4 bg-slate-50 border border-dashed border-slate-400 rounded-lg text-center text-xs text-slate-500 italic">
-                  No labor time clock punches recorded on this repair order ticket yet.
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-slate-300 rounded-lg">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-300 text-[11px] font-bold text-slate-700 uppercase">
-                        <th className="py-2 px-2.5 w-12 text-center">#</th>
-                        <th className="py-2 px-2.5">Technician</th>
-                        <th className="py-2 px-2.5">Phase / Operation</th>
-                        <th className="py-2 px-2.5">Clock In (Start)</th>
-                        <th className="py-2 px-2.5">Clock Out (End)</th>
-                        <th className="py-2 px-2.5 text-right">Elapsed</th>
-                        <th className="py-2 px-2.5">Work Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {punches.map((punch, idx) => {
-                        const inText = formatDateTime(punch.clockIn);
-                        const outText = punch.clockOut ? formatDateTime(punch.clockOut) : 'In Progress (Active)';
-                        const durationHrs = punch.durationMinutes ? (punch.durationMinutes / 60).toFixed(2) : '--';
-                        const durationFormatted = punch.durationMinutes 
-                          ? `${Math.floor(punch.durationMinutes / 60)}h ${punch.durationMinutes % 60}m (${durationHrs} hrs)` 
-                          : 'Active';
-
-                        return (
-                          <tr key={punch.id || idx} className="hover:bg-slate-50">
-                            <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-500">
-                              {idx + 1}
-                            </td>
-                            <td className="py-2 px-2.5 font-bold text-slate-900 whitespace-nowrap">
-                              {punch.techName}
-                              {punch.techEmployeeNumber && (
-                                <span className="text-[10px] font-mono text-slate-500 block">
-                                  #{punch.techEmployeeNumber}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-2.5">
-                              <div className="flex items-center gap-1 flex-wrap">
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-300">
-                                  {punch.operationType || 'REPAIR'}
-                                </span>
-                                {punch.roLineNumber && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                                    Line {punch.roLineNumber}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-2.5 font-mono text-slate-800 whitespace-nowrap">
-                              {inText}
-                            </td>
-                            <td className="py-2 px-2.5 font-mono text-slate-800 whitespace-nowrap">
-                              {punch.clockOut ? (
-                                outText
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                  <span>Active</span>
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-2.5 font-mono font-bold text-slate-900 text-right whitespace-nowrap">
-                              {durationFormatted}
-                            </td>
-                            <td className="py-2 px-2.5 text-slate-700 text-[11px] max-w-xs truncate">
-                              {punch.notes || '--'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 border-t-2 border-slate-300 font-bold text-slate-900 text-xs">
-                        <td colSpan={5} className="py-2.5 px-3 text-right uppercase tracking-wider">
-                          Total Cumulative Warranty Labor Time:
-                        </td>
-                        <td className="py-2.5 px-2.5 text-right font-mono font-black text-sm text-blue-900 whitespace-nowrap">
-                          {totalHoursInt}h {totalMinsInt}m ({totalHoursFormatted} hrs)
-                        </td>
-                        <td className="py-2.5 px-2.5 text-slate-500 text-[11px]">
-                          {punches.length} total punch sessions
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Section 6: Installed Warranty Parts */}
+            {/* Section: Installed Warranty Parts */}
             {ro.parts && ro.parts.length > 0 && (
               <div>
                 <div className="text-xs font-black text-slate-900 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 border-b border-slate-300 pb-1">
-                  <span>6. Installed Replacement Parts / Materials</span>
+                  <span>Installed Replacement Parts / Materials</span>
                 </div>
                 <div className="overflow-x-auto border border-slate-300 rounded-lg">
                   <table className="w-full text-left text-xs border-collapse">
@@ -591,7 +690,7 @@ export const WarrantyPrintModal: React.FC = () => {
               </div>
             )}
 
-            {/* Section 7: Formal Signatures & Certification */}
+            {/* Formal Signatures & Certification */}
             <div className="pt-4 border-t-2 border-slate-800 grid grid-cols-2 gap-6 text-xs">
               <div className="space-y-2">
                 <span className="text-[10px] font-bold uppercase text-slate-500 block">Certified Technician Sign-Off</span>
@@ -729,73 +828,174 @@ export const WarrantyPrintModal: React.FC = () => {
           </div>
         </div>
 
-        {/* 1. Customer Complaints / Concerns */}
+        {/* UNIFIED JOB LINES FOR PRINTING: Line 1, 2, 3... Complaint, Cause, Correction & Labor Time */}
+        <div className="space-y-3.5">
+          <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1 flex justify-between">
+            <span>Itemized Job Lines (Complaint, Cause, Correction & Labor Time)</span>
+            <span>{jobLines.length} Line Items</span>
+          </div>
+
+          {jobLines.map((job) => {
+            const linePunches = getLinePunches(job.lineNum);
+            const lineMins = getLineTotalMinutes(linePunches);
+            const lineHrsFormatted = (lineMins / 60).toFixed(2);
+            const lineHrsInt = Math.floor(lineMins / 60);
+            const lineMinsInt = lineMins % 60;
+
+            return (
+              <div key={job.lineNum} className="warranty-print-section border-2 border-black rounded p-2.5 bg-white space-y-2 text-xs">
+                
+                {/* Line Header */}
+                <div className="flex items-center justify-between border-b-2 border-black pb-1">
+                  <div>
+                    <span className="font-mono font-black text-sm uppercase mr-2">LINE #{job.lineNum}</span>
+                    <span className="font-black text-xs uppercase">
+                      {job.type === 'INSPECTION_FINDING' ? '21-PT INSPECTION FINDING RECORD' : 'JOB DOCUMENTATION & TIME RECORD'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-[10px] px-2 py-0.5 border border-black rounded uppercase">
+                      {job.payType}
+                    </span>
+                    <span className="font-mono font-black text-xs">
+                      Time: {lineHrsFormatted} hrs ({lineHrsInt}h {lineMinsInt}m)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Complaint / Finding */}
+                <div className="p-2 border border-black rounded bg-white">
+                  <div className="text-[10px] font-black uppercase text-black mb-0.5">
+                    1. {job.type === 'INSPECTION_FINDING' ? 'Inspection Finding / Concern:' : 'Customer Complaint / Concern:'}
+                  </div>
+                  <div className="font-bold text-black text-xs leading-snug">{job.title}</div>
+                </div>
+
+                {/* Cause */}
+                <div className="p-2 border border-black rounded bg-white">
+                  <div className="text-[10px] font-black uppercase text-black mb-0.5">2. Cause (Diagnostic Finding / Root Cause):</div>
+                  <div className="font-mono font-bold text-black whitespace-pre-wrap leading-snug">
+                    {job.cause || 'Diagnostic finding pending technician documentation.'}
+                  </div>
+                </div>
+
+                {/* Correction */}
+                <div className="p-2 border border-black rounded bg-white">
+                  <div className="text-[10px] font-black uppercase text-black mb-0.5">3. Correction (Repair Action Taken):</div>
+                  <div className="font-mono font-bold text-black whitespace-pre-wrap leading-snug">
+                    {job.correction || 'Corrective repair pending technician documentation.'}
+                  </div>
+                </div>
+
+                {/* Labor Time for this Line */}
+                <div className="p-2 border border-black rounded bg-white space-y-1">
+                  <div className="flex items-center justify-between border-b border-black/40 pb-0.5">
+                    <span className="text-[10px] font-black uppercase text-black">
+                      4. Warranty Labor Time Log (Line #{job.lineNum}):
+                    </span>
+                    <span className="font-mono font-black text-xs text-black">
+                      Logged Time: {lineHrsFormatted} hrs ({lineHrsInt}h {lineMinsInt}m)
+                    </span>
+                  </div>
+
+                  {linePunches.length === 0 ? (
+                    <div className="italic text-[10px] font-bold text-black py-0.5">
+                      No individual punch sessions logged specifically for Line #{job.lineNum}.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-[10px] border-collapse border border-black mt-1">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-black text-[9px] font-black uppercase">
+                          <th className="py-0.5 px-1.5 border-r border-black text-center w-6">#</th>
+                          <th className="py-0.5 px-1.5 border-r border-black">Technician</th>
+                          <th className="py-0.5 px-1.5 border-r border-black">Phase</th>
+                          <th className="py-0.5 px-1.5 border-r border-black">Clock In</th>
+                          <th className="py-0.5 px-1.5 border-r border-black">Clock Out</th>
+                          <th className="py-0.5 px-1.5 border-r border-black text-right">Elapsed</th>
+                          <th className="py-0.5 px-1.5">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {linePunches.map((p, pIdx) => (
+                          <tr key={p.id || pIdx} className="border-b border-black/30">
+                            <td className="py-0.5 px-1.5 text-center font-mono font-bold border-r border-black/30">{pIdx + 1}</td>
+                            <td className="py-0.5 px-1.5 font-bold border-r border-black/30 whitespace-nowrap">{p.techName}</td>
+                            <td className="py-0.5 px-1.5 font-mono uppercase text-[9px] border-r border-black/30">{p.operationType || 'REPAIR'}</td>
+                            <td className="py-0.5 px-1.5 font-mono border-r border-black/30 whitespace-nowrap">{formatDateTime(p.clockIn)}</td>
+                            <td className="py-0.5 px-1.5 font-mono border-r border-black/30 whitespace-nowrap">{p.clockOut ? formatDateTime(p.clockOut) : 'Active'}</td>
+                            <td className="py-0.5 px-1.5 font-mono font-black text-right border-r border-black/30 whitespace-nowrap">
+                              {p.durationMinutes ? `${(p.durationMinutes / 60).toFixed(2)}h` : 'Active'}
+                            </td>
+                            <td className="py-0.5 px-1.5 text-[9px] truncate max-w-xs">{p.notes || '--'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+
+        {/* General / Unassigned Punches in Print */}
+        {unassignedPunches.length > 0 && (
+          <div className="warranty-print-section border-2 border-black rounded p-2 bg-white space-y-1 text-xs">
+            <div className="text-[10px] font-black uppercase text-black border-b border-black pb-0.5 flex justify-between">
+              <span>General / Shop Labor Time Logs (Unassigned Line)</span>
+              <span>{unassignedPunches.length} Sessions</span>
+            </div>
+            <table className="w-full text-left text-[10px] border-collapse border border-black mt-1">
+              <thead>
+                <tr className="bg-slate-100 border-b border-black text-[9px] font-black uppercase">
+                  <th className="py-0.5 px-1.5 border-r border-black text-center w-6">#</th>
+                  <th className="py-0.5 px-1.5 border-r border-black">Technician</th>
+                  <th className="py-0.5 px-1.5 border-r border-black">Phase</th>
+                  <th className="py-0.5 px-1.5 border-r border-black">Clock In</th>
+                  <th className="py-0.5 px-1.5 border-r border-black">Clock Out</th>
+                  <th className="py-0.5 px-1.5 border-r border-black text-right">Elapsed</th>
+                  <th className="py-0.5 px-1.5">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unassignedPunches.map((p, pIdx) => (
+                  <tr key={p.id || pIdx} className="border-b border-black/30">
+                    <td className="py-0.5 px-1.5 text-center font-mono font-bold border-r border-black/30">{pIdx + 1}</td>
+                    <td className="py-0.5 px-1.5 font-bold border-r border-black/30 whitespace-nowrap">{p.techName}</td>
+                    <td className="py-0.5 px-1.5 font-mono uppercase text-[9px] border-r border-black/30">{p.operationType || 'REPAIR'}</td>
+                    <td className="py-0.5 px-1.5 font-mono border-r border-black/30 whitespace-nowrap">{formatDateTime(p.clockIn)}</td>
+                    <td className="py-0.5 px-1.5 font-mono border-r border-black/30 whitespace-nowrap">{p.clockOut ? formatDateTime(p.clockOut) : 'Active'}</td>
+                    <td className="py-0.5 px-1.5 font-mono font-black text-right border-r border-black/30 whitespace-nowrap">
+                      {p.durationMinutes ? `${(p.durationMinutes / 60).toFixed(2)}h` : 'Active'}
+                    </td>
+                    <td className="py-0.5 px-1.5 text-[9px] truncate max-w-xs">{p.notes || '--'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Grand Total Warranty Labor Time Banner for Print */}
+        <div className="warranty-print-section p-2.5 border-2 border-black rounded bg-slate-100 flex items-center justify-between text-xs">
+          <div>
+            <span className="text-[10px] font-black uppercase text-black block">
+              TOTAL CUMULATIVE WARRANTY LABOR TIME:
+            </span>
+            <span className="text-[10px] font-bold text-black">
+              Total of all individual job line time punches across {punches.length} recorded session{punches.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="text-right font-mono font-black text-base text-black">
+            {totalHoursFormatted} hrs ({totalHoursInt}h {totalMinsInt}m)
+          </div>
+        </div>
+
+        {/* Road Test & Out Mileage Verification */}
         <div className="warranty-print-section space-y-1.5">
           <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1 flex justify-between">
-            <span>1. Customer Complaint / Concern (Customer Stated Symptom)</span>
-            <span>{displayConcerns.length} Line Items</span>
-          </div>
-          <div className="space-y-1">
-            {displayConcerns.map((concern, idx) => (
-              <div key={idx} className="p-2 border border-black rounded bg-white text-xs flex items-center justify-between">
-                <div>
-                  <strong className="font-mono font-black mr-2">Line #{idx + 1}:</strong>
-                  <span className="font-bold text-black">{concern}</span>
-                </div>
-                <span className="font-mono font-black text-[10px] px-1.5 py-0.5 border border-black rounded uppercase">
-                  {ro.concernPayTypes?.[idx] || 'WARRANTY'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 2. Cause (Diagnostic Finding) */}
-        <div className="warranty-print-section space-y-1.5">
-          <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1">
-            2. Cause (Diagnostic Finding / Root Cause of Failure)
-          </div>
-          <div className="space-y-1">
-            {ro.concernCauses && ro.concernCauses.some(c => c && c.trim()) ? (
-              ro.concernCauses.map((cText, idx) => (
-                <div key={idx} className="p-2 border border-black rounded bg-white text-xs">
-                  <div className="text-[10px] font-black uppercase mb-0.5">Line #{idx + 1} Finding:</div>
-                  <div className="font-mono font-bold text-black whitespace-pre-wrap">{cText || 'Diagnosis pending'}</div>
-                </div>
-              ))
-            ) : (
-              <div className="p-2.5 border border-black rounded bg-white text-xs font-mono font-bold whitespace-pre-wrap">
-                {ro.cause || ro.diagnosticNotes || 'Diagnostic finding pending technician documentation.'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 3. Correction (Repair Performed) */}
-        <div className="warranty-print-section space-y-1.5">
-          <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1">
-            3. Correction (Corrective Repair Performed / Action Taken)
-          </div>
-          <div className="space-y-1">
-            {ro.concernCorrections && ro.concernCorrections.some(c => c && c.trim()) ? (
-              ro.concernCorrections.map((corrText, idx) => (
-                <div key={idx} className="p-2 border border-black rounded bg-white text-xs">
-                  <div className="text-[10px] font-black uppercase mb-0.5">Line #{idx + 1} Corrective Action:</div>
-                  <div className="font-mono font-bold text-black whitespace-pre-wrap">{corrText || 'Repair pending'}</div>
-                </div>
-              ))
-            ) : (
-              <div className="p-2.5 border border-black rounded bg-white text-xs font-mono font-bold whitespace-pre-wrap">
-                {ro.correction || 'Corrective repair pending technician documentation.'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 4. Road Test & Out Mileage Verification */}
-        <div className="warranty-print-section space-y-1.5">
-          <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1 flex justify-between">
-            <span>4. Road Test & Out Mileage Verification</span>
+            <span>Road Test & Out Mileage Verification</span>
             <span className="font-mono font-black uppercase">
               {outMiles !== undefined ? 'STATUS: VERIFIED & COMPLETED' : 'STATUS: PENDING ENTRY'}
             </span>
@@ -828,66 +1028,11 @@ export const WarrantyPrintModal: React.FC = () => {
           </div>
         </div>
 
-        {/* 5. Warranty Labor Time Clock Logs */}
-        <div className="warranty-print-section space-y-1.5">
-          <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1 flex justify-between">
-            <span>5. Warranty Labor Time Clock Logs (Punches)</span>
-            <span>{punches.length} Sessions • Total: {totalHoursFormatted} hrs</span>
-          </div>
-          {punches.length === 0 ? (
-            <div className="p-2 border border-black rounded text-center italic text-xs font-bold">
-              No time punches recorded on this repair order ticket.
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs border-collapse border-2 border-black">
-              <thead>
-                <tr className="bg-slate-100 border-b-2 border-black text-[10px] font-black uppercase">
-                  <th className="py-1 px-2 text-center border-r border-black w-8">#</th>
-                  <th className="py-1 px-2 border-r border-black">Technician</th>
-                  <th className="py-1 px-2 border-r border-black">Phase</th>
-                  <th className="py-1 px-2 border-r border-black">Clock In</th>
-                  <th className="py-1 px-2 border-r border-black">Clock Out</th>
-                  <th className="py-1 px-2 border-r border-black text-right">Elapsed</th>
-                  <th className="py-1 px-2">Work Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {punches.map((p, idx) => (
-                  <tr key={p.id || idx} className="border-b border-black/40">
-                    <td className="py-1 px-2 text-center font-mono font-bold border-r border-black/40">{idx + 1}</td>
-                    <td className="py-1 px-2 font-bold border-r border-black/40">{p.techName}</td>
-                    <td className="py-1 px-2 font-mono text-[10px] font-bold uppercase border-r border-black/40">{p.operationType || 'REPAIR'}</td>
-                    <td className="py-1 px-2 font-mono border-r border-black/40">{formatDateTime(p.clockIn)}</td>
-                    <td className="py-1 px-2 font-mono border-r border-black/40">{p.clockOut ? formatDateTime(p.clockOut) : 'Active'}</td>
-                    <td className="py-1 px-2 font-mono font-black text-right border-r border-black/40">
-                      {p.durationMinutes ? `${(p.durationMinutes / 60).toFixed(2)}h` : '--'}
-                    </td>
-                    <td className="py-1 px-2 text-[10px]">{p.notes || '--'}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-100 font-black border-t-2 border-black">
-                  <td colSpan={5} className="py-1.5 px-2 text-right uppercase text-[10px]">
-                    Total Cumulative Warranty Labor Time:
-                  </td>
-                  <td className="py-1.5 px-2 text-right font-mono text-sm font-black border-r border-black">
-                    {totalHoursFormatted} hrs
-                  </td>
-                  <td className="py-1.5 px-2 text-[10px] font-mono">
-                    ({totalHoursInt}h {totalMinsInt}m)
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          )}
-        </div>
-
-        {/* 6. Installed Replacement Parts */}
+        {/* Installed Replacement Parts */}
         {ro.parts && ro.parts.length > 0 && (
           <div className="warranty-print-section space-y-1.5">
             <div className="text-xs font-black text-black uppercase tracking-wider border-b-2 border-black pb-1">
-              6. Installed Replacement Parts / Materials
+              Installed Replacement Parts / Materials
             </div>
             <table className="w-full text-left text-xs border-collapse border-2 border-black">
               <thead>
@@ -912,7 +1057,7 @@ export const WarrantyPrintModal: React.FC = () => {
           </div>
         )}
 
-        {/* 7. Signatures & Certification */}
+        {/* Signatures & Certification */}
         <div className="warranty-print-section pt-3 border-t-2 border-black grid grid-cols-2 gap-8 text-xs">
           <div className="space-y-2">
             <span className="text-[10px] font-black uppercase text-black block">Certified Technician Certification:</span>
