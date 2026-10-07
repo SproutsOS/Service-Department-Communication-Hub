@@ -26,6 +26,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { PartItem, RepairOrder, PartStatus } from '../types';
 import { formatEtaBadge, formatDateTime, formatCurrency } from '../utils/formatters';
+import { printIsolatedDocument } from '../utils/printUtils';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { EditPartModal } from './EditPartModal';
 
@@ -245,7 +246,7 @@ export const ManagerPartsOnOrderModal: React.FC<ManagerPartsOnOrderModalProps> =
 
   // Print Report Handler
   const handlePrint = () => {
-    window.print();
+    printIsolatedDocument('manager-parts-report-modal', 'Parts On Order Report');
   };
 
   if (!isOpen) return null;

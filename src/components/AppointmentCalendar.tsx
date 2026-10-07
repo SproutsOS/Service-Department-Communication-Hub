@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ServiceAppointment, AppointmentStatus, TransportationType, UserRole } from '../types';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 interface AppointmentCalendarProps {
   onBackToDashboard?: () => void;
@@ -2116,13 +2117,7 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
                 <button
                   type="button"
                   onClick={() => {
-                    document.body.classList.add('printing-appointment');
-                    setTimeout(() => {
-                      window.print();
-                      setTimeout(() => {
-                        document.body.classList.remove('printing-appointment');
-                      }, 1000);
-                    }, 60);
+                    printIsolatedDocument('printable-appointment-document', `Service Drive Schedule - ${selectedDateStr}`);
                   }}
                   className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >

@@ -24,6 +24,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { ConcernPayType } from '../types';
 import { formatMilitaryDate, formatMilitaryDateTime, cleanRO3700 } from '../utils/formatters';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -44,26 +45,13 @@ export const QuotePrintModal: React.FC = () => {
   const liveRO = initialRO ? (repairOrders.find(r => r.id === initialRO.id) || initialRO) : null;
   const cleanRO = liveRO ? cleanRO3700(liveRO) : null;
 
-  // Reliable native direct print
+  // Reliable direct document print
   const handlePrint = useCallback(() => {
     if (!cleanRO) return;
     const roNumber = cleanRO.id || '';
     const vehicleDesc = cleanRO.vehicle ? `${cleanRO.vehicle.year} ${cleanRO.vehicle.make} ${cleanRO.vehicle.model}` : '';
     const title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
-    const prevTitle = document.title;
-    document.title = title;
-
-    document.body.classList.add('printing-quote');
-
-    const cleanup = () => {
-      document.body.classList.remove('printing-quote');
-      document.title = prevTitle;
-      window.removeEventListener('afterprint', cleanup);
-    };
-
-    window.addEventListener('afterprint', cleanup);
-    window.print();
-    setTimeout(cleanup, 1500);
+    printIsolatedDocument('printable-quote-document', title);
   }, [cleanRO]);
 
   // Close on Escape key or trigger Print on Ctrl+P / Cmd+P
@@ -79,23 +67,6 @@ export const QuotePrintModal: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [closeQuotePrintModal, handlePrint]);
-
-  // Ensure clean print isolation if system print is triggered
-  useEffect(() => {
-    const handleBeforePrint = () => {
-      document.body.classList.add('printing-quote');
-    };
-    const handleAfterPrint = () => {
-      document.body.classList.remove('printing-quote');
-    };
-    window.addEventListener('beforeprint', handleBeforePrint);
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => {
-      window.removeEventListener('beforeprint', handleBeforePrint);
-      window.removeEventListener('afterprint', handleAfterPrint);
-      document.body.classList.remove('printing-quote');
-    };
-  }, []);
 
   if (!cleanRO) return null;
 

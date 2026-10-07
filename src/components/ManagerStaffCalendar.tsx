@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StaffLeaveEntry, StaffLeaveType, UserRole } from '../types';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 interface ManagerStaffCalendarProps {
   asModal?: boolean;
@@ -436,13 +437,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
 
   // Print schedule
   const handlePrint = () => {
-    document.body.classList.add('printing-attendance');
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => {
-        document.body.classList.remove('printing-attendance');
-      }, 1000);
-    }, 60);
+    const monthName = MONTH_NAMES[currentMonth];
+    printIsolatedDocument('printable-attendance-document', `Staff Schedule - ${monthName} ${currentYear}`);
   };
 
   // Security Gate: Service Manager only

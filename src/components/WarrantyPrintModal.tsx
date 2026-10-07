@@ -21,6 +21,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { WarrantyLaborTimePunch } from '../types';
 import { formatMilitaryDate, formatMilitaryTime, formatMilitaryDateTime } from '../utils/formatters';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -37,43 +38,10 @@ export const WarrantyPrintModal: React.FC = () => {
 
   const ro = activeWarrantyPrintRO;
 
-  // System beforeprint and afterprint lifecycle handling
-  useEffect(() => {
-    const handleBeforePrint = () => {
-      document.body.classList.add('printing-warranty');
-    };
-    const handleAfterPrint = () => {
-      document.body.classList.remove('printing-warranty');
-    };
-    window.addEventListener('beforeprint', handleBeforePrint);
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => {
-      window.removeEventListener('beforeprint', handleBeforePrint);
-      window.removeEventListener('afterprint', handleAfterPrint);
-      document.body.classList.remove('printing-warranty');
-    };
-  }, []);
-
   const handlePrint = useCallback(() => {
     if (!ro) return;
     const title = `Warranty Verification - RO #${ro.id} - ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`;
-    const prevTitle = document.title;
-    document.title = title;
-    document.body.classList.add('printing-warranty');
-
-    const cleanup = () => {
-      document.body.classList.remove('printing-warranty');
-      document.title = prevTitle;
-      window.removeEventListener('afterprint', cleanup);
-    };
-
-    window.addEventListener('afterprint', cleanup);
-
-    // Allow browser 60ms render tick to compute printable stylesheet before snapshot
-    setTimeout(() => {
-      window.print();
-      setTimeout(cleanup, 1500);
-    }, 60);
+    printIsolatedDocument('printable-warranty-document', title);
   }, [ro]);
 
   // Close on Escape key or print on Ctrl+P / Cmd+P

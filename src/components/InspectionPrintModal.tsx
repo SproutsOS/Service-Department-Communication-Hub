@@ -25,6 +25,7 @@ import { useApp } from '../context/AppContext';
 import { RepairOrder, InspectionCategory, InspectionChecklistItem } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { formatMilitaryDate, formatMilitaryDateTime } from '../utils/formatters';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -163,41 +164,9 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
     else passedCount++;
   });
 
-  // System beforeprint and afterprint lifecycle handling
-  useEffect(() => {
-    const handleBeforePrint = () => {
-      document.body.classList.add('printing-inspection');
-    };
-    const handleAfterPrint = () => {
-      document.body.classList.remove('printing-inspection');
-    };
-    window.addEventListener('beforeprint', handleBeforePrint);
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => {
-      window.removeEventListener('beforeprint', handleBeforePrint);
-      window.removeEventListener('afterprint', handleAfterPrint);
-      document.body.classList.remove('printing-inspection');
-    };
-  }, []);
-
   const handlePrint = () => {
     const title = `Multi-Point Inspection - RO #${ro.id} - ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`;
-    const prevTitle = document.title;
-    document.title = title;
-    document.body.classList.add('printing-inspection');
-
-    const cleanup = () => {
-      document.body.classList.remove('printing-inspection');
-      document.title = prevTitle;
-      window.removeEventListener('afterprint', cleanup);
-    };
-
-    window.addEventListener('afterprint', cleanup);
-
-    setTimeout(() => {
-      window.print();
-      setTimeout(cleanup, 1500);
-    }, 60);
+    printIsolatedDocument('printable-inspection-document', title);
   };
 
   const handleCopySummary = () => {

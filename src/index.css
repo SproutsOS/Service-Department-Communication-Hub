@@ -46,7 +46,14 @@ textarea.border-red-500 {
   #printable-inspection-document,
   #printable-appointment-document,
   #printable-attendance-document {
-    display: none !important;
+    position: fixed !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 8.5in !important;
+    height: auto !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
   }
 }
 
@@ -60,54 +67,9 @@ textarea.border-red-500 {
     padding: 0 !important;
   }
 
-  /* When printing an official document, isolate it by hiding the interactive app tree completely */
-  body.printing-quote #root,
-  body.printing-warranty #root,
-  body.printing-inspection #root,
-  body.printing-appointment #root,
-  body.printing-attendance #root {
-    display: none !important;
-  }
-
-  /* Hide interactive controls explicitly */
+  /* Hide interactive controls and non-printable elements */
   .no-print,
   .print\:hidden {
-    display: none !important;
-  }
-
-  /* Mutual document portal exclusions - ensure only the targeted active document prints */
-  body.printing-quote #printable-warranty-document,
-  body.printing-quote #printable-inspection-document,
-  body.printing-quote #printable-appointment-document,
-  body.printing-quote #printable-attendance-document {
-    display: none !important;
-  }
-
-  body.printing-warranty #printable-quote-document,
-  body.printing-warranty #printable-inspection-document,
-  body.printing-warranty #printable-appointment-document,
-  body.printing-warranty #printable-attendance-document {
-    display: none !important;
-  }
-
-  body.printing-inspection #printable-quote-document,
-  body.printing-inspection #printable-warranty-document,
-  body.printing-inspection #printable-appointment-document,
-  body.printing-inspection #printable-attendance-document {
-    display: none !important;
-  }
-
-  body.printing-appointment #printable-quote-document,
-  body.printing-appointment #printable-warranty-document,
-  body.printing-appointment #printable-inspection-document,
-  body.printing-appointment #printable-attendance-document {
-    display: none !important;
-  }
-
-  body.printing-attendance #printable-quote-document,
-  body.printing-attendance #printable-warranty-document,
-  body.printing-attendance #printable-inspection-document,
-  body.printing-attendance #printable-appointment-document {
     display: none !important;
   }
 

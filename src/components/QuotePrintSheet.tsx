@@ -3,6 +3,7 @@ import { StandaloneQuote } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/formatters';
 import { Printer, X, ShieldCheck, Phone, Mail, Car, User, Calendar, FileText, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { printIsolatedDocument } from '../utils/printUtils';
 
 interface QuotePrintSheetProps {
   quote: StandaloneQuote;
@@ -18,7 +19,8 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
   const { shopName, currentUser } = useApp();
 
   const handlePrint = () => {
-    window.print();
+    const title = `Repair Quote - ${quote.quoteNumber || quote.id} - ${quote.customerName || ''}`;
+    printIsolatedDocument('quote-printable-area', title);
   };
 
   const dealershipTitle = shopName || 'Premier Automotive Service Center';
