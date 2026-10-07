@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Wrench, 
   Clock, 
@@ -319,11 +319,28 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
     return `${mins}m ${secs}s`;
   };
 
-  const lines = (ro.concerns && ro.concerns.length > 0)
-    ? ro.concerns
-    : [ro.primaryConcern || 'Customer Concern'];
-
   const recommendations = ro.recommendations || [];
+
+  // Genuine customer complaints (excluding any that match active recommendations to prevent duplicate line cards)
+  const lines = useMemo(() => {
+    const rawList = (ro.concerns && ro.concerns.length > 0)
+      ? ro.concerns
+      : [ro.primaryConcern || 'Customer Concern'];
+
+    if (recommendations.length === 0) return rawList;
+
+    const recNames = new Set(
+      recommendations.map(r => r.serviceName.trim().toLowerCase())
+    );
+
+    // Keep primary concern at index 0, filter any subsequent concerns that match recommendations
+    const filtered = rawList.filter((c, idx) => {
+      if (idx === 0) return true;
+      return !recNames.has(c.trim().toLowerCase());
+    });
+
+    return filtered.length > 0 ? filtered : rawList;
+  }, [ro.concerns, ro.primaryConcern, recommendations]);
 
   // Track recommendation fields inside TechCauseCorrectionSection
   const [recHours, setRecHours] = useState<Record<string, string>>({});

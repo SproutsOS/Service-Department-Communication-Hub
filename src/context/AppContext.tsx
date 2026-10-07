@@ -4575,15 +4575,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    // If approved by advisor/customer, append to concerns list if not already present
-    let updatedConcerns = targetRO.concerns ? [...targetRO.concerns] : (targetRO.primaryConcern ? [targetRO.primaryConcern] : []);
-    if (status === 'APPROVED' && !updatedConcerns.includes(targetRec.serviceName)) {
-      updatedConcerns.push(targetRec.serviceName);
-    }
-
     const updatedRO: RepairOrder = {
       ...targetRO,
-      concerns: updatedConcerns,
       recommendations: updatedRecs,
     };
 
@@ -4804,6 +4797,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             requestedAt: new Date().toISOString(),
           });
           updatedItem.recommendationId = newRecId;
+        }
+      }
+
+      // Ensure any prior duplicate in updatedConcerns matching this inspection item is cleaned up
+      if (updatedConcerns.length > 0 && possibleNames.size > 0) {
+        const keepIndices: number[] = [];
+        const cleanConcerns: string[] = [];
+        updatedConcerns.forEach((c, i) => {
+          const cLower = c.trim().toLowerCase();
+          if (!possibleNames.has(cLower)) {
+            cleanConcerns.push(c);
+            keepIndices.push(i);
+          }
+        });
+
+        if (cleanConcerns.length > 0 && cleanConcerns.length < updatedConcerns.length) {
+          updatedConcerns = cleanConcerns;
+          if (updatedPayTypes) updatedPayTypes = keepIndices.map(i => updatedPayTypes![i]);
+          if (updatedTechIds) updatedTechIds = keepIndices.map(i => updatedTechIds![i]);
+          if (updatedTechNames) updatedTechNames = keepIndices.map(i => updatedTechNames![i]);
+          if (updatedCauses) updatedCauses = keepIndices.map(i => updatedCauses![i]);
+          if (updatedCorrections) updatedCorrections = keepIndices.map(i => updatedCorrections![i]);
+          if (updatedStatuses) updatedStatuses = keepIndices.map(i => updatedStatuses![i]);
         }
       }
 
