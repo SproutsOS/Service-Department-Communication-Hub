@@ -53,11 +53,8 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errMsg = error instanceof Error ? error.message : String(error);
-  const isQuotaError = errMsg.toLowerCase().includes('quota limit exceeded') || errMsg.toLowerCase().includes('resource-exhausted');
-
   const errInfo: FirestoreErrorInfo = {
-    error: errMsg,
+    error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth?.currentUser?.uid,
       email: auth?.currentUser?.email,
@@ -72,12 +69,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-
-  if (isQuotaError) {
-    console.warn(`[Firestore Quota Limit] Serving from persistent local cache & storage for path: ${path}`);
-  } else {
-    console.error('Firestore Error: ', JSON.stringify(errInfo));
-  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
   return errInfo;
 }
 
