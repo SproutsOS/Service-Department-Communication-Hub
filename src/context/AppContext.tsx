@@ -519,11 +519,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isWiped) {
         return [];
       }
-      const saved = localStorage.getItem(STORAGE_KEY_ROS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map((ro: RepairOrder) => cleanRO3700(ro));
+      const candidateKeys = [
+        STORAGE_KEY_ROS,
+        'precision_auto_service_ros_v6_clean',
+        'precision_auto_service_ros_v5_clean',
+        'precision_auto_service_ros_v5',
+        'precision_auto_service_ros_v4',
+        'precision_auto_service_ros_v3',
+        'precision_auto_service_ros_v2',
+        'precision_auto_service_ros_v1',
+        'precision_auto_service_ros',
+        'remix_service_ros',
+      ];
+      for (const k of candidateKeys) {
+        const saved = localStorage.getItem(k);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((ro: RepairOrder) => cleanRO3700(ro));
+          }
         }
       }
     } catch {
@@ -1077,7 +1091,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync to local storage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(repairOrders));
+      const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
+      if (repairOrders.length > 0 || isWiped) {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(repairOrders));
+      }
     } catch {
       // ignore
     }
@@ -1113,26 +1130,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevROMap = new Map<string, string>();
 
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
-      setRepairOrders(cloudROs);
-      setIsCloudSynced(true);
-
-      if (isInitialROLoad) {
-        cloudROs.forEach(r => {
-          prevROMap.set(r.id, `${r.status}_${r.history?.length || 0}_${r.updatedAt || ''}_${r.recommendations?.length || 0}_${r.quote?.status || ''}_${r.parts?.length || 0}`);
-        });
-        isInitialROLoad = false;
-        return;
-      }
-
-      cloudROs.forEach(r => {
-        const sig = `${r.status}_${r.history?.length || 0}_${r.updatedAt || ''}_${r.recommendations?.length || 0}_${r.quote?.status || ''}_${r.parts?.length || 0}`;
-        const prevSig = prevROMap.get(r.id);
-        if (prevSig && prevSig !== sig) {
-          const summary = r.lastChangeSummary || `Status: ${STATUS_CONFIG[r.status]?.label || r.status}`;
-          recordROChange(r.id, summary);
+      if (cloudROs.length > 0) {
+        setRepairOrders(cloudROs);
+        setIsCloudSynced(true);
+        try {
+          localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(cloudROs));
+        } catch {
+          // ignore
         }
-        prevROMap.set(r.id, sig);
-      });
+
+        if (isInitialROLoad) {
+          cloudROs.forEach(r => {
+            prevROMap.set(r.id, `${r.status}_${r.history?.length || 0}_${r.updatedAt || ''}_${r.recommendations?.length || 0}_${r.quote?.status || ''}_${r.parts?.length || 0}`);
+          });
+          isInitialROLoad = false;
+          return;
+        }
+
+        cloudROs.forEach(r => {
+          const sig = `${r.status}_${r.history?.length || 0}_${r.updatedAt || ''}_${r.recommendations?.length || 0}_${r.quote?.status || ''}_${r.parts?.length || 0}`;
+          const prevSig = prevROMap.get(r.id);
+          if (prevSig && prevSig !== sig) {
+            const summary = r.lastChangeSummary || `Status: ${STATUS_CONFIG[r.status]?.label || r.status}`;
+            recordROChange(r.id, summary);
+          }
+          prevROMap.set(r.id, sig);
+        });
+      }
     });
 
     // Subscribe to real-time Users
