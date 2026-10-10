@@ -44,7 +44,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
   onOpenQuote,
   canEdit = false
 }) => {
-  const { updateConcernStatus } = useApp();
+  const { updateConcernStatus, updateRecommendedService } = useApp();
   const ro = cleanRO3700(rawRO);
   const [isAddingLine, setIsAddingLine] = useState(false);
   const [newConcernText, setNewConcernText] = useState('');
@@ -54,6 +54,8 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
   const concerns = ro.concerns && ro.concerns.length > 0 
     ? ro.concerns 
     : [ro.primaryConcern || 'General Inspection'];
+
+  const totalLinesCount = concerns.length + (ro.recommendations?.length || 0);
 
   const handleLineStatusToggle = (idx: number, targetStatus: LineApprovalStatus) => {
     const current = ro.concernStatuses?.[idx] || (ro.quote?.lineStatuses?.[idx + 1]) || 'PENDING';
@@ -94,7 +96,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-black px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 border border-blue-300">
-            {concerns.length} Line Item{concerns.length === 1 ? '' : 's'}
+            {totalLinesCount} Line Item{totalLinesCount === 1 ? '' : 's'}
           </span>
           {canEdit && onAddConcern && (
             <button
@@ -447,7 +449,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
               </div>
 
               {/* 4. Integrated Parts for this Line (Part Name, Price, Qty, Availability) */}
-              <LinePartsSection ro={ro} lineNum={lineNum} />
+              <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={false} />
 
               {/* 5. Line Evidence & Inspection Photos */}
               <LinePhotoSection 
@@ -512,6 +514,257 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
             </div>
           );
         })}
+
+        {/* 2. Inspection Findings & Recommended Services (e.g. Line 4 from 21-Point Inspection) */}
+        {(ro.recommendations || []).map((rec, recIdx) => {
+          const lineNum = concerns.length + recIdx + 1;
+          const lineStatus: LineApprovalStatus = (ro.quote?.lineStatuses?.[lineNum]) || (rec.status === 'APPROVED' ? 'APPROVED' : rec.status === 'DECLINED' ? 'DECLINED' : 'PENDING');
+          const payType: ConcernPayType = rec.payType || ro.concernPayTypes?.[lineNum - 1] || 'CUSTOMER_PAY';
+          const assignedTechId = rec.requestedByTechId || ro.concernTechIds?.[lineNum - 1] || ro.techId;
+          const assignedTechName = rec.requestedByTechName || ro.concernTechNames?.[lineNum - 1] || (assignedTechId ? users.find(u => u.id === assignedTechId)?.name : ro.techName) || 'Unassigned';
+          const assignedTechUser = users.find(u => u.id === assignedTechId || u.name === assignedTechName);
+
+          return (
+            <div 
+              key={rec.id}
+              className={`rounded-xl border transition-all p-4 space-y-3 ${
+                lineStatus === 'DECLINED' 
+                  ? 'bg-rose-50/25 border-rose-300 shadow-2xs' 
+                  : lineStatus === 'APPROVED' 
+                  ? 'bg-white border-emerald-300 shadow-2xs' 
+                  : 'bg-white border-red-200 shadow-2xs hover:border-red-300'
+              }`}
+            >
+              {/* Header: Line Number, Status, Pay Type, Assigned Tech, Approve/Declined Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
+                    Line {lineNum}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                    21-Point Inspection Finding
+                  </span>
+                  {lineStatus === 'APPROVED' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                      <span>Approved</span>
+                    </span>
+                  )}
+                  {lineStatus === 'DECLINED' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
+                      <XCircle className="w-3 h-3 text-rose-700" />
+                      <span>Declined</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Pay Type Badge / Selector */}
+                  <div className="flex items-center gap-1.5">
+                    {canEdit ? (
+                      <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-300">
+                        <button
+                          type="button"
+                          onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'CUSTOMER_PAY' })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                            payType === 'CUSTOMER_PAY' 
+                              ? 'bg-blue-600 text-white shadow-2xs' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Customer Pay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'WARRANTY' })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                            payType === 'WARRANTY' 
+                              ? 'bg-amber-500 text-white shadow-2xs' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Warranty
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'INTERNAL' })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                            payType === 'INTERNAL' 
+                              ? 'bg-purple-600 text-white shadow-2xs' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Internal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateRecommendedService(ro.id, rec.id, { payType: 'EXTENDED_WARRANTY' })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                            payType === 'EXTENDED_WARRANTY' 
+                              ? 'bg-teal-600 text-white shadow-2xs' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Extended Warranty
+                        </button>
+                      </div>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                        payType === 'WARRANTY'
+                          ? 'bg-amber-50 text-amber-900 border-amber-300'
+                          : payType === 'INTERNAL'
+                          ? 'bg-purple-50 text-purple-900 border-purple-300'
+                          : payType === 'EXTENDED_WARRANTY'
+                          ? 'bg-teal-50 text-teal-900 border-teal-300'
+                          : 'bg-blue-50 text-blue-900 border-blue-300'
+                      }`}>
+                        {payType.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Assigned Tech */}
+                  <div className="flex items-center gap-1 text-xs">
+                    <Wrench className="w-3.5 h-3.5 text-slate-500" />
+                    {canEdit ? (
+                      <select
+                        value={assignedTechId || ''}
+                        onChange={e => {
+                          const chosenTech = technicians.find(t => t.id === e.target.value);
+                          updateRecommendedService(ro.id, rec.id, {
+                            requestedByTechId: chosenTech?.id,
+                            requestedByTechName: chosenTech?.name
+                          });
+                        }}
+                        className="text-xs font-semibold bg-white border border-slate-300 rounded px-2 py-1 text-slate-800 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                      >
+                        <option value="">{ro.techName ? `(Primary: ${ro.techName})` : 'Unassigned'}</option>
+                        {technicians.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}{t.employeeNumber ? ` (#${t.employeeNumber})` : ''}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-bold text-slate-800 text-[11px]">{assignedTechName}</span>
+                    )}
+                  </div>
+
+                  {/* Approve / Declined Action Buttons */}
+                  <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = lineStatus === 'APPROVED' ? 'PENDING' : 'APPROVED';
+                        updateRecommendedService(ro.id, rec.id, { status: next });
+                      }}
+                      className={`px-2 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                        lineStatus === 'APPROVED' 
+                          ? 'bg-emerald-600 text-white shadow-2xs' 
+                          : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                      title="Approve Line"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Approve</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = lineStatus === 'DECLINED' ? 'PENDING' : 'DECLINED';
+                        updateRecommendedService(ro.id, rec.id, { status: next });
+                      }}
+                      className={`px-2 py-0.5 rounded text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                        lineStatus === 'DECLINED' 
+                          ? 'bg-rose-600 text-white shadow-2xs' 
+                          : 'text-slate-600 hover:text-rose-700 hover:bg-rose-50'
+                      }`}
+                      title="Decline Line"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>Decline</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Finding / Concern Title */}
+              <div className="bg-red-50/40 p-3 rounded-lg border border-red-200 text-xs">
+                <span className="font-black text-red-950 uppercase tracking-wider text-[10px] block mb-1">
+                  Technician Inspection Finding:
+                </span>
+                <p className="font-bold text-slate-900 whitespace-pre-wrap">{rec.serviceName}</p>
+              </div>
+
+              {/* Cause & Correction if documented */}
+              {(rec.cause || rec.correction) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <div>
+                    <span className="font-bold text-amber-900 uppercase block text-[10px]">Cause:</span>
+                    <p className="font-mono text-slate-800 text-[11px] whitespace-pre-wrap">{rec.cause || 'Diagnostic finding pending'}</p>
+                  </div>
+                  <div>
+                    <span className="font-bold text-emerald-900 uppercase block text-[10px]">Correction:</span>
+                    <p className="font-mono text-slate-800 text-[11px] whitespace-pre-wrap">{rec.correction || 'Repair correction pending'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Integrated Parts for Line */}
+              <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={false} />
+
+              {/* Line Evidence & Inspection Photos */}
+              <LinePhotoSection 
+                roId={ro.id} 
+                roLineNumber={lineNum} 
+                concernIndex={concerns.length + recIdx}
+                photos={ro.linePhotos} 
+                lineTitle={rec.serviceName} 
+              />
+
+              {/* Line Quote Summary */}
+              {(() => {
+                const lineLaborItems = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                const linePartsItems = (ro.quote?.partsItems || []).filter(p => (p.roLineNumber || 1) === lineNum);
+                const lineROParts = (ro.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
+
+                const lineLaborHours = lineLaborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+                const lineLaborCost = lineLaborItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                const lineQuotePartsCost = linePartsItems.reduce((acc, item) => acc + (Number(item.subtotal) || (Number(item.unitPrice || 0) * Number(item.quantity || 1))), 0);
+                const lineROPartsCost = lineROParts.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+                const linePartsCost = linePartsItems.length > 0 ? lineQuotePartsCost : lineROPartsCost;
+                const linePartsCount = linePartsItems.length > 0 ? linePartsItems.length : lineROParts.length;
+                const lineTotal = lineLaborCost + linePartsCost;
+                const hasLineQuote = lineLaborItems.length > 0 || linePartsItems.length > 0 || lineROParts.length > 0;
+
+                return (
+                  <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <Calculator className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
+                      {hasLineQuote ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                            Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                            Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="italic text-slate-500 text-[11px]">Estimate pending</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+                      <span className="text-xs font-black font-mono px-2.5 py-1 rounded-md border shadow-2xs text-indigo-950 bg-white border-indigo-300">
+                        Line {lineNum} Total: ${lineTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })}
       </div>
 
       {/* Quote Total Summary Bar */}
@@ -524,7 +777,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 Repair Order Quote Total (By Line & Totaled)
               </h5>
               <span className="text-[11px] text-slate-300">
-                Itemized totals across all {concerns.length} concern line{concerns.length === 1 ? '' : 's'}
+                Itemized totals across all {totalLinesCount} job line{totalLinesCount === 1 ? '' : 's'}
               </span>
             </div>
           </div>
@@ -542,7 +795,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
 
         {/* Line-by-line itemized totals summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-          {concerns.map((_, i) => {
+          {Array.from({ length: totalLinesCount }, (_, i) => {
             const lNum = i + 1;
             const lStatus = ro.concernStatuses?.[i] || ro.quote?.lineStatuses?.[lNum] || 'PENDING';
             const lLabor = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lNum).reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);

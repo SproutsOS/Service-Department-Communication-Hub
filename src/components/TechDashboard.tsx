@@ -825,8 +825,8 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           );
                         }
 
-                        // If quote / estimate is submitted, or if awaiting approval / estimate done / findings completed
-                        if (ro.status === 'WAITING_FOR_APPROVAL' || ro.status === 'WAITING_APPROVAL' || ro.status === 'ESTIMATE_DONE' || ro.quote?.status === 'SUBMITTED' || isLineComplete || (lineHours[idx] && Number(lineHours[idx]) > 0)) {
+                        // If quote / estimate is submitted, or if awaiting approval / estimate done
+                        if (ro.status === 'WAITING_FOR_APPROVAL' || ro.status === 'WAITING_APPROVAL' || ro.status === 'ESTIMATE_DONE' || ro.quote?.status === 'SUBMITTED' || isLineComplete) {
                           return (
                             <span className="text-xs font-black uppercase px-2.5 py-1 bg-purple-700 text-white rounded-md flex items-center gap-1 shadow-xs border border-purple-800">
                               <Clock className="w-3.5 h-3.5" />
@@ -949,7 +949,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                                 );
                               }
                             }}
-                            className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs shrink-0 ${
                               isLineClockedIn
                                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
                                 : isClockedIn
@@ -987,7 +987,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           e.stopPropagation();
                           setPastPunchModal({ isOpen: true, lineNum: idx + 1, concernText });
                         }}
-                        className="px-3 py-1.5 rounded-full text-xs font-bold border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                        className="px-3 py-1.5 rounded-full text-xs font-bold border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
                         title={`Log a completed past labor punch for Line ${idx + 1}`}
                       >
                         <History className="w-3.5 h-3.5 text-slate-600 shrink-0" />
@@ -997,7 +997,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       {/* Inline Labor Hours Requested Input for Line {idx + 1} (Syncs to Quote) */}
                       <div 
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all"
+                        className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all shrink-0"
                         title={`Enter labor hours requested for Line ${idx + 1} — automatically updates the repair quote`}
                       >
                         <Clock className="w-4 h-4 text-blue-600 shrink-0" />
@@ -1522,7 +1522,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   />
 
                   {/* Integrated Line Parts: Part Name, Price, Qty, Availability */}
-                  <LinePartsSection ro={ro} lineNum={idx + 1} />
+                  <LinePartsSection ro={ro} lineNum={idx + 1} allowAddPart={false} />
 
                   {/* Line Evidence & Inspection Photos (Take Photo on each line) */}
                   <LinePhotoSection 
@@ -1712,7 +1712,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                                 );
                               }
                             }}
-                            className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs shrink-0 ${
                               isRecLineClockedIn
                                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
                                 : isClockedIn
@@ -1750,7 +1750,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                           e.stopPropagation();
                           setPastPunchModal({ isOpen: true, lineNum: globalLineNum, concernText: rec.serviceName });
                         }}
-                        className="px-3 py-1.5 rounded-full text-xs font-bold border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                        className="px-3 py-1.5 rounded-full text-xs font-bold border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
                         title={`Log a completed past labor punch for Line ${globalLineNum}`}
                       >
                         <History className="w-3.5 h-3.5 text-slate-600 shrink-0" />
@@ -1760,7 +1760,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       {/* Labor Hours requested input for Line (Syncs to Quote and Recommendation) */}
                       <div 
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all"
+                        className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all shrink-0"
                         title={`Enter labor hours for Line ${globalLineNum} — automatically updates the repair quote`}
                       >
                         <Clock className="w-4 h-4 text-blue-600 shrink-0" />
@@ -1926,7 +1926,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   />
 
                   {/* Integrated Line Parts for this Recommendation Line */}
-                  <LinePartsSection ro={ro} lineNum={globalLineNum} />
+                  <LinePartsSection ro={ro} lineNum={globalLineNum} allowAddPart={false} />
 
                   {/* Line Evidence & Inspection Photos */}
                   <LinePhotoSection 
@@ -2441,7 +2441,17 @@ export const TechPartsRequestModal: React.FC<TechPartsRequestModalProps> = ({ ro
                           value={part.quantity === 0 || (part.quantity as any) === '' ? '' : part.quantity}
                           onChange={(e) => {
                             const val = e.target.value;
-                            handleUpdatePartLine(part.id, 'quantity', val === '' ? 1 : Math.max(1, parseInt(val) || 1));
+                            if (val === '') {
+                              handleUpdatePartLine(part.id, 'quantity', '' as any);
+                            } else {
+                              const num = parseInt(val, 10);
+                              handleUpdatePartLine(part.id, 'quantity', isNaN(num) ? 1 : Math.max(1, Math.min(99, num)));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (!part.quantity || isNaN(Number(part.quantity)) || Number(part.quantity) < 1) {
+                              handleUpdatePartLine(part.id, 'quantity', 1);
+                            }
                           }}
                           className="w-full text-center py-2 bg-white border-y border-slate-300 text-xs font-extrabold text-slate-900 focus:outline-none"
                         />

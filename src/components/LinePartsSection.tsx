@@ -11,6 +11,7 @@ interface LinePartsSectionProps {
   lineNum: number;
   className?: string;
   compact?: boolean;
+  allowAddPart?: boolean;
 }
 
 export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
@@ -18,6 +19,7 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
   lineNum,
   className = '',
   compact = false,
+  allowAddPart = true,
 }) => {
   const { currentUser, activeRoleView } = useApp();
   const [editingPartItem, setEditingPartItem] = useState<PartItem | null>(null);
@@ -26,12 +28,14 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
   const parts = getLineParts(ro, lineNum);
   const totalPartsCost = parts.reduce((sum, p) => sum + p.subtotal, 0);
 
-  const canEditParts = currentUser.role === 'SERVICE_MANAGER' || 
-                       currentUser.role === 'PARTS_SPECIALIST' || 
-                       currentUser.role === 'SERVICE_ADVISOR' ||
-                       activeRoleView === 'SERVICE_MANAGER' ||
-                       activeRoleView === 'PARTS_SPECIALIST' ||
-                       activeRoleView === 'SERVICE_ADVISOR';
+  // Service Advisor never adds or edits parts on their screen
+  const isAdvisor = currentUser.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR';
+  const canEditParts = allowAddPart && !isAdvisor && (
+    currentUser.role === 'SERVICE_MANAGER' || 
+    currentUser.role === 'PARTS_SPECIALIST' || 
+    activeRoleView === 'SERVICE_MANAGER' ||
+    activeRoleView === 'PARTS_SPECIALIST'
+  );
 
   const handleOpenEdit = (part: IntegratedLinePart) => {
     const rawPart = (ro.parts || []).find(p => p.id === part.id) || {

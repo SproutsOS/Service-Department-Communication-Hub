@@ -429,11 +429,20 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
                 <span>Unit Cost ($)</span>
               </label>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={cost}
-                onChange={(e) => setCost(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                  const parts = raw.split('.');
+                  setCost(parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw);
+                }}
+                onBlur={(e) => {
+                  const raw = e.target.value.replace(/[^0-9.]/g, '').trim();
+                  if (raw !== '' && !isNaN(parseFloat(raw))) {
+                    setCost(parseFloat(raw).toFixed(2));
+                  }
+                }}
                 placeholder="0.00"
                 className="w-full text-xs font-mono font-bold p-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500"
               />
@@ -453,11 +462,20 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
                 )}
               </label>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                  const parts = raw.split('.');
+                  setPrice(parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw);
+                }}
+                onBlur={(e) => {
+                  const raw = e.target.value.replace(/[^0-9.]/g, '').trim();
+                  if (raw !== '' && !isNaN(parseFloat(raw))) {
+                    setPrice(parseFloat(raw).toFixed(2));
+                  }
+                }}
                 placeholder="0.00"
                 className="w-full text-xs font-mono font-bold p-2 bg-white border border-emerald-300 rounded-lg text-emerald-900 focus:ring-2 focus:ring-emerald-500"
               />

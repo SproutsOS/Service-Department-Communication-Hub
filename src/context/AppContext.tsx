@@ -171,6 +171,7 @@ interface AppContextType {
   addMultiplePartOrders: (roId: string, parts: Array<Omit<PartItem, 'id' | 'roId'>>) => void;
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
   updatePartItem: (roId: string, partId: string, updates: Partial<PartItem>) => void;
+  markAllPartsOrderedOnRO: (roId: string, defaultEta?: string) => boolean;
   deletePartItem: (roId: string, partId: string) => void;
   createRepairOrder: (data: {
     roNumber?: string;
@@ -1113,7 +1114,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevROMap = new Map<string, string>();
 
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
-      setRepairOrders(cloudROs);
+      const sanitizedROs = cloudROs.map((r: RepairOrder) => cleanRO3700(r));
+      setRepairOrders(sanitizedROs);
       setIsCloudSynced(true);
 
       if (isInitialROLoad) {
@@ -1649,12 +1651,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
           return {
             ...p,
-            status: 'ORDERED' as PartStatus,
+            status: 'REQUESTED' as PartStatus,
             requestType: 'ORDER_NOW' as const,
-            orderedAt: p.orderedAt || now,
+            orderedAt: undefined,
             estimatedArrival: p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate')
               ? p.estimatedArrival
-              : 'Daily Order (Arriving ~5:00 PM)',
+              : 'Customer Approved — Order Needed',
+            notes: p.notes ? `${p.notes} (Customer Authorized — Order Parts)` : 'Customer Authorized — Order Parts',
           };
         }
         return p;
@@ -1668,6 +1671,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
           );
           if (!alreadyExists) {
+            const isLineDeclined = targetRO.quote?.lineStatuses?.[qp.roLineNumber || 1] === 'DECLINED';
             updatedParts.push({
               id: qp.sourcePartId || `qpart_approved_${Date.now()}_${idx}`,
               roId: targetRO.id,
@@ -1676,11 +1680,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               description: qp.description || 'Quoted Part',
               quantity: qp.quantity || 1,
               price: qp.unitPrice,
-              status: 'ORDERED',
-              requestType: 'ORDER_NOW',
-              orderedAt: now,
-              estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
+              status: isLineDeclined ? 'DECLINED' : 'REQUESTED',
+              requestType: isLineDeclined ? 'QUOTE_ONLY' : 'ORDER_NOW',
+              orderedAt: undefined,
+              estimatedArrival: isLineDeclined ? undefined : 'Customer Approved — Order Needed',
               roLineNumber: qp.roLineNumber || 1,
+              notes: isLineDeclined ? 'Declined by customer' : 'Customer authorized repair — place part order with supplier',
             });
           }
         });
@@ -2010,9 +2015,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? part.status 
           : (part.status === 'NEEDED' || part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' ? part.status : defaultInitialStatus);
 
+        let itemPrice: number | undefined = undefined;
+        if (part.price !== undefined) {
+          const clean = typeof part.price === 'string' ? String(part.price).replace(/[^0-9.-]/g, '') : part.price;
+          if (clean !== '' && !isNaN(Number(clean))) {
+            itemPrice = Number(Number(clean).toFixed(2));
+          }
+        }
         return {
           ...part,
-          price: (part.price !== undefined && !isNaN(Number(part.price))) ? Number(Number(part.price).toFixed(2)) : undefined,
+          quantity: Math.max(1, Number(part.quantity) || 1),
+          price: itemPrice,
           status: effectivePartStatus,
           id: `prt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
           roId,
@@ -2073,17 +2086,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         for (const newPart of newParts) {
           const matchIdx = nextPartsItems.findIndex(qp => 
             qp.sourcePartId === newPart.id || 
-            (newPart.partNumber && qp.partNumber && qp.partNumber.trim().toUpperCase() === newPart.partNumber.trim().toUpperCase())
+            (newPart.partNumber && newPart.partNumber !== 'TBD' && qp.partNumber && qp.partNumber !== 'TBD' && qp.partNumber.trim().toUpperCase() === newPart.partNumber.trim().toUpperCase())
           );
           const partPrice = (newPart.price !== undefined && Number(newPart.price) > 0) ? Number(newPart.price) : 0;
+          const effectiveQty = Math.max(1, Number(newPart.quantity) || 1);
           if (matchIdx >= 0) {
             nextPartsItems[matchIdx] = {
               ...nextPartsItems[matchIdx],
               description: newPart.description || newPart.name || nextPartsItems[matchIdx].description,
               partNumber: newPart.partNumber || nextPartsItems[matchIdx].partNumber,
-              quantity: newPart.quantity || nextPartsItems[matchIdx].quantity || 1,
+              quantity: effectiveQty,
               unitPrice: partPrice > 0 ? partPrice : nextPartsItems[matchIdx].unitPrice,
-              subtotal: (newPart.quantity || nextPartsItems[matchIdx].quantity || 1) * (partPrice > 0 ? partPrice : (Number(nextPartsItems[matchIdx].unitPrice) || 0)),
+              subtotal: effectiveQty * (partPrice > 0 ? partPrice : (Number(nextPartsItems[matchIdx].unitPrice) || 0)),
               sourcePartId: newPart.id,
               roLineNumber: newPart.roLineNumber || nextPartsItems[matchIdx].roLineNumber,
             };
@@ -2092,9 +2106,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               id: `qpart_${Date.now()}_${newPart.id}`,
               description: newPart.description || newPart.name,
               partNumber: newPart.partNumber,
-              quantity: newPart.quantity || 1,
+              quantity: effectiveQty,
               unitPrice: partPrice > 0 ? partPrice : ('' as any),
-              subtotal: (newPart.quantity || 1) * (partPrice > 0 ? partPrice : 0),
+              subtotal: effectiveQty * (partPrice > 0 ? partPrice : 0),
               sourcePartId: newPart.id,
               roLineNumber: newPart.roLineNumber,
             });
@@ -2162,57 +2176,160 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const targetRO = repairOrders.find(r => r.id === roId);
-    if (!targetRO) return;
-
+    let updatedROToSync: RepairOrder | null = null;
     let partDescription = '';
-    const updatedParts = targetRO.parts.map(p => {
-      if (p.id !== partId) return p;
-      partDescription = p.description;
-      return {
-        ...p,
-        status,
-        estimatedArrival: eta || p.estimatedArrival,
-        notes: notes || p.notes,
+    let isUrgent = false;
+
+    setRepairOrders(prevROs => {
+      const targetRO = prevROs.find(r => r.id === roId);
+      if (!targetRO) return prevROs;
+
+      const updatedParts = (targetRO.parts || []).map(p => {
+        if (p.id !== partId) return p;
+        partDescription = p.description || p.name || 'Part';
+        return {
+          ...p,
+          status,
+          estimatedArrival: eta || p.estimatedArrival,
+          notes: notes || p.notes,
+        };
+      });
+
+      const allReceived = updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
+      const allOrderedOrReceived = updatedParts.length > 0 && updatedParts.every(p => 
+        ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'].includes(p.status)
+      );
+
+      let nextROStatus = targetRO.status;
+      if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
+        nextROStatus = status === 'ISSUED_TO_TECH' ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
+      } else if (allOrderedOrReceived && (targetRO.status === 'APPROVED' || targetRO.status === 'WAITING_PARTS' || targetRO.status === 'ESTIMATE_DONE')) {
+        nextROStatus = 'PARTS_ORDERED';
+      }
+
+      isUrgent = status === 'RECEIVED' || status === 'ISSUED_TO_TECH';
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        status: nextROStatus,
+        parts: updatedParts,
+        history: [
+          ...targetRO.history,
+          {
+            id: `hist_${Date.now()}`,
+            status: nextROStatus,
+            updatedBy: currentUser.id,
+            updatedByName: currentUser.name,
+            userRole: currentUser.role,
+            timestamp: new Date().toISOString(),
+            notes: `Part ${partDescription} status updated to ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}.${nextROStatus === 'REPAIR_IN_PROGRESS' ? ' All parts present, RO transitioned to Repair in Progress.' : nextROStatus === 'PARTS_IN_TO_TECH' ? ' Parts arrived, staged for tech.' : nextROStatus === 'PARTS_ORDERED' ? ' All parts on order.' : ''}`,
+          },
+        ],
       };
+
+      updatedROToSync = updatedRO;
+      return prevROs.map(ro => ro.id === roId ? updatedRO : ro);
     });
 
-    const allReceived = updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
-    let nextROStatus = targetRO.status;
-    if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
-      nextROStatus = status === 'ISSUED_TO_TECH' ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
+    if (updatedROToSync) {
+      syncRepairOrder(updatedROToSync);
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_ROS);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = parsed.map((r: RepairOrder) => r.id === roId ? updatedROToSync : r);
+          localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+        }
+      } catch {
+        // ignore
+      }
+
+      triggerNotification(
+        updatedROToSync,
+        `Part ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}: ${partDescription}`,
+        `Status updated by ${currentUser.name}. ${eta ? `New ETA: ${eta}.` : ''}`,
+        isUrgent,
+        'PARTS_UPDATE'
+      );
+    }
+  };
+
+  // Mark All Approved Parts as Ordered on an RO (Atomic update across all parts + RO status)
+  const markAllPartsOrderedOnRO = (roId: string, defaultEta: string = 'Special Order 1-5 Days'): boolean => {
+    let success = false;
+    let updatedROToSync: RepairOrder | null = null;
+
+    setRepairOrders(prevROs => {
+      const targetRO = prevROs.find(r => r.id === roId);
+      if (!targetRO) return prevROs;
+
+      const updatedParts = (targetRO.parts || []).map(p => {
+        const lineStatus = targetRO.quote?.lineStatuses?.[p.roLineNumber || 1];
+        if (lineStatus === 'DECLINED' || p.status === 'DECLINED' || p.status === 'CANCELLED') {
+          return p;
+        }
+        if (p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH' || p.status === 'IN_STOCK') {
+          return p;
+        }
+        return {
+          ...p,
+          status: 'ORDERED' as PartStatus,
+          requestType: 'ORDER_NOW' as const,
+          estimatedArrival: (p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate'))
+            ? p.estimatedArrival
+            : defaultEta,
+          orderedAt: p.orderedAt || new Date().toISOString(),
+        };
+      });
+
+      const nextROStatus: ROStatus = 'PARTS_ORDERED';
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        status: nextROStatus,
+        parts: updatedParts,
+        history: [
+          ...targetRO.history,
+          {
+            id: `hist_${Date.now()}`,
+            status: nextROStatus,
+            updatedBy: currentUser.id,
+            updatedByName: currentUser.name,
+            userRole: currentUser.role,
+            timestamp: new Date().toISOString(),
+            notes: 'All approved parts placed on order with suppliers. RO status updated to PARTS_ORDERED.',
+          },
+        ],
+      };
+
+      updatedROToSync = updatedRO;
+      success = true;
+
+      return prevROs.map(r => r.id === roId ? updatedRO : r);
+    });
+
+    if (updatedROToSync) {
+      syncRepairOrder(updatedROToSync);
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_ROS);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = parsed.map((r: RepairOrder) => r.id === roId ? updatedROToSync : r);
+          localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+        }
+      } catch {
+        // ignore
+      }
+
+      triggerNotification(
+        updatedROToSync,
+        `RO #${roId} Parts Ordered`,
+        `All approved parts for RO #${roId} placed on order with suppliers.`,
+        false,
+        'PARTS_UPDATE'
+      );
     }
 
-    const isUrgent = status === 'RECEIVED' || status === 'ISSUED_TO_TECH';
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      status: nextROStatus,
-      parts: updatedParts,
-      history: [
-        ...targetRO.history,
-        {
-          id: `hist_${Date.now()}`,
-          status: nextROStatus,
-          updatedBy: currentUser.id,
-          updatedByName: currentUser.name,
-          userRole: currentUser.role,
-          timestamp: new Date().toISOString(),
-          notes: `Part ${partDescription} status updated to ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}.${nextROStatus === 'REPAIR_IN_PROGRESS' ? ' All parts present, RO transitioned to Repair in Progress.' : nextROStatus === 'PARTS_IN_TO_TECH' ? ' Parts arrived, staged for tech.' : ''}`,
-        },
-      ],
-    };
-
-    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
-    syncRepairOrder(updatedRO);
-
-    triggerNotification(
-      updatedRO,
-      `Part ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}: ${partDescription}`,
-      `Status updated by ${currentUser.name}. ${eta ? `New ETA: ${eta}.` : ''}`,
-      isUrgent,
-      'PARTS_UPDATE'
-    );
+    return success;
   };
 
   // Update Part Item Details (Full update: Part Number, Description, Vendor, Quantity, Price, ETA, Status, Notes)
@@ -2228,10 +2345,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedParts = targetRO.parts.map(p => {
       if (p.id !== partId) return p;
       partDesc = updates.description || p.description;
+      let parsedPrice = p.price;
+      if (updates.price !== undefined) {
+        const clean = typeof updates.price === 'number' ? updates.price : String(updates.price ?? '').replace(/[^0-9.-]/g, '');
+        if (clean !== '' && !isNaN(Number(clean))) {
+          parsedPrice = Number(Number(clean).toFixed(2));
+        } else if (clean === '' || clean === null) {
+          parsedPrice = undefined;
+        }
+      }
       return {
         ...p,
         ...updates,
-        price: (updates.price !== undefined && !isNaN(Number(updates.price))) ? Number(Number(updates.price).toFixed(2)) : p.price,
+        price: parsedPrice,
       };
     });
 
@@ -2293,16 +2419,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (mergedQuote) {
       const existingQuoteParts = mergedQuote.partsItems || [];
-      const matchIdx = existingQuoteParts.findIndex(qp => qp.sourcePartId === partId || (updates.partNumber && qp.partNumber === updates.partNumber));
       let nextPartsItems = [...existingQuoteParts];
-      const partPrice = (updates.price !== undefined && !isNaN(Number(updates.price))) ? Number(Number(updates.price).toFixed(2)) : undefined;
       const targetPart = targetRO.parts.find(p => p.id === partId);
       const effectiveLineNumber = updates.roLineNumber || targetPart?.roLineNumber;
+      const cleanUpdatesPn = updates.partNumber && updates.partNumber !== 'TBD' ? updates.partNumber.trim().toUpperCase() : '';
+      const cleanTargetPn = targetPart?.partNumber && targetPart.partNumber !== 'TBD' ? targetPart.partNumber.trim().toUpperCase() : '';
+
+      const matchIdx = existingQuoteParts.findIndex(qp => {
+        if (qp.sourcePartId && qp.sourcePartId === partId) return true;
+        if (qp.id === partId || qp.id === `qpart_${partId}`) return true;
+        if (cleanUpdatesPn && qp.partNumber && qp.partNumber.trim().toUpperCase() === cleanUpdatesPn) return true;
+        if (cleanTargetPn && qp.partNumber && qp.partNumber.trim().toUpperCase() === cleanTargetPn) return true;
+        if (partDesc && qp.description && qp.description.trim().toLowerCase() === partDesc.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      let partPrice: number | undefined = undefined;
+      if (updates.price !== undefined) {
+        const clean = typeof updates.price === 'number' ? updates.price : String(updates.price ?? '').replace(/[^0-9.-]/g, '');
+        if (clean !== '' && !isNaN(Number(clean))) {
+          partPrice = Number(Number(clean).toFixed(2));
+        }
+      }
 
       if (matchIdx >= 0) {
         const cur = nextPartsItems[matchIdx];
         const newUnitPrice = partPrice !== undefined ? partPrice : (cur.unitPrice || 0);
-        const newQty = updates.quantity !== undefined ? updates.quantity : (cur.quantity || 1);
+        const newQty = updates.quantity !== undefined 
+          ? Math.max(1, Number(updates.quantity) || 1) 
+          : (targetPart?.quantity || cur.quantity || 1);
         nextPartsItems[matchIdx] = {
           ...cur,
           description: updates.description || cur.description,
@@ -2314,13 +2459,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           roLineNumber: effectiveLineNumber || cur.roLineNumber,
         };
       } else if (partDesc || updates.partNumber) {
+        const newPartQty = updates.quantity !== undefined 
+          ? Math.max(1, Number(updates.quantity) || 1) 
+          : (targetPart?.quantity || 1);
         nextPartsItems.push({
           id: `qpart_${Date.now()}_${partId}`,
           description: partDesc || `Part ${updates.partNumber || ''}`,
           partNumber: updates.partNumber || '',
-          quantity: updates.quantity || 1,
+          quantity: newPartQty,
           unitPrice: (partPrice !== undefined) ? partPrice : ('' as any),
-          subtotal: Number(((updates.quantity || 1) * (partPrice || 0)).toFixed(2)),
+          subtotal: Number((newPartQty * (partPrice || 0)).toFixed(2)),
           sourcePartId: partId,
           roLineNumber: effectiveLineNumber,
         });
@@ -4025,9 +4173,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (status === 'APPROVED' && (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')) {
                 return {
                   ...p,
-                  status: 'ORDERED' as PartStatus,
+                  status: 'REQUESTED' as PartStatus,
                   requestType: 'ORDER_NOW' as const,
-                  orderedAt: p.orderedAt || new Date().toISOString(),
+                  orderedAt: undefined,
+                  notes: p.notes ? `${p.notes} (Customer Authorized Line ${lineNum})` : `Customer Authorized Line ${lineNum} — Order Needed`,
                 };
               }
             }
@@ -4831,8 +4980,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // Ensure any prior duplicate in updatedConcerns matching this inspection item is cleaned up
-      if (updatedConcerns.length > 0 && possibleNames.size > 0) {
+      // Synchronize updatedConcerns with 21-point inspection finding
+      if (updatedItem.status === 'IMMEDIATE_ATTENTION') {
+        const recName = (updatedItem.concern || updatedItem.notes || '').trim() || updatedItem.name;
+        const existingConcernIdx = updatedConcerns.findIndex(c => possibleNames.has(c.trim().toLowerCase()));
+
+        if (existingConcernIdx >= 0) {
+          updatedConcerns[existingConcernIdx] = recName;
+          if (updatedCorrections) updatedCorrections[existingConcernIdx] = updatedItem.correction || updatedCorrections[existingConcernIdx] || `Perform ${recName}`;
+          if (updatedCauses) updatedCauses[existingConcernIdx] = updatedItem.cause || updatedCauses[existingConcernIdx] || '';
+          if (updatedTechNames && currentUser?.name) updatedTechNames[existingConcernIdx] = currentUser.name;
+          if (updatedTechIds && currentUser?.id) updatedTechIds[existingConcernIdx] = currentUser.id;
+        } else {
+          updatedConcerns.push(recName);
+          if (updatedPayTypes) updatedPayTypes.push('CUSTOMER_PAY');
+          if (updatedTechIds) updatedTechIds.push(currentUser.id);
+          if (updatedTechNames) updatedTechNames.push(currentUser.name);
+          if (updatedCauses) updatedCauses.push(updatedItem.cause || '');
+          if (updatedCorrections) updatedCorrections.push(updatedItem.correction || `Perform ${recName}`);
+          if (updatedStatuses) updatedStatuses.push('PENDING');
+        }
+      } else if (updatedConcerns.length > 0 && possibleNames.size > 0) {
+        // If status changed away from IMMEDIATE_ATTENTION (e.g. to PASSED / N/A), remove from concerns if it was generated from this inspection item
         const keepIndices: number[] = [];
         const cleanConcerns: string[] = [];
         updatedConcerns.forEach((c, i) => {
@@ -5506,12 +5675,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
             return {
               ...p,
-              status: 'ORDERED' as PartStatus,
+              status: 'REQUESTED' as PartStatus,
               requestType: 'ORDER_NOW' as const,
-              orderedAt: p.orderedAt || now,
+              orderedAt: undefined,
               estimatedArrival: p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate')
                 ? p.estimatedArrival
-                : 'Daily Order (Arriving ~5:00 PM)',
+                : 'Customer Approved — Order Needed',
+              notes: p.notes ? `${p.notes} (Customer Authorized — Order Parts)` : 'Customer Authorized — Order Parts',
             };
           }
           return p;
@@ -5545,12 +5715,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             description: qp.description || 'Quoted Part',
             quantity: qp.quantity || 1,
             price: qp.unitPrice,
-            status: isPartDeclined ? 'DECLINED' : 'ORDERED',
+            status: isPartDeclined ? 'DECLINED' : 'REQUESTED',
             requestType: isPartDeclined ? 'QUOTE_ONLY' : 'ORDER_NOW',
-            orderedAt: isPartDeclined ? undefined : now,
-            estimatedArrival: isPartDeclined ? undefined : 'Daily Order (Arriving ~5:00 PM)',
+            orderedAt: undefined,
+            estimatedArrival: isPartDeclined ? undefined : 'Customer Approved — Order Needed',
             roLineNumber: qp.roLineNumber || 1,
-            notes: isPartDeclined ? 'Declined by customer' : undefined,
+            notes: isPartDeclined ? 'Declined by customer' : 'Customer authorized repair — place part order with supplier',
           });
         }
       });
@@ -6513,6 +6683,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addMultiplePartOrders,
         updatePartStatus,
         updatePartItem,
+        markAllPartsOrderedOnRO,
         deletePartItem,
         createRepairOrder,
         markNotificationRead,

@@ -7,6 +7,7 @@ import {
   Search, 
   Plus, 
   AlertTriangle, 
+  Bell,
   Wrench, 
   ExternalLink,
   Copy,
@@ -73,12 +74,15 @@ export const PartsDashboard: React.FC = () => {
   const { 
     repairOrders, 
     updatePartStatus, 
+    markAllPartsOrderedOnRO,
     addPartOrder, 
     updatePartItem, 
     deletePartItem, 
     saveRepairQuote,
     updateROStatus,
     setSelectedRO, 
+    notifications,
+    markNotificationRead,
     users 
   } = useApp();
 
@@ -322,6 +326,7 @@ export const PartsDashboard: React.FC = () => {
       ro.status === 'WAITING_FOR_APPROVAL' || 
       ro.status === 'APPROVED' || 
       ro.status === 'PARTS_ORDERED' || 
+      ro.status === 'PARTS_IN_TO_TECH' ||
       ro.status === 'REPAIR_IN_PROGRESS' || 
       ro.status === 'IN_REPAIR'
     ) {
@@ -344,19 +349,27 @@ export const PartsDashboard: React.FC = () => {
     if (orderedRoIds.has(ro.id)) return false;
     if (ro.quote?.status === 'DECLINED') return false;
 
+    const isAlreadyMarkedOrdered = orderedRoIds.has(ro.id);
+
     const isApproved = ro.quote?.status === 'APPROVED' || 
                        ro.status === 'APPROVED' || 
-                       ro.status === 'REPAIR_IN_PROGRESS' || 
-                       ro.status === 'IN_REPAIR' ||
                        (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(st => st === 'APPROVED'));
     
     if (!isApproved) return false;
 
-    const hasUnorderedParts = (ro.parts || []).some(p => {
+    // If the RO status is APPROVED and has not yet been marked ordered in this session, always show
+    if (ro.status === 'APPROVED' && !isAlreadyMarkedOrdered) {
+      return true;
+    }
+
+    // Check if there are any parts on this RO that still need to be ordered
+    const allROParts = ro.parts || [];
+    const quoteParts = ro.quote?.partsItems || [];
+
+    const hasUnorderedParts = allROParts.some(p => {
       const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
       if (lineStatus === 'DECLINED' || p.status === 'DECLINED' || p.status === 'CANCELLED') return false;
-      const isAlreadyOrdered = [
-        'ORDERED', 
+      const isFulfilled = [
         'DAILY_ORDER', 
         'LOCAL_PURCHASE', 
         'SPECIAL_ORDER', 
@@ -367,8 +380,24 @@ export const PartsDashboard: React.FC = () => {
         'ISSUED_TO_TECH', 
         'IN_STOCK'
       ].includes(p.status);
-      return !isAlreadyOrdered;
+      return !isFulfilled;
+    }) || quoteParts.some(qp => {
+      const lineStatus = ro.quote?.lineStatuses?.[qp.roLineNumber || 1];
+      if (lineStatus === 'DECLINED' || qp.status === 'DECLINED') return false;
+      const matchingPart = allROParts.find(p => (qp.sourcePartId && p.id === qp.sourcePartId) || (qp.partNumber && p.partNumber === qp.partNumber));
+      if (matchingPart) {
+        return !['DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'].includes(matchingPart.status);
+      }
+      return true;
     });
+
+    if (isAlreadyMarkedOrdered && !hasUnorderedParts) {
+      return false;
+    }
+
+    if (ro.status === 'PARTS_ORDERED' && !hasUnorderedParts) {
+      return false;
+    }
 
     return hasUnorderedParts;
   };
@@ -376,6 +405,20 @@ export const PartsDashboard: React.FC = () => {
   const rosApprovedReadyToOrder = useMemo(() => {
     return repairOrders.filter(isROApprovedReadyToOrder);
   }, [repairOrders, orderedRoIds]);
+
+  // Unread parts order notifications triggered when service advisor approved estimate
+  const partsAlertNotifications = useMemo(() => {
+    return (notifications || []).filter(n => 
+      !n.read && (
+        n.type === 'PARTS_UPDATE' || 
+        n.targetRole === 'PARTS_SPECIALIST' || 
+        n.title.toLowerCase().includes('part') ||
+        n.title.toLowerCase().includes('approved') ||
+        n.message.toLowerCase().includes('part') ||
+        n.message.toLowerCase().includes('place parts orders')
+      )
+    );
+  }, [notifications]);
 
   // Quick fulfillment draft state for technician-requested parts (Part Number, Price, etc.)
   const [reqDrafts, setReqDrafts] = useState<Record<string, {
@@ -405,17 +448,34 @@ export const PartsDashboard: React.FC = () => {
 
   // Live update part fields (price, timeframe, vendor, partNumber, etc.) with instant quote sync
   const handleUpdatePartField = (roId: string, part: PartItem, field: string, value: any) => {
-    updateReqDraft(part.id, field, value);
+    let cleanVal = value;
+    if (field === 'price') {
+      if (typeof value === 'string') {
+        cleanVal = value.replace(/[^0-9.]/g, '');
+        const parts = cleanVal.split('.');
+        if (parts.length > 2) {
+          cleanVal = parts[0] + '.' + parts.slice(1).join('');
+        }
+      } else if (typeof value === 'number' && !isNaN(value)) {
+        cleanVal = value.toFixed(2);
+      }
+    }
+    updateReqDraft(part.id, field, cleanVal, part);
 
     const existingDraft = reqDrafts[part.id] || getReqDraft(part);
     const currentDraft = {
       ...existingDraft,
-      [field]: value
+      [field]: cleanVal
     };
 
     const cleanPn = currentDraft.partNumber?.trim().toUpperCase() || part.partNumber || 'TBD';
-    const priceVal = (currentDraft.price !== '' && !isNaN(parseFloat(currentDraft.price))) ? parseFloat(currentDraft.price) : undefined;
-    const qty = Math.max(1, Number(currentDraft.quantity) || part.quantity || 1);
+    const cleanPriceStr = typeof currentDraft.price === 'string' ? currentDraft.price.replace(/[^0-9.]/g, '') : String(currentDraft.price ?? '');
+    const priceVal = (cleanPriceStr !== '' && !isNaN(parseFloat(cleanPriceStr))) 
+      ? parseFloat(parseFloat(cleanPriceStr).toFixed(2)) 
+      : (field === 'price' && cleanPriceStr === '' ? undefined : (part.price !== undefined ? part.price : undefined));
+    const qty = field === 'quantity'
+      ? Math.max(1, Number(cleanVal) || 1)
+      : Math.max(1, Number(part.quantity) || 1);
     const effectiveVendor = currentDraft.vendor || part.vendor || vendors[0] || '';
     const effectiveStatus = currentDraft.status || part.status;
     const effectiveEta = currentDraft.estimatedArrival || part.estimatedArrival;
@@ -505,11 +565,18 @@ export const PartsDashboard: React.FC = () => {
   // Helper to get or initialize draft values for any technician-requested part
   const getReqDraft = (part: PartItem) => {
     const existing = reqDrafts[part.id];
-    if (existing) return existing;
+    const truePartQty = Math.max(1, Number(part.quantity) || 1);
+    if (existing) {
+      return {
+        ...existing,
+        // Make sure quantity reflects part.quantity (what the tech entered) unless parts counter explicitly edited it
+        quantity: (existing as any).userEditedQty ? Math.max(1, Number(existing.quantity) || 1) : truePartQty,
+      };
+    }
     return {
       partNumber: part.partNumber && part.partNumber !== 'TBD' ? part.partNumber : '',
       price: formatPrice(part.price),
-      quantity: Math.max(1, part.quantity || 1),
+      quantity: truePartQty,
       status: (part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' ? 'DAILY_ORDER' : part.status) as PartStatus,
       vendor: part.vendor && part.vendor !== 'TBD' ? part.vendor : (vendors[0] || ''),
       timeFrameId: part.status === 'IN_STOCK' ? 'IN_STOCK' : 'TODAY_5PM',
@@ -517,22 +584,24 @@ export const PartsDashboard: React.FC = () => {
     };
   };
 
-  const updateReqDraft = (partId: string, field: string, value: any) => {
+  const updateReqDraft = (partId: string, field: string, value: any, fallbackPart?: PartItem) => {
     setReqDrafts(prev => {
-      const existing = prev[partId] || {
+      const partFromROs = fallbackPart || repairOrders.flatMap(r => r.parts || []).find(p => p.id === partId);
+      const existing = prev[partId] || (partFromROs ? getReqDraft(partFromROs) : {
         partNumber: '',
         price: '',
-        quantity: 1,
+        quantity: partFromROs?.quantity ? Math.max(1, Number(partFromROs.quantity)) : 1,
         status: 'DAILY_ORDER',
         vendor: vendors[0] || '',
         timeFrameId: 'TODAY_5PM',
         estimatedArrival: '',
-      };
+      });
       return {
         ...prev,
         [partId]: {
           ...existing,
-          [field]: value
+          [field]: value,
+          ...(field === 'quantity' ? { userEditedQty: true } : {}),
         }
       };
     });
@@ -543,7 +612,7 @@ export const PartsDashboard: React.FC = () => {
     const draft = getReqDraft(part);
     const cleanPn = draft.partNumber?.trim().toUpperCase() || 'TBD';
     const priceVal = draft.price && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : undefined;
-    const qty = Math.max(1, Number(draft.quantity) || part.quantity || 1);
+    const qty = Math.max(1, Number(part.quantity) || Number(draft.quantity) || 1);
     
     // Resolve expectation of part arrival & status
     const tfCalc = draft.timeFrameId ? computeEtaAndStatus(draft.timeFrameId) : null;
@@ -580,7 +649,7 @@ export const PartsDashboard: React.FC = () => {
     const draft = getReqDraft(part);
     const cleanPn = draft.partNumber?.trim().toUpperCase() || 'TBD';
     const priceVal = draft.price && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : undefined;
-    const qty = Math.max(1, Number(draft.quantity) || part.quantity || 1);
+    const qty = Math.max(1, Number(part.quantity) || Number(draft.quantity) || 1);
     const effectiveVendor = draft.vendor || partVendor || 'Shop Inventory / Supplier';
 
     setSentToEstimatePartIds(prev => new Set(prev).add(part.id));
@@ -606,7 +675,7 @@ export const PartsDashboard: React.FC = () => {
     const quoteParts: QuotePartItem[] = allROParts.map(p => {
       const draft = reqDrafts[p.id] || getReqDraft(p);
       const pr = draft.price !== '' && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : (p.price || 0);
-      const qty = Math.max(1, Number(draft.quantity) || p.quantity || 1);
+      const qty = Math.max(1, Number(p.quantity) || Number(draft.quantity) || 1);
       return {
         id: p.id,
         sourcePartId: p.id,
@@ -628,7 +697,7 @@ export const PartsDashboard: React.FC = () => {
       updatePartItem(ro.id, p.id, {
         partNumber: cleanPn,
         price: pr,
-        quantity: draft.quantity || p.quantity || 1,
+        quantity: Math.max(1, Number(p.quantity) || Number(draft.quantity) || 1),
         vendor: draft.vendor || p.vendor || vendors[0] || '',
         sentToEstimate: true,
       });
@@ -672,14 +741,7 @@ export const PartsDashboard: React.FC = () => {
 
   // Mark all approved parts on an RO as ordered with suppliers, and remove from active order queue
   const handleMarkAllPartsOrdered = (ro: RepairOrder) => {
-    const allROParts = ro.parts || [];
-    allROParts.forEach(p => {
-      const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
-      if (lineStatus !== 'DECLINED' && p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK') {
-        updatePartStatus(ro.id, p.id, 'ORDERED', p.estimatedArrival || 'Special Order 1-5 Days');
-      }
-    });
-    updateROStatus(ro.id, 'PARTS_ORDERED', 'All approved parts placed on order with suppliers.');
+    markAllPartsOrderedOnRO(ro.id);
     setOrderedRoIds(prev => new Set(prev).add(ro.id));
     showToast(`✓ Parts for RO #${ro.id} marked as ORDERED! Removed from active order screen.`);
   };
@@ -696,7 +758,7 @@ export const PartsDashboard: React.FC = () => {
       const draft = getReqDraft(part);
       const cleanPn = draft.partNumber?.trim().toUpperCase() || 'TBD';
       const priceVal = draft.price && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : undefined;
-      const qty = Math.max(1, Number(draft.quantity) || part.quantity || 1);
+      const qty = Math.max(1, Number(part.quantity) || Number(draft.quantity) || 1);
       
       const tfCalc = draft.timeFrameId ? computeEtaAndStatus(draft.timeFrameId) : null;
       const effectiveStatus = draft.status || tfCalc?.status || 'DAILY_ORDER';
@@ -1165,7 +1227,7 @@ export const PartsDashboard: React.FC = () => {
         const draft = getReqDraft(rp);
         const cleanPn = draft.partNumber?.trim().toUpperCase() || rp.partNumber || 'TBD';
         const priceVal = draft.price && !isNaN(parseFloat(draft.price)) ? parseFloat(draft.price) : rp.price;
-        const qty = Math.max(1, Number(draft.quantity) || rp.quantity || 1);
+        const qty = Math.max(1, Number(rp.quantity) || Number(draft.quantity) || 1);
 
         const rpTfCalc = draft.timeFrameId ? computeEtaAndStatus(draft.timeFrameId) : null;
         const rpStatus = draft.status || rpTfCalc?.status || 'DAILY_ORDER';
@@ -1317,6 +1379,103 @@ export const PartsDashboard: React.FC = () => {
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-xs font-bold">{toastMessage}</span>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION 0: UNREAD NOTIFICATIONS TO ORDER PARTS                           */}
+      {/* ========================================================================= */}
+      {partsAlertNotifications.length > 0 && (
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-2xl p-4 sm:p-5 shadow-lg border-2 border-red-400 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/20">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <span className="w-4 h-4 rounded-full bg-yellow-300 animate-ping absolute inset-0 m-auto" />
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white font-black shadow-inner relative border border-white/30">
+                  <Bell className="w-5 h-5 text-yellow-300 animate-bounce" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                    <span>NEW PARTS ORDER NOTIFICATIONS</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-white text-rose-700 text-xs font-black uppercase tracking-wider shadow-xs">
+                      {partsAlertNotifications.length} {partsAlertNotifications.length === 1 ? 'Alert' : 'Alerts'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-rose-100 font-medium">
+                  Service Advisor authorized repairs — action required to verify and place parts orders with suppliers.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                partsAlertNotifications.forEach(n => markNotificationRead(n.id));
+              }}
+              className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all border border-white/30 cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Mark All Read</span>
+            </button>
+          </div>
+
+          {/* Individual Notification Items */}
+          <div className="space-y-2">
+            {partsAlertNotifications.map(notif => {
+              const notifRO = repairOrders.find(r => r.id === notif.roId);
+              return (
+                <div
+                  key={notif.id}
+                  className="bg-black/25 hover:bg-black/35 backdrop-blur-xs rounded-xl p-3 border border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all"
+                >
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+                    <span className="px-2 py-0.5 rounded-md bg-yellow-400 text-slate-900 font-black text-xs shrink-0 font-mono">
+                      {notif.roNumber || notif.roId}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-white">{notif.title}</span>
+                        <span className="text-[10px] text-white/70 font-mono">
+                          {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-rose-100 font-medium truncate sm:whitespace-normal">
+                        {notif.message}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    {notifRO && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          markNotificationRead(notif.id);
+                          setSelectedRO(notifRO);
+                          setActiveTab('RO_LIST');
+                          setRoStatusFilter('APPROVED_READY_ORDER');
+                          setShowAllBackgroundROs(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-yellow-300 text-xs font-black transition-colors shadow-xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Package className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Order Parts Now</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => markNotificationRead(notif.id)}
+                      className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                      title="Dismiss notification"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1477,6 +1636,11 @@ export const PartsDashboard: React.FC = () => {
                               onClick={() => {
                                 updatePartStatus(ro.id, p.id, 'ORDERED', p.estimatedArrival || 'Special Order 1-5 Days');
                                 showToast(`✓ Part "${p.description}" marked as ORDERED!`);
+                                const remainingUnordered = unorderedParts.filter(part => part.id !== p.id);
+                                if (remainingUnordered.length === 0) {
+                                  updateROStatus(ro.id, 'PARTS_ORDERED', 'All approved parts placed on order with suppliers.');
+                                  setOrderedRoIds(prev => new Set(prev).add(ro.id));
+                                }
                               }}
                               className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                             >
@@ -1744,6 +1908,9 @@ export const PartsDashboard: React.FC = () => {
                                           placeholder="Part Description"
                                           className="font-bold text-xs text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white px-1 py-0.5 rounded focus:outline-none min-w-[140px]"
                                         />
+                                        <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-300 shadow-2xs" title="Requested quantity from technician">
+                                          Qty: <strong className="text-slate-900">{rp.quantity || 1}</strong>
+                                        </span>
                                         {rp.status === 'DECLINED' ? (
                                           <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border bg-red-100 text-red-800 border-red-300 shadow-2xs">
                                             🛑 Declined
@@ -1906,16 +2073,30 @@ export const PartsDashboard: React.FC = () => {
                                         <div className="relative">
                                           <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-xs text-slate-400 font-bold">$</span>
                                           <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
+                                            type="text"
+                                            inputMode="decimal"
                                             placeholder="0.00"
                                             value={draft.price}
-                                            onChange={(e) => handleUpdatePartField(ro.id, rp, 'price', e.target.value)}
+                                            onChange={(e) => {
+                                              const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                              const parts = raw.split('.');
+                                              const sanitized = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                              updateReqDraft(rp.id, 'price', sanitized, rp);
+                                            }}
                                             onBlur={(e) => {
-                                              const val = e.target.value.trim();
-                                              if (val && !isNaN(Number(val))) {
-                                                handleUpdatePartField(ro.id, rp, 'price', Number(val).toFixed(2));
+                                              const raw = e.target.value.replace(/[^0-9.]/g, '').trim();
+                                              if (raw !== '' && !isNaN(parseFloat(raw))) {
+                                                const formatted = parseFloat(raw).toFixed(2);
+                                                updateReqDraft(rp.id, 'price', formatted, rp);
+                                                handleUpdatePartField(ro.id, rp, 'price', formatted);
+                                              } else if (raw === '') {
+                                                updateReqDraft(rp.id, 'price', '', rp);
+                                                handleUpdatePartField(ro.id, rp, 'price', '');
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                (e.target as HTMLInputElement).blur();
                                               }
                                             }}
                                             className="w-full pl-5 pr-2 py-1 text-xs font-bold bg-white border border-emerald-400 focus:border-emerald-600 rounded-lg focus:ring-1 focus:ring-emerald-500 text-slate-900 shadow-2xs"
@@ -2103,12 +2284,21 @@ export const PartsDashboard: React.FC = () => {
                                     Price ($)
                                   </label>
                                   <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                    type="text"
+                                    inputMode="decimal"
                                     placeholder="0.00"
                                     value={inlineAddLineState.price}
-                                    onChange={e => setInlineAddLineState(prev => prev ? ({ ...prev, price: e.target.value }) : null)}
+                                    onChange={e => {
+                                      const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                      setInlineAddLineState(prev => prev ? ({ ...prev, price: raw }) : null);
+                                    }}
+                                    onBlur={e => {
+                                      const raw = e.target.value.replace(/[^0-9.]/g, '').trim();
+                                      if (raw !== '' && !isNaN(parseFloat(raw))) {
+                                        const formatted = parseFloat(raw).toFixed(2);
+                                        setInlineAddLineState(prev => prev ? ({ ...prev, price: formatted }) : null);
+                                      }
+                                    }}
                                     className="w-full px-2 py-1 text-xs font-bold bg-white border border-emerald-400 rounded-lg text-slate-900 shadow-2xs"
                                   />
                                 </div>
@@ -3849,7 +4039,7 @@ export const PartsDashboard: React.FC = () => {
                             type="text"
                             placeholder="e.g. 68052369AA"
                             value={draft.partNumber}
-                            onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase())}
+                            onChange={(e) => updateReqDraft(rp.id, 'partNumber', e.target.value.toUpperCase(), rp)}
                             className="w-full px-2.5 py-1.5 text-xs font-mono font-bold uppercase bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-900"
                             autoFocus={idx === 0}
                           />
@@ -3862,16 +4052,23 @@ export const PartsDashboard: React.FC = () => {
                           <div className="relative">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
+                              inputMode="decimal"
                               placeholder="0.00"
                               value={draft.price}
-                              onChange={(e) => updateReqDraft(rp.id, 'price', e.target.value)}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                updateReqDraft(rp.id, 'price', raw, rp);
+                              }}
                               onBlur={(e) => {
-                                const val = e.target.value.trim();
-                                if (val && !isNaN(Number(val))) {
-                                  updateReqDraft(rp.id, 'price', Number(val).toFixed(2));
+                                const raw = e.target.value.replace(/[^0-9.]/g, '').trim();
+                                if (raw !== '' && !isNaN(parseFloat(raw))) {
+                                  updateReqDraft(rp.id, 'price', parseFloat(raw).toFixed(2), rp);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  (e.target as HTMLInputElement).blur();
                                 }
                               }}
                               className="w-full pl-6 pr-2 py-1.5 text-xs font-bold bg-white border border-slate-300 focus:border-blue-500 rounded-lg focus:ring-1 focus:ring-blue-500 text-slate-900"
@@ -3888,7 +4085,7 @@ export const PartsDashboard: React.FC = () => {
                             min="1"
                             max="99"
                             value={draft.quantity}
-                            onChange={(e) => updateReqDraft(rp.id, 'quantity', parseInt(e.target.value) || 1)}
+                            onChange={(e) => updateReqDraft(rp.id, 'quantity', parseInt(e.target.value) || 1, rp)}
                             className="w-full px-2 py-1.5 text-xs font-bold border border-slate-300 rounded-lg text-center bg-white"
                           />
                         </div>
@@ -4072,12 +4269,25 @@ export const PartsDashboard: React.FC = () => {
                           <div className="relative">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
+                              inputMode="decimal"
                               placeholder="0.00"
                               value={line.price}
-                              onChange={e => handleUpdatePartLine(line.id, 'price', e.target.value)}
+                              onChange={e => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                handleUpdatePartLine(line.id, 'price', raw);
+                              }}
+                              onBlur={e => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, '').trim();
+                                if (raw !== '' && !isNaN(parseFloat(raw))) {
+                                  handleUpdatePartLine(line.id, 'price', parseFloat(raw).toFixed(2));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
                               className="w-full pl-6 pr-2 py-1.5 text-xs font-bold bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-slate-900"
                             />
                           </div>

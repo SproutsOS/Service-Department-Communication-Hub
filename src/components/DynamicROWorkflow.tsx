@@ -25,6 +25,7 @@ import {
   Plus,
   Receipt,
   Printer,
+  ClipboardCheck,
   X
 } from 'lucide-react';
 import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome, LineApprovalStatus } from '../types';
@@ -192,7 +193,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
     if ((ro.status === 'BEING_DIAGNOSED' || ro.status === 'IN_DIAG') && (!ro.cause?.trim() || !ro.correction?.trim())) {
       return {
         id: 'DIAGNOSIS_NOTES',
-        sectionKey: 'section-concerns-three-cs',
+        sectionKey: 'section-diagnostics',
         title: 'Document Cause & Correction (Three Cs)',
         badge: 'Findings Pending',
         description: 'Inspection is underway. Technician must record root cause diagnosis and recommended correction before estimate.',
@@ -691,6 +692,17 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                   const lineTotal = lineLaborCost + linePartsCost;
                   const hasLineQuote = lineLaborItems.length > 0 || linePartsItems.length > 0 || lineROParts.length > 0;
                   const lineStatus: LineApprovalStatus = ro.concernStatuses?.[idx] || (ro.quote?.lineStatuses?.[lineNum]) || 'PENDING';
+                  const isInspectionFinding = Boolean(
+                    (ro.recommendations || []).some(r => 
+                      r.serviceName.trim().toLowerCase() === concern.trim().toLowerCase() ||
+                      (r.notes && r.notes.trim().toLowerCase().includes(concern.trim().toLowerCase())) ||
+                      (r.inspectionItemId && lineNum > 1 && (ro.concerns?.length || 0) > 1 && idx === (ro.concerns?.length || 1) - 1)
+                    ) ||
+                    (ro.inspection?.items && Object.values(ro.inspection.items).some(item => 
+                      item.status === 'IMMEDIATE_ATTENTION' && 
+                      (item.concern?.trim().toLowerCase() === concern.trim().toLowerCase() || item.name.trim().toLowerCase() === concern.trim().toLowerCase())
+                    ))
+                  );
 
                   return (
                     <div 
@@ -712,6 +724,12 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                           {idx === 0 && (
                             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                               Primary Concern
+                            </span>
+                          )}
+                          {isInspectionFinding && (
+                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 shadow-2xs flex items-center gap-1">
+                              <ClipboardCheck className="w-3 h-3 text-amber-700" />
+                              <span>21-Pt Inspection Finding</span>
                             </span>
                           )}
                           {lineStatus === 'APPROVED' && (
@@ -985,7 +1003,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                       )}
 
                       {/* 4. Integrated Parts for Line {lineNum} (Part Name, Price, Qty, Availability) */}
-                      <LinePartsSection ro={ro} lineNum={lineNum} />
+                      <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={false} />
 
                       {/* 5. Line Evidence & Inspection Photos (Take Photo on each line) */}
                       <LinePhotoSection 
@@ -1713,6 +1731,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   ];
 
   // Dynamic sorting: When smartWorkflowOrder is enabled, the section matching activeAction.sectionKey is placed at index 0!
+  // The 21-point inspection (section-recommendations) must always be below the customer concern lines (section-diagnostics).
   const sortedSections = useMemo(() => {
     const list = sections.filter(sec => {
       if (isTechScreen && sec.key === 'section-cadence') return false;
@@ -1723,10 +1742,28 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       return [...list].sort((a, b) => a.naturalOrder - b.naturalOrder);
     }
 
+    const getOrderScore = (secKey: string, naturalOrder: number) => {
+      // When recommendations review is active, promote concern lines to top (score -2),
+      // and the 21-point inspection directly below it (score -1).
+      if (activeAction.sectionKey === 'section-recommendations') {
+        if (secKey === 'section-diagnostics') return -2;
+        if (secKey === 'section-recommendations') return -1;
+        return naturalOrder;
+      }
+
+      if (secKey === activeAction.sectionKey) {
+        return -2;
+      }
+
+      return naturalOrder;
+    };
+
     return [...list].sort((a, b) => {
-      if (a.key === activeAction.sectionKey) return -1;
-      if (b.key === activeAction.sectionKey) return 1;
-      return a.naturalOrder - b.naturalOrder;
+      // Strict guarantee: 21-point inspection must NEVER appear above customer concern lines
+      if (a.key === 'section-recommendations' && b.key === 'section-diagnostics') return 1;
+      if (a.key === 'section-diagnostics' && b.key === 'section-recommendations') return -1;
+
+      return getOrderScore(a.key, a.naturalOrder) - getOrderScore(b.key, b.naturalOrder);
     });
   }, [smartWorkflowOrder, activeAction.sectionKey, sections, isTechScreen]);
 

@@ -1039,11 +1039,23 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                                         <div className="sm:col-span-2">
                                           <div className="relative">
                                             <input
-                                              type="number"
-                                              step="0.01"
-                                              min="0"
-                                              value={part.price}
-                                              onChange={(e) => handleUpdatePartInLine(lineIdx, pIdx, { price: parseFloat(e.target.value) || 0 })}
+                                              type="text"
+                                              inputMode="decimal"
+                                              value={part.price !== undefined ? part.price : ''}
+                                              onChange={(e) => {
+                                                const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                                const parts = raw.split('.');
+                                                const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                                handleUpdatePartInLine(lineIdx, pIdx, { price: val as any });
+                                              }}
+                                              onBlur={(e) => {
+                                                const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                                if (raw !== '' && !isNaN(Number(raw))) {
+                                                  handleUpdatePartInLine(lineIdx, pIdx, { price: parseFloat(parseFloat(raw).toFixed(2)) });
+                                                } else if (raw === '') {
+                                                  handleUpdatePartInLine(lineIdx, pIdx, { price: 0 });
+                                                }
+                                              }}
                                               placeholder="Sell"
                                               className="w-full text-xs font-mono font-bold p-1.5 bg-white border border-emerald-300 rounded-md text-emerald-900 focus:ring-2 focus:ring-emerald-500"
                                               title="Customer retail unit price"

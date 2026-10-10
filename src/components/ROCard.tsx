@@ -294,11 +294,20 @@ export const ROCard: React.FC<ROCardProps> = ({
             <div className="text-xs text-slate-700 mt-1 space-y-1">
               {cardConcerns.map((c, idx) => {
                 const payType = ro.concernPayTypes?.[idx] || ro.quote?.payType;
+                const isMPI = Boolean(
+                  (ro.recommendations || []).some(r => r.serviceName.trim().toLowerCase() === c.trim().toLowerCase() || (r.notes && r.notes.trim().toLowerCase().includes(c.trim().toLowerCase()))) ||
+                  (ro.inspection?.items && Object.values(ro.inspection.items).some(item => item.status === 'IMMEDIATE_ATTENTION' && (item.concern?.trim().toLowerCase() === c.trim().toLowerCase() || item.name.trim().toLowerCase() === c.trim().toLowerCase())))
+                );
                 return (
                   <div key={idx} className="flex items-start gap-1.5 leading-snug">
                     <span className="font-mono text-[9px] font-black px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 shrink-0">
                       L{idx + 1}
                     </span>
+                    {isMPI && (
+                      <span className="text-[9px] font-extrabold uppercase px-1 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 shrink-0" title="21-Point Multi-Point Inspection Finding">
+                        MPI
+                      </span>
+                    )}
                     {payType && (
                       <span className={`text-[9px] font-bold px-1 py-0.2 rounded shrink-0 ${
                         payType === 'WARRANTY' 

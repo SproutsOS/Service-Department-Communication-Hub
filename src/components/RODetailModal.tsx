@@ -40,6 +40,7 @@ import {
   Receipt,
   Copy,
   Gauge,
+  ClipboardCheck,
   Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -96,7 +97,7 @@ export const RODetailModal: React.FC = () => {
   } = useApp();
 
   const isTechScreen = activeRoleView === 'TECHNICIAN' || currentUser.role === 'TECHNICIAN';
-  const isAdvisorScreen = (activeRoleView === 'SERVICE_ADVISOR' || (currentUser.role === 'SERVICE_ADVISOR' && !activeRoleView)) && !isTechScreen;
+  const isAdvisorScreen = (activeRoleView === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_ADVISOR') && !isTechScreen;
   const isManager = (currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER') && !isAdvisorScreen && !isTechScreen;
   const isAdvisor = isAdvisorScreen;
   const isPartsManager = currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST';
@@ -1693,17 +1694,35 @@ export const RODetailModal: React.FC = () => {
                         const currentCause = editConcernCauses[idx] ?? (idx === 0 ? editCause : '');
                         const currentCorrection = editConcernCorrections[idx] ?? (idx === 0 ? editCorrection : '');
 
+                        const isInspectionFinding = Boolean(
+                          (selectedRO?.recommendations || []).some(r => 
+                            r.serviceName.trim().toLowerCase() === c.trim().toLowerCase() ||
+                            (r.notes && r.notes.trim().toLowerCase().includes(c.trim().toLowerCase())) ||
+                            (r.inspectionItemId && (idx + 1) > 1 && editConcerns.length > 1 && idx === editConcerns.length - 1)
+                          ) ||
+                          (selectedRO?.inspection?.items && Object.values(selectedRO.inspection.items).some(item => 
+                            item.status === 'IMMEDIATE_ATTENTION' && 
+                            (item.concern?.trim().toLowerCase() === c.trim().toLowerCase() || item.name.trim().toLowerCase() === c.trim().toLowerCase())
+                          ))
+                        );
+
                         return (
                           <div key={idx} className="bg-white p-3.5 rounded-xl border-2 border-slate-400 space-y-3 shadow-xs">
                             {/* Line Header: Line Number, Pay Type, Tech, Remove */}
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
                                   Line {idx + 1}
                                 </span>
                                 {idx === 0 && (
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                                     Primary Line
+                                  </span>
+                                )}
+                                {isInspectionFinding && (
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 shadow-2xs flex items-center gap-1">
+                                    <ClipboardCheck className="w-3 h-3 text-amber-700" />
+                                    <span>21-Pt Inspection Finding</span>
                                   </span>
                                 )}
                               </div>
@@ -1889,7 +1908,7 @@ export const RODetailModal: React.FC = () => {
                             </div>
 
                             {/* 4. Integrated Parts for Line {idx + 1} (Part Name, Price, Qty, Availability) */}
-                            <LinePartsSection ro={selectedRO} lineNum={idx + 1} />
+                            <LinePartsSection ro={selectedRO} lineNum={idx + 1} allowAddPart={false} />
 
                             {/* 5. Line Quote Breakdown & Subtotal */}
                             {(() => {
@@ -2414,15 +2433,17 @@ export const RODetailModal: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setIsAddPartModalOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer mr-1"
-                          title="Add a new part to this Repair Order"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-white" />
-                          <span>+ Add Part</span>
-                        </button>
+                        {!isAdvisorScreen && canOrderParts && (
+                          <button
+                            type="button"
+                            onClick={() => setIsAddPartModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer mr-1"
+                            title="Add a new part to this Repair Order"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-white" />
+                            <span>+ Add Part</span>
+                          </button>
+                        )}
                         {quoteParts.length > 0 && (
                           <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
                             📋 {quoteParts.length} on Quote

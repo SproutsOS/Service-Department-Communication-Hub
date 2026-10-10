@@ -154,12 +154,21 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
             <div className="space-y-1.5">
               {allConcerns.map((concernText, idx) => {
                 const payType = ro.concernPayTypes?.[idx];
+                const isMPI = Boolean(
+                  (ro.recommendations || []).some(r => r.serviceName.trim().toLowerCase() === concernText.trim().toLowerCase() || (r.notes && r.notes.trim().toLowerCase().includes(concernText.trim().toLowerCase()))) ||
+                  (ro.inspection?.items && Object.values(ro.inspection.items).some(item => item.status === 'IMMEDIATE_ATTENTION' && (item.concern?.trim().toLowerCase() === concernText.trim().toLowerCase() || item.name.trim().toLowerCase() === concernText.trim().toLowerCase())))
+                );
                 return (
                   <div key={idx} className="text-xs text-slate-900 leading-snug">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-mono text-[10px] font-black px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 border border-slate-300">
                         Line {idx + 1}
                       </span>
+                      {isMPI && (
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300" title="21-Point Multi-Point Inspection Finding">
+                          21-Pt Inspection
+                        </span>
+                      )}
                       {payType && (
                         <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
                           payType === 'WARRANTY' 

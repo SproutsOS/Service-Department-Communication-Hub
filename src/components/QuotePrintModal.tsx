@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -76,9 +76,35 @@ export const QuotePrintModal: React.FC = () => {
   const outMiles = cleanRO.outMileage ?? cleanRO.vehicle.outMileage;
   const testDriveDistance = outMiles !== undefined && inMiles > 0 ? Math.max(0, outMiles - inMiles) : undefined;
 
-  const concernsList = (cleanRO.concerns && cleanRO.concerns.length > 0)
+  const baseConcerns = (cleanRO.concerns && cleanRO.concerns.length > 0)
     ? cleanRO.concerns
     : (cleanRO.primaryConcern ? [cleanRO.primaryConcern] : ['Customer reported vehicle inspection / service concern']);
+
+  const recommendations = cleanRO.recommendations || [];
+
+  const unifiedLines = useMemo(() => {
+    return [
+      ...baseConcerns.map((concern, idx) => ({
+        lineNum: idx + 1,
+        title: concern,
+        isInspection: false,
+        payType: (cleanRO.concernPayTypes?.[idx] || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
+        cause: cleanRO.concernCauses?.[idx] || (idx === 0 ? cleanRO.cause : '') || '',
+        correction: cleanRO.concernCorrections?.[idx] || (idx === 0 ? cleanRO.correction : '') || '',
+      })),
+      ...recommendations.map((rec, rIdx) => {
+        const lineNum = baseConcerns.length + rIdx + 1;
+        return {
+          lineNum,
+          title: rec.serviceName,
+          isInspection: true,
+          payType: (rec.payType || cleanRO.concernPayTypes?.[lineNum - 1] || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
+          cause: rec.cause || cleanRO.concernCauses?.[lineNum - 1] || '',
+          correction: rec.correction || cleanRO.concernCorrections?.[lineNum - 1] || `Perform ${rec.serviceName}`,
+        };
+      })
+    ];
+  }, [baseConcerns, recommendations, cleanRO, quote?.payType]);
 
   const laborItems = quote?.laborItems || [];
   const partsItems = quote?.partsItems || [];
@@ -120,18 +146,16 @@ export const QuotePrintModal: React.FC = () => {
       `LINE-BY-LINE ESTIMATE BREAKDOWN:`
     ];
 
-    concernsList.forEach((concern, idx) => {
-      const lNum = idx + 1;
+    unifiedLines.forEach((line) => {
+      const lNum = line.lineNum;
       const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lNum);
       const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lNum);
       const lLaborTotal = lLabor.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
       const lPartsTotal = lParts.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
-      const lCause = cleanRO.concernCauses?.[idx] || (idx === 0 ? cleanRO.cause : '');
-      const lCorrection = cleanRO.concernCorrections?.[idx] || (idx === 0 ? cleanRO.correction : '');
 
-      lines.push(`\n[Line ${lNum}] Concern: ${concern}`);
-      if (lCause) lines.push(`  Cause: ${lCause}`);
-      if (lCorrection) lines.push(`  Correction: ${lCorrection}`);
+      lines.push(`\n[Line ${lNum}] ${line.isInspection ? 'Inspection Finding' : 'Concern'}: ${line.title}`);
+      if (line.cause) lines.push(`  Cause: ${line.cause}`);
+      if (line.correction) lines.push(`  Correction: ${line.correction}`);
       if (lLabor.length > 0) {
         lLabor.forEach(li => {
           lines.push(`  Labor: ${li.description} - ${li.laborHours} hrs @ $${li.hourlyRate}/hr = $${(Number(li.subtotal) || 0).toFixed(2)}`);
@@ -363,12 +387,12 @@ export const QuotePrintModal: React.FC = () => {
               <div className="space-y-4">
                 <div className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center justify-between border-b-2 border-slate-300 pb-1">
                   <span>Itemized Concern Lines & Services</span>
-                  <span className="text-[10px] text-slate-500 font-bold">{concernsList.length} Line(s) Total</span>
+                  <span className="text-[10px] text-slate-500 font-bold">{unifiedLines.length} Line(s) Total</span>
                 </div>
 
-                {concernsList.map((concern, idx) => {
-                  const lineNum = idx + 1;
-                  const payType: ConcernPayType = cleanRO.concernPayTypes?.[idx] || quote?.payType || 'CUSTOMER_PAY';
+                {unifiedLines.map((line) => {
+                  const lineNum = line.lineNum;
+                  const payType: ConcernPayType = line.payType;
                   const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
                   const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
                   const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
@@ -387,11 +411,11 @@ export const QuotePrintModal: React.FC = () => {
                   const linePartsCost = effectiveParts.reduce((acc, p) => acc + (Number(p.subtotal) || ((Number(p.unitPrice) || 0) * (Number(p.quantity) || 1))), 0);
                   const lineTotalCost = lineLaborCost + linePartsCost;
 
-                  const lineCause = cleanRO.concernCauses?.[idx] || (idx === 0 ? cleanRO.cause : '');
-                  const lineCorrection = cleanRO.concernCorrections?.[idx] || (idx === 0 ? cleanRO.correction : '');
+                  const lineCause = line.cause;
+                  const lineCorrection = line.correction;
 
                   return (
-                    <div key={idx} className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50/50">
+                    <div key={lineNum} className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50/50">
                       
                       {/* Line Header */}
                       <div className="bg-slate-100 p-2.5 border-b border-slate-300 flex items-center justify-between gap-2 flex-wrap text-xs">
@@ -399,8 +423,13 @@ export const QuotePrintModal: React.FC = () => {
                           <span className="font-mono font-black bg-slate-900 text-white px-2 py-0.5 rounded text-[11px]">
                             Line {lineNum}
                           </span>
+                          {line.isInspection && (
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-red-100 text-red-900 rounded border border-red-200">
+                              Inspection Finding
+                            </span>
+                          )}
                           <span className="font-bold text-slate-900 text-sm">
-                            {concern}
+                            {line.title}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -702,9 +731,9 @@ export const QuotePrintModal: React.FC = () => {
               Itemized Concern Lines & Services:
             </div>
 
-            {concernsList.map((concern, idx) => {
-              const lineNum = idx + 1;
-              const payType: ConcernPayType = cleanRO.concernPayTypes?.[idx] || quote?.payType || 'CUSTOMER_PAY';
+            {unifiedLines.map((line) => {
+              const lineNum = line.lineNum;
+              const payType: ConcernPayType = line.payType;
               const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
               const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
               const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
@@ -722,14 +751,14 @@ export const QuotePrintModal: React.FC = () => {
               const lineLaborCost = lLabor.reduce((acc, i) => acc + (Number(i.subtotal) || ((Number(i.laborHours) || 0) * (Number(i.hourlyRate) || 165))), 0);
               const linePartsCost = effectiveParts.reduce((acc, p) => acc + (Number(p.subtotal) || ((Number(p.unitPrice) || 0) * (Number(p.quantity) || 1))), 0);
               const lineTotalCost = lineLaborCost + linePartsCost;
-              const lineCause = cleanRO.concernCauses?.[idx] || (idx === 0 ? cleanRO.cause : '');
-              const lineCorrection = cleanRO.concernCorrections?.[idx] || (idx === 0 ? cleanRO.correction : '');
+              const lineCause = line.cause;
+              const lineCorrection = line.correction;
 
               return (
-                <div key={idx} className="border border-black p-2.5 space-y-2 quote-line-item">
+                <div key={lineNum} className="border border-black p-2.5 space-y-2 quote-line-item">
                   <div className="flex justify-between items-center border-b border-black pb-1">
                     <div className="font-black text-xs">
-                      Line {lineNum}: {concern} ({payType.replace(/_/g, ' ')})
+                      Line {lineNum}: {line.title} {line.isInspection ? '[Inspection Finding]' : ''} ({payType.replace(/_/g, ' ')})
                     </div>
                     <div className="font-mono font-black text-xs">
                       Line Total: ${lineTotalCost.toFixed(2)}

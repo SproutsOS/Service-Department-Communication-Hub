@@ -227,8 +227,10 @@ export function getDiagnosticStatusDetails(ro: {
  */
 export function formatPrice(val?: number | string | null): string {
   if (val === undefined || val === null || val === '') return '';
-  const num = typeof val === 'number' ? val : Number(val);
-  if (isNaN(num)) return String(val);
+  const clean = typeof val === 'string' ? val.replace(/[^0-9.-]/g, '') : val;
+  if (clean === '') return '';
+  const num = typeof clean === 'number' ? clean : Number(clean);
+  if (isNaN(num)) return '';
   return num.toFixed(2);
 }
 
@@ -238,7 +240,9 @@ export function formatPrice(val?: number | string | null): string {
  */
 export function formatCurrency(val?: number | string | null, fallback = '$0.00'): string {
   if (val === undefined || val === null || val === '') return fallback;
-  const num = typeof val === 'number' ? val : Number(val);
+  const clean = typeof val === 'string' ? val.replace(/[^0-9.-]/g, '') : val;
+  if (clean === '') return fallback;
+  const num = typeof clean === 'number' ? clean : Number(clean);
   if (isNaN(num)) return fallback;
   return `$${num.toFixed(2)}`;
 }
@@ -282,9 +286,41 @@ export function cleanRO3700<T>(ro: T): T {
   let needsUpdate = false;
   let updatedParts = Array.isArray(anyRO.parts) ? [...anyRO.parts] : [];
 
-  // If repair order is approved, quote-only parts should be ordered
+  // If repair order is already PARTS_ORDERED or further in workflow, all non-declined parts must be marked as ORDERED
+  const isPartsOrderedOrBeyond = ['PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(anyRO.status);
+
   updatedParts = updatedParts.map(p => {
-    if (p && (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY')) {
+    if (!p) return p;
+
+    const isCompleteOrDeclined = [
+      'ORDERED', 
+      'DAILY_ORDER', 
+      'LOCAL_PURCHASE', 
+      'SPECIAL_ORDER', 
+      'SPECIAL_ORDER_1_5_DAYS', 
+      'VOR_UPGRADE', 
+      'IN_TRANSIT', 
+      'RECEIVED', 
+      'ISSUED_TO_TECH', 
+      'IN_STOCK', 
+      'DECLINED', 
+      'CANCELLED'
+    ].includes(p.status);
+
+    if (isPartsOrderedOrBeyond && !isCompleteOrDeclined) {
+      needsUpdate = true;
+      return {
+        ...p,
+        status: 'ORDERED',
+        requestType: 'ORDER_NOW',
+        orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
+        estimatedArrival: (p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate'))
+          ? p.estimatedArrival
+          : 'Special Order 1-5 Days',
+      };
+    }
+
+    if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
       needsUpdate = true;
       return {
         ...p,
@@ -302,15 +338,20 @@ export function cleanRO3700<T>(ro: T): T {
   // If quote contains partsItems not yet in ro.parts, include them as ordered parts
   if (anyRO.quote?.partsItems && Array.isArray(anyRO.quote.partsItems) && anyRO.quote.partsItems.length > 0) {
     anyRO.quote.partsItems.forEach((qp: any, idx: number) => {
-      const exists = updatedParts.some((p: any) => 
+      const existingMatch = updatedParts.find((p: any) => 
         (qp.sourcePartId && p.id === qp.sourcePartId) ||
-        (qp.partNumber && p.partNumber && p.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
+        (qp.id && p.id === qp.id) ||
+        (qp.partNumber && qp.partNumber !== 'TBD' && p.partNumber && p.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
         (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
       );
-      if (!exists) {
+      if (existingMatch) {
+        if (!qp.sourcePartId) {
+          qp.sourcePartId = existingMatch.id;
+        }
+      } else {
         needsUpdate = true;
         updatedParts.push({
-          id: qp.sourcePartId || `qpart_approved_${idx}_${Date.now()}`,
+          id: qp.sourcePartId || qp.id || `qpart_approved_${anyRO.id || 'ro'}_${idx}`,
           partNumber: qp.partNumber || 'TBD',
           description: qp.description || 'Quoted Part',
           quantity: qp.quantity || 1,

@@ -2090,22 +2090,27 @@ export const RepairQuoteModal: React.FC = () => {
                           <div className="relative w-24">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
+                              inputMode="decimal"
                               placeholder="0.00"
                               value={part.unitPrice === 0 || part.unitPrice === undefined || (part.unitPrice as any) === '' ? '' : part.unitPrice}
                               onChange={(e) => {
-                                const val = e.target.value;
+                                const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                const parts = raw.split('.');
+                                const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
                                 handleUpdatePartItem(part.id, { 
-                                  unitPrice: val === '' ? ('' as any) : Number(val) 
+                                  unitPrice: val === '' ? ('' as any) : val 
                                 });
                               }}
                               onBlur={(e) => {
-                                const val = e.target.value.trim();
-                                if (val !== '' && !isNaN(Number(val))) {
+                                const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                if (raw !== '' && !isNaN(Number(raw))) {
                                   handleUpdatePartItem(part.id, { 
-                                    unitPrice: Number(Number(val).toFixed(2)) 
+                                    unitPrice: Number(Number(raw).toFixed(2)) 
+                                  });
+                                } else if (raw === '') {
+                                  handleUpdatePartItem(part.id, { 
+                                    unitPrice: 0 
                                   });
                                 }
                               }}

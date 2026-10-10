@@ -3,20 +3,27 @@ import { AlertTriangle, X, ArrowRight, Bell } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const UrgentToastStack: React.FC = () => {
-  const { notifications, markNotificationRead, setSelectedRO, repairOrders } = useApp();
+  const { notifications, markNotificationRead, setSelectedRO, repairOrders, activeRoleView, currentUser } = useApp();
 
-  // Show only unread urgent notifications, excluding parts requests completely
+  const isPartsScreen = activeRoleView === 'PARTS_SPECIALIST' || currentUser.role === 'PARTS_SPECIALIST' || currentUser.role === 'SERVICE_MANAGER';
+
+  // Show unread urgent notifications, including parts orders when relevant
   const activeToasts = notifications.filter(n => {
     if (n.read || !n.isUrgent) return false;
+    // Exclude shop chat alerts: chat has its own dedicated floating launcher & audio chime
+    if (n.type === 'SHOP_CHAT') return false;
+
     const isParts = n.type === 'PARTS_UPDATE' || 
                     n.targetRole === 'PARTS_SPECIALIST' || 
                     n.title.toLowerCase().includes('part') || 
                     n.message.toLowerCase().includes('part');
-    if (isParts) return false;
-    // Exclude shop chat alerts: chat has its own dedicated floating launcher & audio chime
-    if (n.type === 'SHOP_CHAT') return false;
+    
+    // Allow parts action notifications to display
+    if (isParts && !isPartsScreen && n.targetRole === 'PARTS_SPECIALIST') {
+      return false;
+    }
     return true;
-  }).slice(0, 2);
+  }).slice(0, 3);
 
   if (activeToasts.length === 0) return null;
 

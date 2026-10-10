@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   RepairOrder, 
   InspectionCategory,
@@ -27,6 +27,107 @@ import {
   X,
   Wrench
 } from 'lucide-react';
+
+// Global in-memory draft cache so typing is preserved across re-renders, sorting, or Framer Motion promotions
+const globalInspectionDrafts: Record<string, string> = {};
+
+interface InspectionItemTextareaProps {
+  roId: string;
+  itemId: string;
+  fieldKey: 'notes' | 'concern';
+  initialValue: string;
+  onSave: (val: string) => void;
+  placeholder: string;
+  className: string;
+  rows?: number;
+}
+
+const InspectionItemTextarea: React.FC<InspectionItemTextareaProps> = ({
+  roId,
+  itemId,
+  fieldKey,
+  initialValue,
+  onSave,
+  placeholder,
+  className,
+  rows = 2,
+}) => {
+  const cacheKey = `${roId}_${itemId}_${fieldKey}`;
+  const [val, setVal] = useState<string>(() => {
+    if (globalInspectionDrafts[cacheKey] !== undefined) {
+      return globalInspectionDrafts[cacheKey];
+    }
+    return initialValue || '';
+  });
+
+  const isFocusedRef = useRef(false);
+  const valRef = useRef(val);
+  valRef.current = val;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync with incoming prop if external value changes AND user is not actively focused on this textarea
+  useEffect(() => {
+    if (!isFocusedRef.current) {
+      if (globalInspectionDrafts[cacheKey] === undefined || globalInspectionDrafts[cacheKey] === initialValue) {
+        setVal(initialValue || '');
+        valRef.current = initialValue || '';
+      }
+    }
+  }, [initialValue, cacheKey]);
+
+  // Flush any pending save on true component unmount ONLY
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+        onSaveRef.current(valRef.current);
+      }
+    };
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextVal = e.target.value;
+    setVal(nextVal);
+    valRef.current = nextVal;
+    globalInspectionDrafts[cacheKey] = nextVal;
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      onSaveRef.current(nextVal);
+      timerRef.current = null;
+    }, 600);
+  };
+
+  const handleBlur = () => {
+    isFocusedRef.current = false;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    onSaveRef.current(valRef.current);
+  };
+
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+  };
+
+  return (
+    <textarea
+      value={val}
+      onFocus={handleFocus}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      rows={rows}
+      className={className}
+    />
+  );
+};
 
 interface TechRecommendationsSectionProps {
   ro: RepairOrder;
@@ -92,6 +193,44 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
 
+  const inspectionItemsMap = ro.inspection?.items || {};
+
+  const saveFutureNotes = React.useCallback((item: InspectionChecklistItem, val: string) => {
+    const existing = inspectionItemsMap[item.id];
+    setInspectionItemResult(ro.id, item.id, {
+      notes: val,
+      status: 'FUTURE_ATTENTION',
+      name: item.name,
+      category: item.category,
+      measurementValue: existing?.measurementValue || '',
+    });
+  }, [ro.id, inspectionItemsMap, setInspectionItemResult]);
+
+  const saveImmediateConcern = React.useCallback((item: InspectionChecklistItem, val: string) => {
+    const existing = inspectionItemsMap[item.id];
+    setInspectionItemResult(ro.id, item.id, {
+      concern: val,
+      notes: val,
+      status: 'IMMEDIATE_ATTENTION',
+      name: item.name,
+      category: item.category,
+      measurementValue: existing?.measurementValue || '',
+    });
+    const recName = (item.defaultRecommendationName || '').toLowerCase().trim();
+    const itemName = item.name.toLowerCase().trim();
+    const matchingRec = (ro.recommendations || []).find(r => 
+      r.inspectionItemId === item.id || 
+      (recName && r.serviceName.toLowerCase().includes(recName)) ||
+      (itemName && r.serviceName.toLowerCase().includes(itemName))
+    );
+    if (matchingRec) {
+      updateRecommendedService(ro.id, matchingRec.id, {
+        serviceName: val.trim() ? `${item.name}: ${val.trim()}` : item.name,
+        notes: val,
+      });
+    }
+  }, [ro.id, ro.recommendations, inspectionItemsMap, setInspectionItemResult, updateRecommendedService]);
+
   // Recommendations state
   const recommendations = ro.recommendations || [];
   const pendingCount = recommendations.filter(r => r.status === 'PENDING').length;
@@ -102,7 +241,6 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
     ? inspectionChecklist 
     : DEFAULT_INSPECTION_CHECKLIST;
 
-  const inspectionItemsMap = ro.inspection?.items || {};
   const totalChecklistCount = effectiveChecklist.filter(i => i.isEnabled !== false).length;
 
   const passedCount = useMemo(() => {
@@ -174,26 +312,20 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
     const matchingRec = findLinkedRec(item.id, item);
 
     if (status === 'IMMEDIATE_ATTENTION') {
-      if (!matchingRec) {
-        addRecommendedService(ro.id, {
-          serviceName: existingConcern.trim() ? `${item.name}: ${existingConcern.trim()}` : item.name,
-          inspectionItemId: item.id,
-          urgency: 'SAFETY',
-          payType: 'CUSTOMER_PAY',
-          laborHours: 0,
-          notes: existingConcern,
-        });
-      }
       setStatusFeedback(`Marked "${item.name}" for Immediate Concern (Red) — added to Job Lines.`);
     } else {
       if (matchingRec) {
         deleteRecommendedService(ro.id, matchingRec.id);
       }
       if (status === 'PASSED') {
+        delete globalInspectionDrafts[`${ro.id}_${item.id}_notes`];
+        delete globalInspectionDrafts[`${ro.id}_${item.id}_concern`];
         setStatusFeedback(`Marked "${item.name}" as Checked & OK.`);
       } else if (status === 'FUTURE_ATTENTION') {
         setStatusFeedback(`Marked "${item.name}" for Future Attention (Yellow) — enter advisory notes below.`);
       } else if (status === 'NOT_APPLICABLE') {
+        delete globalInspectionDrafts[`${ro.id}_${item.id}_notes`];
+        delete globalInspectionDrafts[`${ro.id}_${item.id}_concern`];
         setStatusFeedback(`Marked "${item.name}" as N/A.`);
       }
     }
@@ -535,19 +667,13 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                       Saved to 21-Point Inspection Report
                                     </span>
                                   </div>
-                                  <textarea
-                                    value={result?.notes || ''}
-                                    onChange={(e) => {
-                                      setInspectionItemResult(ro.id, item.id, {
-                                        notes: e.target.value,
-                                        status: 'FUTURE_ATTENTION',
-                                        name: item.name,
-                                        category: item.category,
-                                        measurementValue: result?.measurementValue || '',
-                                      });
-                                    }}
+                                  <InspectionItemTextarea
+                                    roId={ro.id}
+                                    itemId={item.id}
+                                    fieldKey="notes"
+                                    initialValue={result?.notes || ''}
+                                    onSave={(val) => saveFutureNotes(item, val)}
                                     placeholder={`Enter future maintenance / advisory notes for ${item.name} (e.g., "Pads at 4mm — recheck next service", "Tires at 4/32 tread — recommend replacement in 5,000 miles")...`}
-                                    rows={2}
                                     className="w-full text-xs p-2 bg-white border border-amber-300 rounded-lg text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-amber-500 shadow-2xs"
                                   />
                                 </div>
@@ -565,28 +691,13 @@ export const TechRecommendationsSection: React.FC<TechRecommendationsSectionProp
                                       Listed as Inspection Finding
                                     </span>
                                   </div>
-                                  <textarea
-                                    value={result?.concern !== undefined ? result.concern : (result?.notes || '')}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setInspectionItemResult(ro.id, item.id, {
-                                        concern: val,
-                                        notes: val,
-                                        status: 'IMMEDIATE_ATTENTION',
-                                        name: item.name,
-                                        category: item.category,
-                                        measurementValue: result?.measurementValue || '',
-                                      });
-                                      const matchingRec = findLinkedRec(item.id, item);
-                                      if (matchingRec) {
-                                        updateRecommendedService(ro.id, matchingRec.id, {
-                                          serviceName: val.trim() ? `${item.name}: ${val.trim()}` : item.name,
-                                          notes: val,
-                                        });
-                                      }
-                                    }}
+                                  <InspectionItemTextarea
+                                    roId={ro.id}
+                                    itemId={item.id}
+                                    fieldKey="concern"
+                                    initialValue={result?.concern !== undefined ? result.concern : (result?.notes || '')}
+                                    onSave={(val) => saveImmediateConcern(item, val)}
                                     placeholder={`Enter technician finding / concern for ${item.name} (e.g., "Front brake pads worn to 1mm, metal contact on rotor", "Left CV axle boot torn slinging grease")...`}
-                                    rows={2}
                                     className="w-full text-xs p-2 bg-white border-2 border-red-300 rounded-lg text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-500 shadow-2xs"
                                   />
                                 </div>
