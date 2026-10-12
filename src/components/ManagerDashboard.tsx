@@ -23,16 +23,20 @@ import {
   PhoneCall,
   ExternalLink,
   Receipt,
-  Archive
+  Archive,
+  ChevronRight,
+  Bell,
+  X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
-import { ROStatus, RepairOrder } from '../types';
+import { ROStatus, RepairOrder, User } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince, sortROsNumerically, matchesROSearch } from '../utils/formatters';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { ManagerPartsOnOrderModal } from './ManagerPartsOnOrderModal';
+import { TechWorkloadModal } from './TechWorkloadModal';
 import { getContactCadenceStatus, isEligibleForCadence, isWoolwineVehicle } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
@@ -51,8 +55,13 @@ export const ManagerDashboard: React.FC = () => {
     openQuoteBuilder,
     quotes,
     openArchivedROsModal,
+    notifications,
+    markNotificationRead,
+    dismissPartsOrderAlert,
+    setActiveRoleView,
   } = useApp();
 
+  const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
   const [isPartsOnOrderModalOpen, setIsPartsOnOrderModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +145,86 @@ export const ManagerDashboard: React.FC = () => {
       return acc + active.length;
     }, 0);
   }, [activeROsList]);
+
+  // Set of dismissed notification IDs in the current session on manager screen
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(new Set());
+
+  // Parts Order Notifications visible to Service Manager & Parts Counter (Synchronized via Firestore)
+  const partsAlertNotifications = useMemo(() => {
+    const directNotifs = (notifications || []).filter(n => {
+      if (n.read) return false;
+      if (dismissedAlertIds.has(n.id)) return false;
+
+      const titleLower = (n.title || '').toLowerCase();
+      const msgLower = (n.message || '').toLowerCase();
+      if (
+        titleLower.includes('parts ordered') || 
+        titleLower.includes('placed on order') || 
+        msgLower.includes('placed on order')
+      ) {
+        return false;
+      }
+
+      const isParts = n.type === 'PARTS_UPDATE' || 
+        n.targetRole === 'PARTS_SPECIALIST' || 
+        n.targetRole === 'SERVICE_MANAGER' ||
+        titleLower.includes('part') ||
+        titleLower.includes('approved') ||
+        msgLower.includes('part') ||
+        msgLower.includes('place parts orders');
+
+      if (!isParts) return false;
+
+      if (n.roId) {
+        const ro = repairOrders.find(r => String(r.id) === String(n.roId));
+        if (ro && (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy || ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH')) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    const isFulfilled = (st?: string) => [
+      'ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 
+      'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 
+      'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'
+    ].includes(st || '');
+
+    const autoAlerts = repairOrders
+      .filter(ro => {
+        if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
+        if (ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH') return false;
+        if (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy) return false;
+        if (directNotifs.some(n => String(n.roId) === String(ro.id))) return false;
+        if (dismissedAlertIds.has(`auto_alert_ro_${ro.id}`) || dismissedAlertIds.has(`auto_alert_ro_${String(ro.id)}`)) return false;
+
+        const isApproved = ro.quote?.status === 'APPROVED' || 
+                           ro.status === 'APPROVED' || 
+                           (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(st => st === 'APPROVED'));
+        if (!isApproved) return false;
+
+        const allParts = ro.parts || [];
+        const quoteParts = ro.quote?.partsItems || [];
+        if (allParts.length === 0 && quoteParts.length === 0) return false;
+
+        return allParts.some(p => !isFulfilled(p.status)) || quoteParts.some(qp => !isFulfilled(qp.status));
+      })
+      .map(ro => ({
+        id: `auto_alert_ro_${ro.id}`,
+        roId: ro.id,
+        roNumber: ro.id,
+        title: `🚨 Parts Action: RO Approved #${ro.id}`,
+        message: `Customer authorized repairs for ${ro.customerName} (${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}). Verify and place parts orders now.`,
+        timestamp: ro.updatedAt || new Date().toISOString(),
+        isUrgent: true,
+        type: 'PARTS_UPDATE' as const,
+        read: false,
+        targetRole: 'SERVICE_MANAGER' as const,
+      }));
+
+    return [...directNotifs, ...autoAlerts];
+  }, [notifications, repairOrders, dismissedAlertIds]);
 
   // Filter & Sort ROs in numerical order
   const filteredROs = sortROsNumerically(repairOrders.filter(ro => {
@@ -255,6 +344,117 @@ export const ManagerDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* NEW PARTS ORDER NOTIFICATIONS (Real-time sync with Parts Counter)          */}
+      {/* ========================================================================= */}
+      {partsAlertNotifications.length > 0 && viewSection === 'FLOOR' && (
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-2xl p-4 sm:p-5 shadow-lg border-2 border-red-400 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/20">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <span className="w-4 h-4 rounded-full bg-yellow-300 animate-ping absolute inset-0 m-auto" />
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white font-black shadow-inner relative border border-white/30">
+                  <Bell className="w-5 h-5 text-yellow-300 animate-bounce" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                    <span>NEW PARTS ORDER NOTIFICATIONS</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-white text-rose-700 text-xs font-black uppercase tracking-wider shadow-xs">
+                      {partsAlertNotifications.length} {partsAlertNotifications.length === 1 ? 'Alert' : 'Alerts'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-rose-100 font-medium">
+                  Service Advisor authorized repairs — action required to verify and place parts orders with suppliers.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDismissedAlertIds(prev => {
+                  const next = new Set(prev);
+                  partsAlertNotifications.forEach(n => {
+                    next.add(n.id);
+                    if (n.roId) next.add(n.roId);
+                  });
+                  return next;
+                });
+                partsAlertNotifications.forEach(n => {
+                  markNotificationRead(n.id);
+                  dismissPartsOrderAlert(n.roId, n.id, false);
+                });
+              }}
+              className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all border border-white/30 cursor-pointer flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Mark All Read</span>
+            </button>
+          </div>
+
+          {/* Individual Notification Items */}
+          <div className="space-y-2">
+            {partsAlertNotifications.map(notif => {
+              const notifRO = repairOrders.find(r => String(r.id) === String(notif.roId));
+              return (
+                <div
+                  key={notif.id}
+                  className="bg-black/25 hover:bg-black/35 backdrop-blur-xs rounded-xl p-3 border border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all"
+                >
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+                    <span className="px-2 py-0.5 rounded-md bg-yellow-400 text-slate-900 font-black text-xs shrink-0 font-mono">
+                      {notif.roNumber || notif.roId}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-white">{notif.title}</span>
+                        <span className="text-[10px] text-white/70 font-mono">
+                          {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-rose-100 font-medium truncate sm:whitespace-normal">
+                        {notif.message}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    {notifRO && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDismissedAlertIds(prev => new Set([...prev, notif.id, notif.roId, `auto_alert_ro_${notif.roId}`, `auto_alert_ro_${String(notif.roId)}`, `parts_alert_${notif.roId}`]));
+                          markNotificationRead(notif.id);
+                          dismissPartsOrderAlert(notif.roId, notif.id, true);
+                          setSelectedRO(notifRO);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-yellow-300 text-xs font-black transition-colors shadow-xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Package className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Order Parts Now</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDismissedAlertIds(prev => new Set([...prev, notif.id, notif.roId, `auto_alert_ro_${notif.roId}`, `auto_alert_ro_${String(notif.roId)}`, `parts_alert_${notif.roId}`]));
+                        markNotificationRead(notif.id);
+                        dismissPartsOrderAlert(notif.roId, notif.id, false);
+                      }}
+                      className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
+                      title="Dismiss notification"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Cadence Notification Alert for Service Manager */}
       {totalCallsDue > 0 && viewSection === 'FLOOR' && (
@@ -546,84 +746,124 @@ export const ManagerDashboard: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {technicians.map(tech => {
-              const activeJobs = repairOrders.filter(r => r.techId === tech.id && r.status !== 'COMPLETED');
+              const techNameClean = tech.name.trim().toLowerCase();
+              const assignedROs = repairOrders.filter(r => 
+                r.techId === tech.id || 
+                (r.concernTechIds && r.concernTechIds.some(id => id === tech.id)) ||
+                (r.techName && r.techName.trim().toLowerCase() === techNameClean) ||
+                (r.concernTechNames && r.concernTechNames.some(name => name && name.trim().toLowerCase() === techNameClean))
+              );
+              const activeJobs = assignedROs.filter(r => r.status !== 'COMPLETED' && r.status !== 'CLOSED');
               const currentJob = activeJobs[0];
 
               return (
                 <div 
                   key={tech.id}
-                  onClick={() => currentJob && setSelectedRO(currentJob)}
-                  className={`p-3 rounded-lg border text-left transition-all ${
-                    currentJob 
-                      ? 'border-slate-200 bg-slate-50/60 hover:border-blue-400 hover:bg-white cursor-pointer shadow-2xs' 
-                      : 'border-dashed border-slate-200 bg-white'
-                  }`}
+                  onClick={() => setSelectedWorkloadTech(tech)}
+                  className="p-3.5 rounded-xl border-2 border-slate-200 bg-white hover:border-blue-500 hover:bg-blue-50/20 hover:shadow-md transition-all cursor-pointer text-left flex flex-col justify-between group relative"
+                  title={`Click to view all ${assignedROs.length} repair orders assigned to ${tech.name}`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                      {tech.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'T'}
+                  <div>
+                    {/* Header: Tech Name, Cert, Active Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs group-hover:bg-blue-700 transition-colors">
+                          {tech.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'T'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1 flex-wrap">
+                            <span className="group-hover:text-blue-700 transition-colors">{tech.name}</span>
+                            {tech.employeeNumber && (
+                              <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                                #{tech.employeeNumber}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-blue-700 font-semibold truncate flex items-center gap-1">
+                            <Award className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                            <span className="truncate">{tech.certificationLevel || tech.title || 'Technician'}</span>
+                            {tech.bayNumber && <span className="text-slate-400 font-normal">• Bay {tech.bayNumber}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Workload Pill */}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
+                        activeJobs.length > 0
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 font-extrabold'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        {activeJobs.length === 0 ? 'Available' : `${activeJobs.length} Active`}
+                      </span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1 flex-wrap">
-                        <span>{tech.name}</span>
-                        {tech.employeeNumber && (
-                          <span className="font-mono text-xs font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                            {tech.employeeNumber}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-blue-700 font-semibold truncate flex items-center gap-1">
-                        <Award className="w-2.5 h-2.5 text-blue-500 shrink-0" />
-                        <span className="truncate">{tech.certificationLevel || tech.title || 'Technician'}</span>
-                      </div>
+
+                    {/* Active Job Preview or Idle State */}
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 text-xs">
+                      {currentJob ? (
+                        <div>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-mono font-bold text-blue-600 text-[11px] group-hover:underline">
+                              RO #{currentJob.id}
+                            </span>
+                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${
+                              STATUS_CONFIG[currentJob.status]?.badgeClass || 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {STATUS_CONFIG[currentJob.status]?.label || currentJob.status.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-700 font-medium truncate mt-1">
+                            {currentJob.vehicle.year} {currentJob.vehicle.make} {currentJob.vehicle.model}
+                          </div>
+
+                          {/* Diagnostic Status helper in Tech card */}
+                          {(currentJob.status === 'WAITING_DIAGNOSTICS' || currentJob.status === 'WAITING_DIAGNOSIS') && (
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-amber-700 font-medium">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                Waiting Diag ({formatDurationSince(currentJob.waitingDiagnosisAt)})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startDiagnosis(currentJob.id);
+                                }}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-1.5 py-0.5 rounded text-[9px] shadow-2xs transition-colors cursor-pointer"
+                              >
+                                Start Diag
+                              </button>
+                            </div>
+                          )}
+                          {(currentJob.status === 'IN_DIAG' || currentJob.status === 'BEING_DIAGNOSED' || currentJob.status === 'IN_BAY') && (
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center gap-1 text-[10px] text-blue-700 font-medium">
+                              <Wrench className="w-3 h-3 text-blue-600" />
+                              <span>Diagnosing: {formatDurationSince(currentJob.diagnosisStartedAt)} active</span>
+                            </div>
+                          )}
+
+                          {activeJobs.length > 1 && (
+                            <div className="mt-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                              +{activeJobs.length - 1} more assigned job{activeJobs.length - 1 === 1 ? '' : 's'}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-slate-400 text-[11px] italic py-1">
+                          Tech available • Ready for assignment
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 text-xs">
-                    {currentJob ? (
-                      <div>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-bold text-blue-600 text-[11px]">{currentJob.id}</span>
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full border ${
-                            STATUS_CONFIG[currentJob.status]?.badgeClass || 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {STATUS_CONFIG[currentJob.status]?.label || currentJob.status.replace(/_/g, ' ')}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-600 truncate mt-1">
-                          {currentJob.vehicle.year} {currentJob.vehicle.make} {currentJob.vehicle.model}
-                        </div>
-
-                        {/* Diagnostic Status helper in Tech card */}
-                        {(currentJob.status === 'WAITING_DIAGNOSTICS' || currentJob.status === 'WAITING_DIAGNOSIS') && (
-                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-amber-700 font-medium">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-amber-600" />
-                              Waiting Diag ({formatDurationSince(currentJob.waitingDiagnosisAt)})
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startDiagnosis(currentJob.id);
-                              }}
-                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-1.5 py-0.5 rounded text-[9px] shadow-2xs transition-colors"
-                            >
-                              Start Diag
-                            </button>
-                          </div>
-                        )}
-                        {(currentJob.status === 'IN_DIAG' || currentJob.status === 'BEING_DIAGNOSED' || currentJob.status === 'IN_BAY') && (
-                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center gap-1 text-[10px] text-blue-700 font-medium">
-                            <Wrench className="w-3 h-3 text-blue-600" />
-                            <span>Diagnosing: {formatDurationSince(currentJob.diagnosisStartedAt)} active</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-slate-400 text-[11px] italic">
-                        Tech available • Ready for assignment
-                      </div>
-                    )}
+                  {/* Click cue bar */}
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-blue-600 group-hover:text-blue-800">
+                    <span className="text-slate-500 font-medium text-[10px]">
+                      {assignedROs.length} assigned RO{assignedROs.length === 1 ? '' : 's'} total
+                    </span>
+                    <span className="flex items-center gap-0.5 group-hover:underline">
+                      <span>View All ROs</span>
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </span>
                   </div>
                 </div>
               );
@@ -1040,6 +1280,18 @@ export const ManagerDashboard: React.FC = () => {
         isOpen={isPartsOnOrderModalOpen}
         onClose={() => setIsPartsOnOrderModalOpen(false)}
         onOpenRO={(ro) => setSelectedRO(ro)}
+      />
+
+      {/* Service Manager: Technician Workload Modal (View all assigned ROs and click to see whole RO) */}
+      <TechWorkloadModal
+        isOpen={Boolean(selectedWorkloadTech)}
+        onClose={() => setSelectedWorkloadTech(null)}
+        tech={selectedWorkloadTech}
+        repairOrders={repairOrders}
+        onSelectRO={(ro) => {
+          setSelectedRO(ro);
+        }}
+        onStartDiag={(roId) => startDiagnosis(roId)}
       />
 
     </div>

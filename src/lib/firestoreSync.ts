@@ -399,11 +399,11 @@ export async function syncNotification(notif: UrgentNotification): Promise<boole
   }
 }
 
-// Mark notification as read
+// Mark notification as read (using setDoc with merge to avoid 'No document to update' errors)
 export async function markNotificationReadDoc(notifId: string) {
   try {
     const docRef = doc(db, NOTIFICATIONS_COL, notifId);
-    await updateDoc(docRef, { read: true });
+    await setDoc(docRef, { read: true }, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `${NOTIFICATIONS_COL}/${notifId}`);
   }
@@ -411,11 +411,12 @@ export async function markNotificationReadDoc(notifId: string) {
 
 // Mark all notifications read
 export async function markAllNotificationsReadDocs(notifIds: string[]) {
+  if (!notifIds || notifIds.length === 0) return;
   try {
     const batch = writeBatch(db);
     notifIds.forEach(id => {
       const docRef = doc(db, NOTIFICATIONS_COL, id);
-      batch.update(docRef, { read: true });
+      batch.set(docRef, { read: true }, { merge: true });
     });
     await batch.commit();
   } catch (err) {

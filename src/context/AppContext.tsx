@@ -172,6 +172,7 @@ interface AppContextType {
   updatePartStatus: (roId: string, partId: string, status: PartStatus, eta?: string, notes?: string) => void;
   updatePartItem: (roId: string, partId: string, updates: Partial<PartItem>) => void;
   markAllPartsOrderedOnRO: (roId: string, defaultEta?: string) => boolean;
+  dismissPartsOrderAlert: (roId: string, notifId?: string, isClaimed?: boolean) => void;
   deletePartItem: (roId: string, partId: string) => void;
   createRepairOrder: (data: {
     roNumber?: string;
@@ -2252,13 +2253,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // ignore
       }
 
-      triggerNotification(
-        updatedROToSync,
-        `Part ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}: ${partDescription}`,
-        `Status updated by ${currentUser.name}. ${eta ? `New ETA: ${eta}.` : ''}`,
-        isUrgent,
-        'PARTS_UPDATE'
-      );
+      // Notify appropriate staff when part status changes
+      if (status === 'RECEIVED' || status === 'ISSUED_TO_TECH') {
+        triggerNotification(
+          updatedROToSync,
+          `Part ${status.replace(/_/g, ' ')}: ${partDescription}`,
+          `Part is ready for installation. Status updated by ${currentUser.name}.`,
+          true,
+          'PARTS_UPDATE',
+          'TECHNICIAN'
+        );
+      } else if (status !== 'ORDERED') {
+        triggerNotification(
+          updatedROToSync,
+          `Part ${status === 'SPECIAL_ORDER_1_5_DAYS' ? 'SPECIAL ORDER 1-5 DAYS' : status.replace(/_/g, ' ')}: ${partDescription}`,
+          `Status updated by ${currentUser.name}. ${eta ? `New ETA: ${eta}.` : ''}`,
+          isUrgent,
+          'PARTS_UPDATE',
+          'SERVICE_ADVISOR'
+        );
+      }
+    }
+  };
+
+  // Dismiss / Claim Parts Order Alert across all screens (Real-time Firestore sync)
+  // Dismiss / Claim Parts Order Alert across all screens (Real-time Firestore sync)
+  const dismissPartsOrderAlert = (roId: string, notifId?: string, isClaimed: boolean = false) => {
+    const now = new Date().toISOString();
+    let updatedROToSync: RepairOrder | null = null;
+
+    if (roId) {
+      setRepairOrders(prevROs => {
+        const targetRO = prevROs.find(r => String(r.id) === String(roId));
+        if (!targetRO) return prevROs;
+
+        const updatedRO: RepairOrder = {
+          ...targetRO,
+          partsAlertDismissed: true,
+          partsAlertDismissedAt: now,
+          partsAlertDismissedBy: currentUser.name,
+          ...(isClaimed ? {
+            partsOrderClaimedBy: currentUser.name,
+            partsOrderClaimedAt: now,
+          } : {}),
+          updatedAt: now,
+        };
+        updatedROToSync = updatedRO;
+        return prevROs.map(r => String(r.id) === String(roId) ? updatedRO : r);
+      });
+    }
+
+    if (updatedROToSync) {
+      syncRepairOrder(updatedROToSync);
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_ROS);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = parsed.map((r: RepairOrder) => String(r.id) === String(roId) ? updatedROToSync : r);
+          localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Dismiss & mark as read all matching notifications for this RO across clients
+    const notifIdsToMarkRead: string[] = [];
+    setNotifications(prev => prev.map(n => {
+      const isMatch = (notifId && n.id === notifId) || (roId && String(n.roId) === String(roId) && (
+        n.type === 'PARTS_UPDATE' || 
+        n.targetRole === 'PARTS_SPECIALIST' || 
+        n.title.toLowerCase().includes('part') || 
+        n.title.toLowerCase().includes('approved')
+      ));
+      if (isMatch) {
+        if (!n.id.startsWith('auto_alert_ro_')) {
+          notifIdsToMarkRead.push(n.id);
+        }
+        return { ...n, read: true };
+      }
+      return n;
+    }));
+
+    if (notifId && !notifId.startsWith('auto_alert_ro_') && !notifIdsToMarkRead.includes(notifId)) {
+      notifIdsToMarkRead.push(notifId);
+    }
+
+    if (notifIdsToMarkRead.length > 0) {
+      markAllNotificationsReadDocs(notifIdsToMarkRead);
     }
   };
 
@@ -2266,9 +2348,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const markAllPartsOrderedOnRO = (roId: string, defaultEta: string = 'Special Order 1-5 Days'): boolean => {
     let success = false;
     let updatedROToSync: RepairOrder | null = null;
+    const now = new Date().toISOString();
 
     setRepairOrders(prevROs => {
-      const targetRO = prevROs.find(r => r.id === roId);
+      const targetRO = prevROs.find(r => String(r.id) === String(roId));
       if (!targetRO) return prevROs;
 
       const updatedParts = (targetRO.parts || []).map(p => {
@@ -2286,15 +2369,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           estimatedArrival: (p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate'))
             ? p.estimatedArrival
             : defaultEta,
-          orderedAt: p.orderedAt || new Date().toISOString(),
+          orderedAt: p.orderedAt || now,
         };
       });
+
+      // Also ensure quote partsItems are marked as APPROVED
+      const updatedQuote = targetRO.quote ? {
+        ...targetRO.quote,
+        partsItems: (targetRO.quote.partsItems || []).map(qp => {
+          const lineStatus = targetRO.quote?.lineStatuses?.[qp.roLineNumber || 1];
+          if (lineStatus === 'DECLINED' || qp.status === 'DECLINED') {
+            return qp;
+          }
+          return {
+            ...qp,
+            status: 'APPROVED' as LineApprovalStatus,
+          };
+        }),
+      } : targetRO.quote;
 
       const nextROStatus: ROStatus = 'PARTS_ORDERED';
       const updatedRO: RepairOrder = {
         ...targetRO,
         status: nextROStatus,
         parts: updatedParts,
+        quote: updatedQuote,
+        partsAlertDismissed: true,
+        partsAlertDismissedAt: now,
+        partsAlertDismissedBy: currentUser.name,
+        partsOrderClaimedBy: currentUser.name,
+        partsOrderClaimedAt: now,
+        partsOrderCompletedBy: currentUser.name,
+        partsOrderCompletedAt: now,
+        updatedAt: now,
         history: [
           ...targetRO.history,
           {
@@ -2303,7 +2410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updatedBy: currentUser.id,
             updatedByName: currentUser.name,
             userRole: currentUser.role,
-            timestamp: new Date().toISOString(),
+            timestamp: now,
             notes: 'All approved parts placed on order with suppliers. RO status updated to PARTS_ORDERED.',
           },
         ],
@@ -2312,7 +2419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedROToSync = updatedRO;
       success = true;
 
-      return prevROs.map(r => r.id === roId ? updatedRO : r);
+      return prevROs.map(r => String(r.id) === String(roId) ? updatedRO : r);
     });
 
     if (updatedROToSync) {
@@ -2321,19 +2428,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const saved = localStorage.getItem(STORAGE_KEY_ROS);
         if (saved) {
           const parsed = JSON.parse(saved);
-          const updated = parsed.map((r: RepairOrder) => r.id === roId ? updatedROToSync : r);
+          const updated = parsed.map((r: RepairOrder) => String(r.id) === String(roId) ? updatedROToSync : r);
           localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
         }
       } catch {
         // ignore
       }
 
+      // Mark any pending parts order notifications for this RO as read across all clients
+      const notifsToDismiss: string[] = [];
+      setNotifications(prev => prev.map(n => {
+        if (String(n.roId) === String(roId) && (n.type === 'PARTS_UPDATE' || n.targetRole === 'PARTS_SPECIALIST' || n.title.toLowerCase().includes('part') || n.title.toLowerCase().includes('approved'))) {
+          if (!n.id.startsWith('auto_alert_ro_')) {
+            notifsToDismiss.push(n.id);
+          }
+          return { ...n, read: true };
+        }
+        return n;
+      }));
+      if (notifsToDismiss.length > 0) {
+        markAllNotificationsReadDocs(notifsToDismiss);
+      }
+
+      // Informational update for Service Advisor (NOT urgent, so it doesn't pop up on parts/manager screens)
       triggerNotification(
         updatedROToSync,
-        `RO #${roId} Parts Ordered`,
-        `All approved parts for RO #${roId} placed on order with suppliers.`,
+        `RO #${roId} Parts Placed on Order`,
+        `All approved parts for RO #${roId} have been placed on order with suppliers by ${currentUser.name}.`,
         false,
-        'PARTS_UPDATE'
+        'PARTS_UPDATE',
+        'SERVICE_ADVISOR'
       );
     }
 
@@ -6692,6 +6816,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatePartStatus,
         updatePartItem,
         markAllPartsOrderedOnRO,
+        dismissPartsOrderAlert,
         deletePartItem,
         createRepairOrder,
         markNotificationRead,

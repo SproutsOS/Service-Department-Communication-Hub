@@ -3,7 +3,15 @@ import { AlertTriangle, X, ArrowRight, Bell } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const UrgentToastStack: React.FC = () => {
-  const { notifications, markNotificationRead, setSelectedRO, repairOrders, activeRoleView, currentUser } = useApp();
+  const { 
+    notifications, 
+    markNotificationRead, 
+    dismissPartsOrderAlert,
+    setSelectedRO, 
+    repairOrders, 
+    activeRoleView, 
+    currentUser 
+  } = useApp();
 
   const isPartsScreen = activeRoleView === 'PARTS_SPECIALIST' || currentUser.role === 'PARTS_SPECIALIST' || currentUser.role === 'SERVICE_MANAGER';
 
@@ -13,11 +21,26 @@ export const UrgentToastStack: React.FC = () => {
     // Exclude shop chat alerts: chat has its own dedicated floating launcher & audio chime
     if (n.type === 'SHOP_CHAT') return false;
 
+    // Do NOT show toast if it's a confirmation notice that parts are already ordered
+    const titleLower = (n.title || '').toLowerCase();
+    const msgLower = (n.message || '').toLowerCase();
+    if (titleLower.includes('parts ordered') || titleLower.includes('placed on order') || msgLower.includes('placed on order')) {
+      return false;
+    }
+
     const isParts = n.type === 'PARTS_UPDATE' || 
                     n.targetRole === 'PARTS_SPECIALIST' || 
-                    n.title.toLowerCase().includes('part') || 
-                    n.message.toLowerCase().includes('part');
+                    titleLower.includes('part') || 
+                    msgLower.includes('part');
     
+    // If it's a parts action, check if the RO has already dismissed or claimed it or parts are ordered
+    if (isParts && n.roId) {
+      const ro = repairOrders.find(r => String(r.id) === String(n.roId));
+      if (ro && (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy || ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH')) {
+        return false;
+      }
+    }
+
     // Allow parts action notifications to display
     if (isParts && !isPartsScreen && n.targetRole === 'PARTS_SPECIALIST') {
       return false;
@@ -29,7 +52,10 @@ export const UrgentToastStack: React.FC = () => {
 
   const handleToastClick = (roId: string, notifId: string) => {
     markNotificationRead(notifId);
-    const ro = repairOrders.find(r => r.id === roId);
+    if (roId) {
+      dismissPartsOrderAlert(roId, notifId, true);
+    }
+    const ro = repairOrders.find(r => String(r.id) === String(roId));
     if (ro) setSelectedRO(ro);
   };
 
@@ -60,7 +86,12 @@ export const UrgentToastStack: React.FC = () => {
           </div>
 
           <button
-            onClick={() => markNotificationRead(toast.id)}
+            onClick={() => {
+              markNotificationRead(toast.id);
+              if (toast.roId) {
+                dismissPartsOrderAlert(toast.roId, toast.id, false);
+              }
+            }}
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors shrink-0"
           >
             <X className="w-4 h-4" />

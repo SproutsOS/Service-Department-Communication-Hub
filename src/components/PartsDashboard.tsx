@@ -75,6 +75,7 @@ export const PartsDashboard: React.FC = () => {
     repairOrders, 
     updatePartStatus, 
     markAllPartsOrderedOnRO,
+    dismissPartsOrderAlert,
     addPartOrder, 
     updatePartItem, 
     deletePartItem, 
@@ -343,63 +344,67 @@ export const PartsDashboard: React.FC = () => {
   // Alias for backward compatibility
   const rosWithPendingTechRequests = rosPendingPartsQuote;
 
+  // Helper: check if a part is already ordered or fulfilled
+  const isPartFulfilledOrOrdered = (status?: string): boolean => {
+    if (!status) return false;
+    return [
+      'ORDERED',
+      'DAILY_ORDER', 
+      'LOCAL_PURCHASE', 
+      'SPECIAL_ORDER', 
+      'SPECIAL_ORDER_1_5_DAYS', 
+      'VOR_UPGRADE', 
+      'IN_TRANSIT', 
+      'RECEIVED', 
+      'ISSUED_TO_TECH', 
+      'IN_STOCK',
+      'DECLINED',
+      'CANCELLED'
+    ].includes(status);
+  };
+
   // 2. Approved ROs Queue: ROs authorized by customer/advisor that have parts ready to be ordered
   const isROApprovedReadyToOrder = (ro: RepairOrder): boolean => {
+    // If RO is completed, closed, denied, or already in repair/parts ordered stage, remove from ready to order queue
     if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
-    if (orderedRoIds.has(ro.id)) return false;
+    if (ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH') return false;
+    if (ro.status === 'IN_REPAIR' || ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'REPAIR_COMPLETE') return false;
+    if (orderedRoIds.has(ro.id) || orderedRoIds.has(String(ro.id))) return false;
+    if (ro.partsAlertDismissed || ro.partsOrderCompletedBy) return false;
     if (ro.quote?.status === 'DECLINED') return false;
-
-    const isAlreadyMarkedOrdered = orderedRoIds.has(ro.id);
-
-    const isApproved = ro.quote?.status === 'APPROVED' || 
-                       ro.status === 'APPROVED' || 
-                       (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(st => st === 'APPROVED'));
-    
-    if (!isApproved) return false;
-
-    // If the RO status is APPROVED and has not yet been marked ordered in this session, always show
-    if (ro.status === 'APPROVED' && !isAlreadyMarkedOrdered) {
-      return true;
-    }
 
     // Check if there are any parts on this RO that still need to be ordered
     const allROParts = ro.parts || [];
     const quoteParts = ro.quote?.partsItems || [];
 
+    // If there are no parts on the RO at all, it does not belong in the parts ordering queue
+    if (allROParts.length === 0 && quoteParts.length === 0) {
+      return false;
+    }
+
     const hasUnorderedParts = allROParts.some(p => {
       const lineStatus = ro.quote?.lineStatuses?.[p.roLineNumber || 1];
       if (lineStatus === 'DECLINED' || p.status === 'DECLINED' || p.status === 'CANCELLED') return false;
-      const isFulfilled = [
-        'DAILY_ORDER', 
-        'LOCAL_PURCHASE', 
-        'SPECIAL_ORDER', 
-        'SPECIAL_ORDER_1_5_DAYS', 
-        'VOR_UPGRADE', 
-        'IN_TRANSIT', 
-        'RECEIVED', 
-        'ISSUED_TO_TECH', 
-        'IN_STOCK'
-      ].includes(p.status);
-      return !isFulfilled;
+      return !isPartFulfilledOrOrdered(p.status);
     }) || quoteParts.some(qp => {
       const lineStatus = ro.quote?.lineStatuses?.[qp.roLineNumber || 1];
       if (lineStatus === 'DECLINED' || qp.status === 'DECLINED') return false;
       const matchingPart = allROParts.find(p => (qp.sourcePartId && p.id === qp.sourcePartId) || (qp.partNumber && p.partNumber === qp.partNumber));
       if (matchingPart) {
-        return !['DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'].includes(matchingPart.status);
+        return !isPartFulfilledOrOrdered(matchingPart.status);
       }
-      return true;
+      return !isPartFulfilledOrOrdered(qp.status);
     });
 
-    if (isAlreadyMarkedOrdered && !hasUnorderedParts) {
+    if (!hasUnorderedParts) {
       return false;
     }
 
-    if (ro.status === 'PARTS_ORDERED' && !hasUnorderedParts) {
-      return false;
-    }
-
-    return hasUnorderedParts;
+    const isApproved = ro.quote?.status === 'APPROVED' || 
+                       ro.status === 'APPROVED' || 
+                       (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(st => st === 'APPROVED'));
+    
+    return isApproved;
   };
 
   const rosApprovedReadyToOrder = useMemo(() => {
@@ -411,20 +416,51 @@ export const PartsDashboard: React.FC = () => {
 
   // Unread parts order notifications triggered when service advisor approved estimate
   const partsAlertNotifications = useMemo(() => {
-    const directNotifs = (notifications || []).filter(n => 
-      !n.read && !dismissedAlertIds.has(n.id) && (
-        n.type === 'PARTS_UPDATE' || 
+    const directNotifs = (notifications || []).filter(n => {
+      if (n.read) return false;
+      if (dismissedAlertIds.has(n.id)) return false;
+
+      // Do not show "Parts Ordered" / "Placed on Order" confirmations as action order prompts
+      const titleLower = (n.title || '').toLowerCase();
+      const msgLower = (n.message || '').toLowerCase();
+      if (
+        titleLower.includes('parts ordered') || 
+        titleLower.includes('placed on order') || 
+        msgLower.includes('placed on order')
+      ) {
+        return false;
+      }
+
+      const isParts = n.type === 'PARTS_UPDATE' || 
         n.targetRole === 'PARTS_SPECIALIST' || 
-        n.title.toLowerCase().includes('part') ||
-        n.title.toLowerCase().includes('approved') ||
-        n.message.toLowerCase().includes('part') ||
-        n.message.toLowerCase().includes('place parts orders')
-      )
-    );
+        titleLower.includes('part') ||
+        titleLower.includes('approved') ||
+        msgLower.includes('part') ||
+        msgLower.includes('place parts orders');
+
+      if (!isParts) return false;
+
+      // Check if associated RO has already had this alert dismissed or claimed
+      if (n.roId) {
+        const ro = repairOrders.find(r => String(r.id) === String(n.roId));
+        if (ro && (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy || ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH')) {
+          return false;
+        }
+      }
+
+      return true;
+    });
 
     // Guaranteed alerts for every approved RO that has parts ready to be ordered
+    // Only include if NOT dismissed or claimed across cloud screens
     const autoAlerts: UrgentNotification[] = rosApprovedReadyToOrder
-      .filter(ro => !directNotifs.some(n => n.roId === ro.id) && !dismissedAlertIds.has(`auto_alert_ro_${ro.id}`))
+      .filter(ro => {
+        if (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy) return false;
+        if (ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH') return false;
+        if (directNotifs.some(n => String(n.roId) === String(ro.id))) return false;
+        if (dismissedAlertIds.has(`auto_alert_ro_${ro.id}`) || dismissedAlertIds.has(`auto_alert_ro_${String(ro.id)}`)) return false;
+        return true;
+      })
       .map(ro => ({
         id: `auto_alert_ro_${ro.id}`,
         roId: ro.id,
@@ -439,7 +475,7 @@ export const PartsDashboard: React.FC = () => {
       }));
 
     return [...directNotifs, ...autoAlerts];
-  }, [notifications, rosApprovedReadyToOrder, dismissedAlertIds]);
+  }, [notifications, rosApprovedReadyToOrder, dismissedAlertIds, repairOrders]);
 
   // Quick fulfillment draft state for technician-requested parts (Part Number, Price, etc.)
   const [reqDrafts, setReqDrafts] = useState<Record<string, {
@@ -498,7 +534,9 @@ export const PartsDashboard: React.FC = () => {
       ? Math.max(1, Number(cleanVal) || 1)
       : Math.max(1, Number(part.quantity) || 1);
     const effectiveVendor = currentDraft.vendor || part.vendor || vendors[0] || '';
-    const effectiveStatus = currentDraft.status || part.status;
+    // CRITICAL: Preserve part.status unless the user explicitly toggled or updated the status field!
+    // Never default to DAILY_ORDER when editing part number or price.
+    const effectiveStatus = field === 'status' ? value : part.status;
     const effectiveEta = currentDraft.estimatedArrival || part.estimatedArrival;
     
     // Explicitly update requestType based on status if field is status
@@ -598,7 +636,7 @@ export const PartsDashboard: React.FC = () => {
       partNumber: part.partNumber && part.partNumber !== 'TBD' ? part.partNumber : '',
       price: formatPrice(part.price),
       quantity: truePartQty,
-      status: (part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' ? 'DAILY_ORDER' : part.status) as PartStatus,
+      status: part.status, // Preserve actual part status so it remains in quoting queue
       vendor: part.vendor && part.vendor !== 'TBD' ? part.vendor : (vendors[0] || ''),
       timeFrameId: part.status === 'IN_STOCK' ? 'IN_STOCK' : 'TODAY_5PM',
       estimatedArrival: part.estimatedArrival || '',
@@ -612,7 +650,7 @@ export const PartsDashboard: React.FC = () => {
         partNumber: '',
         price: '',
         quantity: partFromROs?.quantity ? Math.max(1, Number(partFromROs.quantity)) : 1,
-        status: 'DAILY_ORDER',
+        status: partFromROs?.status || 'REQUESTED',
         vendor: vendors[0] || '',
         timeFrameId: 'TODAY_5PM',
         estimatedArrival: '',
@@ -622,7 +660,7 @@ export const PartsDashboard: React.FC = () => {
         [partId]: {
           ...existing,
           [field]: value,
-          ...(field === 'quantity' ? { userEditedQty: true } : {}),
+          ...(field === 'quantity' ? { userEditedQty: true } : {})
         }
       };
     });
@@ -763,7 +801,9 @@ export const PartsDashboard: React.FC = () => {
   // Mark all approved parts on an RO as ordered with suppliers, and remove from active order queue
   const handleMarkAllPartsOrdered = (ro: RepairOrder) => {
     markAllPartsOrderedOnRO(ro.id);
-    setOrderedRoIds(prev => new Set(prev).add(ro.id));
+    dismissPartsOrderAlert(ro.id, undefined, true);
+    setOrderedRoIds(prev => new Set(prev).add(ro.id).add(String(ro.id)));
+    setDismissedAlertIds(prev => new Set(prev).add(`auto_alert_ro_${ro.id}`).add(`auto_alert_ro_${String(ro.id)}`).add(`parts_alert_${ro.id}`));
     showToast(`✓ Parts for RO #${ro.id} marked as ORDERED! Removed from active order screen.`);
   };
 
@@ -1438,7 +1478,10 @@ export const PartsDashboard: React.FC = () => {
                   partsAlertNotifications.forEach(n => next.add(n.id));
                   return next;
                 });
-                partsAlertNotifications.forEach(n => markNotificationRead(n.id));
+                partsAlertNotifications.forEach(n => {
+                  markNotificationRead(n.id);
+                  dismissPartsOrderAlert(n.roId, n.id, false);
+                });
               }}
               className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all border border-white/30 cursor-pointer flex items-center gap-1.5"
             >
@@ -1477,8 +1520,9 @@ export const PartsDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setDismissedAlertIds(prev => new Set([...prev, notif.id]));
+                          setDismissedAlertIds(prev => new Set([...prev, notif.id, notif.roId, `auto_alert_ro_${notif.roId}`, `auto_alert_ro_${String(notif.roId)}`, `parts_alert_${notif.roId}`]));
                           markNotificationRead(notif.id);
+                          dismissPartsOrderAlert(notif.roId, notif.id, true);
                           setSelectedRO(notifRO);
                           setActiveTab('RO_LIST');
                           setRoStatusFilter('APPROVED_READY_ORDER');
@@ -1493,8 +1537,9 @@ export const PartsDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setDismissedAlertIds(prev => new Set([...prev, notif.id]));
+                        setDismissedAlertIds(prev => new Set([...prev, notif.id, notif.roId, `auto_alert_ro_${notif.roId}`, `auto_alert_ro_${String(notif.roId)}`, `parts_alert_${notif.roId}`]));
                         markNotificationRead(notif.id);
+                        dismissPartsOrderAlert(notif.roId, notif.id, false);
                       }}
                       className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
                       title="Dismiss notification"
@@ -1577,6 +1622,11 @@ export const PartsDashboard: React.FC = () => {
                         <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black uppercase">
                           ✓ Authorized for Repair
                         </span>
+                        {ro.partsOrderClaimedBy && (
+                          <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 text-[10px] font-black uppercase flex items-center gap-1">
+                            <span>Being Ordered by {ro.partsOrderClaimedBy}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
@@ -1669,7 +1719,9 @@ export const PartsDashboard: React.FC = () => {
                                 const remainingUnordered = unorderedParts.filter(part => part.id !== p.id);
                                 if (remainingUnordered.length === 0) {
                                   updateROStatus(ro.id, 'PARTS_ORDERED', 'All approved parts placed on order with suppliers.');
-                                  setOrderedRoIds(prev => new Set(prev).add(ro.id));
+                                  dismissPartsOrderAlert(ro.id, undefined, true);
+                                  setOrderedRoIds(prev => new Set(prev).add(ro.id).add(String(ro.id)));
+                                  setDismissedAlertIds(prev => new Set(prev).add(`auto_alert_ro_${ro.id}`).add(`auto_alert_ro_${String(ro.id)}`).add(`parts_alert_${ro.id}`));
                                 }
                               }}
                               className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
@@ -1972,7 +2024,10 @@ export const PartsDashboard: React.FC = () => {
                                         <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100 text-[10px]">
                                           <button
                                             type="button"
-                                            onClick={() => handleUpdatePartField(ro.id, rp, 'status', 'QUOTE_ONLY')}
+                                            onClick={() => {
+                                              handleUpdatePartField(ro.id, rp, 'status', 'QUOTE_ONLY');
+                                              handleUpdatePartField(ro.id, rp, 'requestType', 'QUOTE_ONLY');
+                                            }}
                                             className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
                                               isQuoteOnly ? 'bg-purple-600 text-white shadow-2xs font-black' : 'text-slate-600 hover:text-slate-900'
                                             }`}
@@ -1981,7 +2036,10 @@ export const PartsDashboard: React.FC = () => {
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleUpdatePartField(ro.id, rp, 'status', 'DAILY_ORDER')}
+                                            onClick={() => {
+                                              handleUpdatePartField(ro.id, rp, 'status', 'REQUESTED');
+                                              handleUpdatePartField(ro.id, rp, 'requestType', 'ORDER_NOW');
+                                            }}
                                             className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
                                               !isQuoteOnly ? 'bg-amber-600 text-white shadow-2xs font-black' : 'text-slate-600 hover:text-slate-900'
                                             }`}
@@ -2145,9 +2203,8 @@ export const PartsDashboard: React.FC = () => {
                                           value={draft.timeFrameId || draft.status || 'DAILY_ORDER'}
                                           onChange={({ timeFrameId, status, estimatedArrival }) => {
                                             updateReqDraft(rp.id, 'timeFrameId', timeFrameId);
-                                            updateReqDraft(rp.id, 'status', status);
                                             updateReqDraft(rp.id, 'estimatedArrival', estimatedArrival);
-                                            handleUpdatePartField(ro.id, rp, 'status', status);
+                                            handleUpdatePartField(ro.id, rp, 'estimatedArrival', estimatedArrival);
                                           }}
                                         />
                                       </div>

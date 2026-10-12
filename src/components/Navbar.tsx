@@ -56,6 +56,7 @@ export const Navbar: React.FC = () => {
     openArchivedROsModal,
     notifications,
     markNotificationRead,
+    dismissPartsOrderAlert,
     setActiveRoleView,
   } = useApp();
 
@@ -86,25 +87,60 @@ export const Navbar: React.FC = () => {
   const partsMenuRef = useRef<HTMLDivElement>(null);
 
   const unreadPartsAlerts = useMemo(() => {
-    const unread = (notifications || []).filter(n => 
-      !n.read && (
-        n.type === 'PARTS_UPDATE' || 
+    const unread = (notifications || []).filter(n => {
+      if (n.read) return false;
+      const titleLower = (n.title || '').toLowerCase();
+      const msgLower = (n.message || '').toLowerCase();
+      if (titleLower.includes('parts ordered') || titleLower.includes('placed on order') || msgLower.includes('placed on order')) {
+        return false;
+      }
+      const isParts = n.type === 'PARTS_UPDATE' || 
         n.targetRole === 'PARTS_SPECIALIST' || 
-        n.title.toLowerCase().includes('part') ||
-        n.title.toLowerCase().includes('approved')
-      )
-    );
+        titleLower.includes('part') || 
+        titleLower.includes('approved');
+      if (!isParts) return false;
+
+      if (n.roId) {
+        const ro = repairOrders.find(r => r.id === n.roId);
+        if (ro && (ro.partsAlertDismissed || ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH')) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const isFulfilled = (status?: string) => {
+      if (!status) return false;
+      return [
+        'ORDERED',
+        'DAILY_ORDER',
+        'LOCAL_PURCHASE',
+        'SPECIAL_ORDER',
+        'SPECIAL_ORDER_1_5_DAYS',
+        'VOR_UPGRADE',
+        'IN_TRANSIT',
+        'RECEIVED',
+        'ISSUED_TO_TECH',
+        'IN_STOCK',
+        'DECLINED',
+        'CANCELLED'
+      ].includes(status);
+    };
 
     const approvedRos = repairOrders.filter(ro => {
       if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
+      if (ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH') return false;
+      if (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy) return false;
       const isApproved = ro.status === 'APPROVED' || ro.quote?.status === 'APPROVED' || (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(s => s === 'APPROVED'));
       if (!isApproved) return false;
-      return (ro.parts || []).some(p => p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK' && p.status !== 'DECLINED');
+      const allParts = ro.parts || [];
+      if (allParts.length === 0) return false;
+      return allParts.some(p => !isFulfilled(p.status));
     });
 
     const combined = [...unread];
     approvedRos.forEach(ro => {
-      if (!combined.some(n => n.roId === ro.id)) {
+      if (!combined.some(n => String(n.roId) === String(ro.id))) {
         combined.push({
           id: `parts_alert_${ro.id}`,
           roId: ro.id,
@@ -125,8 +161,11 @@ export const Navbar: React.FC = () => {
 
   const handlePartsAlertClick = (roId: string, notifId: string) => {
     markNotificationRead(notifId);
+    if (roId) {
+      dismissPartsOrderAlert(roId, notifId, true);
+    }
     setShowPartsMenu(false);
-    const targetRO = repairOrders.find(r => r.id === roId);
+    const targetRO = repairOrders.find(r => String(r.id) === String(roId));
     if (targetRO) {
       setSelectedRO(targetRO);
       setActiveRoleView('PARTS_SPECIALIST');

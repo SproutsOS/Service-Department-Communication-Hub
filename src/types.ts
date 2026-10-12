@@ -227,6 +227,13 @@ export interface RepairOrder {
   taxExemptNumber?: string; // Optional tax exempt resale or state certificate number
   vehiclePhotos?: VehiclePhoto[]; // Photos of vehicle (walkaround, damage, odometer, tech findings)
   linePhotos?: LinePhoto[]; // Photos attached to specific concern lines (Line 1, Line 2, etc.)
+  partsAlertDismissed?: boolean; // Whether parts order alert has been acknowledged/dismissed across screens
+  partsAlertDismissedAt?: string;
+  partsAlertDismissedBy?: string;
+  partsOrderClaimedBy?: string; // Name of staff who clicked "Order Parts Now" so colleagues don't duplicate work
+  partsOrderClaimedAt?: string;
+  partsOrderCompletedBy?: string;
+  partsOrderCompletedAt?: string;
   updatedAt?: string; // Timestamp of latest change/update made to repair order
   lastChangeSummary?: string; // Short description of latest modification
 }
