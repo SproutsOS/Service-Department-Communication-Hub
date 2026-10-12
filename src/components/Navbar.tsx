@@ -19,7 +19,8 @@ import {
   CalendarDays,
   CalendarCheck,
   Receipt,
-  Archive
+  Archive,
+  Package
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -53,6 +54,9 @@ export const Navbar: React.FC = () => {
     openQuoteBuilder,
     quotes,
     openArchivedROsModal,
+    notifications,
+    markNotificationRead,
+    setActiveRoleView,
   } = useApp();
 
   const archivedCount = useMemo(() => {
@@ -77,6 +81,57 @@ export const Navbar: React.FC = () => {
 
   const [showROChangesMenu, setShowROChangesMenu] = useState(false);
   const roChangesRef = useRef<HTMLDivElement>(null);
+
+  const [showPartsMenu, setShowPartsMenu] = useState(false);
+  const partsMenuRef = useRef<HTMLDivElement>(null);
+
+  const unreadPartsAlerts = useMemo(() => {
+    const unread = (notifications || []).filter(n => 
+      !n.read && (
+        n.type === 'PARTS_UPDATE' || 
+        n.targetRole === 'PARTS_SPECIALIST' || 
+        n.title.toLowerCase().includes('part') ||
+        n.title.toLowerCase().includes('approved')
+      )
+    );
+
+    const approvedRos = repairOrders.filter(ro => {
+      if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
+      const isApproved = ro.status === 'APPROVED' || ro.quote?.status === 'APPROVED' || (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(s => s === 'APPROVED'));
+      if (!isApproved) return false;
+      return (ro.parts || []).some(p => p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK' && p.status !== 'DECLINED');
+    });
+
+    const combined = [...unread];
+    approvedRos.forEach(ro => {
+      if (!combined.some(n => n.roId === ro.id)) {
+        combined.push({
+          id: `parts_alert_${ro.id}`,
+          roId: ro.id,
+          roNumber: ro.id,
+          title: `🚨 Parts Action: RO Approved #${ro.id}`,
+          message: `Customer approved repairs for ${ro.customerName} (${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}). Place parts order now.`,
+          timestamp: ro.updatedAt || new Date().toISOString(),
+          isUrgent: true,
+          type: 'PARTS_UPDATE' as const,
+          read: false,
+          targetRole: 'PARTS_SPECIALIST' as const,
+        });
+      }
+    });
+
+    return combined;
+  }, [notifications, repairOrders]);
+
+  const handlePartsAlertClick = (roId: string, notifId: string) => {
+    markNotificationRead(notifId);
+    setShowPartsMenu(false);
+    const targetRO = repairOrders.find(r => r.id === roId);
+    if (targetRO) {
+      setSelectedRO(targetRO);
+      setActiveRoleView('PARTS_SPECIALIST');
+    }
+  };
 
   const handleROChangeClick = (roId: string) => {
     clearROChangeAlert(roId);
@@ -110,6 +165,30 @@ export const Navbar: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showROChangesMenu]);
+
+  useEffect(() => {
+    if (!showPartsMenu) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowPartsMenu(false);
+      }
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (partsMenuRef.current && !partsMenuRef.current.contains(e.target as Node)) {
+        setShowPartsMenu(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPartsMenu]);
 
   return (
     <header className="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 sm:px-6 shadow-md shrink-0 sticky top-0 z-40">
@@ -235,6 +314,103 @@ export const Navbar: React.FC = () => {
                         </div>
                         <span className="text-[11px] font-bold text-blue-600 group-hover:underline shrink-0 mt-1 flex items-center gap-0.5">
                           Open RO →
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Amber Bell Icon for Parts Orders & Approvals */}
+        {(currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST' || currentUser.role === 'SERVICE_MANAGER') && (
+          <div ref={partsMenuRef} className="relative">
+            <button
+              id="navbar-parts-orders-bell-btn"
+              type="button"
+              onClick={() => setShowPartsMenu(prev => !prev)}
+              className={`relative p-2 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
+                unreadPartsAlerts.length > 0
+                  ? 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-400 border-2 border-amber-400 ring-2 ring-amber-400/40 shadow-sm'
+                  : 'bg-slate-900/90 hover:bg-slate-700/80 text-amber-400/70 hover:text-amber-400 border border-slate-700/80'
+              }`}
+              title={
+                unreadPartsAlerts.length > 0
+                  ? `${unreadPartsAlerts.length} Parts Order Alert${unreadPartsAlerts.length > 1 ? 's' : ''} - Click to view & order`
+                  : 'Parts Department Notifications'
+              }
+            >
+              <Bell className={`w-4 h-4 text-amber-400 fill-amber-400 ${unreadPartsAlerts.length > 0 ? 'animate-bounce' : ''}`} />
+              {unreadPartsAlerts.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full text-[10px] font-black text-slate-900 bg-amber-400 ring-2 ring-slate-800 animate-pulse">
+                  {unreadPartsAlerts.length}
+                </span>
+              )}
+            </button>
+
+            {/* Parts Alerts Dropdown Menu */}
+            {showPartsMenu && (
+              <div
+                id="parts-alerts-dropdown-menu"
+                className="absolute right-0 sm:left-0 sm:right-auto top-full mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border-2 border-amber-400 z-50 animate-in fade-in zoom-in-95 duration-100 text-slate-900 overflow-hidden"
+              >
+                <div className="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between gap-2 bg-amber-50/70">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-md bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                      <Package className="w-3.5 h-3.5 text-amber-700" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm text-slate-900">Parts Order Alerts</span>
+                      <p className="text-[10px] text-slate-500">Approved ROs ready to be ordered</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {unreadPartsAlerts.length > 0 && (
+                      <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full uppercase shrink-0">
+                        {unreadPartsAlerts.length} Action Needed
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  {unreadPartsAlerts.length === 0 ? (
+                    <div className="p-6 text-center text-slate-500">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                      <p className="text-xs font-bold text-slate-700">All Parts Orders Up to Date</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[240px] mx-auto">
+                        When service advisors approve repair estimates, order alerts will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    unreadPartsAlerts.map(alert => (
+                      <button
+                        key={alert.id}
+                        type="button"
+                        onClick={() => handlePartsAlertClick(alert.roId, alert.id)}
+                        className="w-full text-left p-3 hover:bg-amber-50/70 transition-colors flex items-start gap-3 group cursor-pointer border-l-4 border-amber-500"
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 mt-1.5 animate-pulse" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono font-black text-sm text-blue-700 group-hover:text-blue-900">
+                              RO #{alert.roNumber || alert.roId}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {formatRelativeTime(alert.timestamp)}
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                            {alert.title}
+                          </p>
+                          <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">
+                            {alert.message}
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-bold text-amber-700 group-hover:underline shrink-0 mt-1 flex items-center gap-0.5">
+                          Order Parts →
                         </span>
                       </button>
                     ))

@@ -1544,7 +1544,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       targetUserId,
     };
 
-    setNotifications(prev => [newNotif, ...prev.slice(0, 49)]);
+    setNotifications(prev => {
+      const nextNotifs = [newNotif, ...prev.slice(0, 49)];
+      try {
+        localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(nextNotifs));
+      } catch {
+        // ignore
+      }
+      return nextNotifs;
+    });
     syncNotification(newNotif);
 
     // When a part is requested, alert the Parts screen/specialist, NOT the technician on the tech screen

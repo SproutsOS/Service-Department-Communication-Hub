@@ -27,7 +27,7 @@ import { ROStatus, RepairOrder } from '../types';
 import { normalizeROStatus } from '../data/mockData';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
-import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus, isWoolwineVehicle } from '../utils/cadenceUtils';
 import { sortROsNumerically, matchesROSearch } from '../utils/formatters';
 
 export const AdvisorDashboard: React.FC = () => {
@@ -151,6 +151,7 @@ export const AdvisorDashboard: React.FC = () => {
       if (completedSubFilter === 'DUE' && !postRepair.needsCall) return false;
       if (completedSubFilter === 'DONE' && postRepair.needsCall) return false;
     } else if (activeTab === 'CALLS_DUE') {
+      if (isWoolwineVehicle(ro)) return false;
       if (isCompleted) {
         const postRepair = getPostRepairFollowUpStatus(ro);
         if (!postRepair.needsCall) return false;

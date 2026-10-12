@@ -31,7 +31,7 @@ import {
 import { RepairOrder, ROStatus, User as AppUser, ConcernPayType, CustomerContactOutcome, LineApprovalStatus } from '../types';
 import { useApp } from '../context/AppContext';
 import { formatTimeOnly, formatDurationSince, formatRelativeTime, cleanRO3700 } from '../utils/formatters';
-import { getContactCadenceStatus, formatContactOutcome } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, formatContactOutcome, isWoolwineVehicle } from '../utils/cadenceUtils';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { TicketFlowStepper } from './TicketFlowStepper';
 import { LinePartsSection } from './LinePartsSection';
@@ -1669,11 +1669,13 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
       key: 'section-cadence',
       naturalOrder: 9,
       title: 'Customer Communication Cadence',
-      isComplete: !cadence.isOverdue && !cadence.isDueToday,
-      completeBadgeText: 'Cadence On Track',
+      isComplete: isWoolwineVehicle(ro) ? true : (!cadence.isOverdue && !cadence.isDueToday),
+      completeBadgeText: isWoolwineVehicle(ro) ? 'Dealership Vehicle (Call Log Excluded)' : 'Cadence On Track',
       render: (isPromoted: boolean) => (
         <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs transition-all ${
-          isPromoted
+          isWoolwineVehicle(ro)
+            ? 'bg-slate-50 border-slate-300'
+            : isPromoted
             ? 'bg-red-50/90 border-red-300 ring-2 ring-red-400'
             : cadence.isOverdue 
             ? 'bg-red-50/70 border-red-200' 
@@ -1691,11 +1693,15 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                 {cadence.label}
               </span>
               <span className="text-xs font-semibold text-slate-600">
-                (Twice per week standard)
+                {isWoolwineVehicle(ro) ? '(Internal inventory - excluded from call log)' : '(Twice per week standard)'}
               </span>
             </div>
             <div className="text-xs text-slate-700 mt-1">
-              <strong>Last Contact:</strong> {cadence.lastContactText} • <strong>Next Call Due:</strong> {cadence.nextDueText}
+              {isWoolwineVehicle(ro) ? (
+                <span><strong>Dealership Vehicle:</strong> Excluded from daily customer call log and cadence reminders.</span>
+              ) : (
+                <><strong>Last Contact:</strong> {cadence.lastContactText} • <strong>Next Call Due:</strong> {cadence.nextDueText}</>
+              )}
             </div>
           </div>
 

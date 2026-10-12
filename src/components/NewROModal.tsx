@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Plus, FileText, Send, User, UserCheck, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench, ShieldCheck, Search, Users, ExternalLink } from 'lucide-react';
+import { X, Plus, FileText, Send, User, UserCheck, Car, Clock, Phone, AlertTriangle, Loader2, CheckCircle2, Sparkles, RefreshCw, Hash, Trash2, Wrench, ShieldCheck, Search, Users, ExternalLink, Archive } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { decodeVin } from '../utils/vinDecoder';
 import { ConcernPayType, Customer, VehicleInfo, Vehicle } from '../types';
 import { CustomerVehiclesModal } from './CustomerVehiclesModal';
+import { isWoolwineVehicle } from '../utils/cadenceUtils';
 
 
 export const NewROModal: React.FC = () => {
@@ -183,7 +184,10 @@ export const NewROModal: React.FC = () => {
     setTaxExemptNumber(cust.taxExemptNumber || '');
     setShowCustomerDropdown(false);
 
-    if (cust.vehicles && cust.vehicles.length >= 1) {
+    // If it's a Woolwine CDJR internal dealership account, do NOT auto-fill a previous vehicle VIN/details
+    // Woolwine inventory vehicles are one-time repairs; previous VINs are archived and should not overwrite
+    const isWoolwine = isWoolwineVehicle(cust.name);
+    if (!isWoolwine && cust.vehicles && cust.vehicles.length >= 1) {
       const veh = cust.vehicles[0];
       setYear(veh.year || '');
       setMake(veh.make || '');
@@ -697,10 +701,17 @@ export const NewROModal: React.FC = () => {
                         </div>
                         <div className="text-[11px] text-slate-600 flex items-center gap-3 mt-0.5">
                           {cust.phone && <span>Phone: <span className="font-mono text-slate-900 font-semibold">{cust.phone}</span></span>}
-                          {cust.vehicles && cust.vehicles.length > 0 && (
-                            <span className="text-slate-500 truncate max-w-xs">
-                              🚗 {cust.vehicles[0].year} {cust.vehicles[0].make} {cust.vehicles[0].model} {cust.vehicles.length > 1 ? `(+${cust.vehicles.length - 1} more)` : ''}
+                          {isWoolwineVehicle(cust.name) ? (
+                            <span className="text-slate-500 font-medium italic flex items-center gap-1">
+                              <Archive className="w-3 h-3 text-slate-400" />
+                              <span>Dealership Account ({cust.vehicles?.length || 0} vehicles archived)</span>
                             </span>
+                          ) : (
+                            cust.vehicles && cust.vehicles.length > 0 && (
+                              <span className="text-slate-500 truncate max-w-xs">
+                                🚗 {cust.vehicles[0].year} {cust.vehicles[0].make} {cust.vehicles[0].model} {cust.vehicles.length > 1 ? `(+${cust.vehicles.length - 1} more)` : ''}
+                              </span>
+                            )
                           )}
                         </div>
                       </div>
@@ -735,56 +746,84 @@ export const NewROModal: React.FC = () => {
             )}
 
             {/* Saved Fleet Vehicles Chip Bar */}
-            {activeCustomerRecord && activeCustomerRecord.vehicles && activeCustomerRecord.vehicles.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-300">
-                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
-                    <Car className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Customer Fleet ({activeCustomerRecord.vehicles.length} Saved Vehicles):</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomerVehiclesModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-100/90 hover:bg-blue-200 px-3 py-1 rounded-lg border border-blue-300 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    <Car className="w-3.5 h-3.5" />
-                    <span>View & Select All Vehicles ({activeCustomerRecord.vehicles.length}) →</span>
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {activeCustomerRecord.vehicles.map((v, idx) => {
-                    const isCurrent = vin && v.vin && vin.toUpperCase() === v.vin.toUpperCase();
-                    return (
+            {activeCustomerRecord && activeCustomerRecord.vehicles && activeCustomerRecord.vehicles.length > 0 && (() => {
+              const isWoolwineRecord = isWoolwineVehicle(activeCustomerRecord.name) || isWoolwineVehicle(customerName);
+              if (isWoolwineRecord) {
+                return (
+                  <div className="mt-3 pt-3 border-t border-slate-300">
+                    <div className="flex items-center justify-between p-2.5 bg-slate-100 rounded-lg border border-slate-300 text-xs">
+                      <div className="flex items-center gap-2 text-slate-700">
+                        <Archive className="w-4 h-4 text-slate-500 shrink-0" />
+                        <div>
+                          <span className="font-bold text-slate-900">Woolwine CDJR Dealership Inventory</span>
+                          <p className="text-[11px] text-slate-500">
+                            {activeCustomerRecord.vehicles.length} previous vehicles safely archived in history. Enter this vehicle's VIN or details below.
+                          </p>
+                        </div>
+                      </div>
                       <button
-                        key={v.vin || idx}
                         type="button"
-                        onClick={() => {
-                          setYear(v.year || '');
-                          setMake(v.make || '');
-                          setModel(v.model || '');
-                          setVin(v.vin || '');
-                          setMileage('');
-                          setVinDecodedMsg(null);
-                        }}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shadow-2xs ${
-                          isCurrent 
-                            ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400' 
-                            : 'bg-white hover:bg-blue-50 text-slate-800 border-slate-300 hover:border-blue-400'
-                        }`}
+                        onClick={() => setIsCustomerVehiclesModalOpen(true)}
+                        className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-50 px-2.5 py-1 rounded border border-slate-300 transition-colors shadow-2xs cursor-pointer shrink-0"
                       >
-                        <Car className={`w-3.5 h-3.5 ${isCurrent ? 'text-white' : 'text-blue-600'}`} />
-                        <span>{v.year} {v.make} {v.model}</span>
-                        {v.vin && (
-                          <span className={`font-mono text-[10px] ${isCurrent ? 'text-blue-100' : 'text-slate-500'}`}>
-                            ({v.vin.slice(-6)})
-                          </span>
-                        )}
+                        Browse Archived ({activeCustomerRecord.vehicles.length})
                       </button>
-                    );
-                  })}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="mt-3 pt-3 border-t border-slate-300">
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <Car className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Customer Fleet ({activeCustomerRecord.vehicles.length} Saved Vehicles):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerVehiclesModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-100/90 hover:bg-blue-200 px-3 py-1 rounded-lg border border-blue-300 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Car className="w-3.5 h-3.5" />
+                      <span>View & Select All Vehicles ({activeCustomerRecord.vehicles.length}) →</span>
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeCustomerRecord.vehicles.map((v, idx) => {
+                      const isCurrent = vin && v.vin && vin.toUpperCase() === v.vin.toUpperCase();
+                      return (
+                        <button
+                          key={v.vin || idx}
+                          type="button"
+                          onClick={() => {
+                            setYear(v.year || '');
+                            setMake(v.make || '');
+                            setModel(v.model || '');
+                            setVin(v.vin || '');
+                            setMileage('');
+                            setVinDecodedMsg(null);
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shadow-2xs ${
+                            isCurrent 
+                              ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400' 
+                              : 'bg-white hover:bg-blue-50 text-slate-800 border-slate-300 hover:border-blue-400'
+                          }`}
+                        >
+                          <Car className={`w-3.5 h-3.5 ${isCurrent ? 'text-white' : 'text-blue-600'}`} />
+                          <span>{v.year} {v.make} {v.model}</span>
+                          {v.vin && (
+                            <span className={`font-mono text-[10px] ${isCurrent ? 'text-blue-100' : 'text-slate-500'}`}>
+                              ({v.vin.slice(-6)})
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Vehicle Section */}
@@ -794,7 +833,7 @@ export const NewROModal: React.FC = () => {
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <Car className="w-3.5 h-3.5 text-blue-600" /> Vehicle Information
                 </h3>
-                {activeCustomerRecord && activeCustomerRecord.vehicles && activeCustomerRecord.vehicles.length > 1 && (
+                {activeCustomerRecord && activeCustomerRecord.vehicles && activeCustomerRecord.vehicles.length > 1 && !isWoolwineVehicle(activeCustomerRecord.name) && !isWoolwineVehicle(customerName) && (
                   <button
                     type="button"
                     onClick={() => setIsCustomerVehiclesModalOpen(true)}

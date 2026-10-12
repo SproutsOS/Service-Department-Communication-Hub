@@ -35,7 +35,7 @@ import {
   Calculator
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { PartItem, PartStatus, RepairOrder, QuotePartItem, RepairQuote } from '../types';
+import { PartItem, PartStatus, RepairOrder, QuotePartItem, RepairQuote, UrgentNotification } from '../types';
 import { formatEtaBadge, formatDateTime, formatPrice, formatCurrency } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { computeEtaAndStatus } from '../utils/partArrivalOptions';
@@ -406,10 +406,13 @@ export const PartsDashboard: React.FC = () => {
     return repairOrders.filter(isROApprovedReadyToOrder);
   }, [repairOrders, orderedRoIds]);
 
+  // Set of dismissed notification IDs in the current session
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(new Set());
+
   // Unread parts order notifications triggered when service advisor approved estimate
   const partsAlertNotifications = useMemo(() => {
-    return (notifications || []).filter(n => 
-      !n.read && (
+    const directNotifs = (notifications || []).filter(n => 
+      !n.read && !dismissedAlertIds.has(n.id) && (
         n.type === 'PARTS_UPDATE' || 
         n.targetRole === 'PARTS_SPECIALIST' || 
         n.title.toLowerCase().includes('part') ||
@@ -418,7 +421,25 @@ export const PartsDashboard: React.FC = () => {
         n.message.toLowerCase().includes('place parts orders')
       )
     );
-  }, [notifications]);
+
+    // Guaranteed alerts for every approved RO that has parts ready to be ordered
+    const autoAlerts: UrgentNotification[] = rosApprovedReadyToOrder
+      .filter(ro => !directNotifs.some(n => n.roId === ro.id) && !dismissedAlertIds.has(`auto_alert_ro_${ro.id}`))
+      .map(ro => ({
+        id: `auto_alert_ro_${ro.id}`,
+        roId: ro.id,
+        roNumber: ro.id,
+        title: `🚨 Parts Action: RO Approved #${ro.id}`,
+        message: `Customer authorized repairs for ${ro.customerName} (${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}). Verify and place parts orders now.`,
+        timestamp: ro.updatedAt || new Date().toISOString(),
+        isUrgent: true,
+        type: 'PARTS_UPDATE' as const,
+        read: false,
+        targetRole: 'PARTS_SPECIALIST' as const,
+      }));
+
+    return [...directNotifs, ...autoAlerts];
+  }, [notifications, rosApprovedReadyToOrder, dismissedAlertIds]);
 
   // Quick fulfillment draft state for technician-requested parts (Part Number, Price, etc.)
   const [reqDrafts, setReqDrafts] = useState<Record<string, {
@@ -1412,6 +1433,11 @@ export const PartsDashboard: React.FC = () => {
             <button
               type="button"
               onClick={() => {
+                setDismissedAlertIds(prev => {
+                  const next = new Set(prev);
+                  partsAlertNotifications.forEach(n => next.add(n.id));
+                  return next;
+                });
                 partsAlertNotifications.forEach(n => markNotificationRead(n.id));
               }}
               className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition-all border border-white/30 cursor-pointer flex items-center gap-1.5"
@@ -1451,6 +1477,7 @@ export const PartsDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          setDismissedAlertIds(prev => new Set([...prev, notif.id]));
                           markNotificationRead(notif.id);
                           setSelectedRO(notifRO);
                           setActiveTab('RO_LIST');
@@ -1465,7 +1492,10 @@ export const PartsDashboard: React.FC = () => {
                     )}
                     <button
                       type="button"
-                      onClick={() => markNotificationRead(notif.id)}
+                      onClick={() => {
+                        setDismissedAlertIds(prev => new Set([...prev, notif.id]));
+                        markNotificationRead(notif.id);
+                      }}
                       className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
                       title="Dismiss notification"
                     >

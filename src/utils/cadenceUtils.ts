@@ -31,11 +31,66 @@ export function calculateNextContactDate(fromDate?: Date | string, daysAhead: nu
 }
 
 /**
+ * Determines whether a repair order or customer corresponds to a Woolwine CDJR vehicle
+ * (dealership-owned inventory, used cars, new inventory, loaners, house accounts, or dealership prep).
+ * Excludes all Woolwine CDJR vehicles from the customer call log and customer contact cadence.
+ */
+export function isWoolwineVehicle(roOrCustomer?: RepairOrder | string | null): boolean {
+  if (!roOrCustomer) return false;
+
+  let customerName = '';
+  let vehicleStr = '';
+  let concernStr = '';
+
+  if (typeof roOrCustomer === 'string') {
+    customerName = roOrCustomer;
+  } else {
+    customerName = roOrCustomer.customerName || '';
+    if (roOrCustomer.vehicle) {
+      vehicleStr = `${roOrCustomer.vehicle.make || ''} ${roOrCustomer.vehicle.model || ''}`;
+    }
+    concernStr = `${roOrCustomer.primaryConcern || ''} ${(roOrCustomer.concerns || []).join(' ')}`;
+  }
+
+  const cleanCustomer = customerName.trim().toLowerCase();
+  const cleanVehicle = vehicleStr.trim().toLowerCase();
+  const cleanConcern = concernStr.trim().toLowerCase();
+
+  // 1. Matches "woolwine" in customer name (e.g. "Woolwine CDJR", "Woolwine", "Woolwine Used", "Woolwine Chrysler Dodge Jeep Ram")
+  if (cleanCustomer.includes('woolwine')) {
+    return true;
+  }
+
+  // 2. Matches "cdjr" in customer name (e.g. "Woolwine CDJR", "CDJR Used", "CDJR Inventory")
+  if (cleanCustomer.includes('cdjr')) {
+    return true;
+  }
+
+  // 3. Matches dealership vehicle references in vehicle make/model
+  if (cleanVehicle.includes('woolwine')) {
+    return true;
+  }
+
+  // 4. Primary concern or concerns explicitly marking Woolwine dealership inventory
+  if (cleanConcern.includes('woolwine')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Determines whether an RO qualifies for active customer contact cadence.
  * Vehicles that are waiting on parts, in diagnostics, waiting on estimate approval,
  * or actively in repair need at least twice-weekly proactive outreach.
+ * All Woolwine CDJR dealership vehicles are excluded from the customer call log.
  */
 export function isEligibleForCadence(ro: RepairOrder): boolean {
+  // Exclude all Woolwine CDJR vehicles from customer contact cadence and call log
+  if (isWoolwineVehicle(ro)) {
+    return false;
+  }
+
   const norm = normalizeROStatus(ro.status);
   if (norm === 'CLOSED' || norm === 'COMPLETED' || norm === 'READY_FOR_PICKUP') {
     return false;
@@ -47,6 +102,21 @@ export function isEligibleForCadence(ro: RepairOrder): boolean {
  * Computes customer contact cadence health, overdue metrics, and visual badges.
  */
 export function getContactCadenceStatus(ro: RepairOrder): CadenceStatusInfo {
+  if (isWoolwineVehicle(ro)) {
+    return {
+      status: 'NOT_APPLICABLE',
+      label: 'Woolwine CDJR (Internal)',
+      badgeClass: 'bg-slate-100 text-slate-500 border-slate-200',
+      daysSinceLastContact: 0,
+      daysOverdue: 0,
+      isOverdue: false,
+      isDueToday: false,
+      needsCall: false,
+      lastContactText: 'Woolwine CDJR vehicle excluded from call log',
+      nextDueText: 'Internal vehicle (No calls needed)',
+    };
+  }
+
   if (!isEligibleForCadence(ro)) {
     return {
       status: 'NOT_APPLICABLE',
@@ -205,7 +275,7 @@ export interface PostRepairFollowUpInfo {
  * satisfaction and ensure customer has no additional concerns.
  */
 export function getPostRepairFollowUpStatus(ro: RepairOrder): PostRepairFollowUpInfo {
-  if (!isROCompleted(ro)) {
+  if (isWoolwineVehicle(ro) || !isROCompleted(ro)) {
     return {
       isEligible: false,
       targetDate: '',
@@ -215,7 +285,7 @@ export function getPostRepairFollowUpStatus(ro: RepairOrder): PostRepairFollowUp
       isOverdue: false,
       needsCall: false,
       isCompleted: false,
-      label: 'Vehicle In Service',
+      label: isWoolwineVehicle(ro) ? 'Woolwine CDJR (Internal)' : 'Vehicle In Service',
       badgeClass: 'bg-slate-100 text-slate-500 border-slate-200',
       completedDateFormatted: '',
     };

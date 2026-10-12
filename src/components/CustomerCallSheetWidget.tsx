@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { RepairOrder } from '../types';
 import { useApp } from '../context/AppContext';
-import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus, formatContactOutcome } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus, formatContactOutcome, isWoolwineVehicle } from '../utils/cadenceUtils';
 import { STATUS_CONFIG } from '../data/mockData';
 import { formatEtaBadge, compareROsNumerically } from '../utils/formatters';
 
@@ -56,9 +56,13 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
   const [searchQuery, setSearchQuery] = useState('');
 
   // Map both active cadence orders and completed orders (post-repair quality check)
-  const targetROs = filterAdvisorId 
+  // Exclude all Woolwine CDJR dealership vehicles from the customer call log
+  const rawTargetROs = filterAdvisorId 
     ? repairOrders.filter(ro => ro.advisorId === filterAdvisorId)
     : repairOrders;
+
+  const targetROs = rawTargetROs.filter(ro => !isWoolwineVehicle(ro));
+  const woolwineExcludedCount = rawTargetROs.filter(ro => isWoolwineVehicle(ro)).length;
 
   const allCadenceItems: CallSheetItem[] = targetROs.flatMap((ro): CallSheetItem[] => {
     const isCompleted = isROCompleted(ro);
@@ -150,13 +154,22 @@ export const CustomerCallSheetWidget: React.FC<CustomerCallSheetWidgetProps> = (
             <span className="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
               Customer Communications
             </span>
+            {woolwineExcludedCount > 0 && (
+              <span 
+                className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1"
+                title="Dealership-owned inventory, used cars, and internal vehicles are excluded from customer call log"
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>Woolwine CDJR Vehicles Excluded ({woolwineExcludedCount})</span>
+              </span>
+            )}
           </div>
           <h2 className="text-base sm:text-lg font-black mt-0.5 text-white tracking-tight flex items-center gap-2">
             <PhoneCall className="w-4 h-4 text-blue-400" />
             <span>Daily Call Log</span>
           </h2>
           <p className="text-xs text-slate-300">
-            Keep customers with vehicles in shop or waiting on parts informed every 3 to 4 days.
+            Keep retail customers with vehicles in shop or waiting on parts informed every 3 to 4 days (Woolwine CDJR internal vehicles excluded).
           </p>
         </div>
 

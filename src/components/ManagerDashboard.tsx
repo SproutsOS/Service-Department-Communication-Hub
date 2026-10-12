@@ -33,7 +33,7 @@ import { formatEtaBadge, formatTimeOnly, formatDateTime, formatDurationSince, so
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { ManagerPartsOnOrderModal } from './ManagerPartsOnOrderModal';
-import { getContactCadenceStatus, isEligibleForCadence } from '../utils/cadenceUtils';
+import { getContactCadenceStatus, isEligibleForCadence, isWoolwineVehicle } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
   const { 
@@ -142,6 +142,7 @@ export const ManagerDashboard: React.FC = () => {
     const isClosed = ro.status === 'CLOSED' || ro.status === 'COMPLETED' || ro.isArchived;
     if (urgentOnly && !ro.isUrgent) return false;
     if (statusFilter === 'CALLS_DUE') {
+      if (isWoolwineVehicle(ro)) return false;
       const cadence = getContactCadenceStatus(ro);
       if (!cadence.needsCall) return false;
     } else if (statusFilter === 'ALL') {

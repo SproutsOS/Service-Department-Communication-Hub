@@ -4,7 +4,6 @@ import {
   X, 
   Trash2, 
   AlertTriangle, 
-  Sparkles, 
   Clock, 
   User as UserIcon,
   CheckCircle2,
@@ -92,17 +91,6 @@ const COLOR_OPTIONS: {
   },
 ];
 
-const PRESET_SUGGESTIONS = [
-  { text: 'Customer waiting in customer lounge — prioritize turnaround', color: 'yellow', urgent: true },
-  { text: 'DO NOT ROAD TEST - Check with technician first', color: 'red', urgent: true },
-  { text: 'Wheel lock key located in glove box / center console', color: 'yellow', urgent: false },
-  { text: 'Customer promised pickup time: 3:00 PM SHARP', color: 'red', urgent: true },
-  { text: 'Special order parts arriving on next parts shuttle', color: 'blue', urgent: false },
-  { text: 'Extended warranty authorization # pending with adjuster', color: 'green', urgent: false },
-  { text: 'Call customer for approval before any additional tear-down', color: 'purple', urgent: false },
-  { text: 'Save old parts in box in trunk for customer inspection', color: 'orange', urgent: false },
-];
-
 export const ROStickyNoteModal: React.FC = () => {
   const { 
     repairOrders, 
@@ -164,12 +152,6 @@ export const ROStickyNoteModal: React.FC = () => {
   const handleRemove = () => {
     removeROStickyNote(currentRO.id);
     closeStickyNoteModal();
-  };
-
-  const applyPreset = (preset: { text: string; color: string; urgent: boolean }) => {
-    setNoteText(preset.text);
-    setSelectedColor(preset.color as StickyNoteColor);
-    setIsUrgent(preset.urgent);
   };
 
   return (
@@ -292,26 +274,6 @@ export const ROStickyNoteModal: React.FC = () => {
                   </span>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Quick Presets / Suggestions */}
-          <div>
-            <div className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              <Sparkles className="w-3 h-3 text-amber-500" />
-              <span>Quick Presets:</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-              {PRESET_SUGGESTIONS.map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => applyPreset(preset)}
-                  className="text-left text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200/80 transition-colors cursor-pointer"
-                >
-                  {preset.text}
-                </button>
-              ))}
             </div>
           </div>
 

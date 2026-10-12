@@ -81,11 +81,25 @@ const MainContent: React.FC = () => {
     isQuoteBuilderOpen,
     closeQuoteBuilder,
     activeQuoteBuilderId,
-    openQuoteBuilder
+    openQuoteBuilder,
+    notifications,
   } = useApp();
   
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
   const isManager = currentUser.role === 'SERVICE_MANAGER';
+
+  // Count of active approved ROs needing parts orders or unread parts order alerts
+  const partsAlertsCount = React.useMemo(() => {
+    const approvedRosNeedingParts = repairOrders.filter(ro => {
+      if (ro.status === 'COMPLETED' || ro.status === 'CLOSED' || ro.status === 'DENIED') return false;
+      const isApproved = ro.status === 'APPROVED' || ro.quote?.status === 'APPROVED' || (ro.quote?.lineStatuses && Object.values(ro.quote.lineStatuses).some(s => s === 'APPROVED'));
+      if (!isApproved) return false;
+      return (ro.parts || []).some(p => p.status !== 'ORDERED' && p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'IN_STOCK' && p.status !== 'DECLINED');
+    }).length;
+
+    const unreadPartsNotifs = (notifications || []).filter(n => !n.read && (n.type === 'PARTS_UPDATE' || n.targetRole === 'PARTS_SPECIALIST')).length;
+    return Math.max(approvedRosNeedingParts, unreadPartsNotifs);
+  }, [repairOrders, notifications]);
 
   // Auto-close staff management, calendar, & time card calculator if a non-manager is active
   React.useEffect(() => {
@@ -210,15 +224,23 @@ const MainContent: React.FC = () => {
 
                 {/* Parts & Tracking Hub */}
                 <button
+                  id="sidebar-parts-tracking-btn"
                   onClick={() => handleSelectRole('PARTS_SPECIALIST')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
                     !isStaffManagementOpen && activeRoleView === 'PARTS_SPECIALIST'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  <Package className="w-4 h-4 shrink-0" />
-                  <span className="text-sm font-medium">Parts & Tracking</span>
+                  <div className="flex items-center gap-3">
+                    <Package className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span className="text-sm font-medium">Parts & Tracking</span>
+                  </div>
+                  {partsAlertsCount > 0 && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-600 text-white animate-pulse shadow-xs">
+                      {partsAlertsCount} To Order
+                    </span>
+                  )}
                 </button>
 
                 {/* Sales Portal (Read-Only) */}
@@ -545,9 +567,15 @@ const MainContent: React.FC = () => {
                         <div className="text-[11px] text-blue-200">Procurement & Sourcing</div>
                       </div>
                     </div>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 uppercase">
-                      Parts Dept
-                    </span>
+                    {partsAlertsCount > 0 ? (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500 text-white animate-pulse shadow-xs">
+                        {partsAlertsCount} To Order
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 uppercase">
+                        Parts Dept
+                      </span>
+                    )}
                   </button>
                 )}
               </div>
