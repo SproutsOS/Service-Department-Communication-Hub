@@ -1470,22 +1470,24 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   })()}
 
                   {/* Customer Concern / Additional Concern Found for Line {idx + 1} */}
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs flex items-start gap-2 shadow-2xs">
-                    <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold text-slate-700">
-                        {idx === 0 ? `Line ${idx + 1} Customer Concern: ` : `Line ${idx + 1} Additional Concern Found: `}
-                      </span>
-                      <span className="text-slate-900 font-medium break-words">{concernText}</span>
+                  <div className="bg-white p-3 rounded-lg border-2 border-slate-300 text-xs shadow-2xs">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <FileText className="w-4 h-4 text-blue-600 shrink-0 mt-1" />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-black text-black text-[15px] uppercase tracking-wide block mb-1">
+                          {idx === 0 ? `Line ${idx + 1} Customer Concern:` : `Line ${idx + 1} Additional Concern Found:`}
+                        </span>
+                        <p className="text-black font-bold text-[18px] leading-relaxed break-words">{concernText}</p>
+                      </div>
                     </div>
                   </div>
 
                   {/* Line {idx + 1} Cause */}
-                  <div>
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                        <span>Line {idx + 1} Cause</span>
+                      <label className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-black inline-block"></span>
+                        <span>Line {idx + 1} Cause (Diagnostic Finding)</span>
                       </label>
                     </div>
                     <textarea
@@ -1500,16 +1502,16 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         handleBlurSave();
                       }}
                       placeholder={`Type Line ${idx + 1} cause...`}
-                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold text-black focus:outline-hidden focus:ring-2 focus:ring-black bg-white leading-relaxed placeholder:text-slate-400 placeholder:text-sm"
                     />
                   </div>
 
                   {/* Line {idx + 1} Correction */}
-                  <div>
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                        <span>Line {idx + 1} Correction</span>
+                      <label className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-black inline-block"></span>
+                        <span>Line {idx + 1} Correction (Repair Procedure / Action Taken)</span>
                       </label>
                     </div>
                     <textarea
@@ -1524,7 +1526,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         handleBlurSave();
                       }}
                       placeholder={`Type Line ${idx + 1} correction...`}
-                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold text-black focus:outline-hidden focus:ring-2 focus:ring-black bg-white leading-relaxed placeholder:text-slate-400 placeholder:text-sm"
                     />
                   </div>
 
@@ -1882,16 +1884,16 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   </div>
 
                   {/* 21-Point Inspection Finding Header banner */}
-                  <div className="bg-amber-100/80 p-2.5 rounded-lg border border-amber-300 text-xs flex items-start justify-between gap-2 shadow-2xs">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <Wrench className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-extrabold text-amber-950">
-                          <span>Line {globalLineNum} Inspection Finding: </span>
-                          <span className="text-blue-900">{rec.serviceName}</span>
-                        </div>
+                  <div className="bg-amber-100/80 p-3 rounded-lg border-2 border-amber-300 text-xs shadow-2xs">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <Wrench className="w-4 h-4 text-amber-700 shrink-0 mt-1" />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-black text-black text-[15px] uppercase tracking-wide block mb-1">
+                          Line {globalLineNum} Inspection Finding / Concern:
+                        </span>
+                        <p className="text-black font-bold text-[18px] leading-relaxed break-words">{rec.serviceName}</p>
                         {rec.notes && (
-                          <div className="text-[11px] text-amber-900 mt-0.5 italic">
+                          <div className="text-sm text-amber-950 mt-1 italic font-medium">
                             {rec.notes}
                           </div>
                         )}
@@ -1900,11 +1902,11 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                   </div>
 
                   {/* Line {globalLineNum} Cause */}
-                  <div>
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
-                        <span>Line {globalLineNum} Cause</span>
+                      <label className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-black inline-block"></span>
+                        <span>Line {globalLineNum} Cause (Diagnostic Finding)</span>
                       </label>
                     </div>
                     <textarea
@@ -1919,16 +1921,16 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         updateRecommendedService(ro.id, rec.id, { cause: recCause });
                       }}
                       placeholder={`Type Line ${globalLineNum} cause...`}
-                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold text-black focus:outline-hidden focus:ring-2 focus:ring-black bg-white leading-relaxed placeholder:text-slate-400 placeholder:text-sm"
                     />
                   </div>
 
                   {/* Line {globalLineNum} Correction */}
-                  <div>
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                        <span>Line {globalLineNum} Correction</span>
+                      <label className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-black inline-block"></span>
+                        <span>Line {globalLineNum} Correction (Repair Procedure / Action Taken)</span>
                       </label>
                     </div>
                     <textarea
@@ -1943,7 +1945,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         updateRecommendedService(ro.id, rec.id, { correction: recCorr });
                       }}
                       placeholder={`Type Line ${globalLineNum} correction...`}
-                      className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold text-black focus:outline-hidden focus:ring-2 focus:ring-black bg-white leading-relaxed placeholder:text-slate-400 placeholder:text-sm"
                     />
                   </div>
 
@@ -2850,9 +2852,10 @@ export const TechWorkflowStepper: React.FC<TechWorkflowStepperProps> = ({
               type="button"
               onClick={handleStartDiag}
               className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              title="Commence diagnostic phase and update repair order status to In Diagnosis"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Start Diagnosis (Clock In)</span>
+              <span>Start Diagnosis</span>
             </button>
           )}
 
@@ -3172,24 +3175,24 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
           </div>
         )}
 
-        {/* Complaints List Summary */}
-        <div className="space-y-1 pt-1 border-t border-slate-100 text-xs">
-          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-            <span>Lines ({concernsList.length}):</span>
+        {/* Complaints / Concerns List Summary */}
+        <div className="space-y-1.5 pt-1.5 border-t border-slate-100">
+          <div className="text-[12px] font-black text-slate-600 uppercase tracking-wider flex items-center justify-between">
+            <span>Customer Concerns ({concernsList.length}):</span>
             {loggedHours > 0 && (
               <span className="text-blue-700 font-extrabold font-mono">
                 {loggedHours.toFixed(1)} hrs logged
               </span>
             )}
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {concernsList.slice(0, 2).map((c, i) => (
-              <p key={i} className="text-slate-700 text-xs font-medium truncate">
-                <strong className="text-slate-900 font-semibold">L{i + 1}:</strong> {c}
+              <p key={i} className="text-black text-[16px] font-bold truncate">
+                <strong className="text-slate-900 font-black">L{i + 1}:</strong> {c}
               </p>
             ))}
             {concernsList.length > 2 && (
-              <p className="text-[11px] text-slate-400 font-semibold italic">
+              <p className="text-xs text-slate-500 font-semibold italic">
                 +{concernsList.length - 2} more line{concernsList.length - 2 > 1 ? 's' : ''}...
               </p>
             )}
