@@ -424,32 +424,32 @@ export const WarrantyPrintModal: React.FC = () => {
 
                     <div className="p-4 space-y-3 bg-white">
                       {/* Complaint / Finding */}
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <div className="bg-white p-3 rounded-lg border-2 border-black space-y-1">
+                        <span className="text-[15px] font-black text-black uppercase block tracking-wider">
                           1. {job.type === 'INSPECTION_FINDING' ? 'Inspection Finding / Concern:' : 'Customer Complaint / Concern:'}
                         </span>
-                        <p className="font-bold text-slate-950 text-xs leading-relaxed">
+                        <p className="font-bold text-black text-[18px] leading-relaxed">
                           {job.title}
                         </p>
                       </div>
 
                       {/* Cause */}
-                      <div className="bg-amber-50/60 p-3 rounded-lg border-2 border-amber-300 text-xs">
-                        <span className="text-[10px] font-mono font-bold uppercase text-amber-900 block mb-1">
+                      <div className="bg-white p-3 rounded-lg border-2 border-black space-y-1">
+                        <span className="text-[15px] font-mono font-black uppercase text-black block tracking-wider">
                           2. Cause (Diagnostic Finding / Root Cause):
                         </span>
-                        <p className="font-mono text-slate-950 font-medium leading-relaxed whitespace-pre-wrap">
-                          {job.cause || <span className="italic text-slate-400">Diagnosis / root cause pending documentation</span>}
+                        <p className="font-mono text-black font-bold text-[18px] leading-relaxed whitespace-pre-wrap">
+                          {job.cause || <span className="italic text-slate-400 font-sans font-normal text-sm">Diagnosis / root cause pending documentation</span>}
                         </p>
                       </div>
 
                       {/* Correction */}
-                      <div className="bg-emerald-50/60 p-3 rounded-lg border-2 border-emerald-300 text-xs">
-                        <span className="text-[10px] font-mono font-bold uppercase text-emerald-900 block mb-1">
+                      <div className="bg-white p-3 rounded-lg border-2 border-black space-y-1">
+                        <span className="text-[15px] font-mono font-black uppercase text-black block tracking-wider">
                           3. Correction (Repair Performed / Action Taken):
                         </span>
-                        <p className="font-mono text-slate-950 font-medium leading-relaxed whitespace-pre-wrap">
-                          {job.correction || <span className="italic text-slate-400">Corrective repair pending documentation</span>}
+                        <p className="font-mono text-black font-bold text-[18px] leading-relaxed whitespace-pre-wrap">
+                          {job.correction || <span className="italic text-slate-400 font-sans font-normal text-sm">Corrective repair pending documentation</span>}
                         </p>
                       </div>
 
@@ -864,25 +864,25 @@ export const WarrantyPrintModal: React.FC = () => {
                 </div>
 
                 {/* Complaint / Finding */}
-                <div className="p-2 border border-black rounded bg-white">
-                  <div className="text-[10px] font-black uppercase text-black mb-0.5">
+                <div className="p-2.5 border-2 border-black rounded bg-white mb-2">
+                  <div className="text-[15px] font-black uppercase text-black mb-1">
                     1. {job.type === 'INSPECTION_FINDING' ? 'Inspection Finding / Concern:' : 'Customer Complaint / Concern:'}
                   </div>
-                  <div className="font-bold text-black text-xs leading-snug">{job.title}</div>
+                  <div className="font-bold text-black text-[18px] leading-snug">{job.title}</div>
                 </div>
 
                 {/* Cause */}
-                <div className="p-2 border border-black rounded bg-white">
-                  <div className="text-[10px] font-black uppercase text-black mb-0.5">2. Cause (Diagnostic Finding / Root Cause):</div>
-                  <div className="font-mono font-bold text-black whitespace-pre-wrap leading-snug">
+                <div className="p-2.5 border-2 border-black rounded bg-white mb-2">
+                  <div className="text-[15px] font-black uppercase text-black mb-1">2. Cause (Diagnostic Finding / Root Cause):</div>
+                  <div className="font-mono font-bold text-black text-[18px] whitespace-pre-wrap leading-snug">
                     {job.cause || 'Diagnostic finding pending technician documentation.'}
                   </div>
                 </div>
 
                 {/* Correction */}
-                <div className="p-2 border border-black rounded bg-white">
-                  <div className="text-[10px] font-black uppercase text-black mb-0.5">3. Correction (Repair Action Taken):</div>
-                  <div className="font-mono font-bold text-black whitespace-pre-wrap leading-snug">
+                <div className="p-2.5 border-2 border-black rounded bg-white mb-2">
+                  <div className="text-[15px] font-black uppercase text-black mb-1">3. Correction (Repair Action Taken):</div>
+                  <div className="font-mono font-bold text-black text-[18px] whitespace-pre-wrap leading-snug">
                     {job.correction || 'Corrective repair pending technician documentation.'}
                   </div>
                 </div>

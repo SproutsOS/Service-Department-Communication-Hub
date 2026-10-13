@@ -336,14 +336,14 @@ export const ROCard: React.FC<ROCardProps> = ({
           <div className="mt-1 text-[11px] bg-slate-50 p-1.5 rounded-md border-2 border-slate-700 space-y-0.5">
             {ro.cause && (
               <div className="flex items-start gap-1.5 truncate">
-                <span className="font-bold text-amber-800 shrink-0">Cause:</span>
-                <span className="text-slate-800 truncate font-mono text-[10px]">{ro.cause}</span>
+                <span className="font-bold text-black shrink-0">Cause:</span>
+                <span className="text-black font-bold truncate font-mono text-[11px]">{ro.cause}</span>
               </div>
             )}
             {ro.correction && (
               <div className="flex items-start gap-1.5 truncate">
-                <span className="font-bold text-emerald-800 shrink-0">Correction:</span>
-                <span className="text-slate-800 truncate font-mono text-[10px]">{ro.correction}</span>
+                <span className="font-bold text-black shrink-0">Correction:</span>
+                <span className="text-black font-bold truncate font-mono text-[11px]">{ro.correction}</span>
               </div>
             )}
           </div>

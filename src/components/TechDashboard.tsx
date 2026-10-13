@@ -933,49 +933,64 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       {/* Clock In / Out Button directly to the right of Line status */}
                       {(() => {
                         const isLineClockedIn = isClockedIn && (activePunch?.roLineNumber === idx + 1 || (!activePunch?.roLineNumber && idx === 0));
+                        const clockInTimeStr = activePunch?.clockIn
+                          ? new Date(activePunch.clockIn).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                          : '';
+
+                        if (isLineClockedIn) {
+                          return (
+                            <div className="flex items-center gap-2 flex-wrap shrink-0">
+                              <div className="px-3.5 py-1.5 rounded-full text-xs font-black bg-emerald-600 text-white border-2 border-emerald-700 ring-2 ring-emerald-300 shadow-sm flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+                                <span className="tracking-wider uppercase font-black">CLOCKED IN</span>
+                                <span className="text-emerald-100 font-mono font-bold">
+                                  Clock In Time: <strong className="text-white underline decoration-emerald-300">{clockInTimeStr}</strong>
+                                </span>
+                                <span className="font-mono text-emerald-200 text-[11px]">
+                                  ({formatElapsed(activeElapsedSecs)})
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${idx + 1}`);
+                                }}
+                                className="px-3 py-1.5 rounded-full text-xs font-black bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+                                title={`Clock out of Line ${idx + 1}`}
+                              >
+                                <Square className="w-3 h-3 fill-white" />
+                                <span>Clock Out</span>
+                              </button>
+                            </div>
+                          );
+                        }
+
                         return (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (isLineClockedIn) {
-                                clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${idx + 1}`);
-                              } else {
-                                clockInToRO(
-                                  ro.id, 
-                                  `Working on Line ${idx + 1}: ${concernText.slice(0, 50)}`, 
-                                  payType === 'WARRANTY' ? 'REPAIR' : 'GENERAL',
-                                  idx + 1
-                                );
-                              }
+                              clockInToRO(
+                                ro.id, 
+                                `Working on Line ${idx + 1}: ${concernText.slice(0, 50)}`, 
+                                payType === 'WARRANTY' ? 'REPAIR' : 'GENERAL',
+                                idx + 1
+                              );
                             }}
                             className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs shrink-0 ${
-                              isLineClockedIn
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
-                                : isClockedIn
+                              isClockedIn
                                 ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700 hover:shadow-xs active:scale-95'
                                 : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
                             }`}
                             title={
-                              isLineClockedIn 
-                                ? `Clocked in on RO #${ro.id} Line ${idx + 1} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
-                                : isClockedIn
+                              isClockedIn
                                 ? `Switch punch to RO #${ro.id} Line ${idx + 1} (will auto clock out of current punch)`
                                 : `Clock in to start working on RO #${ro.id} Line ${idx + 1}`
                             }
                           >
-                            {isLineClockedIn ? (
-                              <>
-                                <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                                <Square className="w-3 h-3 fill-white" />
-                                <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
-                              </>
-                            ) : (
-                              <>
-                                <Play className="w-3 h-3 fill-current" />
-                                <span>{isClockedIn ? `Switch to Line ${idx + 1}` : 'Clock In'}</span>
-                              </>
-                            )}
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>{isClockedIn ? `Switch to Line ${idx + 1}` : 'Clock In'}</span>
                           </button>
                         );
                       })()}
@@ -1696,49 +1711,64 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       {/* Clock In / Out Button for this recommendation line */}
                       {(() => {
                         const isRecLineClockedIn = isClockedIn && (activePunch?.roLineNumber === globalLineNum);
+                        const recClockInTimeStr = activePunch?.clockIn
+                          ? new Date(activePunch.clockIn).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                          : '';
+
+                        if (isRecLineClockedIn) {
+                          return (
+                            <div className="flex items-center gap-2 flex-wrap shrink-0">
+                              <div className="px-3.5 py-1.5 rounded-full text-xs font-black bg-emerald-600 text-white border-2 border-emerald-700 ring-2 ring-emerald-300 shadow-sm flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                                <span className="tracking-wider uppercase font-black">CLOCKED IN</span>
+                                <span className="text-emerald-100 font-mono font-bold">
+                                  Clock In Time: <strong className="text-white underline decoration-emerald-300">{recClockInTimeStr}</strong>
+                                </span>
+                                <span className="font-mono text-emerald-200 text-[11px]">
+                                  ({formatElapsed(activeElapsedSecs)})
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${globalLineNum}`);
+                                }}
+                                className="px-3 py-1.5 rounded-full text-xs font-black bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+                                title={`Clock out of Line ${globalLineNum}`}
+                              >
+                                <Square className="w-3 h-3 fill-white" />
+                                <span>Clock Out</span>
+                              </button>
+                            </div>
+                          );
+                        }
+
                         return (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (isRecLineClockedIn) {
-                                clockOutOfRO(ro.id, activePunch?.id, `Clocked out from Line ${globalLineNum}`);
-                              } else {
-                                clockInToRO(
-                                  ro.id, 
-                                  `Working on Line ${globalLineNum}: ${rec.serviceName.slice(0, 50)}`, 
-                                  recPayType === 'WARRANTY' ? 'REPAIR' : 'GENERAL',
-                                  globalLineNum
-                                );
-                              }
+                              clockInToRO(
+                                ro.id, 
+                                `Working on Line ${globalLineNum}: ${rec.serviceName.slice(0, 50)}`, 
+                                recPayType === 'WARRANTY' ? 'REPAIR' : 'GENERAL',
+                                globalLineNum
+                              );
                             }}
                             className={`px-3.5 py-1.5 rounded-full text-xs font-black border flex items-center gap-2 transition-all cursor-pointer shadow-xs shrink-0 ${
-                              isRecLineClockedIn
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-300'
-                                : isClockedIn
+                              isClockedIn
                                 ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700 hover:shadow-xs active:scale-95'
                                 : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 hover:shadow-xs active:scale-95'
                             }`}
                             title={
-                              isRecLineClockedIn 
-                                ? `Clocked in on RO #${ro.id} Line ${globalLineNum} since ${new Date(activePunch!.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatElapsed(activeElapsedSecs)}). Click to clock out.` 
-                                : isClockedIn
+                              isClockedIn
                                 ? `Switch punch to Line ${globalLineNum} (will auto clock out of current punch)`
                                 : `Clock in to work on Line ${globalLineNum}`
                             }
                           >
-                            {isRecLineClockedIn ? (
-                              <>
-                                <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                                <Square className="w-3 h-3 fill-white" />
-                                <span>Clock Out ({formatElapsed(activeElapsedSecs)})</span>
-                              </>
-                            ) : (
-                              <>
-                                <Play className="w-3 h-3 fill-current" />
-                                <span>{isClockedIn ? `Switch to Line ${globalLineNum}` : 'Clock In'}</span>
-                              </>
-                            )}
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>{isClockedIn ? `Switch to Line ${globalLineNum}` : 'Clock In'}</span>
                           </button>
                         );
                       })()}
@@ -3123,14 +3153,22 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
 
         {/* Active Clocked In Banner on the card */}
         {myPunch && (
-          <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-300 text-emerald-950 text-xs font-bold">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>Clocked In: Line {myPunch.roLineNumber || 1}</span>
+          <div className="flex items-center justify-between p-2.5 bg-emerald-50 rounded-lg border-2 border-emerald-500 text-emerald-950 text-xs font-bold shadow-2xs">
+            <span className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping"></span>
+              <span className="uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-black">
+                CLOCKED IN
+              </span>
+              <span>Line {myPunch.roLineNumber || 1}</span>
             </span>
-            <span className="font-mono font-black text-emerald-800">
-              {formatElapsed(elapsedSecs)}
-            </span>
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="text-slate-800 font-bold bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300/60">
+                Clock In: <strong className="text-emerald-950">{new Date(myPunch.clockIn).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+              </span>
+              <span className="font-black text-emerald-800">
+                ({formatElapsed(elapsedSecs)})
+              </span>
+            </div>
           </div>
         )}
 
@@ -3219,9 +3257,39 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
   onRequestParts,
   onTestDrive
 }) => {
-  const { sendMessage, markROMessagesAsRead, updateOutMileage, currentUser, users } = useApp();
+  const { sendMessage, markROMessagesAsRead, updateOutMileage, currentUser, users, clockOutOfRO } = useApp();
   if (!ro) return null;
   const statusCfg = STATUS_CONFIG[ro.status] || STATUS_CONFIG.WAITING_DIAGNOSTICS;
+
+  const myActivePunch = ro.timePunches?.find(
+    p => p.techId === currentUser.id && p.clockIn && !p.clockOut
+  );
+  const [modalElapsedSecs, setModalElapsedSecs] = useState<number>(() => {
+    if (!myActivePunch) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(myActivePunch.clockIn).getTime()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!myActivePunch) {
+      setModalElapsedSecs(0);
+      return;
+    }
+    const inMs = new Date(myActivePunch.clockIn).getTime();
+    const updateElapsed = () => {
+      setModalElapsedSecs(Math.max(0, Math.floor((Date.now() - inMs) / 1000)));
+    };
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [myActivePunch?.id, myActivePunch?.clockIn]);
+
+  const formatModalElapsed = (totalSecs: number) => {
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m ${secs}s`;
+  };
 
   const unreadMessages = (ro.messages || []).filter(m => !(m.readBy || []).includes(currentUser.id));
   const hasUnreadUrgentMessage = unreadMessages.some(m => m.isUrgent);
@@ -3440,6 +3508,35 @@ export const TechROStationModal: React.FC<TechROStationModalProps> = ({
           </div>
         </div>
 
+        {/* Active Clocked In Bar inside Tech Station Modal */}
+        {myActivePunch && (
+          <div className="bg-emerald-600 text-white px-4 py-2.5 flex items-center justify-between flex-wrap gap-2 text-xs font-bold border-b border-emerald-500 shadow-inner shrink-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+              <span className="uppercase tracking-wider font-black px-2.5 py-0.5 rounded-full bg-white text-emerald-950 text-xs shadow-2xs">
+                CLOCKED IN
+              </span>
+              <span>Currently working on Line {myActivePunch.roLineNumber || 1}</span>
+              <span className="bg-emerald-900/90 border border-emerald-400/40 px-2.5 py-0.5 rounded font-mono font-bold text-white">
+                Clock In Time: <strong className="font-mono text-emerald-100 text-sm">{new Date(myActivePunch.clockIn).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-emerald-100 font-bold bg-emerald-800/80 px-2.5 py-0.5 rounded border border-emerald-500/40">
+                Elapsed: {formatModalElapsed(modalElapsedSecs)}
+              </span>
+              <button
+                type="button"
+                onClick={() => clockOutOfRO(ro.id, myActivePunch.id, `Clocked out from Station header`)}
+                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-md flex items-center gap-1 shadow-xs cursor-pointer transition-colors active:scale-95"
+              >
+                <Square className="w-3 h-3 fill-white" />
+                <span>Clock Out</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Modal Scrollable Body - Full Screen View */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
           {/* Pinned Sticky Note Banner (At Top of Tech Station) */}
@@ -3615,11 +3712,46 @@ export const TechDashboard: React.FC = () => {
     openDirectChat,
     openQuoteModal,
     updateConcernPayType,
-    updateConcernTech
+    updateConcernTech,
+    clockOutOfRO
   } = useApp();
 
   const [selectedTechROId, setSelectedTechROId] = useState<string | null>(null);
   const selectedTechRO = repairOrders.find(r => r.id === selectedTechROId) || null;
+
+  // Active punch across all repair orders for current tech
+  const activeROWithPunch = repairOrders.find(ro => 
+    ro.timePunches?.some(p => p.techId === currentUser.id && p.clockIn && !p.clockOut)
+  );
+  const techActivePunch = activeROWithPunch?.timePunches?.find(
+    p => p.techId === currentUser.id && p.clockIn && !p.clockOut
+  );
+  const [techElapsedSecs, setTechElapsedSecs] = useState<number>(() => {
+    if (!techActivePunch) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(techActivePunch.clockIn).getTime()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!techActivePunch) {
+      setTechElapsedSecs(0);
+      return;
+    }
+    const inMs = new Date(techActivePunch.clockIn).getTime();
+    const updateElapsed = () => {
+      setTechElapsedSecs(Math.max(0, Math.floor((Date.now() - inMs) / 1000)));
+    };
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [techActivePunch?.id, techActivePunch?.clockIn]);
+
+  const formatElapsed = (totalSecs: number) => {
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m ${secs}s`;
+  };
 
   const [partsModalRO, setPartsModalRO] = useState<RepairOrder | null>(null);
   const [partsModalLine, setPartsModalLine] = useState<{ index?: number; text?: string }>({});
@@ -3652,6 +3784,62 @@ export const TechDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
+
+      {/* Prominent Active Punch Banner on Technician Screen */}
+      {activeROWithPunch && techActivePunch && (
+        <div className="bg-emerald-600 text-white rounded-xl p-4 sm:p-5 border-2 border-emerald-400 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-emerald-700 ring-2 ring-white/80 flex items-center justify-center shrink-0 shadow-inner">
+              <span className="w-3.5 h-3.5 rounded-full bg-white animate-ping"></span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="text-xs uppercase tracking-wider font-black px-2.5 py-0.5 rounded-full bg-white text-emerald-950 shadow-2xs">
+                  CLOCKED IN
+                </span>
+                <span className="font-mono text-sm font-black bg-emerald-900/80 px-2.5 py-0.5 rounded border border-emerald-400/50">
+                  RO #{activeROWithPunch.id}
+                </span>
+                <span className="text-xs font-black text-emerald-100 bg-emerald-800/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                  Line {techActivePunch.roLineNumber || 1}
+                </span>
+                <span className="text-xs font-bold text-white bg-emerald-900/90 px-2.5 py-0.5 rounded border border-emerald-400/40">
+                  Clock In Time: <strong className="font-mono text-white text-sm underline decoration-emerald-300">{new Date(techActivePunch.clockIn).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+                </span>
+              </div>
+              <p className="text-xs text-emerald-100 mt-1 font-semibold flex items-center gap-1.5 flex-wrap">
+                <span>{activeROWithPunch.customerName}</span>
+                <span>•</span>
+                <span>{activeROWithPunch.vehicle.year} {activeROWithPunch.vehicle.make} {activeROWithPunch.vehicle.model}</span>
+                {activeROWithPunch.vehicle.vin && (
+                  <span className="font-mono opacity-80">• VIN: {activeROWithPunch.vehicle.vin.slice(-6)}</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+            <span className="font-mono text-sm font-black bg-emerald-900/80 px-3 py-1.5 rounded-lg border border-emerald-400/50 shadow-2xs">
+              Elapsed: {formatElapsed(techElapsedSecs)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedTechROId(activeROWithPunch.id)}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-white/20 hover:bg-white/30 text-white border border-white/40 cursor-pointer transition-colors shadow-2xs"
+            >
+              Open Station
+            </button>
+            <button
+              type="button"
+              onClick={() => clockOutOfRO(activeROWithPunch.id, techActivePunch.id, 'Clocked out from Tech Screen banner')}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-rose-600 hover:bg-rose-700 text-white border border-rose-800 shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors active:scale-95"
+            >
+              <Square className="w-3.5 h-3.5 fill-white" />
+              <span>Clock Out</span>
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Top Banner */}
       <div className="bg-slate-800 text-white rounded-xl p-5 sm:p-6 border border-slate-700 shadow-sm relative">

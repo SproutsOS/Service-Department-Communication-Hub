@@ -1840,9 +1840,9 @@ export const RODetailModal: React.FC = () => {
                             </div>
 
                             {/* 1. Customer Stated Complaint */}
-                            <div className="space-y-1">
-                              <label className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                                <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
+                            <div className="space-y-1.5">
+                              <label className="text-[16px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">1</span>
                                 <span>Complaint (Customer Stated Symptom)</span>
                               </label>
                               <textarea
@@ -1857,14 +1857,14 @@ export const RODetailModal: React.FC = () => {
                                 }}
                                 onBlur={flushManagerAutoSave}
                                 placeholder={idx === 0 ? "Customer primary complaint / stated symptom..." : `Customer complaint for line ${idx + 1}...`}
-                                className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                                className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold text-black focus:outline-hidden focus:ring-2 focus:ring-black focus:border-black bg-white leading-relaxed placeholder:text-slate-400 placeholder:text-sm"
                               />
                             </div>
 
                             {/* 2. Cause (Technician Diagnostic Findings) */}
-                            <div className="space-y-1">
-                              <label className="text-[11px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                                <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
+                            <div className="space-y-1.5">
+                              <label className="text-[16px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">2</span>
                                 <span>Cause (Diagnostic Finding)</span>
                               </label>
                               <input
@@ -1880,14 +1880,14 @@ export const RODetailModal: React.FC = () => {
                                 }}
                                 onBlur={flushManagerAutoSave}
                                 placeholder={idx === 0 ? "Root cause / diagnostic finding (e.g. Code P0300 cylinder 3 misfire, cracked coil pack)..." : `Diagnostic finding / cause for line ${idx + 1}...`}
-                                className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                                className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold font-mono text-black focus:outline-hidden focus:ring-2 focus:ring-black focus:border-black bg-white placeholder:text-slate-400 placeholder:text-sm placeholder:font-sans"
                               />
                             </div>
 
                             {/* 3. Correction (Repair Procedure / Action Taken) */}
-                            <div className="space-y-1">
-                              <label className="text-[11px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
-                                <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black inline-flex items-center justify-center">3</span>
+                            <div className="space-y-1.5">
+                              <label className="text-[16px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">3</span>
                                 <span>Correction (Repair Procedure / Action Taken)</span>
                               </label>
                               <input
@@ -1903,7 +1903,7 @@ export const RODetailModal: React.FC = () => {
                                 }}
                                 onBlur={flushManagerAutoSave}
                                 placeholder={idx === 0 ? "Corrective repair (e.g. Replaced cylinder 3 coil pack & plugs, cleared codes, road tested 5 mi)..." : `Repair correction for line ${idx + 1}...`}
-                                className="w-full px-3 py-2 border-2 border-slate-400 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white"
+                                className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold font-mono text-black focus:outline-hidden focus:ring-2 focus:ring-black focus:border-black bg-white placeholder:text-slate-400 placeholder:text-sm placeholder:font-sans"
                               />
                             </div>
 

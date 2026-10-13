@@ -1622,10 +1622,10 @@ export const RepairQuoteModal: React.FC = () => {
 
                           {/* 2. Cause (Technician Diagnostic Findings) */}
                           <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-200 pt-1.5 md:pt-0 md:pl-2.5">
-                            <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">
+                            <span className="text-[12px] font-black text-black uppercase tracking-wider block">
                               2. Cause:
                             </span>
-                            <p className="font-bold text-amber-950 text-xs leading-snug font-mono">
+                            <p className="font-bold text-black text-sm leading-snug font-mono">
                               {(() => {
                                 const baseCount = cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0);
                                 if (roLineNum > baseCount) {
@@ -1644,7 +1644,7 @@ export const RepairQuoteModal: React.FC = () => {
                           {/* 3. Correction (Repair Procedure / Action Taken) */}
                           <div className="space-y-0.5 border-t md:border-t-0 md:border-l border-slate-200 pt-1.5 md:pt-0 md:pl-2.5">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-emerald-950 uppercase tracking-wider block">
+                              <span className="text-[12px] font-black text-black uppercase tracking-wider block">
                                 3. Correction:
                               </span>
                               <button
@@ -1660,7 +1660,7 @@ export const RepairQuoteModal: React.FC = () => {
                                 <span>{cleanRO.correction || cleanRO.concernCorrections?.[roLineNum - 1] ? 'Edit' : '+ Add'}</span>
                               </button>
                             </div>
-                            <p className="font-bold text-emerald-950 text-xs leading-snug font-mono">
+                            <p className="font-bold text-black text-sm leading-snug font-mono">
                               {item.correctionText || cleanRO.concernCorrections?.[roLineNum - 1] || parseLineFromCombinedText(cleanRO.correction, roLineNum) || (
                                 <span className="italic text-slate-800 font-sans font-medium">Pending technician repair plan</span>
                               )}

@@ -308,30 +308,22 @@ export function cleanRO3700<T>(ro: T): T {
     ].includes(p.status);
 
     if (isPartsOrderedOrBeyond && !isCompleteOrDeclined) {
-      needsUpdate = true;
-      return {
-        ...p,
-        status: 'ORDERED',
-        requestType: 'ORDER_NOW',
-        orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
-        estimatedArrival: (p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate'))
-          ? p.estimatedArrival
-          : 'Special Order 1-5 Days',
-      };
+      // Do not convert REQUESTED or QUOTE_ONLY parts that are still pending pricing or order
+      if (p.status !== 'REQUESTED' && p.status !== 'QUOTE_ONLY' && p.status !== 'NEEDED' && p.requestType !== 'QUOTE_ONLY') {
+        needsUpdate = true;
+        return {
+          ...p,
+          status: 'ORDERED',
+          requestType: 'ORDER_NOW',
+          orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
+          estimatedArrival: (p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate'))
+            ? p.estimatedArrival
+            : 'Special Order 1-5 Days',
+        };
+      }
     }
 
-    if (p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY') {
-      needsUpdate = true;
-      return {
-        ...p,
-        status: 'ORDERED',
-        requestType: 'ORDER_NOW',
-        orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
-        estimatedArrival: p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate')
-          ? p.estimatedArrival
-          : 'Daily Order (Arriving ~5:00 PM)',
-      };
-    }
+    // Preserve QUOTE_ONLY parts as QUOTE_ONLY so they remain in the quoting queue
     return p;
   });
 

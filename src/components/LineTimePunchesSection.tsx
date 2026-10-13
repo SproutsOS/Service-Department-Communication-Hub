@@ -60,9 +60,15 @@ export const LineTimePunchesSection: React.FC<LineTimePunchesSectionProps> = ({
             <span>Line {lineNum} Labor Time Clock Logs</span>
           </div>
           {activeLinePunch ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>{activeLinePunch.techName} Clocked In</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-600 text-white border-2 border-emerald-700 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+              <span className="tracking-wider uppercase">CLOCKED IN</span>
+              <span className="text-emerald-100 font-mono font-bold">
+                at {new Date(activeLinePunch.clockIn).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </span>
+              <span className="text-emerald-200 text-[11px] font-normal">
+                ({activeLinePunch.techName})
+              </span>
             </span>
           ) : null}
         </div>

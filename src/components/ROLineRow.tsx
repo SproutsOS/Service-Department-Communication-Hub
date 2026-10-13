@@ -193,17 +193,17 @@ export const ROLineRow: React.FC<ROLineRowProps> = ({
           );
         })()}
         {(ro.cause || ro.correction) && (
-          <div className="text-[10px] text-slate-600 mt-1.5 space-y-0.5 bg-slate-50 p-1.5 rounded border border-slate-200">
+          <div className="text-[11px] text-black mt-1.5 space-y-0.5 bg-slate-50 p-1.5 rounded border border-slate-300">
             {ro.cause && (
               <div>
-                <strong className="text-amber-800 font-bold">Cause: </strong>
-                <span>{ro.cause}</span>
+                <strong className="text-black font-bold">Cause: </strong>
+                <span className="text-black font-semibold font-mono">{ro.cause}</span>
               </div>
             )}
             {ro.correction && (
               <div>
-                <strong className="text-emerald-800 font-bold">Correction: </strong>
-                <span>{ro.correction}</span>
+                <strong className="text-black font-bold">Correction: </strong>
+                <span className="text-black font-semibold font-mono">{ro.correction}</span>
               </div>
             )}
           </div>

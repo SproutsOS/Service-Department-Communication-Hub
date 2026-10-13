@@ -534,15 +534,20 @@ export const PartsDashboard: React.FC = () => {
       ? Math.max(1, Number(cleanVal) || 1)
       : Math.max(1, Number(part.quantity) || 1);
     const effectiveVendor = currentDraft.vendor || part.vendor || vendors[0] || '';
-    // CRITICAL: Preserve part.status unless the user explicitly toggled or updated the status field!
-    // Never default to DAILY_ORDER when editing part number or price.
-    const effectiveStatus = field === 'status' ? value : part.status;
+    // CRITICAL: Preserve part.status as REQUESTED or QUOTE_ONLY while in quoting queue
+    // Never default or flip to an ordered status when editing part number, price, or vendor.
+    const isQuotingPart = part.status === 'REQUESTED' || part.status === 'QUOTE_ONLY' || part.status === 'NEEDED' || part.requestType === 'QUOTE_ONLY';
+    const effectiveStatus = field === 'status' 
+      ? value 
+      : (isQuotingPart ? (part.status === 'QUOTE_ONLY' || part.requestType === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'REQUESTED') : part.status);
     const effectiveEta = currentDraft.estimatedArrival || part.estimatedArrival;
     
     // Explicitly update requestType based on status if field is status
     const effectiveRequestType = field === 'status'
       ? (value === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'ORDER_NOW')
       : (field === 'requestType' ? value : (part.requestType || (effectiveStatus === 'QUOTE_ONLY' ? 'QUOTE_ONLY' : 'ORDER_NOW')));
+
+    const effectiveLineNum = part.roLineNumber || getPartLineOrder(part) || 1;
 
     updatePartItem(roId, part.id, {
       partNumber: cleanPn,
@@ -552,7 +557,7 @@ export const PartsDashboard: React.FC = () => {
       status: effectiveStatus,
       requestType: effectiveRequestType,
       estimatedArrival: effectiveEta,
-      roLineNumber: part.roLineNumber,
+      roLineNumber: effectiveLineNum,
     });
   };
 
@@ -1942,9 +1947,9 @@ export const PartsDashboard: React.FC = () => {
                               </div>
 
                               {(causeDesc || correctionDesc) && (
-                                <div className="text-[11px] text-slate-600 flex items-center gap-3 flex-wrap">
-                                  {causeDesc && <span>Cause: <strong className="text-amber-900 font-mono">{causeDesc}</strong></span>}
-                                  {correctionDesc && <span>Correction: <strong className="text-emerald-900 font-mono">{correctionDesc}</strong></span>}
+                                <div className="text-[12px] text-black flex items-center gap-3 flex-wrap">
+                                  {causeDesc && <span>Cause: <strong className="text-black font-mono font-bold">{causeDesc}</strong></span>}
+                                  {correctionDesc && <span>Correction: <strong className="text-black font-mono font-bold">{correctionDesc}</strong></span>}
                                 </div>
                               )}
                             </div>
@@ -3196,17 +3201,17 @@ export const PartsDashboard: React.FC = () => {
                           <span>Cause Findings & Notes</span>
                         </div>
                         {ro.cause || ro.diagnosticNotes ? (
-                          <div className="text-slate-700 font-medium">
-                            <span className="font-bold text-slate-900">Cause: </span>
-                            {ro.cause || ro.diagnosticNotes}
+                          <div className="text-black font-semibold">
+                            <span className="font-bold text-black">Cause: </span>
+                            <span className="font-mono text-black font-bold">{ro.cause || ro.diagnosticNotes}</span>
                           </div>
                         ) : (
                           <div className="text-slate-400 italic">No cause findings documented yet.</div>
                         )}
                         {ro.correction && (
-                          <div className="text-slate-700 font-medium mt-1">
-                            <span className="font-bold text-slate-900">Correction: </span>
-                            {ro.correction}
+                          <div className="text-black font-semibold mt-1">
+                            <span className="font-bold text-black">Correction: </span>
+                            <span className="font-mono text-black font-bold">{ro.correction}</span>
                           </div>
                         )}
                       </div>
@@ -4087,30 +4092,30 @@ export const PartsDashboard: React.FC = () => {
                       {(concernDesc || causeDesc || correctionDesc) && (
                         <div className="text-[11px] bg-white/95 p-2 rounded-lg border border-slate-200/90 space-y-1 shadow-2xs">
                           {concernDesc && (
-                            <div className="text-slate-900 leading-snug">
-                              <strong className="text-blue-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1">
-                                <span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">1</span>
+                            <div className="text-black leading-snug">
+                              <strong className="text-black font-bold uppercase text-[10px] mr-1.5 inline-flex items-center gap-1">
+                                <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-black inline-flex items-center justify-center shrink-0">1</span>
                                 Line {lineNum || 1} Concern:
                               </strong>
-                              <span className="font-semibold">{concernDesc}</span>
+                              <span className="font-bold text-black text-xs">{concernDesc}</span>
                             </div>
                           )}
                           {causeDesc && (
-                            <div className="text-amber-950 leading-snug font-mono">
-                              <strong className="text-amber-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
-                                <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">2</span>
+                            <div className="text-black leading-snug font-mono">
+                              <strong className="text-black font-bold uppercase text-[10px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
+                                <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-black inline-flex items-center justify-center shrink-0">2</span>
                                 Cause:
                               </strong>
-                              <span>{causeDesc}</span>
+                              <span className="font-bold text-black text-xs">{causeDesc}</span>
                             </div>
                           )}
                           {correctionDesc && (
-                            <div className="text-emerald-950 leading-snug font-mono">
-                              <strong className="text-emerald-900 font-bold uppercase text-[9px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
-                                <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white text-[8px] font-black inline-flex items-center justify-center shrink-0">3</span>
+                            <div className="text-black leading-snug font-mono">
+                              <strong className="text-black font-bold uppercase text-[10px] mr-1.5 inline-flex items-center gap-1 font-sans shrink-0">
+                                <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-black inline-flex items-center justify-center shrink-0">3</span>
                                 Correction:
                               </strong>
-                              <span>{correctionDesc}</span>
+                              <span className="font-bold text-black text-xs">{correctionDesc}</span>
                             </div>
                           )}
                         </div>

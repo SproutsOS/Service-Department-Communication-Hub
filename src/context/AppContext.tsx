@@ -2494,11 +2494,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Check if parts are all received / issued
-    const allReceived = updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
+    const allReceived = updatedParts.length > 0 && updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
+    const hasPendingUnorderedParts = updatedParts.some(p => p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY' || p.status === 'NEEDED' || p.requestType === 'QUOTE_ONLY');
+    const allOrderedOrReceived = updatedParts.length > 0 && !hasPendingUnorderedParts && updatedParts.every(p => 
+      ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'].includes(p.status)
+    );
+
     let nextROStatus = targetRO.status;
     if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
       nextROStatus = (updates.status === 'ISSUED_TO_TECH') ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
-    } else if (updates.status && (updates.status === 'DAILY_ORDER' || updates.status === 'LOCAL_PURCHASE' || updates.status === 'SPECIAL_ORDER' || updates.status === 'SPECIAL_ORDER_1_5_DAYS' || updates.status === 'ORDERED' || updates.status === 'VOR_UPGRADE')) {
+    } else if (allOrderedOrReceived && updates.status && ['DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'ORDERED', 'VOR_UPGRADE'].includes(updates.status)) {
       if (targetRO.status === 'WAITING_PARTS' || targetRO.status === 'BEING_DIAGNOSED') {
         nextROStatus = 'PARTS_ORDERED';
       }

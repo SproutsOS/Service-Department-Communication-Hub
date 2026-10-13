@@ -416,35 +416,35 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
               </div>
 
               {/* 1. Customer Stated Complaint */}
-              <div className="space-y-1">
-                <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black inline-flex items-center justify-center">1</span>
+              <div className="space-y-1.5">
+                <span className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">1</span>
                   <span>Complaint (Customer Stated Symptom):</span>
                 </span>
-                <p className="text-xs font-bold text-slate-950 whitespace-pre-wrap leading-relaxed pl-5.5">
+                <p className="text-[18px] font-bold text-black whitespace-pre-wrap leading-relaxed pl-7">
                   {concernText}
                 </p>
               </div>
 
               {/* 2. Cause (Technician Diagnostic Findings) */}
-              <div className="space-y-1 pt-2 border-t border-slate-100">
-                <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black inline-flex items-center justify-center">2</span>
+              <div className="space-y-1.5 pt-2.5 border-t border-slate-200">
+                <span className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">2</span>
                   <span>Cause (Diagnostic Finding):</span>
                 </span>
-                <p className="text-xs font-semibold text-slate-900 pl-5.5 font-mono">
-                  {ro.concernCauses?.[idx] || (idx === 0 ? ro.cause : '') || <span className="italic text-slate-400 font-sans font-normal">Pending diagnosis</span>}
+                <p className="text-[18px] font-bold text-black pl-7 font-mono">
+                  {ro.concernCauses?.[idx] || (idx === 0 ? ro.cause : '') || <span className="italic text-slate-400 font-sans font-normal text-sm">Pending diagnosis</span>}
                 </p>
               </div>
 
               {/* 3. Correction (Repair Procedure / Action Taken) */}
-              <div className="space-y-1 pt-2 border-t border-slate-100">
-                <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black inline-flex items-center justify-center">3</span>
+              <div className="space-y-1.5 pt-2.5 border-t border-slate-200">
+                <span className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">3</span>
                   <span>Correction (Repair Procedure / Action Taken):</span>
                 </span>
-                <p className="text-xs font-semibold text-slate-900 pl-5.5 font-mono">
-                  {ro.concernCorrections?.[idx] || (idx === 0 ? ro.correction : '') || <span className="italic text-slate-400 font-sans font-normal">Pending technician repair</span>}
+                <p className="text-[18px] font-bold text-black pl-7 font-mono">
+                  {ro.concernCorrections?.[idx] || (idx === 0 ? ro.correction : '') || <span className="italic text-slate-400 font-sans font-normal text-sm">Pending technician repair</span>}
                 </p>
               </div>
 
@@ -696,14 +696,14 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
 
               {/* Cause & Correction if documented */}
               {(rec.cause || rec.correction) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-white p-3.5 rounded-lg border-2 border-slate-300">
                   <div>
-                    <span className="font-bold text-amber-900 uppercase block text-[10px]">Cause:</span>
-                    <p className="font-mono text-slate-800 text-[11px] whitespace-pre-wrap">{rec.cause || 'Diagnostic finding pending'}</p>
+                    <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Cause:</span>
+                    <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed">{rec.cause || 'Diagnostic finding pending'}</p>
                   </div>
                   <div>
-                    <span className="font-bold text-emerald-900 uppercase block text-[10px]">Correction:</span>
-                    <p className="font-mono text-slate-800 text-[11px] whitespace-pre-wrap">{rec.correction || 'Repair correction pending'}</p>
+                    <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Correction:</span>
+                    <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed">{rec.correction || 'Repair correction pending'}</p>
                   </div>
                 </div>
               )}
