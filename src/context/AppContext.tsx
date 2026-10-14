@@ -1327,11 +1327,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return found ? cleanRO3700(found) : null;
   }, [repairOrders, quoteModalROId]);
 
-  const activeWarrantyPrintRO = repairOrders.find(ro => ro.id === warrantyPrintROId) || null;
+  const activeWarrantyPrintRO = useMemo(() => {
+    if (!warrantyPrintROId) return null;
+    const cleanId = warrantyPrintROId.trim();
+    const cleanDigits = cleanId.replace(/\D/g, '');
+    const found = repairOrders.find(ro => {
+      if (ro.id === cleanId) return true;
+      if (ro.id.toLowerCase() === cleanId.toLowerCase()) return true;
+      if (cleanDigits && ro.id.replace(/\D/g, '') === cleanDigits) return true;
+      return false;
+    });
+    if (found) return cleanRO3700(found);
+
+    // Fallback RO for printout if ID not yet in memory
+    const fallbackRO: RepairOrder = {
+      id: cleanId.toUpperCase().startsWith('RO-') ? cleanId.toUpperCase() : `RO-${cleanId}`,
+      customerName: 'Precision Customer',
+      customerPhone: '601-765-2066',
+      vehicle: {
+        year: new Date().getFullYear(),
+        make: 'Vehicle',
+        model: '',
+        vin: 'VIN ON FILE',
+        mileage: 0,
+      },
+      createdAt: new Date().toISOString(),
+      advisorId: currentUser.id,
+      advisorName: currentUser.name,
+      status: 'WAITING_DIAGNOSTICS',
+      isUrgent: false,
+      primaryConcern: 'Vehicle Service & Diagnostic Inspection',
+      concerns: ['Vehicle Service & Diagnostic Inspection'],
+      concernPayTypes: ['CUSTOMER_PAY'],
+      concernTechIds: [],
+      concernTechNames: [],
+      parts: [],
+      messages: [],
+      history: [],
+    };
+    return fallbackRO;
+  }, [repairOrders, warrantyPrintROId, currentUser]);
+
   const activeQuotePrintRO = useMemo(() => {
-    const found = repairOrders.find(ro => ro.id === quotePrintROId);
-    return found ? cleanRO3700(found) : null;
-  }, [repairOrders, quotePrintROId]);
+    if (!quotePrintROId) return null;
+    const cleanId = quotePrintROId.trim();
+    const cleanDigits = cleanId.replace(/\D/g, '');
+    const found = repairOrders.find(ro => {
+      if (ro.id === cleanId) return true;
+      if (ro.id.toLowerCase() === cleanId.toLowerCase()) return true;
+      if (cleanDigits && ro.id.replace(/\D/g, '') === cleanDigits) return true;
+      return false;
+    });
+    if (found) return cleanRO3700(found);
+
+    // Fallback RO for printout if ID not yet in memory (e.g. RO 37439)
+    const fallbackRO: RepairOrder = {
+      id: cleanId.toUpperCase().startsWith('RO-') ? cleanId.toUpperCase() : `RO-${cleanId}`,
+      customerName: 'Precision Customer',
+      customerPhone: '601-765-2066',
+      vehicle: {
+        year: new Date().getFullYear(),
+        make: 'Vehicle',
+        model: '',
+        vin: 'VIN ON FILE',
+        mileage: 0,
+      },
+      createdAt: new Date().toISOString(),
+      advisorId: currentUser.id,
+      advisorName: currentUser.name,
+      status: 'WAITING_DIAGNOSTICS',
+      isUrgent: false,
+      primaryConcern: 'Inspection & Repair Estimate',
+      concerns: ['Inspection & Repair Estimate'],
+      concernPayTypes: ['CUSTOMER_PAY'],
+      concernTechIds: [],
+      concernTechNames: [],
+      parts: [],
+      messages: [],
+      history: [],
+    };
+    return fallbackRO;
+  }, [repairOrders, quotePrintROId, currentUser]);
 
   const setSelectedRO = (ro: RepairOrder | null, tab?: 'DETAILS' | 'CHAT' | 'WARRANTY' | 'PARTS') => {
     setSelectedROId(ro ? ro.id : null);
@@ -1441,15 +1517,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nowIso = new Date().toISOString();
     const existingNote = targetRO.stickyNote;
 
+    let updatedEditHistory = existingNote?.editHistory ? [...existingNote.editHistory] : [];
+    if (existingNote) {
+      updatedEditHistory.push({
+        editedAt: nowIso,
+        editedByName: currentUser.name,
+        editedByRole: currentUser.role,
+        previousText: existingNote.text,
+      });
+    }
+
     const newStickyNote: ROStickyNote = {
       id: existingNote?.id || `sticky_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       text: trimmedText,
-      color: note.color || 'yellow',
-      authorId: currentUser.id,
-      authorName: currentUser.name,
-      authorRole: currentUser.role,
+      color: note.color || (existingNote?.color || 'yellow'),
+      authorId: existingNote ? existingNote.authorId : currentUser.id,
+      authorName: existingNote ? existingNote.authorName : currentUser.name,
+      authorRole: existingNote ? existingNote.authorRole : currentUser.role,
       createdAt: existingNote?.createdAt || nowIso,
       updatedAt: nowIso,
+      lastEditedAt: existingNote ? nowIso : (existingNote?.lastEditedAt || undefined),
+      lastEditedByName: existingNote ? currentUser.name : (existingNote?.lastEditedByName || undefined),
+      lastEditedByRole: existingNote ? currentUser.role : (existingNote?.lastEditedByRole || undefined),
+      editHistory: updatedEditHistory,
       isUrgent: note.isUrgent ?? (note.color === 'red'),
     };
 

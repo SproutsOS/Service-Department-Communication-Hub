@@ -151,6 +151,12 @@ export const ManagerDashboard: React.FC = () => {
 
   // Parts Order Notifications visible to Service Manager & Parts Counter (Synchronized via Firestore)
   const partsAlertNotifications = useMemo(() => {
+    const isFulfilled = (st?: string) => [
+      'ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 
+      'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 
+      'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'
+    ].includes(st || '');
+
     const directNotifs = (notifications || []).filter(n => {
       if (n.read) return false;
       if (dismissedAlertIds.has(n.id)) return false;
@@ -161,6 +167,19 @@ export const ManagerDashboard: React.FC = () => {
         titleLower.includes('parts ordered') || 
         titleLower.includes('placed on order') || 
         msgLower.includes('placed on order')
+      ) {
+        return false;
+      }
+
+      // Do NOT classify "no parts required", "no part", or "labor only" notifications as parts order alerts
+      if (
+        titleLower.includes('no part') ||
+        msgLower.includes('no part') ||
+        msgLower.includes('labor only') ||
+        titleLower.includes('labor only') ||
+        msgLower.includes('labor-only') ||
+        titleLower.includes('labor-only') ||
+        msgLower.includes('zero parts')
       ) {
         return false;
       }
@@ -180,16 +199,22 @@ export const ManagerDashboard: React.FC = () => {
         if (ro && (ro.partsAlertDismissed || ro.partsOrderClaimedBy || ro.partsOrderCompletedBy || ro.status === 'PARTS_ORDERED' || ro.status === 'PARTS_IN_TO_TECH')) {
           return false;
         }
+        // If RO has no parts and no quoted parts at all, it's labor only
+        const allParts = ro?.parts || [];
+        const quoteParts = ro?.quote?.partsItems || [];
+        if (allParts.length === 0 && quoteParts.length === 0) {
+          return false;
+        }
+        // If all parts in RO and quote are already fulfilled/declined/in-stock, do not show order alert
+        const unfulfilledROParts = allParts.filter(p => !isFulfilled(p.status));
+        const unfulfilledQuoteParts = quoteParts.filter(qp => !isFulfilled(qp.status));
+        if (unfulfilledROParts.length === 0 && unfulfilledQuoteParts.length === 0) {
+          return false;
+        }
       }
 
       return true;
     });
-
-    const isFulfilled = (st?: string) => [
-      'ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 
-      'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 
-      'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'
-    ].includes(st || '');
 
     const autoAlerts = repairOrders
       .filter(ro => {
@@ -432,8 +457,38 @@ export const ManagerDashboard: React.FC = () => {
                         }}
                         className="px-3 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-yellow-300 text-xs font-black transition-colors shadow-xs cursor-pointer flex items-center gap-1"
                       >
-                        <Package className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Order Parts Now</span>
+                        {(() => {
+                          const isFulfilledStatus = (st?: string) => [
+                            'ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 
+                            'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 
+                            'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'
+                          ].includes(st || '');
+
+                          const isNoPartsAlert = (notif.message || '').toLowerCase().includes('no part') ||
+                            (notif.message || '').toLowerCase().includes('labor only') ||
+                            (notif.message || '').toLowerCase().includes('labor-only') ||
+                            (notif.title || '').toLowerCase().includes('no part') ||
+                            (notif.title || '').toLowerCase().includes('labor only');
+
+                          const neededParts = (notifRO.parts || []).filter(p => !isFulfilledStatus(p.status));
+                          const neededQuoteParts = (notifRO.quote?.partsItems || []).filter(qp => !isFulfilledStatus(qp.status));
+                          const hasPartsToOrder = !isNoPartsAlert && (neededParts.length > 0 || neededQuoteParts.length > 0);
+
+                          if (hasPartsToOrder) {
+                            return (
+                              <>
+                                <Package className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Order Parts Now</span>
+                              </>
+                            );
+                          }
+                          return (
+                            <>
+                              <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                              <span>View RO #{notifRO.id}</span>
+                            </>
+                          );
+                        })()}
                       </button>
                     )}
                     <button

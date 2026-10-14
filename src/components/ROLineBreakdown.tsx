@@ -449,7 +449,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
               </div>
 
               {/* 4. Integrated Parts for this Line (Part Name, Price, Qty, Availability) */}
-              <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={false} />
+              <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={true} />
 
               {/* 5. Line Evidence & Inspection Photos */}
               <LinePhotoSection 
@@ -709,7 +709,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
               )}
 
               {/* Integrated Parts for Line */}
-              <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={false} />
+              <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={true} />
 
               {/* Line Evidence & Inspection Photos */}
               <LinePhotoSection 

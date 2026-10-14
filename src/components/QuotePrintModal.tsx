@@ -40,19 +40,53 @@ export const QuotePrintModal: React.FC = () => {
   } = useApp();
 
   const [copied, setCopied] = useState(false);
+  const [printStatusMsg, setPrintStatusMsg] = useState<string | null>(null);
 
   // Live RO and clean data
-  const liveRO = initialRO ? (repairOrders.find(r => r.id === initialRO.id) || initialRO) : null;
+  const liveRO = useMemo(() => {
+    if (!initialRO) return null;
+    const cleanId = (initialRO.id || '').trim();
+    const cleanDigits = cleanId.replace(/\D/g, '');
+    const found = repairOrders.find(r => 
+      r.id === cleanId || 
+      r.id.toLowerCase() === cleanId.toLowerCase() || 
+      (cleanDigits && r.id.replace(/\D/g, '') === cleanDigits)
+    );
+    return found || initialRO;
+  }, [initialRO, repairOrders]);
+
   const cleanRO = liveRO ? cleanRO3700(liveRO) : null;
+
+  // Safe fallback vehicle
+  const vehicle = cleanRO?.vehicle || {
+    year: new Date().getFullYear(),
+    make: 'Vehicle',
+    model: '',
+    vin: 'VIN ON FILE',
+    mileage: 0,
+    licensePlate: undefined,
+    outMileage: undefined
+  };
 
   // Reliable direct document print
   const handlePrint = useCallback(() => {
     if (!cleanRO) return;
     const roNumber = cleanRO.id || '';
-    const vehicleDesc = cleanRO.vehicle ? `${cleanRO.vehicle.year} ${cleanRO.vehicle.make} ${cleanRO.vehicle.model}` : '';
+    const vehicleDesc = `${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}`.trim();
     const title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
-    printIsolatedDocument('printable-quote-document', title);
-  }, [cleanRO]);
+    try {
+      printIsolatedDocument('printable-quote-document', title);
+      setPrintStatusMsg('Print request sent. If popup was blocked, use Ctrl+P (or Cmd+P on Mac).');
+      setTimeout(() => setPrintStatusMsg(null), 5000);
+    } catch (err) {
+      console.warn('Direct print error:', err);
+      try {
+        window.print();
+      } catch (e) {
+        setPrintStatusMsg('Browser print blocked: Please press Ctrl+P or Cmd+P to print.');
+      }
+    }
+  }, [cleanRO, vehicle]);
 
   // Close on Escape key or trigger Print on Ctrl+P / Cmd+P
   useEffect(() => {
@@ -72,42 +106,43 @@ export const QuotePrintModal: React.FC = () => {
 
   const quote = cleanRO.quote;
 
-  const inMiles = cleanRO.vehicle.mileage ?? 0;
-  const outMiles = cleanRO.outMileage ?? cleanRO.vehicle.outMileage;
+  const inMiles = vehicle.mileage ?? (cleanRO as any).inMileage ?? 0;
+  const outMiles = cleanRO.outMileage ?? vehicle.outMileage;
   const testDriveDistance = outMiles !== undefined && inMiles > 0 ? Math.max(0, outMiles - inMiles) : undefined;
 
-  const baseConcerns = (cleanRO.concerns && cleanRO.concerns.length > 0)
-    ? cleanRO.concerns
+  const rawConcerns = (cleanRO.concerns && cleanRO.concerns.length > 0)
+    ? cleanRO.concerns.filter(Boolean)
     : (cleanRO.primaryConcern ? [cleanRO.primaryConcern] : ['Customer reported vehicle inspection / service concern']);
 
-  const recommendations = cleanRO.recommendations || [];
+  const baseConcerns = rawConcerns.length > 0 ? rawConcerns : ['Customer reported vehicle inspection / service concern'];
+  const recommendations = (cleanRO.recommendations || []).filter(Boolean);
 
   const unifiedLines = useMemo(() => {
     return [
       ...baseConcerns.map((concern, idx) => ({
         lineNum: idx + 1,
-        title: concern,
+        title: concern || `Customer Concern #${idx + 1}`,
         isInspection: false,
-        payType: (cleanRO.concernPayTypes?.[idx] || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
-        cause: cleanRO.concernCauses?.[idx] || (idx === 0 ? cleanRO.cause : '') || '',
-        correction: cleanRO.concernCorrections?.[idx] || (idx === 0 ? cleanRO.correction : '') || '',
+        payType: ((cleanRO.concernPayTypes && cleanRO.concernPayTypes[idx]) || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
+        cause: (cleanRO.concernCauses && cleanRO.concernCauses[idx]) || (idx === 0 ? cleanRO.cause : '') || '',
+        correction: (cleanRO.concernCorrections && cleanRO.concernCorrections[idx]) || (idx === 0 ? cleanRO.correction : '') || '',
       })),
       ...recommendations.map((rec, rIdx) => {
         const lineNum = baseConcerns.length + rIdx + 1;
         return {
           lineNum,
-          title: rec.serviceName,
+          title: rec.serviceName || `Recommended Service #${rIdx + 1}`,
           isInspection: true,
-          payType: (rec.payType || cleanRO.concernPayTypes?.[lineNum - 1] || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
-          cause: rec.cause || cleanRO.concernCauses?.[lineNum - 1] || '',
-          correction: rec.correction || cleanRO.concernCorrections?.[lineNum - 1] || `Perform ${rec.serviceName}`,
+          payType: (rec.payType || (cleanRO.concernPayTypes && cleanRO.concernPayTypes[lineNum - 1]) || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
+          cause: rec.cause || (cleanRO.concernCauses && cleanRO.concernCauses[lineNum - 1]) || '',
+          correction: rec.correction || (cleanRO.concernCorrections && cleanRO.concernCorrections[lineNum - 1]) || `Perform ${rec.serviceName || 'service'}`,
         };
       })
     ];
   }, [baseConcerns, recommendations, cleanRO, quote?.payType]);
 
-  const laborItems = quote?.laborItems || [];
-  const partsItems = quote?.partsItems || [];
+  const laborItems = (quote?.laborItems || []).filter(Boolean);
+  const partsItems = (quote?.partsItems || []).filter(Boolean);
 
   // Financial calculations
   const totalLaborHours = quote?.totalLaborHours ?? laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
@@ -294,6 +329,20 @@ export const QuotePrintModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Print Status Notification */}
+          {printStatusMsg && (
+            <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-xs font-semibold text-blue-900 flex items-center justify-between no-print">
+              <span>{printStatusMsg}</span>
+              <button 
+                type="button" 
+                onClick={() => setPrintStatusMsg(null)}
+                className="text-blue-500 hover:text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Screen Preview Paper Container */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100">
             
@@ -345,7 +394,7 @@ export const QuotePrintModal: React.FC = () => {
                 <div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle</span>
                   <span className="font-bold text-slate-900 block">
-                    {cleanRO.vehicle.year} {cleanRO.vehicle.make} {cleanRO.vehicle.model}
+                    {vehicle.year} {vehicle.make} {vehicle.model}
                   </span>
                   <span className="text-slate-700 block text-[11px] font-bold">
                     In: {inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}
@@ -360,11 +409,11 @@ export const QuotePrintModal: React.FC = () => {
                 <div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">VIN (17-Digit)</span>
                   <span className="font-mono font-black text-slate-950 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 inline-block text-[11px]">
-                    {cleanRO.vehicle.vin}
+                    {vehicle.vin || 'VIN ON FILE'}
                   </span>
-                  {cleanRO.vehicle.licensePlate && (
+                  {vehicle.licensePlate && (
                     <span className="text-slate-600 block text-[11px] mt-0.5">
-                      Plate: {cleanRO.vehicle.licensePlate}
+                      Plate: {vehicle.licensePlate}
                     </span>
                   )}
                 </div>
@@ -434,7 +483,7 @@ export const QuotePrintModal: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-100 text-blue-900 rounded border border-blue-200">
-                            {payType.replace(/_/g, ' ')}
+                            {((payType || 'CUSTOMER_PAY') as string).replace(/_/g, ' ')}
                           </span>
                           <span className="text-xs font-mono font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300">
                             ${lineTotalCost.toFixed(2)}
@@ -714,14 +763,14 @@ export const QuotePrintModal: React.FC = () => {
             <div>
               <div className="text-[10px] font-black uppercase text-black">Vehicle Details:</div>
               <div className="font-black text-sm text-black">
-                {cleanRO.vehicle.year} {cleanRO.vehicle.make} {cleanRO.vehicle.model}
+                {vehicle.year} {vehicle.make} {vehicle.model}
               </div>
-              <div className="font-mono font-bold text-black">VIN: {cleanRO.vehicle.vin}</div>
+              <div className="font-mono font-bold text-black">VIN: {vehicle.vin || 'VIN ON FILE'}</div>
               <div className="text-black font-bold">
                 Mileage In: {inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}
                 {outMiles !== undefined ? ` | Out: ${outMiles.toLocaleString()} mi` : ''}
               </div>
-              {cleanRO.vehicle.licensePlate && <div className="text-black">Plate: {cleanRO.vehicle.licensePlate}</div>}
+              {vehicle.licensePlate && <div className="text-black">Plate: {vehicle.licensePlate}</div>}
             </div>
           </div>
 
@@ -758,7 +807,7 @@ export const QuotePrintModal: React.FC = () => {
                 <div key={lineNum} className="border border-black p-2.5 space-y-2 quote-line-item">
                   <div className="flex justify-between items-center border-b border-black pb-1">
                     <div className="font-black text-xs">
-                      Line {lineNum}: {line.title} {line.isInspection ? '[Inspection Finding]' : ''} ({payType.replace(/_/g, ' ')})
+                      Line {lineNum}: {line.title} {line.isInspection ? '[Inspection Finding]' : ''} ({((payType || 'CUSTOMER_PAY') as string).replace(/_/g, ' ')})
                     </div>
                     <div className="font-mono font-black text-xs">
                       Line Total: ${lineTotalCost.toFixed(2)}

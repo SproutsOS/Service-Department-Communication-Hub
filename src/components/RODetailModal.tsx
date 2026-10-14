@@ -1112,6 +1112,18 @@ export const RODetailModal: React.FC = () => {
                 <span>{isEditingDetails ? 'Cancel Editing' : 'Edit RO Info'}</span>
               </button>
             )}
+
+            {/* Quick Print RO / Estimate Button in Top Header */}
+            <button
+              type="button"
+              id="top-header-print-ro-btn"
+              onClick={() => openQuotePrintModal(selectedRO.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer border shrink-0 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 shadow-2xs hover:text-white"
+              title="Print Repair Order / Estimate Quote (Ctrl+P)"
+            >
+              <Printer className="w-3.5 h-3.5 text-blue-400" />
+              <span>Print RO</span>
+            </button>
           </div>
 
           {/* Close Button positioned in the Upper Right Corner of the Screen / Header */}
@@ -1125,6 +1137,17 @@ export const RODetailModal: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* 1-Click Jump to Stage Stepper: Promoted to the TOP OF THE SCREEN for Service Manager & Service Advisor */}
+        {(isManager || isAdvisor) && (
+          <div id="ro-screen-top-jump-to-stage" className="bg-slate-950 border-b-2 border-slate-700 p-2 sm:px-4 shrink-0 shadow-sm">
+            <TicketFlowStepper 
+              ro={selectedRO} 
+              onUpdateStatus={(newStatus, notes) => updateROStatus(selectedRO.id, newStatus, notes)} 
+              canEdit={!isSales}
+            />
+          </div>
+        )}
 
         {/* Navigation Tabs */}
         {isSales && (
@@ -1908,7 +1931,7 @@ export const RODetailModal: React.FC = () => {
                             </div>
 
                             {/* 4. Integrated Parts for Line {idx + 1} (Part Name, Price, Qty, Availability) */}
-                            <LinePartsSection ro={selectedRO} lineNum={idx + 1} allowAddPart={false} />
+                            <LinePartsSection ro={selectedRO} lineNum={idx + 1} allowAddPart={canOrderParts} />
 
                             {/* 5. Line Quote Breakdown & Subtotal */}
                             {(() => {
@@ -2433,7 +2456,7 @@ export const RODetailModal: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {!isAdvisorScreen && canOrderParts && (
+                        {canOrderParts && (
                           <button
                             type="button"
                             onClick={() => setIsAddPartModalOpen(true)}

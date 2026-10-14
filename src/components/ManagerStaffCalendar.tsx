@@ -103,6 +103,18 @@ const LEAVE_TYPE_CONFIG: Record<StaffLeaveType, {
     pillBorder: 'border-purple-700',
     bannerBg: 'bg-purple-50 border-purple-300 text-purple-900',
   },
+  TRAINING: {
+    label: 'In Training / Class',
+    shortLabel: 'Training',
+    icon: '🎓',
+    badgeBg: 'bg-indigo-100',
+    badgeText: 'text-indigo-900',
+    badgeBorder: 'border-indigo-300',
+    pillBg: 'bg-indigo-600',
+    pillText: 'text-white',
+    pillBorder: 'border-indigo-700',
+    bannerBg: 'bg-indigo-50 border-indigo-300 text-indigo-900',
+  },
   PERSONAL: {
     label: 'Personal / Other',
     shortLabel: 'Personal',
@@ -118,6 +130,9 @@ const LEAVE_TYPE_CONFIG: Record<StaffLeaveType, {
 };
 
 const QUICK_TIME_CHIPS = [
+  'Full Day',
+  'Half Day AM',
+  'Half Day PM',
   'Left at 11:30 AM',
   'Left at 12:00 PM (Lunch)',
   'Left at 1:00 PM',
@@ -126,13 +141,16 @@ const QUICK_TIME_CHIPS = [
   'Left at 2:30 PM',
   'Left at 3:00 PM',
   'Left at 3:30 PM',
-  'Half Day PM',
-  'Full Day',
   'Arriving at 10:00 AM',
   'Arriving at 11:00 AM'
 ];
 
 const QUICK_REASON_CHIPS = [
+  'Factory / OEM Training',
+  'Stellantis Academy',
+  'EV / Hybrid Certification',
+  'ASE Certification Class',
+  'Service Advisor Workshop',
   'Doctor Appointment',
   'Dentist Appointment',
   'Family Emergency',
@@ -318,9 +336,12 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
     setFormUserId(activeStaff[0]?.id || '');
     setFormLeaveType(presetType || 'LEFT_EARLY');
     setFormStartDate(targetDate);
-    setFormEndDate(targetDate);
-    setFormTimeDetails(presetType === 'LEFT_EARLY' ? 'Left early at 1:30 PM' : presetType === 'SICK' ? 'Full Day Out Sick' : presetType === 'VACATION' ? 'Approved PTO' : '');
-    setFormNotes('');
+    setFormTimeDetails(
+      presetType === 'LEFT_EARLY' ? 'Left early at 1:30 PM' : 
+      presetType === 'SICK' ? 'Full Day Out Sick' : 
+      presetType === 'VACATION' ? 'Approved PTO' : 
+      presetType === 'TRAINING' ? 'Factory Training / Class' : ''
+    );
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -532,6 +553,16 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
 
           <button
             type="button"
+            onClick={() => handleOpenAddModal('TRAINING')}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+            title="Schedule staff training, factory certifications, or classes"
+          >
+            <span>🎓</span>
+            <span>Training</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleOpenAddModal()}
             className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 ring-2 ring-blue-400/40 active:scale-95"
           >
@@ -721,6 +752,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
             <option value="LEFT_EARLY">⏰ Left Early</option>
             <option value="SICK">🤒 Out Sick</option>
             <option value="VACATION">🌴 On Vacation</option>
+            <option value="TRAINING">🎓 In Training</option>
             <option value="LATE_ARRIVAL">⏱️ Late Arrival</option>
             <option value="PERSONAL">📋 Personal / Other</option>
           </select>
@@ -1107,6 +1139,17 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                     onClick={() => {
                       const day = inspectedDay;
                       setInspectedDay(null);
+                      handleOpenAddModal('TRAINING', day);
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer shadow-xs"
+                  >
+                    🎓 Log Training
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const day = inspectedDay;
+                      setInspectedDay(null);
                       handleOpenAddModal(undefined, day);
                     }}
                     className="px-3.5 py-1.5 text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors cursor-pointer shadow-xs"
@@ -1191,7 +1234,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   Absence / Leave Type *
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {(['LEFT_EARLY', 'SICK', 'VACATION', 'LATE_ARRIVAL', 'PERSONAL'] as StaffLeaveType[]).map((typeKey) => {
+                  {(['LEFT_EARLY', 'SICK', 'VACATION', 'TRAINING', 'LATE_ARRIVAL', 'PERSONAL'] as StaffLeaveType[]).map((typeKey) => {
                     const cfg = LEAVE_TYPE_CONFIG[typeKey];
                     const isSelected = formLeaveType === typeKey;
 
@@ -1207,6 +1250,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                             setFormTimeDetails('Full Day Out Sick');
                           } else if (typeKey === 'VACATION' && !formTimeDetails) {
                             setFormTimeDetails('Approved PTO');
+                          } else if (typeKey === 'TRAINING' && !formTimeDetails) {
+                            setFormTimeDetails('Factory Training / Class');
                           }
                         }}
                         className={`p-2.5 rounded-lg border-2 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${

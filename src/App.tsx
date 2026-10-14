@@ -949,8 +949,12 @@ const MainContent: React.FC = () => {
       <ErrorBoundary fallbackTitle="Repair Quote Modal Error">
         <RepairQuoteModal />
       </ErrorBoundary>
-      <WarrantyPrintModal />
-      <QuotePrintModal />
+      <ErrorBoundary fallbackTitle="Warranty Print Modal Error">
+        <WarrantyPrintModal />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Repair Quote Print Modal Error">
+        <QuotePrintModal />
+      </ErrorBoundary>
       <CustomerDirectoryModal />
       <ArchivedROsModal />
       <ROStickyNoteModal />

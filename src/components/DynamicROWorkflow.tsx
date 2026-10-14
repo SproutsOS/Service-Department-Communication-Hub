@@ -101,8 +101,21 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
     updateConcernStatus, 
     openQuotePrintModal,
     updateRepairOrderConcernText,
-    deleteRepairOrderConcern
+    deleteRepairOrderConcern,
+    activeRoleView
   } = useApp();
+
+  // Service Manager and Service Advisor check for promoting 1-Click Jump to Stage to top of screen
+  const isManagerOrAdvisor = Boolean(
+    isManager || 
+    isAdvisor || 
+    currentUser.role === 'SERVICE_MANAGER' || 
+    currentUser.role === 'SERVICE_ADVISOR' ||
+    activeRoleView === 'SERVICE_MANAGER' || 
+    activeRoleView === 'SERVICE_ADVISOR' ||
+    (!isTechScreen && !isSales)
+  );
+
   const ro = cleanRO3700(rawRO);
   const [smartWorkflowOrder, setSmartWorkflowOrder] = useState<boolean>(true);
   const [quickTechCause, setQuickTechCause] = useState<string>(ro.cause || '');
@@ -1003,7 +1016,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                       )}
 
                       {/* 4. Integrated Parts for Line {lineNum} (Part Name, Price, Qty, Availability) */}
-                      <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={false} />
+                      <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={true} />
 
                       {/* 5. Line Evidence & Inspection Photos (Take Photo on each line) */}
                       <LinePhotoSection 
@@ -1741,6 +1754,9 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   const sortedSections = useMemo(() => {
     const list = sections.filter(sec => {
       if (isTechScreen && sec.key === 'section-cadence') return false;
+      // For Service Manager and Service Advisor, the 1-Click Jump to Stage Stepper is promoted to the very TOP of the screen,
+      // so we filter it out of the lower sections list to prevent duplication.
+      if (isManagerOrAdvisor && sec.key === 'section-pipeline-stepper') return false;
       return true;
     });
 
@@ -1771,10 +1787,21 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
 
       return getOrderScore(a.key, a.naturalOrder) - getOrderScore(b.key, b.naturalOrder);
     });
-  }, [smartWorkflowOrder, activeAction.sectionKey, sections, isTechScreen]);
+  }, [smartWorkflowOrder, activeAction.sectionKey, sections, isTechScreen, isManagerOrAdvisor]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* 1-Click Jump to Stage & Flow Pipeline: Promoted to the TOP of the screen for Service Manager & Service Advisor */}
+      {isManagerOrAdvisor && (
+        <div id="top-jump-to-stage-stepper" className="space-y-1">
+          <TicketFlowStepper 
+            ro={ro} 
+            onUpdateStatus={handleStatusChange} 
+            canEdit={!isSales}
+          />
+        </div>
+      )}
+
       {/* Simple, clean Next Action Required indicator without cluttered boxes */}
       {smartWorkflowOrder && activeAction.id !== 'NONE' ? (
         <div className="flex items-center justify-between pb-1 pt-0.5 text-xs">

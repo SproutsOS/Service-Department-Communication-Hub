@@ -78,10 +78,18 @@ export const RepairQuoteModal: React.FC = () => {
   } = useApp();
 
   const isTech = currentUser.role === 'TECHNICIAN' || activeRoleView === 'TECHNICIAN';
-  const isAdvisorOrManager = !isTech && (
-    currentUser.role === 'SERVICE_ADVISOR' || 
+  const isAdvisor = currentUser.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR';
+  const isManagerOrParts = (
     currentUser.role === 'SERVICE_MANAGER' || 
-    activeRoleView === 'SERVICE_ADVISOR' || 
+    currentUser.role === 'PARTS_SPECIALIST' || 
+    activeRoleView === 'SERVICE_MANAGER' || 
+    activeRoleView === 'PARTS_SPECIALIST'
+  );
+  // Specifically: only Service Manager and Parts Counter can add or edit parts (not Service Advisors or Techs)
+  const canManageParts = isManagerOrParts && !isAdvisor && !isTech;
+  const isAdvisorOrManager = !isTech && (
+    isAdvisor || 
+    currentUser.role === 'SERVICE_MANAGER' || 
     activeRoleView === 'SERVICE_MANAGER'
   );
 
@@ -1797,109 +1805,210 @@ export const RepairQuoteModal: React.FC = () => {
                         const lineTotal = (Number(item.subtotal) || 0) + linePartsSubtotal;
 
                         return (
-                          <div className="pt-2 border-t border-slate-200/80 space-y-1.5 pl-8">
-                            {partsForThisLine.length > 0 && (
-                              <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 text-xs space-y-2">
-                                <div className="flex items-center justify-between font-bold text-amber-950 text-[11px]">
-                                  <span className="flex items-center gap-1.5">
-                                    <Package className="w-3.5 h-3.5 text-amber-600" />
-                                    <span>Parts for Line #{roLineNum} ({partsForThisLine.length} item{partsForThisLine.length === 1 ? '' : 's'}):</span>
-                                  </span>
-                                  <span className="font-mono text-xs font-black">
-                                    Approved Parts: <strong className="text-emerald-800 font-mono">${linePartsSubtotal.toFixed(2)}</strong>
-                                  </span>
+                          <div className="pt-2 border-t border-slate-200/80 space-y-2 pl-8">
+                            {/* Line Parts Box */}
+                            <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200 text-xs space-y-2.5">
+                              <div className="flex items-center justify-between font-bold text-amber-950 text-[11px] flex-wrap gap-2">
+                                <span className="flex items-center gap-1.5">
+                                  <Package className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>Parts for Line #{roLineNum} ({partsForThisLine.length} item{partsForThisLine.length === 1 ? '' : 's'}):</span>
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  {partsForThisLine.length > 0 && (
+                                    <span className="font-mono text-xs font-black">
+                                      Parts Subtotal: <strong className="text-emerald-800 font-mono">${linePartsSubtotal.toFixed(2)}</strong>
+                                    </span>
+                                  )}
+                                  {canManageParts && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddPartItem(roLineNum)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black cursor-pointer shadow-2xs transition-colors"
+                                      title={`Add part item specifically to Line #${roLineNum}`}
+                                    >
+                                      <Plus className="w-3 h-3 text-white" />
+                                      <span>+ Add Part to Line #{roLineNum}</span>
+                                    </button>
+                                  )}
                                 </div>
-                                <div className="space-y-1.5">
-                                  {partsForThisLine.map(p => {
-                                    const roPart = cleanRO.parts?.find(rp => rp.id === p.sourcePartId || rp.partNumber === p.partNumber || rp.description.toLowerCase() === p.description.toLowerCase());
-                                    const availability = roPart ? (roPart.status === 'IN_STOCK' ? 'In Stock' : roPart.estimatedArrival || roPart.status.replace(/_/g, ' ')) : 'Quoted on Estimate';
-                                    const isQuoteOnly = roPart?.status === 'QUOTE_ONLY' || roPart?.requestType === 'QUOTE_ONLY';
-                                    const isPartDeclined = p.status === 'DECLINED';
+                              </div>
 
+                              {partsForThisLine.length === 0 ? (
+                                <div className="flex items-center justify-between py-2 px-3 bg-white/90 rounded-lg border border-dashed border-amber-300 text-xs text-amber-900/80">
+                                  <span>No parts on Line #{roLineNum} yet (Labor only).</span>
+                                  {canManageParts && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddPartItem(roLineNum)}
+                                      className="inline-flex items-center gap-1 font-black text-amber-900 hover:text-amber-950 underline cursor-pointer text-[11px]"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>Add Part to Line #{roLineNum}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {partsForThisLine.map(p => {
+                                    const isPartDeclined = p.status === 'DECLINED';
                                     return (
                                       <div 
                                         key={p.id} 
-                                        className={`flex flex-col sm:flex-row sm:items-center justify-between text-[11px] font-medium p-2 rounded-lg border gap-2 shadow-2xs transition-all ${
+                                        className={`p-2.5 rounded-lg border text-xs space-y-2 shadow-2xs transition-all ${
                                           isPartDeclined
-                                            ? 'bg-rose-50/60 border-rose-200 text-slate-500'
-                                            : 'bg-white border-amber-200 text-slate-900'
+                                            ? 'bg-rose-50/70 border-rose-200'
+                                            : 'bg-white border-amber-200'
                                         }`}
                                       >
-                                        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                                          <span className={`font-extrabold ${isPartDeclined ? 'line-through text-slate-500' : 'text-slate-950'}`}>
-                                            {p.description}
-                                          </span>
-                                          {p.partNumber && (
-                                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
-                                              #{p.partNumber}
-                                            </span>
-                                          )}
-                                          <span className="text-slate-300">•</span>
-                                          <span className="text-slate-700 font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-                                            Qty: {p.quantity}
-                                          </span>
-                                          <span className="text-slate-300">•</span>
-                                          <span className={`font-mono font-bold ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-800'}`}>
-                                            ${(Number(p.unitPrice) || 0).toFixed(2)} ea
-                                          </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                                          {isPartDeclined ? (
-                                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
-                                              🛑 Declined by Customer ($0.00)
-                                            </span>
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                          {/* Description & Part # */}
+                                          {canManageParts ? (
+                                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                                              <input
+                                                type="text"
+                                                placeholder="Part description (e.g. Front Brake Pad Set)..."
+                                                value={p.description}
+                                                onChange={(e) => handleUpdatePartItem(p.id, { description: e.target.value })}
+                                                className={`w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none ${isPartDeclined ? 'line-through text-slate-400' : ''}`}
+                                              />
+                                              <input
+                                                type="text"
+                                                placeholder="Part # (opt)"
+                                                value={p.partNumber || ''}
+                                                onChange={(e) => handleUpdatePartItem(p.id, { partNumber: e.target.value })}
+                                                className="w-28 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none shrink-0"
+                                              />
+                                            </div>
                                           ) : (
-                                            <>
-                                              {isQuoteOnly && (
-                                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-300">
-                                                  Quote Only
+                                            <div className="flex-1 flex items-center gap-2 min-w-0 flex-wrap">
+                                              <span className={`font-black text-xs ${isPartDeclined ? 'line-through text-slate-400' : 'text-slate-950'}`}>
+                                                {p.description}
+                                              </span>
+                                              {p.partNumber && (
+                                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+                                                  #{p.partNumber}
                                                 </span>
                                               )}
-                                              <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">
-                                                Avail: {availability}
-                                              </span>
-                                              <span className="font-mono font-black text-slate-950 text-xs">
-                                                ${(Number(p.subtotal) || 0).toFixed(2)}
-                                              </span>
-                                            </>
+                                            </div>
                                           )}
 
-                                          {/* Individual Part Approve / Decline Action (for Advisor/Manager) */}
-                                          {!isTech && (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const nextStatus: LineApprovalStatus = isPartDeclined ? 'APPROVED' : 'DECLINED';
-                                                handleUpdatePartItem(p.id, { status: nextStatus });
-                                              }}
-                                              className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
-                                                isPartDeclined
-                                                  ? 'bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-300'
-                                                  : 'bg-white hover:bg-rose-50 text-rose-700 border-rose-300'
-                                              }`}
-                                              title={isPartDeclined ? 'Customer wants this part: Click to approve/include' : 'Customer declined this specific part: Click to decline'}
-                                            >
-                                              {isPartDeclined ? (
-                                                <>
-                                                  <Check className="w-3 h-3 text-emerald-600" />
-                                                  <span>Approve Part</span>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <Ban className="w-3 h-3 text-rose-600" />
-                                                  <span>Decline Part</span>
-                                                </>
-                                              )}
-                                            </button>
-                                          )}
+                                          {/* Qty, Price, Subtotal & Actions */}
+                                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                            {canManageParts ? (
+                                              <>
+                                                <div className="flex items-center gap-1">
+                                                  <label className="text-[10px] font-black text-slate-700 uppercase">Qty:</label>
+                                                  <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={p.quantity === 0 || p.quantity === undefined || (p.quantity as any) === '' ? '' : p.quantity}
+                                                    onChange={(e) => {
+                                                      const val = e.target.value;
+                                                      handleUpdatePartItem(p.id, { quantity: val === '' ? ('' as any) : Number(val) });
+                                                    }}
+                                                    className="w-14 px-1.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                  />
+                                                </div>
+
+                                                <div className="flex items-center gap-1">
+                                                  <label className="text-[10px] font-black text-slate-700 uppercase">Price:</label>
+                                                  <div className="relative w-22">
+                                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-xs">$</span>
+                                                    <input
+                                                      type="text"
+                                                      inputMode="decimal"
+                                                      placeholder="0.00"
+                                                      value={p.unitPrice === 0 || p.unitPrice === undefined || (p.unitPrice as any) === '' ? '' : p.unitPrice}
+                                                      onChange={(e) => {
+                                                        const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                                        const parts = raw.split('.');
+                                                        const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                                        handleUpdatePartItem(p.id, { unitPrice: val === '' ? ('' as any) : val });
+                                                      }}
+                                                      onBlur={(e) => {
+                                                        const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                                        if (raw !== '' && !isNaN(Number(raw))) {
+                                                          handleUpdatePartItem(p.id, { unitPrice: Number(Number(raw).toFixed(2)) });
+                                                        } else if (raw === '') {
+                                                          handleUpdatePartItem(p.id, { unitPrice: 0 });
+                                                        }
+                                                      }}
+                                                      className="w-full pl-4 pr-1.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                    />
+                                                  </div>
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                                  Qty: {p.quantity}
+                                                </span>
+                                                <span className="text-[11px] font-mono font-bold text-slate-700">
+                                                  ${(Number(p.unitPrice) || 0).toFixed(2)} ea
+                                                </span>
+                                              </div>
+                                            )}
+
+                                            <div className="text-right min-w-[70px]">
+                                              <span className="text-[9px] text-slate-500 block uppercase font-bold">Subtotal</span>
+                                              <span className={`text-xs font-black font-mono ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-800'}`}>
+                                                ${(Number(p.subtotal) || 0).toFixed(2)}
+                                              </span>
+                                            </div>
+
+                                            {/* Decline / Approve Toggle (Advisor or Manager recording customer decision) */}
+                                            {!isTech && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const nextStatus: LineApprovalStatus = isPartDeclined ? 'APPROVED' : 'DECLINED';
+                                                  handleUpdatePartItem(p.id, { status: nextStatus });
+                                                }}
+                                                className={`px-2 py-1 rounded-md text-[10px] font-black uppercase border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                                                  isPartDeclined
+                                                    ? 'bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-300'
+                                                    : 'bg-white hover:bg-rose-50 text-rose-700 border-rose-300'
+                                                }`}
+                                                title={isPartDeclined ? 'Customer wants this part: Click to approve' : 'Customer declined this specific part: Click to decline'}
+                                              >
+                                                {isPartDeclined ? <Check className="w-3 h-3 text-emerald-600" /> : <Ban className="w-3 h-3 text-rose-600" />}
+                                                <span>{isPartDeclined ? 'Approve' : 'Decline'}</span>
+                                              </button>
+                                            )}
+
+                                            {/* Remove Part (Service Manager & Parts Specialist only) */}
+                                            {canManageParts && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemovePartItem(p.id)}
+                                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                                title="Delete part from line"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     );
                                   })}
+
+                                  {/* Add another part to this line (Service Manager & Parts Specialist only) */}
+                                  {canManageParts && (
+                                    <div className="pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddPartItem(roLineNum)}
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 hover:text-amber-950 underline cursor-pointer"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                        <span>+ Add another part to Line #{roLineNum}</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            )}
+                              )}
+                            </div>
 
                             {!isTech && (
                               <div className="flex items-center justify-between px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-bold">
@@ -2019,19 +2128,42 @@ export const RepairQuoteModal: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-950 rounded-lg text-xs font-bold border border-amber-300">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Managed by Parts Specialist</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {canManageParts && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddPartItem(1)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-black shadow-2xs transition-colors cursor-pointer"
+                      title="Add new part item to quote"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-white" />
+                      <span>+ Add Part Item</span>
+                    </button>
+                  )}
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-950 rounded-lg text-xs font-bold border border-amber-300">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Managed by Parts Specialist</span>
+                  </div>
                 </div>
               </div>
 
               {partsItems.length === 0 ? (
-                <div className="text-center py-6 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                <div className="text-center py-6 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-2">
                   <Package className="w-7 h-7 text-slate-600 mx-auto mb-1.5" />
                   <p className="text-xs font-bold text-slate-900">No parts on quote yet (Labor only)</p>
                   <p className="text-[11px] text-slate-800 font-semibold mt-0.5">
                     Parts requested through the Parts Counter will appear here automatically.
                   </p>
+                  {canManageParts && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddPartItem(1)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer mt-2"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-white" />
+                      <span>+ Add Part to Line #1</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2043,82 +2175,142 @@ export const RepairQuoteModal: React.FC = () => {
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <span className="text-xs font-black text-slate-950 w-5 shrink-0">#{index + 1}</span>
 
+                        {/* Line Assignment */}
+                        {canManageParts ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <label className="text-[10px] font-black text-slate-700 uppercase">Line:</label>
+                            <select
+                              value={part.roLineNumber || 1}
+                              onChange={(e) => handleUpdatePartItem(part.id, { roLineNumber: Number(e.target.value) })}
+                              className="px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                              title="Assign part to specific RO Line"
+                            >
+                              {laborItems.length > 0 ? (
+                                laborItems.map((li, lIdx) => {
+                                  const lNum = li.roLineNumber || (lIdx + 1);
+                                  return (
+                                    <option key={li.id || lIdx} value={lNum}>
+                                      Line #{lNum}
+                                    </option>
+                                  );
+                                })
+                              ) : (
+                                <>
+                                  <option value={1}>Line #1</option>
+                                  <option value={2}>Line #2</option>
+                                  <option value={3}>Line #3</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                        ) : (
+                          <span className="px-2 py-1 bg-amber-100 text-amber-950 font-black text-xs rounded-lg border border-amber-300 shrink-0">
+                            Line #{part.roLineNumber || 1}
+                          </span>
+                        )}
+
                         {/* Part Description */}
-                        <div className="flex-1 w-full">
-                          <input
-                            type="text"
-                            placeholder="e.g. Front Ceramic Brake Pad Set"
-                            value={part.description}
-                            onChange={(e) => handleUpdatePartItem(part.id, { description: e.target.value })}
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
-                          />
-                        </div>
-
-                        {/* Part Number */}
-                        <div className="w-36 shrink-0">
-                          <input
-                            type="text"
-                            placeholder="Part # (optional)"
-                            value={part.partNumber || ''}
-                            onChange={(e) => handleUpdatePartItem(part.id, { partNumber: e.target.value })}
-                            className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
-                          />
-                        </div>
-
-                        {/* Quantity */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-black text-slate-950 uppercase">Qty:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            placeholder=""
-                            value={part.quantity === 0 || part.quantity === undefined || (part.quantity as any) === '' ? '' : part.quantity}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              handleUpdatePartItem(part.id, { 
-                                quantity: val === '' ? ('' as any) : Number(val) 
-                              });
-                            }}
-                            onFocus={(e) => e.target.select()}
-                            className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-
-                        {/* Unit Price */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <label className="text-[11px] font-black text-slate-950 uppercase">Price:</label>
-                          <div className="relative w-24">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
+                        {canManageParts ? (
+                          <div className="flex-1 w-full">
                             <input
                               type="text"
-                              inputMode="decimal"
-                              placeholder="0.00"
-                              value={part.unitPrice === 0 || part.unitPrice === undefined || (part.unitPrice as any) === '' ? '' : part.unitPrice}
-                              onChange={(e) => {
-                                const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                const parts = raw.split('.');
-                                const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
-                                handleUpdatePartItem(part.id, { 
-                                  unitPrice: val === '' ? ('' as any) : val 
-                                });
-                              }}
-                              onBlur={(e) => {
-                                const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
-                                if (raw !== '' && !isNaN(Number(raw))) {
-                                  handleUpdatePartItem(part.id, { 
-                                    unitPrice: Number(Number(raw).toFixed(2)) 
-                                  });
-                                } else if (raw === '') {
-                                  handleUpdatePartItem(part.id, { 
-                                    unitPrice: 0 
-                                  });
-                                }
-                              }}
-                              onFocus={(e) => e.target.select()}
-                              className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              placeholder="e.g. Front Ceramic Brake Pad Set"
+                              value={part.description}
+                              onChange={(e) => handleUpdatePartItem(part.id, { description: e.target.value })}
+                              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
                             />
                           </div>
-                        </div>
+                        ) : (
+                          <div className="flex-1 w-full text-xs font-bold text-slate-950">
+                            {part.description}
+                          </div>
+                        )}
+
+                        {/* Part Number */}
+                        {canManageParts ? (
+                          <div className="w-36 shrink-0">
+                            <input
+                              type="text"
+                              placeholder="Part # (optional)"
+                              value={part.partNumber || ''}
+                              onChange={(e) => handleUpdatePartItem(part.id, { partNumber: e.target.value })}
+                              className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-500"
+                            />
+                          </div>
+                        ) : (
+                          part.partNumber ? (
+                            <div className="w-36 shrink-0 font-mono text-xs font-bold px-2 py-1 bg-white border border-slate-300 rounded-lg text-slate-700">
+                              #{part.partNumber}
+                            </div>
+                          ) : null
+                        )}
+
+                        {/* Quantity */}
+                        {canManageParts ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <label className="text-[11px] font-black text-slate-950 uppercase">Qty:</label>
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder=""
+                              value={part.quantity === 0 || part.quantity === undefined || (part.quantity as any) === '' ? '' : part.quantity}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                handleUpdatePartItem(part.id, { 
+                                  quantity: val === '' ? ('' as any) : Number(val) 
+                                });
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-16 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 shrink-0">
+                            Qty: {part.quantity}
+                          </span>
+                        )}
+
+                        {/* Unit Price */}
+                        {canManageParts ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <label className="text-[11px] font-black text-slate-950 uppercase">Price:</label>
+                            <div className="relative w-24">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={part.unitPrice === 0 || part.unitPrice === undefined || (part.unitPrice as any) === '' ? '' : part.unitPrice}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                  const parts = raw.split('.');
+                                  const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                  handleUpdatePartItem(part.id, { 
+                                    unitPrice: val === '' ? ('' as any) : val 
+                                  });
+                                }}
+                                onBlur={(e) => {
+                                  const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                  if (raw !== '' && !isNaN(Number(raw))) {
+                                    handleUpdatePartItem(part.id, { 
+                                      unitPrice: Number(Number(raw).toFixed(2)) 
+                                    });
+                                  } else if (raw === '') {
+                                    handleUpdatePartItem(part.id, { 
+                                      unitPrice: 0 
+                                    });
+                                  }
+                                }}
+                                onFocus={(e) => e.target.select()}
+                                className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold font-mono px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-slate-700 shrink-0">
+                            ${(Number(part.unitPrice) || 0).toFixed(2)} ea
+                          </span>
+                        )}
 
                         {/* Line Subtotal */}
                         <div className="text-right w-24 shrink-0">
@@ -2128,15 +2320,17 @@ export const RepairQuoteModal: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Remove Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePartItem(part.id)}
-                          className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
-                          title="Delete part item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Remove Button (Manager and Parts Counter only) */}
+                        {canManageParts && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePartItem(part.id)}
+                            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors print:hidden cursor-pointer"
+                            title="Delete part item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -561,7 +561,7 @@ export interface InspectionSheet {
 // Service Manager Staff Attendance & Calendar Types
 // ==========================================
 
-export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL';
+export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL' | 'TRAINING';
 
 export interface StaffLeaveEntry {
   id: string;
@@ -628,6 +628,13 @@ export interface ServiceAppointment {
 
 export type StickyNoteColor = 'yellow' | 'red' | 'blue' | 'green' | 'purple' | 'orange';
 
+export interface StickyNoteEditRecord {
+  editedAt: string;
+  editedByName: string;
+  editedByRole?: string;
+  previousText?: string;
+}
+
 export interface ROStickyNote {
   id: string;
   text: string;
@@ -637,6 +644,10 @@ export interface ROStickyNote {
   authorRole?: string;
   createdAt: string;
   updatedAt?: string;
+  lastEditedAt?: string;
+  lastEditedByName?: string;
+  lastEditedByRole?: string;
+  editHistory?: StickyNoteEditRecord[];
   isUrgent?: boolean;
 }
 

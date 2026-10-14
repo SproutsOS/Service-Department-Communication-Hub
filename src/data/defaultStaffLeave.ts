@@ -88,6 +88,21 @@ export function getInitialStaffLeaveEntries(): StaffLeaveEntry[] {
       createdAt: new Date().toISOString(),
       createdByManagerId: 'usr_mgr_1',
       createdByManagerName: 'Service Manager',
+    },
+    {
+      id: 'leave_demo_5',
+      userId: 'usr_tech_3',
+      userName: 'Chris Vance',
+      userRole: 'TECHNICIAN',
+      employeeNumber: '105',
+      leaveType: 'TRAINING',
+      startDate: tomorrowStr,
+      endDate: tomorrowStr,
+      timeDetails: 'Factory Training / Class',
+      notes: 'Stellantis EV Academy & High-Voltage Battery Certification Seminar.',
+      createdAt: new Date().toISOString(),
+      createdByManagerId: 'usr_mgr_1',
+      createdByManagerName: 'Service Manager',
     }
   ];
 }

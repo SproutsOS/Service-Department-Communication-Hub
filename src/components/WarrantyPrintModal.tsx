@@ -45,14 +45,37 @@ export const WarrantyPrintModal: React.FC = () => {
   } = useApp();
 
   const [copied, setCopied] = useState(false);
+  const [printStatusMsg, setPrintStatusMsg] = useState<string | null>(null);
 
   const ro = activeWarrantyPrintRO;
 
+  const vehicle = ro?.vehicle || {
+    year: new Date().getFullYear(),
+    make: 'Vehicle',
+    model: '',
+    vin: 'VIN ON FILE',
+    mileage: 0,
+    licensePlate: undefined,
+    outMileage: undefined
+  };
+
   const handlePrint = useCallback(() => {
     if (!ro) return;
-    const title = `Warranty Verification - RO #${ro.id} - ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`;
-    printIsolatedDocument('printable-warranty-document', title);
-  }, [ro]);
+    const vehicleDesc = `${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}`.trim();
+    const title = `Warranty Verification - RO #${ro.id} - ${vehicleDesc}`;
+    try {
+      printIsolatedDocument('printable-warranty-document', title);
+      setPrintStatusMsg('Print request sent. If popup was blocked, use Ctrl+P or Cmd+P.');
+      setTimeout(() => setPrintStatusMsg(null), 5000);
+    } catch (err) {
+      console.warn('Direct print error:', err);
+      try {
+        window.print();
+      } catch (e) {
+        setPrintStatusMsg('Browser print blocked: Please press Ctrl+P or Cmd+P to print.');
+      }
+    }
+  }, [ro, vehicle]);
 
   // Close on Escape key or print on Ctrl+P / Cmd+P
   useEffect(() => {
@@ -68,12 +91,12 @@ export const WarrantyPrintModal: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [closeWarrantyPrintModal, handlePrint]);
 
-  if (!activeWarrantyPrintRO) return null;
+  if (!activeWarrantyPrintRO || !ro) return null;
 
   const punches: WarrantyLaborTimePunch[] = ro.timePunches || [];
 
-  const inMiles = ro.vehicle.mileage ?? 0;
-  const outMiles = ro.outMileage ?? ro.vehicle.outMileage;
+  const inMiles = vehicle.mileage ?? (ro as any)?.inMileage ?? 0;
+  const outMiles = ro.outMileage ?? vehicle.outMileage;
   const testDriveDistance = outMiles !== undefined && inMiles > 0 ? Math.max(0, outMiles - inMiles) : undefined;
   const testDriveNotes = ro.testDriveNotes || (ro.testDriveCompleted || outMiles !== undefined ? 'Road test verified repairs resolved. Normal vehicle operation confirmed.' : '');
 
@@ -284,6 +307,20 @@ export const WarrantyPrintModal: React.FC = () => {
           </div>
         </div>
 
+        {/* Print Status Notification */}
+        {printStatusMsg && (
+          <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-xs font-semibold text-blue-900 flex items-center justify-between no-print">
+            <span>{printStatusMsg}</span>
+            <button 
+              type="button" 
+              onClick={() => setPrintStatusMsg(null)}
+              className="text-blue-500 hover:text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Screen Preview Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100">
           
@@ -323,7 +360,7 @@ export const WarrantyPrintModal: React.FC = () => {
                     Print Date: {formatMilitaryDateTime(new Date())}
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono">
-                    Printed By: {currentUser.name} ({currentUser.role.replace(/_/g, ' ')})
+                    Printed By: {currentUser.name} ({(currentUser.role || 'STAFF').replace(/_/g, ' ')})
                   </div>
                 </div>
               </div>
@@ -340,7 +377,7 @@ export const WarrantyPrintModal: React.FC = () => {
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle Year/Make/Model</span>
                 <span className="font-bold text-slate-900">
-                  {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
+                  {vehicle.year} {vehicle.make} {vehicle.model}
                 </span>
                 <span className="text-slate-700 block text-[11px] font-bold">
                   In: {inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}
@@ -355,11 +392,11 @@ export const WarrantyPrintModal: React.FC = () => {
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Vehicle VIN (17-Digit)</span>
                 <span className="font-mono font-black text-slate-950 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 inline-block text-[11px]">
-                  {ro.vehicle.vin}
+                  {vehicle.vin || 'VIN ON FILE'}
                 </span>
-                {ro.vehicle.licensePlate && (
+                {vehicle.licensePlate && (
                   <span className="text-slate-600 block text-[11px] mt-0.5">
-                    Plate: {ro.vehicle.licensePlate}
+                    Plate: {vehicle.licensePlate}
                   </span>
                 )}
               </div>
@@ -776,7 +813,7 @@ export const WarrantyPrintModal: React.FC = () => {
                 Print Date: {formatMilitaryDateTime(new Date())}
               </div>
               <div className="text-[10px] text-black font-mono">
-                Printed By: {currentUser.name} ({currentUser.role.replace(/_/g, ' ')})
+                Printed By: {currentUser.name} ({(currentUser.role || 'STAFF').replace(/_/g, ' ')})
               </div>
             </div>
           </div>
@@ -793,7 +830,7 @@ export const WarrantyPrintModal: React.FC = () => {
           <div>
             <span className="text-[10px] font-black text-black uppercase block">Vehicle Information</span>
             <span className="font-black text-black text-sm block">
-              {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
+              {vehicle.year} {vehicle.make} {vehicle.model}
             </span>
             <span className="text-black block text-[11px] font-bold">
               In Miles: {inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}
@@ -808,11 +845,11 @@ export const WarrantyPrintModal: React.FC = () => {
           <div>
             <span className="text-[10px] font-black text-black uppercase block">Vehicle Identification</span>
             <span className="font-mono font-black text-black bg-white px-1.5 py-0.5 rounded border border-black inline-block text-[11px]">
-              VIN: {ro.vehicle.vin}
+              VIN: {vehicle.vin || 'VIN ON FILE'}
             </span>
-            {ro.vehicle.licensePlate && (
+            {vehicle.licensePlate && (
               <span className="text-black block text-[11px] mt-0.5 font-bold">
-                Plate: {ro.vehicle.licensePlate}
+                Plate: {vehicle.licensePlate}
               </span>
             )}
           </div>

@@ -28,14 +28,11 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
   const parts = getLineParts(ro, lineNum);
   const totalPartsCost = parts.reduce((sum, p) => sum + p.subtotal, 0);
 
-  // Service Advisor never adds or edits parts on their screen
+  // Only Service Manager and Parts Counter can add or edit parts on lines (Service Advisors cannot add or edit parts)
   const isAdvisor = currentUser.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR';
-  const canEditParts = allowAddPart && !isAdvisor && (
-    currentUser.role === 'SERVICE_MANAGER' || 
-    currentUser.role === 'PARTS_SPECIALIST' || 
-    activeRoleView === 'SERVICE_MANAGER' ||
-    activeRoleView === 'PARTS_SPECIALIST'
-  );
+  const isManager = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
+  const isPartsSpec = currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST';
+  const canEditParts = allowAddPart && (isManager || isPartsSpec) && !isAdvisor;
 
   const handleOpenEdit = (part: IntegratedLinePart) => {
     const rawPart = (ro.parts || []).find(p => p.id === part.id) || {
@@ -80,10 +77,10 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
             <button
               type="button"
               onClick={() => setIsAddPartOpen(true)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold border border-blue-200 cursor-pointer shadow-2xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black cursor-pointer shadow-xs transition-colors"
               title={`Add part specifically to Line ${lineNum}`}
             >
-              <Plus className="w-3 h-3 text-blue-600" />
+              <Plus className="w-3.5 h-3.5 text-white" />
               <span>+ Add Part</span>
             </button>
           )}
@@ -92,9 +89,23 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
 
       {/* Parts List */}
       {parts.length === 0 ? (
-        <div className="pl-5.5 text-xs italic text-slate-400">
-          No parts required or documented for Line {lineNum} yet
-        </div>
+        canEditParts ? (
+          <div className="pl-2 sm:pl-5.5 flex items-center justify-between py-1.5 px-2.5 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500">
+            <span className="italic">No parts required or documented for Line {lineNum} yet</span>
+            <button
+              type="button"
+              onClick={() => setIsAddPartOpen(true)}
+              className="inline-flex items-center gap-1 text-[11px] font-black text-blue-700 hover:text-blue-900 cursor-pointer hover:underline"
+            >
+              <Plus className="w-3 h-3" />
+              <span>+ Add Part to Line {lineNum}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="pl-5.5 text-xs italic text-slate-400">
+            No parts required or documented for Line {lineNum} yet
+          </div>
+        )
       ) : (
         <div className="pl-2 sm:pl-5.5 space-y-1.5">
           {parts.map((part) => {

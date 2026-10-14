@@ -11,7 +11,11 @@ export function printIsolatedDocument(elementId: string, documentTitle: string =
   const sourceElement = document.getElementById(elementId);
   if (!sourceElement) {
     console.warn(`Print element #${elementId} not found, falling back to window.print()`);
-    window.print();
+    try {
+      window.print();
+    } catch (e) {
+      console.warn('window.print fallback failed:', e);
+    }
     return;
   }
 
@@ -141,7 +145,11 @@ export function printIsolatedDocument(elementId: string, documentTitle: string =
       iframe.contentWindow.print();
     } catch (e) {
       console.warn('Iframe print error, invoking native window.print()', e);
-      window.print();
+      try {
+        window.print();
+      } catch (err) {
+        console.warn('Native window.print() failed or blocked by iframe sandbox:', err);
+      }
     }
   };
 
@@ -150,3 +158,4 @@ export function printIsolatedDocument(elementId: string, documentTitle: string =
     triggerIframePrint();
   }, 120);
 }
+

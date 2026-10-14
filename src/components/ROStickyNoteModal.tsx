@@ -262,15 +262,24 @@ export const ROStickyNoteModal: React.FC = () => {
               />
 
               {/* Sticky Note Bottom Fold visual accent */}
-              <div className="px-3 pb-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-black/5 bg-black/5">
-                <span className="italic flex items-center gap-1">
-                  <Bookmark className="w-3 h-3" />
-                  Appears at the top of this RO across all stations
+              <div className="px-3 py-2 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 border-t border-black/10 bg-black/5">
+                <span className="flex items-center gap-1 font-medium">
+                  <Bookmark className="w-3 h-3 text-slate-500" />
+                  <span>
+                    {existingNote ? (
+                      <>Pinned {new Date(existingNote.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} at {new Date(existingNote.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} by {existingNote.authorName}</>
+                    ) : (
+                      <>Pinned by {currentUser.name}</>
+                    )}
+                  </span>
                 </span>
-                {existingNote?.updatedAt && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    Last updated {new Date(existingNote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {existingNote && (existingNote.lastEditedAt || (existingNote.updatedAt && existingNote.updatedAt !== existingNote.createdAt)) && (
+                  <span className="flex items-center gap-1 text-slate-700 font-bold bg-black/10 px-1.5 py-0.5 rounded">
+                    <Clock className="w-3 h-3 text-slate-600" />
+                    <span>
+                      Edited {new Date(existingNote.lastEditedAt || existingNote.updatedAt!).toLocaleDateString([], { month: 'short', day: 'numeric' })} at {new Date(existingNote.lastEditedAt || existingNote.updatedAt!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      {existingNote.lastEditedByName ? ` by ${existingNote.lastEditedByName}` : ''}
+                    </span>
                   </span>
                 )}
               </div>

@@ -286,14 +286,15 @@ export const TicketFlowStepper: React.FC<TicketFlowStepperProps> = ({
         {canEdit && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                Jump to Stage (1-Click Advance):
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                <span>Jump to Stage (1-Click Advance):</span>
               </span>
               <span className="text-[11px] font-bold text-slate-500">
                 Stage {currentStep.stepNumber} of 11 Active
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5">
               {FLOW_STEPS.map((s, idx) => {
                 const isCurrent = currentNormalized === s.key;
                 const isCompleted = currentIndex > idx;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Pin, 
   Edit3, 
@@ -6,7 +6,10 @@ import {
   AlertTriangle, 
   User as UserIcon, 
   Clock, 
-  Plus
+  Plus,
+  History,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStickyNote, StickyNoteColor } from '../types';
@@ -77,6 +80,16 @@ const COLOR_STYLES: Record<StickyNoteColor, {
 };
 
 /**
+ * Cleanly format ISO timestamp into date and time
+ */
+export const formatStickyDateTime = (isoString?: string): string => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+};
+
+/**
  * Full Sticky Note Banner rendered at the very top of Repair Order Details / Workflow views
  */
 export const ROStickyNoteBanner: React.FC<ROStickyNoteBannerProps> = ({
@@ -86,6 +99,7 @@ export const ROStickyNoteBanner: React.FC<ROStickyNoteBannerProps> = ({
   allowAdd = true,
 }) => {
   const { openStickyNoteModal, removeROStickyNote } = useApp();
+  const [showHistory, setShowHistory] = useState(false);
 
   if (!stickyNote) {
     if (!allowAdd) return null;
@@ -94,7 +108,7 @@ export const ROStickyNoteBanner: React.FC<ROStickyNoteBannerProps> = ({
         <button
           type="button"
           onClick={() => openStickyNoteModal(roId)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 hover:border-amber-300 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer group"
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs text-xs font-bold transition-all cursor-pointer hover:shadow-xs active:scale-98"
           title="Pin a digital sticky note to this Repair Order"
         >
           <Pin className="w-3.5 h-3.5 text-amber-600 fill-amber-500 rotate-45 group-hover:scale-110 transition-transform" />
@@ -106,6 +120,16 @@ export const ROStickyNoteBanner: React.FC<ROStickyNoteBannerProps> = ({
 
   const colorKey = stickyNote.color || 'yellow';
   const style = COLOR_STYLES[colorKey] || COLOR_STYLES.yellow;
+
+  const isEdited = Boolean(
+    stickyNote.lastEditedAt || 
+    (stickyNote.editHistory && stickyNote.editHistory.length > 0) ||
+    (stickyNote.updatedAt && stickyNote.updatedAt !== stickyNote.createdAt)
+  );
+
+  const editTimestamp = stickyNote.lastEditedAt || stickyNote.updatedAt;
+  const editorName = stickyNote.lastEditedByName || stickyNote.authorName;
+  const editCount = stickyNote.editHistory?.length || (isEdited ? 1 : 0);
 
   return (
     <div 
@@ -149,33 +173,90 @@ export const ROStickyNoteBanner: React.FC<ROStickyNoteBannerProps> = ({
         </div>
       </div>
 
-      {/* Note Content */}
+      {/* Note Content - Full text without truncation */}
       <div className="p-3">
-        <p className={`text-sm font-semibold leading-relaxed whitespace-pre-wrap ${style.text}`}>
+        <p className={`text-sm font-semibold leading-relaxed whitespace-pre-wrap break-words ${style.text}`}>
           {stickyNote.text}
         </p>
 
-        {/* Footer Meta */}
-        <div className="mt-2.5 pt-2 border-t border-black/5 flex flex-wrap items-center justify-between text-[11px] opacity-75 gap-y-1">
-          <div className="flex items-center gap-1.5">
-            <UserIcon className="w-3 h-3" />
-            <span>
-              Pinned by <strong className="font-bold">{stickyNote.authorName}</strong>
-              {stickyNote.authorRole && (
-                <span className="ml-1 opacity-75">
-                  ({stickyNote.authorRole.replace(/_/g, ' ')})
+        {/* Footer Meta: Original Timestamp + Edit Timestamp */}
+        <div className="mt-2.5 pt-2 border-t border-black/10 space-y-1.5 text-[11px]">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 opacity-80">
+            {/* Created Timestamp */}
+            <div className="flex items-center gap-1.5">
+              <UserIcon className="w-3 h-3 text-slate-700 shrink-0" />
+              <span>
+                Pinned by <strong className="font-bold text-slate-900">{stickyNote.authorName}</strong>
+                {stickyNote.authorRole && (
+                  <span className="ml-1 opacity-75">
+                    ({stickyNote.authorRole.replace(/_/g, ' ')})
+                  </span>
+                )}
+              </span>
+              <span className="opacity-40">•</span>
+              <span className="flex items-center gap-1 text-slate-700">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>{formatStickyDateTime(stickyNote.createdAt)}</span>
+              </span>
+            </div>
+
+            {/* Edited Badge & Timestamp */}
+            {isEdited && editTimestamp && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-black/10 text-slate-900 font-extrabold text-[10px] tracking-wide">
+                  <Edit3 className="w-2.5 h-2.5 text-slate-700" />
+                  <span>Edited {formatStickyDateTime(editTimestamp)}</span>
+                  {editorName && (
+                    <span className="font-normal opacity-85">by {editorName}</span>
+                  )}
+                  {editCount > 1 && (
+                    <span className="ml-0.5 px-1 rounded-full bg-slate-800 text-white text-[9px] font-black">
+                      {editCount}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
+
+                {stickyNote.editHistory && stickyNote.editHistory.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory(prev => !prev)}
+                    className="text-[10px] font-bold text-blue-700 hover:text-blue-900 underline flex items-center gap-0.5 cursor-pointer ml-1"
+                  >
+                    <History className="w-2.5 h-2.5" />
+                    <span>{showHistory ? 'Hide edits' : `View ${stickyNote.editHistory.length} edits`}</span>
+                    {showHistory ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>
-              {new Date(stickyNote.updatedAt || stickyNote.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} at{' '}
-              {new Date(stickyNote.updatedAt || stickyNote.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          </div>
+          {/* Expanded Edit History Log */}
+          {showHistory && stickyNote.editHistory && stickyNote.editHistory.length > 0 && (
+            <div className="mt-2 p-2 rounded-lg bg-black/5 border border-black/10 space-y-1.5 animate-in fade-in duration-150">
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                <History className="w-3 h-3" />
+                <span>Sticky Note Edit History</span>
+              </div>
+              <div className="space-y-1 divide-y divide-black/5">
+                <div className="text-[10px] text-slate-600 pt-0.5">
+                  <span className="font-bold text-slate-800">Original Pin:</span> {formatStickyDateTime(stickyNote.createdAt)} by {stickyNote.authorName}
+                </div>
+                {stickyNote.editHistory.map((item, idx) => (
+                  <div key={idx} className="text-[10px] text-slate-700 pt-1 flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-slate-900">Edit #{idx + 1}:</span> {formatStickyDateTime(item.editedAt)} by <span className="font-semibold">{item.editedByName}</span>
+                      {item.previousText && (
+                        <div className="text-[9px] text-slate-500 italic mt-0.5 line-clamp-1">
+                          Previous: "{item.previousText}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -183,7 +264,8 @@ export const ROStickyNoteBanner: React.FC<ROStickyNoteBannerProps> = ({
 };
 
 /**
- * Compact Sticky Note Chip for Kanban and Workstation cards
+ * Sticky Note Component for Small Cards (Kanban, Workstations, Tech & Parts lists)
+ * Fully displays the whole note without truncation, with original timestamp + edit timestamp
  */
 export const ROStickyNoteChip: React.FC<{
   roId: string;
@@ -198,6 +280,16 @@ export const ROStickyNoteChip: React.FC<{
   const colorKey = stickyNote.color || 'yellow';
   const style = COLOR_STYLES[colorKey] || COLOR_STYLES.yellow;
 
+  const isEdited = Boolean(
+    stickyNote.lastEditedAt || 
+    (stickyNote.editHistory && stickyNote.editHistory.length > 0) ||
+    (stickyNote.updatedAt && stickyNote.updatedAt !== stickyNote.createdAt)
+  );
+
+  const editTimestamp = stickyNote.lastEditedAt || stickyNote.updatedAt;
+  const editorName = stickyNote.lastEditedByName || stickyNote.authorName;
+  const editCount = stickyNote.editHistory?.length || (isEdited ? 1 : 0);
+
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onClick) {
@@ -208,20 +300,67 @@ export const ROStickyNoteChip: React.FC<{
   };
 
   return (
-    <button
-      type="button"
+    <div
       onClick={handleClick}
-      className={`group/chip relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-left transition-all hover:scale-[1.02] shadow-2xs cursor-pointer ${style.badge} ${
-        stickyNote.isUrgent ? 'ring-1.5 ring-rose-500 animate-pulse' : ''
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick(e as any);
+        }
+      }}
+      className={`group/chip relative w-full text-left rounded-lg border-2 p-2.5 transition-all hover:scale-[1.01] hover:shadow-xs shadow-2xs cursor-pointer ${style.badge} ${
+        stickyNote.isUrgent ? 'ring-2 ring-rose-500 animate-pulse' : ''
       } ${className}`}
-      title={`Sticky Note: "${stickyNote.text}" (Click to view/edit)`}
+      title={`Sticky Note (Click to view/edit)`}
     >
-      <Pin className={`w-3 h-3 shrink-0 ${style.pin} rotate-45 group-hover/chip:rotate-12 transition-transform`} />
-      <span className="text-[11px] font-bold truncate max-w-[200px]">
-        {stickyNote.isUrgent && <span className="text-rose-700 mr-1">[URGENT]</span>}
+      {/* Header bar of sticky note on small card */}
+      <div className="flex items-center justify-between gap-1.5 mb-1.5 pb-1 border-b border-black/10">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Pin className={`w-3.5 h-3.5 shrink-0 ${style.pin} rotate-45 group-hover/chip:rotate-12 transition-transform`} />
+          <span className="text-[10px] font-black uppercase tracking-wider opacity-90 truncate">
+            {stickyNote.authorName ? `Note • ${stickyNote.authorName}` : 'STICKY NOTE'}
+          </span>
+          {stickyNote.isUrgent && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider">
+              <AlertTriangle className="w-2.5 h-2.5" />
+              URGENT
+            </span>
+          )}
+        </div>
+        <span className="text-[9px] opacity-75 font-bold group-hover/chip:opacity-100 flex items-center gap-0.5 shrink-0 text-slate-800">
+          <Edit3 className="w-2.5 h-2.5" />
+          <span>Edit</span>
+        </span>
+      </div>
+
+      {/* WHOLE NOTE ON SMALL CARD: Display the entire note without any line-clamp or truncation */}
+      <p className={`text-xs font-bold leading-snug whitespace-pre-wrap break-words ${style.text}`}>
         {stickyNote.text}
-      </span>
-    </button>
+      </p>
+
+      {/* FOOTER TIMESTAMPS: Created timestamp AND edit timestamp when note has been edited */}
+      <div className="mt-2 pt-1.5 border-t border-black/10 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] opacity-80">
+        {/* Original Pinned Timestamp */}
+        <span className="flex items-center gap-1 font-medium text-slate-800">
+          <Clock className="w-2.5 h-2.5 shrink-0 text-slate-600" />
+          <span>Pinned: {formatStickyDateTime(stickyNote.createdAt)}</span>
+        </span>
+
+        {/* Edit Timestamp (Added as an edit when edited) */}
+        {isEdited && editTimestamp && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/10 text-slate-900 font-bold text-[9px]">
+            <Edit3 className="w-2.5 h-2.5 text-slate-700 shrink-0" />
+            <span>
+              Edited: {formatStickyDateTime(editTimestamp)}
+              {editorName ? ` by ${editorName.split(' ')[0]}` : ''}
+              {editCount > 1 ? ` (${editCount})` : ''}
+            </span>
+          </span>
+        )}
+      </div>
+    </div>
   );
 };
 

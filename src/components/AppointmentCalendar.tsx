@@ -67,7 +67,8 @@ const QUICK_SERVICE_CHIPS = [
   'Factory Scheduled Maintenance',
   'Transmission Fluid Service',
   'State Safety & Emissions Inspection',
-  'Recall Campaign / Software Flash'
+  'Recall Campaign / Software Flash',
+  'Staff / Tech Training Block'
 ];
 
 const STATUS_CONFIG: Record<AppointmentStatus, {
@@ -179,7 +180,9 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
     convertAppointmentToRO, 
     repairOrders, 
     setSelectedRO,
-    shopName
+    shopName,
+    setIsStaffCalendarOpen,
+    setIsAppointmentCalendarOpen
   } = useApp();
 
   const isManager = currentUser.role === 'SERVICE_MANAGER';
@@ -197,6 +200,8 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
 
   // Modals
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [isTrainingModalOpen, setIsTrainingModalOpen] = useState(false);
+  const [trainingTargetDate, setTrainingTargetDate] = useState<string | null>(null);
   const [editingAppointment, setEditingAppointment] = useState<ServiceAppointment | null>(null);
   const [selectedDayInspectDate, setSelectedDayInspectDate] = useState<string | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -492,6 +497,42 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
     setIsBookModalOpen(true);
   };
 
+  // Open modal pre-configured for a Training Session / Workshop Block
+  const handleOpenTrainingBlock = (defaultDate?: string, defaultTime?: string) => {
+    setEditingAppointment(null);
+    setFormCustomerName('Shop Training / Certification');
+    setFormCustomerPhone('(555) 010-0900');
+    setFormCustomerEmail('');
+    setFormVehicleYear(new Date().getFullYear());
+    setFormVehicleMake('Training');
+    setFormVehicleModel('Bay Workshop');
+    setFormVehicleVin('');
+    setFormVehicleMileage('');
+    setFormLicensePlate('TRAIN');
+    setFormAppointmentDate(defaultDate || todayStr);
+    setFormAppointmentTime(defaultTime || '09:00 AM');
+    setFormDurationMinutes(120);
+    setFormAdvisorId(isAdvisor ? currentUser.id : (serviceWriters[0]?.id || currentUser.id));
+    setFormPreferredTechId('');
+    setFormTransportationType('WAITER');
+    setFormConcerns(['Staff / Tech Training Block']);
+    setFormCustomConcernInput('');
+    setFormNotes('Technician factory certification / team training workshop session');
+    setFormStatus('CONFIRMED');
+    setFormError(null);
+    setIsBookModalOpen(true);
+  };
+
+  // Open Training Flow: If manager, show destination options; if advisor, open training block booking
+  const handleOpenTraining = (targetDate?: string) => {
+    setTrainingTargetDate(targetDate || null);
+    if (currentUser.role === 'SERVICE_MANAGER') {
+      setIsTrainingModalOpen(true);
+    } else {
+      handleOpenTrainingBlock(targetDate);
+    }
+  };
+
   // Open modal to edit an existing appointment
   const handleOpenEditModal = (appt: ServiceAppointment) => {
     setEditingAppointment(appt);
@@ -714,6 +755,16 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
           >
             <Printer className="w-3.5 h-3.5 text-slate-600" />
             <span className="hidden sm:inline">Print Schedule</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenTraining()}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+            title="Schedule Training / Staff Training on Calendar"
+          >
+            <span>🎓</span>
+            <span>Training</span>
           </button>
 
           <button
@@ -1031,14 +1082,26 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
                   </div>
 
                   {/* Hover Quick Action */}
-                  <div className="pt-1 opacity-0 group-hover:opacity-100 transition-opacity flex justify-end">
+                  <div className="pt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenTraining(cell.dateStr);
+                      }}
+                      className="text-[9px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 shadow-2xs"
+                      title="Schedule Training on this day"
+                    >
+                      <span>🎓</span>
+                      <span>Train</span>
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenBookModal(cell.dateStr);
                       }}
-                      className="text-[9px] font-bold text-purple-600 hover:text-purple-800 flex items-center gap-0.5 bg-white px-1 py-0.5 rounded border border-purple-200 shadow-2xs"
+                      className="text-[9px] font-bold text-purple-600 hover:text-purple-800 flex items-center gap-0.5 bg-white px-1.5 py-0.5 rounded border border-purple-200 shadow-2xs"
                     >
                       <Plus className="w-2.5 h-2.5" />
                       <span>Book</span>
@@ -1176,14 +1239,25 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
             <div className="text-xs font-bold text-slate-700">
               Hour-by-Hour Service Drive Schedule for <span className="font-extrabold text-slate-900">{selectedDateStr}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => handleOpenBookModal(selectedDateStr)}
-              className="px-2.5 py-1 bg-purple-600 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Book Appointment</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleOpenTraining(selectedDateStr)}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer"
+                title="Schedule Training block on this date"
+              >
+                <span>🎓</span>
+                <span>Training</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenBookModal(selectedDateStr)}
+                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Book Appointment</span>
+              </button>
+            </div>
           </div>
 
           <div className="divide-y divide-slate-100">
@@ -1457,9 +1531,20 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
                 <button
                   type="button"
                   onClick={() => {
+                    handleOpenTraining(selectedDayInspectDate);
+                  }}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer"
+                  title="Schedule Training on this date"
+                >
+                  <span>🎓</span>
+                  <span>+ Training</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     handleOpenBookModal(selectedDayInspectDate);
                   }}
-                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1"
+                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Vehicle</span>
@@ -1480,14 +1565,24 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
                 <div className="text-center py-10 text-slate-400 space-y-2">
                   <Clock className="w-8 h-8 mx-auto text-slate-300" />
                   <p className="text-sm font-bold text-slate-600">No appointments scheduled for this date</p>
-                  <p className="text-xs text-slate-400">Click below to schedule a service visit.</p>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenBookModal(selectedDayInspectDate)}
-                    className="mt-2 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg shadow-xs"
-                  >
-                    + Book Appointment for {selectedDayInspectDate}
-                  </button>
+                  <p className="text-xs text-slate-400">Click below to schedule a service visit or training block.</p>
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTraining(selectedDayInspectDate)}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>🎓</span>
+                      <span>Schedule Training</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBookModal(selectedDayInspectDate)}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                    >
+                      + Book Appointment
+                    </button>
+                  </div>
                 </div>
               ) : (
                 selectedDayAppointments.map((appt) => {
@@ -2295,6 +2390,95 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({ onBack
           document.body
         )}
         </>
+      )}
+
+      {/* ======================================================== */}
+      {/* 5. TRAINING DESTINATION MODAL (Service Managers) */}
+      {/* ======================================================== */}
+      {isTrainingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-2xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600/30 text-indigo-400 flex items-center justify-center text-lg border border-indigo-500/30">
+                  🎓
+                </div>
+                <div>
+                  <h3 className="text-base font-black">Schedule Training</h3>
+                  <p className="text-xs text-slate-300">Choose training calendar destination</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTrainingModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrainingModalOpen(false);
+                  setIsAppointmentCalendarOpen(false);
+                  setIsStaffCalendarOpen(true);
+                }}
+                className="w-full p-4 rounded-xl border-2 border-indigo-200 hover:border-indigo-500 bg-indigo-50/60 hover:bg-indigo-50 text-left transition-all group cursor-pointer shadow-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform shrink-0">
+                    👥
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-black text-slate-900 group-hover:text-indigo-950">
+                      Staff Attendance & Training Calendar
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Record employee training, factory classes, and ASE certification days.
+                    </p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-indigo-600 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0" />
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrainingModalOpen(false);
+                  handleOpenTrainingBlock(trainingTargetDate || undefined);
+                }}
+                className="w-full p-4 rounded-xl border-2 border-purple-200 hover:border-purple-500 bg-purple-50/60 hover:bg-purple-50 text-left transition-all group cursor-pointer shadow-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform shrink-0">
+                    🚗
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-black text-slate-900 group-hover:text-purple-950">
+                      Service Drive & Bay Training Block
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Reserve appointment schedule slots and bays for hands-on vehicle training.
+                    </p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-purple-600 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0" />
+                </div>
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsTrainingModalOpen(false)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
