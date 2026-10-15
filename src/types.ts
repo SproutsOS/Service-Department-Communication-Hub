@@ -653,8 +653,9 @@ export interface ROStickyNote {
 
 export interface SpecialPartNumber {
   id: string;
-  name: string;        // Name of part
+  category: string;    // Category (e.g. "Oil Filters", "Drain Plugs & Gaskets", "Batteries")
   partNumber: string;  // Part number
+  name?: string;       // Optional part name / description
   createdAt?: string;
   updatedAt?: string;
 }

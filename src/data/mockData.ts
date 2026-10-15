@@ -449,9 +449,9 @@ export function normalizeROStatus(status: string): string {
 }
 
 export const INITIAL_SPECIAL_PARTS: SpecialPartNumber[] = [
-  { id: 'sp_1', name: '3.6L / 3.2L Oil Filter Cartridge', partNumber: '68191349AC', createdAt: '2026-01-01T08:00:00Z' },
-  { id: 'sp_2', name: '5.7L Hemi Spin-On Oil Filter', partNumber: '04884899AC', createdAt: '2026-01-01T08:00:00Z' },
-  { id: 'sp_3', name: 'Oil Pan Drain Plug Gasket 14mm', partNumber: '6506214AA', createdAt: '2026-01-01T08:00:00Z' },
-  { id: 'sp_4', name: 'Cabin Air Filter (Grand Cherokee / Durango)', partNumber: '68079487AB', createdAt: '2026-01-01T08:00:00Z' },
-  { id: 'sp_5', name: 'Key Fob Battery (CR2032 3V Lithium)', partNumber: 'CR2032-OEM', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'sp_1', category: 'Oil Filters', name: '3.6L / 3.2L Oil Filter Cartridge', partNumber: '68191349AC', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'sp_2', category: 'Oil Filters', name: '5.7L Hemi Spin-On Oil Filter', partNumber: '04884899AC', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'sp_3', category: 'Drain Plugs & Gaskets', name: 'Oil Pan Drain Plug Gasket 14mm', partNumber: '6506214AA', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'sp_4', category: 'Cabin & Air Filters', name: 'Cabin Air Filter (Grand Cherokee / Durango)', partNumber: '68079487AB', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'sp_5', category: 'Batteries & Key Fobs', name: 'Key Fob Battery (CR2032 3V Lithium)', partNumber: 'CR2032-OEM', createdAt: '2026-01-01T08:00:00Z' },
 ];

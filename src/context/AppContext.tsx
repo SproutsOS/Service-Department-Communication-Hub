@@ -386,8 +386,8 @@ interface AppContextType {
 
   // Special & Frequent Part Numbers (Service Manager Quick Reference)
   specialParts: SpecialPartNumber[];
-  addSpecialPart: (name: string, partNumber: string) => void;
-  updateSpecialPart: (id: string, name: string, partNumber: string) => void;
+  addSpecialPart: (category: string, partNumber: string, name?: string) => void;
+  updateSpecialPart: (id: string, category: string, partNumber: string, name?: string) => void;
   deleteSpecialPart: (id: string) => void;
   isSpecialPartsModalOpen: boolean;
   setIsSpecialPartsModalOpen: (open: boolean) => void;
@@ -687,7 +687,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cached = localStorage.getItem(STORAGE_KEY_SPECIAL_PARTS);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((p: any, idx: number) => ({
+            id: p.id || `sp_${idx}`,
+            category: p.category || 'General',
+            partNumber: p.partNumber || '',
+            name: p.name || '',
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+          }));
+        }
       }
     } catch {}
     return INITIAL_SPECIAL_PARTS;
@@ -5551,14 +5560,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [appointments, repairOrders, currentUser, createRepairOrder, setSelectedRO, updateAppointment]);
 
   // Special Part Numbers Actions (Service Manager)
-  const addSpecialPart = useCallback((name: string, partNumber: string) => {
-    const cleanName = (name || '').trim();
+  const addSpecialPart = useCallback((category: string, partNumber: string, name?: string) => {
+    const cleanCategory = (category || '').trim();
     const cleanPn = (partNumber || '').trim().toUpperCase();
-    if (!cleanName || !cleanPn) return;
+    const cleanName = (name || '').trim();
+    if (!cleanCategory || !cleanPn) return;
     const newPart: SpecialPartNumber = {
       id: `sp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: cleanName,
+      category: cleanCategory,
       partNumber: cleanPn,
+      name: cleanName || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -5572,12 +5583,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  const updateSpecialPart = useCallback((id: string, name: string, partNumber: string) => {
-    const cleanName = (name || '').trim();
+  const updateSpecialPart = useCallback((id: string, category: string, partNumber: string, name?: string) => {
+    const cleanCategory = (category || '').trim();
     const cleanPn = (partNumber || '').trim().toUpperCase();
-    if (!cleanName || !cleanPn) return;
+    const cleanName = (name || '').trim();
+    if (!cleanCategory || !cleanPn) return;
     setSpecialParts(prev => {
-      const updated = prev.map(p => p.id === id ? { ...p, name: cleanName, partNumber: cleanPn, updatedAt: new Date().toISOString() } : p);
+      const updated = prev.map(p => p.id === id ? { 
+        ...p, 
+        category: cleanCategory, 
+        partNumber: cleanPn, 
+        name: cleanName || undefined, 
+        updatedAt: new Date().toISOString() 
+      } : p);
       try {
         localStorage.setItem(STORAGE_KEY_SPECIAL_PARTS, JSON.stringify(updated));
       } catch {}
