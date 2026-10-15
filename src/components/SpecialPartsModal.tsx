@@ -12,7 +12,9 @@ import {
   Bookmark,
   Layers,
   Sparkles,
-  Filter
+  Filter,
+  Phone,
+  KeyRound
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SpecialPartNumber } from '../types';
@@ -37,7 +39,11 @@ export const SpecialPartsModal: React.FC = () => {
     specialParts, 
     addSpecialPart, 
     updateSpecialPart, 
-    deleteSpecialPart 
+    deleteSpecialPart,
+    openImportantNumbersModal,
+    openManagerPasswordsModal,
+    importantNumbers,
+    managerPasswords
   } = useApp();
 
   const [newCategory, setNewCategory] = useState('');
@@ -150,14 +156,73 @@ export const SpecialPartsModal: React.FC = () => {
     }
   };
 
+  const handleSwitchTab = (tab: 'parts' | 'numbers' | 'passwords') => {
+    if (tab === 'numbers') {
+      closeSpecialPartsModal();
+      openImportantNumbersModal();
+    } else if (tab === 'passwords') {
+      closeSpecialPartsModal();
+      openManagerPasswordsModal();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div 
         className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 max-h-[92vh] animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
+        {/* Navigation Tabs Bar */}
+        <div className="bg-slate-950 px-5 pt-3 pb-1 border-b border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800 text-xs">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold shadow-xs cursor-default"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-slate-950 fill-slate-950" />
+              <span>Special Parts</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-900 text-amber-300 font-mono">
+                {specialParts.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('numbers')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 font-semibold transition-colors cursor-pointer"
+            >
+              <Phone className="w-3.5 h-3.5 text-blue-400" />
+              <span>Important Numbers</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-blue-300 font-mono">
+                {importantNumbers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('passwords')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 font-semibold transition-colors cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Passwords</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-emerald-300 font-mono">
+                {managerPasswords.length}
+              </span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeSpecialPartsModal}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer ml-auto"
+            title="Close directory"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
         {/* Modal Header */}
-        <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0 border-b border-slate-800">
+        <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shadow-sm">
               <Bookmark className="w-5 h-5 fill-slate-950" />
@@ -176,15 +241,6 @@ export const SpecialPartsModal: React.FC = () => {
               </p>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={closeSpecialPartsModal}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Close special parts directory"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Content Body */}

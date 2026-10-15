@@ -90,6 +90,8 @@ export interface ShopSettings {
   staffLeaveEntries?: any[];
   appointments?: any[];
   specialParts?: any[];
+  importantNumbers?: any[];
+  managerPasswords?: any[];
   updatedAt?: string;
 }
 

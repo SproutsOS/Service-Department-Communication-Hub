@@ -26,6 +26,8 @@ import { ManagerStaffCalendar } from './components/ManagerStaffCalendar';
 import { AppointmentCalendar } from './components/AppointmentCalendar';
 import { QuoteBuilderModal } from './components/QuoteBuilderModal';
 import { SpecialPartsModal } from './components/SpecialPartsModal';
+import { ImportantNumbersModal } from './components/ImportantNumbersModal';
+import { ManagerPasswordsModal } from './components/ManagerPasswordsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -960,6 +962,8 @@ const MainContent: React.FC = () => {
       <ArchivedROsModal />
       <ROStickyNoteModal />
       <SpecialPartsModal />
+      <ImportantNumbersModal />
+      <ManagerPasswordsModal />
       <ErrorBoundary fallbackTitle="Quote Builder Error">
         <QuoteBuilderModal 
           isOpen={isQuoteBuilderOpen} 

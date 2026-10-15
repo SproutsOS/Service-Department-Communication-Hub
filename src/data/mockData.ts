@@ -1,4 +1,4 @@
-import { User, RepairOrder, SpecialPartNumber } from '../types';
+import { User, RepairOrder, SpecialPartNumber, ImportantNumberEntry, ManagerPasswordEntry } from '../types';
 
 export const STANDARD_JOB_TITLES: string[] = [
   'Oil Bay',
@@ -455,3 +455,19 @@ export const INITIAL_SPECIAL_PARTS: SpecialPartNumber[] = [
   { id: 'sp_4', category: 'Cabin & Air Filters', name: 'Cabin Air Filter (Grand Cherokee / Durango)', partNumber: '68079487AB', createdAt: '2026-01-01T08:00:00Z' },
   { id: 'sp_5', category: 'Batteries & Key Fobs', name: 'Key Fob Battery (CR2032 3V Lithium)', partNumber: 'CR2032-OEM', createdAt: '2026-01-01T08:00:00Z' },
 ];
+
+export const INITIAL_IMPORTANT_NUMBERS: ImportantNumberEntry[] = [
+  { id: 'in_1', category: 'Warranty Hotlines', name: 'Mopar Digital Warranty Helpdesk', number: '1-800-442-2666', notes: 'Claims & Prior Authorization (8am - 8pm EST)', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'in_2', category: 'Diagnostic Support', name: 'WiTECH 2.0 Diagnostic Helpdesk', number: '1-888-948-3241', notes: 'Micropod II registration & software help', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'in_3', category: 'Parts & Couriers', name: 'Local Parts Depot Courier Dispatch', number: '(555) 321-4490', notes: 'Daily afternoon run cutoff at 2:30 PM', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'in_4', category: 'Towing & Sublet', name: 'Dealership Priority Flatbed Towing', number: '(555) 882-9100', notes: 'Account #9042, 24/7 Service Drive dispatch', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'in_5', category: 'Sublet Vendors', name: 'SafeGlass Mobile Windshield Sublet', number: '(555) 774-1299', notes: 'Camera ADAS calibration on site', createdAt: '2026-01-01T08:00:00Z' },
+];
+
+export const INITIAL_MANAGER_PASSWORDS: ManagerPasswordEntry[] = [
+  { id: 'pw_1', category: 'OEM Portals', title: 'DealerConnect (Stellantis / Mopar)', username: 'S9042_MGR', password: 'DC*Service2026!', websiteUrl: 'https://dealerconnect.chrysler.com', notes: 'Service & Parts administration portal', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'pw_2', category: 'Diagnostic Tools', title: 'WiTECH 2.0 Cloud Diagnostic', username: 'wo_service_lead', password: 'WiTech#Pass4491', websiteUrl: 'https://login.witechcloud.com', notes: 'Vehicle flash and ECU configuration', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'pw_3', category: 'Estimating & Labor', title: 'ProDemand / Mitchell 1', username: 'woolwine_advisor', password: 'ProDemand2026!', websiteUrl: 'https://www.prodemand.com', notes: 'Flat rate labor times & OEM procedures', createdAt: '2026-01-01T08:00:00Z' },
+  { id: 'pw_4', category: 'Tire Program', title: 'Mopar National Tire Program', username: 'woolwine_tires', password: 'TireOrder#9042', websiteUrl: 'https://www.tirerackdealer.com', notes: 'OEM tire price match & distributor stock', createdAt: '2026-01-01T08:00:00Z' },
+];
+

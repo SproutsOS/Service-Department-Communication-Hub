@@ -660,4 +660,26 @@ export interface SpecialPartNumber {
   updatedAt?: string;
 }
 
+export interface ImportantNumberEntry {
+  id: string;
+  category: string;    // Category (e.g. "Warranty Hotlines", "Parts Couriers", "Towing", "Sublet")
+  name: string;        // Name of contact, department, or company (e.g. "Mopar Tech Support")
+  number: string;      // Phone, hotline, or account number (e.g. "1-800-888-9922")
+  notes?: string;      // Optional notes or extension
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ManagerPasswordEntry {
+  id: string;
+  category: string;    // Category (e.g. "OEM Portals", "Diagnostic Tools", "Parts Ordering")
+  title: string;       // Name of system or portal (e.g. "DealerConnect", "ProDemand")
+  username: string;    // Login username / ID
+  password: string;    // Stored password
+  websiteUrl?: string; // Optional URL / login link
+  notes?: string;      // Optional security notes or hints
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 

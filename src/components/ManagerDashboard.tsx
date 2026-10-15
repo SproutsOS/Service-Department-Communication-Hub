@@ -28,7 +28,9 @@ import {
   Bell,
   X,
   Bookmark,
-  Tag
+  Tag,
+  Phone,
+  KeyRound
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -63,6 +65,10 @@ export const ManagerDashboard: React.FC = () => {
     setActiveRoleView,
     specialParts,
     openSpecialPartsModal,
+    importantNumbers,
+    openImportantNumbersModal,
+    managerPasswords,
+    openManagerPasswordsModal,
   } = useApp();
 
   const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);

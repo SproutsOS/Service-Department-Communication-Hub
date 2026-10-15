@@ -83,6 +83,8 @@
         "shopName": { "type": "string" },
         "isSetupCompleted": { "type": "boolean" },
         "specialParts": { "type": "array" },
+        "importantNumbers": { "type": "array" },
+        "managerPasswords": { "type": "array" },
         "updatedAt": { "type": "string" }
       },
       "required": ["shopName"]

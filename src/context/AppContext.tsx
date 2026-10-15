@@ -41,14 +41,23 @@ import {
   RollToROParams,
   ROStickyNote,
   StickyNoteColor,
-  SpecialPartNumber
+  SpecialPartNumber,
+  ImportantNumberEntry,
+  ManagerPasswordEntry
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
 import { getInitialServiceAppointments } from '../data/defaultAppointments';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
-import { INITIAL_USERS, INITIAL_REPAIR_ORDERS, STATUS_CONFIG, INITIAL_SPECIAL_PARTS } from '../data/mockData';
+import { 
+  INITIAL_USERS, 
+  INITIAL_REPAIR_ORDERS, 
+  STATUS_CONFIG, 
+  INITIAL_SPECIAL_PARTS,
+  INITIAL_IMPORTANT_NUMBERS,
+  INITIAL_MANAGER_PASSWORDS 
+} from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
   subscribeToRepairOrders,
@@ -393,6 +402,26 @@ interface AppContextType {
   setIsSpecialPartsModalOpen: (open: boolean) => void;
   openSpecialPartsModal: () => void;
   closeSpecialPartsModal: () => void;
+
+  // Important Numbers Directory (Service Manager Quick Reference)
+  importantNumbers: ImportantNumberEntry[];
+  addImportantNumber: (category: string, name: string, number: string, notes?: string) => void;
+  updateImportantNumber: (id: string, category: string, name: string, number: string, notes?: string) => void;
+  deleteImportantNumber: (id: string) => void;
+  isImportantNumbersModalOpen: boolean;
+  setIsImportantNumbersModalOpen: (open: boolean) => void;
+  openImportantNumbersModal: () => void;
+  closeImportantNumbersModal: () => void;
+
+  // Passwords & Portals Directory (Service Manager Quick Reference)
+  managerPasswords: ManagerPasswordEntry[];
+  addManagerPassword: (category: string, title: string, username: string, password: string, websiteUrl?: string, notes?: string) => void;
+  updateManagerPassword: (id: string, category: string, title: string, username: string, password: string, websiteUrl?: string, notes?: string) => void;
+  deleteManagerPassword: (id: string) => void;
+  isManagerPasswordsModalOpen: boolean;
+  setIsManagerPasswordsModalOpen: (open: boolean) => void;
+  openManagerPasswordsModal: () => void;
+  closeManagerPasswordsModal: () => void;
 }
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
@@ -704,6 +733,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSpecialPartsModalOpen, setIsSpecialPartsModalOpen] = useState(false);
   const openSpecialPartsModal = useCallback(() => setIsSpecialPartsModalOpen(true), []);
   const closeSpecialPartsModal = useCallback(() => setIsSpecialPartsModalOpen(false), []);
+
+  // Important Numbers Directory (Service Manager Quick Reference)
+  const STORAGE_KEY_IMPORTANT_NUMBERS = 'dealership_important_numbers';
+  const [importantNumbers, setImportantNumbers] = useState<ImportantNumberEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_IMPORTANT_NUMBERS);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_IMPORTANT_NUMBERS;
+  });
+  const [isImportantNumbersModalOpen, setIsImportantNumbersModalOpen] = useState(false);
+  const openImportantNumbersModal = useCallback(() => setIsImportantNumbersModalOpen(true), []);
+  const closeImportantNumbersModal = useCallback(() => setIsImportantNumbersModalOpen(false), []);
+
+  // Manager Passwords Directory (Service Manager Quick Reference)
+  const STORAGE_KEY_MANAGER_PASSWORDS = 'dealership_manager_passwords';
+  const [managerPasswords, setManagerPasswords] = useState<ManagerPasswordEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_MANAGER_PASSWORDS);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_MANAGER_PASSWORDS;
+  });
+  const [isManagerPasswordsModalOpen, setIsManagerPasswordsModalOpen] = useState(false);
+  const openManagerPasswordsModal = useCallback(() => setIsManagerPasswordsModalOpen(true), []);
+  const closeManagerPasswordsModal = useCallback(() => setIsManagerPasswordsModalOpen(false), []);
 
   // RO Change Alerts & Red Bell Notifications
   const [roChangeAlerts, setRoChangeAlerts] = useState<Record<string, ROChangeAlert>>(() => {
@@ -1242,6 +1303,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setSpecialParts(cloudSettings.specialParts);
           try {
             localStorage.setItem(STORAGE_KEY_SPECIAL_PARTS, JSON.stringify(cloudSettings.specialParts));
+          } catch {}
+        }
+        if (Array.isArray(cloudSettings.importantNumbers)) {
+          setImportantNumbers(cloudSettings.importantNumbers);
+          try {
+            localStorage.setItem(STORAGE_KEY_IMPORTANT_NUMBERS, JSON.stringify(cloudSettings.importantNumbers));
+          } catch {}
+        }
+        if (Array.isArray(cloudSettings.managerPasswords)) {
+          setManagerPasswords(cloudSettings.managerPasswords);
+          try {
+            localStorage.setItem(STORAGE_KEY_MANAGER_PASSWORDS, JSON.stringify(cloudSettings.managerPasswords));
           } catch {}
         }
       }
@@ -5615,6 +5688,134 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  // Important Numbers Actions (Service Manager)
+  const addImportantNumber = useCallback((category: string, name: string, number: string, notes?: string) => {
+    const cleanCategory = (category || '').trim();
+    const cleanName = (name || '').trim();
+    const cleanNum = (number || '').trim();
+    const cleanNotes = (notes || '').trim();
+    if (!cleanCategory || !cleanNum) return;
+    const newEntry: ImportantNumberEntry = {
+      id: `in_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      category: cleanCategory,
+      name: cleanName || cleanCategory,
+      number: cleanNum,
+      notes: cleanNotes || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setImportantNumbers(prev => {
+      const updated = [newEntry, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_IMPORTANT_NUMBERS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ importantNumbers: updated });
+      return updated;
+    });
+  }, []);
+
+  const updateImportantNumber = useCallback((id: string, category: string, name: string, number: string, notes?: string) => {
+    const cleanCategory = (category || '').trim();
+    const cleanName = (name || '').trim();
+    const cleanNum = (number || '').trim();
+    const cleanNotes = (notes || '').trim();
+    if (!cleanCategory || !cleanNum) return;
+    setImportantNumbers(prev => {
+      const updated = prev.map(item => item.id === id ? {
+        ...item,
+        category: cleanCategory,
+        name: cleanName || cleanCategory,
+        number: cleanNum,
+        notes: cleanNotes || undefined,
+        updatedAt: new Date().toISOString(),
+      } : item);
+      try {
+        localStorage.setItem(STORAGE_KEY_IMPORTANT_NUMBERS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ importantNumbers: updated });
+      return updated;
+    });
+  }, []);
+
+  const deleteImportantNumber = useCallback((id: string) => {
+    setImportantNumbers(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_IMPORTANT_NUMBERS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ importantNumbers: updated });
+      return updated;
+    });
+  }, []);
+
+  // Manager Passwords Actions (Service Manager)
+  const addManagerPassword = useCallback((category: string, title: string, username: string, password: string, websiteUrl?: string, notes?: string) => {
+    const cleanCategory = (category || '').trim();
+    const cleanTitle = (title || '').trim();
+    const cleanUsername = (username || '').trim();
+    const cleanPassword = (password || '').trim();
+    const cleanUrl = (websiteUrl || '').trim();
+    const cleanNotes = (notes || '').trim();
+    if (!cleanCategory || !cleanTitle || !cleanPassword) return;
+    const newEntry: ManagerPasswordEntry = {
+      id: `pw_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      category: cleanCategory,
+      title: cleanTitle,
+      username: cleanUsername,
+      password: cleanPassword,
+      websiteUrl: cleanUrl || undefined,
+      notes: cleanNotes || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setManagerPasswords(prev => {
+      const updated = [newEntry, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_MANAGER_PASSWORDS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ managerPasswords: updated });
+      return updated;
+    });
+  }, []);
+
+  const updateManagerPassword = useCallback((id: string, category: string, title: string, username: string, password: string, websiteUrl?: string, notes?: string) => {
+    const cleanCategory = (category || '').trim();
+    const cleanTitle = (title || '').trim();
+    const cleanUsername = (username || '').trim();
+    const cleanPassword = (password || '').trim();
+    const cleanUrl = (websiteUrl || '').trim();
+    const cleanNotes = (notes || '').trim();
+    if (!cleanCategory || !cleanTitle || !cleanPassword) return;
+    setManagerPasswords(prev => {
+      const updated = prev.map(item => item.id === id ? {
+        ...item,
+        category: cleanCategory,
+        title: cleanTitle,
+        username: cleanUsername,
+        password: cleanPassword,
+        websiteUrl: cleanUrl || undefined,
+        notes: cleanNotes || undefined,
+        updatedAt: new Date().toISOString(),
+      } : item);
+      try {
+        localStorage.setItem(STORAGE_KEY_MANAGER_PASSWORDS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ managerPasswords: updated });
+      return updated;
+    });
+  }, []);
+
+  const deleteManagerPassword = useCallback((id: string) => {
+    setManagerPasswords(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_MANAGER_PASSWORDS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ managerPasswords: updated });
+      return updated;
+    });
+  }, []);
+
   // Technician Repair Quote Workflow
   const saveRepairQuote = (
     roId: string, 
@@ -7121,6 +7322,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsSpecialPartsModalOpen,
         openSpecialPartsModal,
         closeSpecialPartsModal,
+        importantNumbers,
+        addImportantNumber,
+        updateImportantNumber,
+        deleteImportantNumber,
+        isImportantNumbersModalOpen,
+        setIsImportantNumbersModalOpen,
+        openImportantNumbersModal,
+        closeImportantNumbersModal,
+        managerPasswords,
+        addManagerPassword,
+        updateManagerPassword,
+        deleteManagerPassword,
+        isManagerPasswordsModalOpen,
+        setIsManagerPasswordsModalOpen,
+        openManagerPasswordsModal,
+        closeManagerPasswordsModal,
       }}
     >
       {children}
