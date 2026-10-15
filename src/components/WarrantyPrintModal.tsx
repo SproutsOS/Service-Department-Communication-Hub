@@ -16,12 +16,13 @@ import {
   Gauge,
   CheckCircle2,
   MapPin,
-  Phone
+  Phone,
+  Download,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WarrantyLaborTimePunch } from '../types';
 import { formatMilitaryDate, formatMilitaryTime, formatMilitaryDateTime } from '../utils/formatters';
-import { printIsolatedDocument } from '../utils/printUtils';
+import { printIsolatedDocument, downloadPrintableDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -75,6 +76,16 @@ export const WarrantyPrintModal: React.FC = () => {
         setPrintStatusMsg('Browser print blocked: Please press Ctrl+P or Cmd+P to print.');
       }
     }
+  }, [ro, vehicle]);
+
+  const handleDownload = useCallback(() => {
+    if (!ro) return;
+    const vehicleDesc = `${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}`.trim();
+    const title = `Warranty Verification - RO #${ro.id} - ${vehicleDesc}`;
+    const filename = `Warranty-Record-RO-${(ro.id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    downloadPrintableDocument('printable-warranty-document', filename, title);
+    setPrintStatusMsg('Document downloaded! Opening the downloaded file will immediately launch your printer dialog.');
+    setTimeout(() => setPrintStatusMsg(null), 5000);
   }, [ro, vehicle]);
 
   // Close on Escape key or print on Ctrl+P / Cmd+P
@@ -251,32 +262,32 @@ export const WarrantyPrintModal: React.FC = () => {
   return (
     <>
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto no-print"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto no-print"
       role="dialog"
       aria-modal="true"
     >
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border-2 border-slate-700 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
         {/* Screen Header (Excluded from Print) */}
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b-2 border-slate-700 shrink-0 no-print">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-600 rounded-lg text-white shadow-xs">
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b-2 border-slate-700 shrink-0 no-print flex-wrap">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 bg-blue-600 rounded-lg text-white shadow-xs shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-bold tracking-tight">Warranty Documentation & Time Verification</h3>
                 <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 text-xs font-mono font-bold rounded border border-blue-400/40">
                   RO #{ro.id}
                 </span>
               </div>
-              <p className="text-xs text-slate-300">
+              <p className="text-xs text-slate-300 hidden sm:block truncate">
                 Itemized Complaint, Cause, Correction & Labor Time per Line Item, Road Test Verification, and Punch Logs
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <button
               type="button"
               onClick={handleCopySummary}
@@ -284,16 +295,26 @@ export const WarrantyPrintModal: React.FC = () => {
               title="Copy text formatted for warranty claim submission"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied to Clipboard' : 'Copy Text'}</span>
+              <span>{copied ? 'Copied' : 'Copy Text'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              title="Download standalone printable HTML file (auto-prints on opening)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download HTML</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer ring-2 ring-blue-400/30"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Official Sheet</span>
+              <span>Print Sheet</span>
             </button>
 
             <button
@@ -301,6 +322,7 @@ export const WarrantyPrintModal: React.FC = () => {
               onClick={closeWarrantyPrintModal}
               className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer ml-1"
               aria-label="Close modal"
+              title="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -761,14 +783,22 @@ export const WarrantyPrintModal: React.FC = () => {
             <button
               type="button"
               onClick={closeWarrantyPrintModal}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-600"
             >
               Close
             </button>
             <button
               type="button"
+              onClick={handleDownload}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download HTML</span>
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer ring-2 ring-blue-400/40"
             >
               <Printer className="w-4 h-4" />
               <span>Print Document (Ctrl+P)</span>

@@ -6,25 +6,22 @@ import {
   Copy, 
   Check, 
   Calculator, 
-  FileText, 
-  ShieldCheck, 
-  User as UserIcon, 
-  Car, 
-  Calendar,
+  Wrench, 
+  Package, 
+  Edit3, 
+  MapPin, 
+  Phone,
+  Download,
+  Maximize2,
+  Minimize2,
   CheckCircle2,
-  AlertCircle,
   Clock,
-  Wrench,
-  Package,
-  DollarSign,
-  Edit3,
-  MapPin,
-  Phone
+  AlertCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ConcernPayType } from '../types';
 import { formatMilitaryDate, formatMilitaryDateTime, cleanRO3700 } from '../utils/formatters';
-import { printIsolatedDocument } from '../utils/printUtils';
+import { printIsolatedDocument, downloadPrintableDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -35,12 +32,13 @@ export const QuotePrintModal: React.FC = () => {
     closeQuotePrintModal, 
     openQuoteModal,
     shopName, 
-    currentUser,
     repairOrders 
   } = useApp();
 
   const [copied, setCopied] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const [printStatusMsg, setPrintStatusMsg] = useState<string | null>(null);
+  const [isPaperMode, setIsPaperMode] = useState(false);
 
   // Live RO and clean data
   const liveRO = useMemo(() => {
@@ -55,18 +53,22 @@ export const QuotePrintModal: React.FC = () => {
     return found || initialRO;
   }, [initialRO, repairOrders]);
 
-  const cleanRO = liveRO ? cleanRO3700(liveRO) : null;
+  const cleanRO = useMemo(() => {
+    return liveRO ? cleanRO3700(liveRO) : null;
+  }, [liveRO]);
 
   // Safe fallback vehicle
-  const vehicle = cleanRO?.vehicle || {
-    year: new Date().getFullYear(),
-    make: 'Vehicle',
-    model: '',
-    vin: 'VIN ON FILE',
-    mileage: 0,
-    licensePlate: undefined,
-    outMileage: undefined
-  };
+  const vehicle = useMemo(() => {
+    return {
+      year: cleanRO?.vehicle?.year || new Date().getFullYear(),
+      make: cleanRO?.vehicle?.make || 'Vehicle',
+      model: cleanRO?.vehicle?.model || '',
+      vin: cleanRO?.vehicle?.vin || 'VIN ON FILE',
+      mileage: Number(cleanRO?.vehicle?.mileage) || 0,
+      licensePlate: cleanRO?.vehicle?.licensePlate || '',
+      outMileage: cleanRO?.vehicle?.outMileage
+    };
+  }, [cleanRO]);
 
   // Reliable direct document print
   const handlePrint = useCallback(() => {
@@ -74,17 +76,35 @@ export const QuotePrintModal: React.FC = () => {
     const roNumber = cleanRO.id || '';
     const vehicleDesc = `${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}`.trim();
     const title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
+    
     try {
-      printIsolatedDocument('printable-quote-document', title);
-      setPrintStatusMsg('Print request sent. If popup was blocked, use Ctrl+P (or Cmd+P on Mac).');
-      setTimeout(() => setPrintStatusMsg(null), 5000);
+      const printed = printIsolatedDocument('printable-quote-document', title);
+      if (printed) {
+        setPrintStatusMsg('Print dialog opened. If your browser preview blocks print popups, use "Download Document" to print directly.');
+      } else {
+        setPrintStatusMsg('Direct print command issued. You can also click "Download Document" to save & print instantly.');
+      }
+      setTimeout(() => setPrintStatusMsg(null), 6000);
     } catch (err) {
       console.warn('Direct print error:', err);
-      try {
-        window.print();
-      } catch (e) {
-        setPrintStatusMsg('Browser print blocked: Please press Ctrl+P or Cmd+P to print.');
-      }
+      setPrintStatusMsg('Direct browser printing restricted. Click "Download Document" to print immediately.');
+    }
+  }, [cleanRO, vehicle]);
+
+  // Download standalone HTML with instant auto-print script
+  const handleDownload = useCallback(() => {
+    if (!cleanRO) return;
+    const roNumber = cleanRO.id || '';
+    const vehicleDesc = `${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}`.trim();
+    const title = `Repair Quote - RO #${roNumber} - ${vehicleDesc}`;
+    const filename = `Repair-Estimate-RO-${roNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    
+    const success = downloadPrintableDocument('printable-quote-document', filename, title);
+    if (success) {
+      setDownloaded(true);
+      setPrintStatusMsg('Document downloaded! Opening the downloaded file will immediately launch your printer dialog.');
+      setTimeout(() => setDownloaded(false), 2500);
+      setTimeout(() => setPrintStatusMsg(null), 6000);
     }
   }, [cleanRO, vehicle]);
 
@@ -94,7 +114,7 @@ export const QuotePrintModal: React.FC = () => {
       if (e.key === 'Escape') {
         closeQuotePrintModal();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
+        // Allow native print or handlePrint
         handlePrint();
       }
     };
@@ -106,8 +126,9 @@ export const QuotePrintModal: React.FC = () => {
 
   const quote = cleanRO.quote;
 
-  const inMiles = vehicle.mileage ?? (cleanRO as any).inMileage ?? 0;
-  const outMiles = cleanRO.outMileage ?? vehicle.outMileage;
+  const inMiles = Number(vehicle.mileage ?? (cleanRO as any).inMileage) || 0;
+  const outMilesRaw = cleanRO.outMileage ?? vehicle.outMileage;
+  const outMiles = outMilesRaw !== undefined && outMilesRaw !== null ? Number(outMilesRaw) : undefined;
   const testDriveDistance = outMiles !== undefined && inMiles > 0 ? Math.max(0, outMiles - inMiles) : undefined;
 
   const rawConcerns = (cleanRO.concerns && cleanRO.concerns.length > 0)
@@ -117,50 +138,47 @@ export const QuotePrintModal: React.FC = () => {
   const baseConcerns = rawConcerns.length > 0 ? rawConcerns : ['Customer reported vehicle inspection / service concern'];
   const recommendations = (cleanRO.recommendations || []).filter(Boolean);
 
-  const unifiedLines = useMemo(() => {
-    return [
-      ...baseConcerns.map((concern, idx) => ({
-        lineNum: idx + 1,
-        title: concern || `Customer Concern #${idx + 1}`,
-        isInspection: false,
-        payType: ((cleanRO.concernPayTypes && cleanRO.concernPayTypes[idx]) || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
-        cause: (cleanRO.concernCauses && cleanRO.concernCauses[idx]) || (idx === 0 ? cleanRO.cause : '') || '',
-        correction: (cleanRO.concernCorrections && cleanRO.concernCorrections[idx]) || (idx === 0 ? cleanRO.correction : '') || '',
-      })),
-      ...recommendations.map((rec, rIdx) => {
-        const lineNum = baseConcerns.length + rIdx + 1;
-        return {
-          lineNum,
-          title: rec.serviceName || `Recommended Service #${rIdx + 1}`,
-          isInspection: true,
-          payType: (rec.payType || (cleanRO.concernPayTypes && cleanRO.concernPayTypes[lineNum - 1]) || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
-          cause: rec.cause || (cleanRO.concernCauses && cleanRO.concernCauses[lineNum - 1]) || '',
-          correction: rec.correction || (cleanRO.concernCorrections && cleanRO.concernCorrections[lineNum - 1]) || `Perform ${rec.serviceName || 'service'}`,
-        };
-      })
-    ];
-  }, [baseConcerns, recommendations, cleanRO, quote?.payType]);
+  const unifiedLines = [
+    ...baseConcerns.map((concern, idx) => ({
+      lineNum: idx + 1,
+      title: concern || `Customer Concern #${idx + 1}`,
+      isInspection: false,
+      payType: ((cleanRO.concernPayTypes && cleanRO.concernPayTypes[idx]) || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
+      cause: (cleanRO.concernCauses && cleanRO.concernCauses[idx]) || (idx === 0 ? cleanRO.cause : '') || '',
+      correction: (cleanRO.concernCorrections && cleanRO.concernCorrections[idx]) || (idx === 0 ? cleanRO.correction : '') || '',
+    })),
+    ...recommendations.map((rec, rIdx) => {
+      const lineNum = baseConcerns.length + rIdx + 1;
+      return {
+        lineNum,
+        title: rec.serviceName || `Recommended Service #${rIdx + 1}`,
+        isInspection: true,
+        payType: (rec.payType || (cleanRO.concernPayTypes && cleanRO.concernPayTypes[lineNum - 1]) || quote?.payType || 'CUSTOMER_PAY') as ConcernPayType,
+        cause: rec.cause || (cleanRO.concernCauses && cleanRO.concernCauses[lineNum - 1]) || '',
+        correction: rec.correction || (cleanRO.concernCorrections && cleanRO.concernCorrections[lineNum - 1]) || `Perform ${rec.serviceName || 'service'}`,
+      };
+    })
+  ];
 
   const laborItems = (quote?.laborItems || []).filter(Boolean);
   const partsItems = (quote?.partsItems || []).filter(Boolean);
 
-  // Financial calculations
-  const totalLaborHours = quote?.totalLaborHours ?? laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
-  const totalLaborCost = quote?.totalLaborCost ?? laborItems.reduce((acc, item) => acc + (Number(item.subtotal) || ((Number(item.laborHours) || 0) * (Number(item.hourlyRate) || 165))), 0);
+  // Financial calculations with 100% safe numbers
+  const totalLaborHours = Number(quote?.totalLaborHours) || laborItems.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+  const totalLaborCost = Number(quote?.totalLaborCost) || laborItems.reduce((acc, item) => acc + (Number(item.subtotal) || ((Number(item.laborHours) || 0) * (Number(item.hourlyRate) || 165))), 0);
   
-  // Calculate parts subtotal from quote parts or RO parts if not in quote
-  const totalPartsCost = quote?.totalPartsCost ?? (
+  const totalPartsCost = Number(quote?.totalPartsCost) || (
     partsItems.length > 0
       ? partsItems.reduce((acc, p) => acc + (Number(p.subtotal) || ((Number(p.unitPrice) || 0) * (Number(p.quantity) || 1))), 0)
       : (cleanRO.parts || []).reduce((acc, p) => acc + ((Number(p.price) || 0) * (Number(p.quantity) || 1)), 0)
   );
 
-  const shopSuppliesFee = quote?.applyShopSupplies ? (quote?.shopSuppliesFee ?? 25.00) : 0;
+  const shopSuppliesFee = quote?.applyShopSupplies ? (Number(quote?.shopSuppliesFee) || 25.00) : 0;
   const isTaxExempt = Boolean(cleanRO.isTaxExempt || quote?.isTaxExempt);
-  const taxRatePercent = (quote as any)?.taxRatePercent ?? 7.0;
+  const taxRatePercent = Number((quote as any)?.taxRatePercent) || 7.0;
   const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
-  const taxAmount = isTaxExempt ? 0 : (quote?.taxAmount ?? (taxableAmount * (taxRatePercent / 100)));
-  const grandTotal = quote?.grandTotal ?? (taxableAmount + taxAmount);
+  const taxAmount = isTaxExempt ? 0 : (Number(quote?.taxAmount) || (taxableAmount * (taxRatePercent / 100)));
+  const grandTotal = Number(quote?.grandTotal) || (taxableAmount + taxAmount);
 
   const handleCopySummary = () => {
     const lines: string[] = [
@@ -172,11 +190,11 @@ export const QuotePrintModal: React.FC = () => {
       `Repair Order #: ${cleanRO.id}`,
       `Date: ${cleanRO.createdAt ? formatMilitaryDate(cleanRO.createdAt) : formatMilitaryDate(new Date())}`,
       `Status: ${quote?.status || 'PENDING ESTIMATE'}`,
-      `Customer: ${cleanRO.customerName} | Phone: ${cleanRO.customerPhone || 'N/A'}`,
-      `Vehicle: ${cleanRO.vehicle.year} ${cleanRO.vehicle.make} ${cleanRO.vehicle.model}`,
-      `VIN: ${cleanRO.vehicle.vin}`,
+      `Customer: ${cleanRO.customerName || 'Customer'} | Phone: ${cleanRO.customerPhone || 'N/A'}`,
+      `Vehicle: ${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+      `VIN: ${vehicle.vin || 'VIN ON FILE'}`,
       `Mileage In: ${inMiles > 0 ? `${inMiles.toLocaleString()} mi` : 'N/A'}`,
-      `Service Advisor: ${cleanRO.advisorName} | Tech: ${cleanRO.techName || 'Unassigned'}`,
+      `Service Advisor: ${cleanRO.advisorName || 'Advisor'} | Tech: ${cleanRO.techName || 'Unassigned'}`,
       `------------------------------------------------------`,
       `LINE-BY-LINE ESTIMATE BREAKDOWN:`
     ];
@@ -193,7 +211,7 @@ export const QuotePrintModal: React.FC = () => {
       if (line.correction) lines.push(`  Correction: ${line.correction}`);
       if (lLabor.length > 0) {
         lLabor.forEach(li => {
-          lines.push(`  Labor: ${li.description} - ${li.laborHours} hrs @ $${li.hourlyRate}/hr = $${(Number(li.subtotal) || 0).toFixed(2)}`);
+          lines.push(`  Labor: ${li.description} - ${li.laborHours} hrs @ $${li.hourlyRate || 165}/hr = $${(Number(li.subtotal) || 0).toFixed(2)}`);
         });
       }
       if (lParts.length > 0) {
@@ -259,32 +277,44 @@ export const QuotePrintModal: React.FC = () => {
   return (
     <>
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto no-print"
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-6 overflow-y-auto no-print"
         role="dialog"
         aria-modal="true"
       >
-        <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border-2 border-slate-700 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className={`bg-white w-full ${isPaperMode ? 'max-w-5xl' : 'max-w-4xl'} rounded-2xl shadow-2xl border-2 border-slate-700 flex flex-col max-h-[95vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150`}>
           
           {/* Screen Header (Excluded from Print) */}
-          <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b-2 border-slate-700 shrink-0 no-print">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-blue-600 rounded-lg text-white shadow-xs">
+          <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b-2 border-slate-700 shrink-0 no-print flex-wrap">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 bg-blue-600 rounded-lg text-white shadow-xs shrink-0">
                 <Calculator className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold tracking-tight truncate">Repair Estimate Preview</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold tracking-tight truncate">Official Repair Estimate & Quote</h3>
                   <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 text-xs font-mono font-bold rounded border border-blue-400/40 shrink-0">
                     RO #{cleanRO.id}
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 truncate">
+                <p className="text-xs text-slate-300 truncate hidden sm:block">
                   Itemized Parts, Labor Operations, Taxes, and Customer Authorization Record
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* Paper View Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsPaperMode(!isPaperMode)}
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer shrink-0"
+                title={isPaperMode ? "Exit clean paper layout" : "Switch to clean paper layout"}
+              >
+                {isPaperMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                <span className="hidden md:inline">{isPaperMode ? 'Standard' : 'Paper Mode'}</span>
+              </button>
+
+              {/* Copy Summary */}
               <button
                 type="button"
                 onClick={handleCopySummary}
@@ -292,9 +322,10 @@ export const QuotePrintModal: React.FC = () => {
                 title="Copy formatted text to clipboard"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied' : 'Copy Text'}</span>
+                <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
 
+              {/* Edit Quote button */}
               <button
                 type="button"
                 onClick={() => {
@@ -305,18 +336,33 @@ export const QuotePrintModal: React.FC = () => {
                 title="Edit quote lines, rates, or parts"
               >
                 <Edit3 className="w-3.5 h-3.5 text-blue-400" />
-                <span>Edit Quote</span>
+                <span className="hidden sm:inline">Edit</span>
               </button>
 
+              {/* Download Printable HTML (100% Reliable Fallback) */}
               <button
                 type="button"
+                onClick={handleDownload}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer shrink-0"
+                title="Save and download clean printable HTML file (auto-prints on opening)"
+              >
+                {downloaded ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+                <span>{downloaded ? 'Saved' : 'Download Document'}</span>
+              </button>
+
+              {/* Main Print Button */}
+              <button
+                type="button"
+                id="quote-print-modal-trigger-btn"
                 onClick={handlePrint}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer shrink-0"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer shrink-0 ring-2 ring-blue-400/30"
+                title="Print document via system print dialog (Ctrl+P)"
               >
                 <Printer className="w-4 h-4" />
                 <span>Print Quote</span>
               </button>
 
+              {/* Close Button */}
               <button
                 type="button"
                 onClick={closeQuotePrintModal}
@@ -331,22 +377,34 @@ export const QuotePrintModal: React.FC = () => {
 
           {/* Print Status Notification */}
           {printStatusMsg && (
-            <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-xs font-semibold text-blue-900 flex items-center justify-between no-print">
-              <span>{printStatusMsg}</span>
-              <button 
-                type="button" 
-                onClick={() => setPrintStatusMsg(null)}
-                className="text-blue-500 hover:text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
-              >
-                ✕
-              </button>
+            <div className="bg-blue-50 border-b border-blue-200 px-4 py-2.5 text-xs font-semibold text-blue-900 flex items-center justify-between no-print animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>{printStatusMsg}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded cursor-pointer"
+                >
+                  Download HTML
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setPrintStatusMsg(null)}
+                  className="text-blue-500 hover:text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
 
           {/* Screen Preview Paper Container */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100">
+          <div className={`flex-1 overflow-y-auto ${isPaperMode ? 'p-2 sm:p-4 bg-slate-200' : 'p-3 sm:p-6 bg-slate-100'}`}>
             
-            <div className="bg-white p-6 sm:p-8 rounded-xl border-2 border-slate-300 shadow-sm max-w-3xl mx-auto space-y-6 text-slate-900">
+            <div className={`bg-white p-6 sm:p-8 rounded-xl border-2 border-slate-300 shadow-md ${isPaperMode ? 'max-w-4xl' : 'max-w-3xl'} mx-auto space-y-6 text-slate-900`}>
               
               {/* Dealership & Estimate Header */}
               <div className="border-b-2 border-slate-900 pb-4">
@@ -387,7 +445,7 @@ export const QuotePrintModal: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-lg border border-slate-300 text-xs">
                 <div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Customer</span>
-                  <span className="font-bold text-slate-900 block">{cleanRO.customerName}</span>
+                  <span className="font-bold text-slate-900 block">{cleanRO.customerName || 'Customer'}</span>
                   <span className="text-slate-600 block text-[11px]">{cleanRO.customerPhone || 'N/A'}</span>
                 </div>
 
@@ -421,7 +479,7 @@ export const QuotePrintModal: React.FC = () => {
                 <div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Service Team</span>
                   <span className="font-medium text-slate-800 block">
-                    Advisor: <strong className="font-bold">{cleanRO.advisorName}</strong>
+                    Advisor: <strong className="font-bold">{cleanRO.advisorName || 'Advisor'}</strong>
                   </span>
                   <span className="font-medium text-slate-800 block">
                     Tech: <strong className="font-bold">{cleanRO.techName || 'Unassigned'}</strong>
@@ -441,7 +499,7 @@ export const QuotePrintModal: React.FC = () => {
 
                 {unifiedLines.map((line) => {
                   const lineNum = line.lineNum;
-                  const payType: ConcernPayType = line.payType;
+                  const payType: string = line.payType || 'CUSTOMER_PAY';
                   const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
                   const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
                   const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
@@ -451,7 +509,7 @@ export const QuotePrintModal: React.FC = () => {
                     description: p.description,
                     quantity: p.quantity,
                     unitPrice: p.price,
-                    subtotal: (p.price || 0) * (p.quantity || 1),
+                    subtotal: (Number(p.price) || 0) * (Number(p.quantity) || 1),
                     status: 'PENDING' as const,
                     roLineNumber: lineNum
                   }));
@@ -483,7 +541,7 @@ export const QuotePrintModal: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-100 text-blue-900 rounded border border-blue-200">
-                            {((payType || 'CUSTOMER_PAY') as string).replace(/_/g, ' ')}
+                            {String(payType).replace(/_/g, ' ')}
                           </span>
                           <span className="text-xs font-mono font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300">
                             ${lineTotalCost.toFixed(2)}
@@ -512,12 +570,12 @@ export const QuotePrintModal: React.FC = () => {
 
                         {/* Labor Operations Table */}
                         {lLabor.length > 0 && (
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                          <div style={{ fontSize: '101.5%' }}>
+                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1 flex items-center gap-1" style={{ fontSize: '101.5%' }}>
                               <Wrench className="w-3 h-3 text-blue-600" />
                               <span>Labor Operations:</span>
                             </span>
-                            <table className="w-full text-[11px] border border-slate-200 rounded overflow-hidden">
+                            <table className="w-full text-[11px] border border-slate-200 rounded overflow-hidden" style={{ fontSize: '101.5%' }}>
                               <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-left">
                                 <tr>
                                   <th className="p-1.5">Operation Description</th>
@@ -543,7 +601,7 @@ export const QuotePrintModal: React.FC = () => {
                         {/* Parts Items Table */}
                         {effectiveParts.length > 0 && (
                           <div>
-                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1 flex items-center gap-1">
                               <Package className="w-3 h-3 text-amber-600" />
                               <span>Required Parts & Materials:</span>
                             </span>
@@ -595,12 +653,12 @@ export const QuotePrintModal: React.FC = () => {
               <div className="bg-slate-50 p-4 rounded-xl border-2 border-slate-300 space-y-2">
                 <div className="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5 flex items-center justify-between">
                   <span>Financial Estimate Summary</span>
-                  <span className="font-mono text-[11px] font-bold text-slate-600">Total Labor: {totalLaborHours.toFixed(1)} hrs</span>
+                  <span className="font-mono text-[11px] font-bold text-slate-600" style={{ fontSize: '101.5%' }}>Total Labor: {totalLaborHours.toFixed(1)} hrs</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
                   <div className="space-y-1.5 text-slate-700">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between" style={{ fontSize: '101.5%' }}>
                       <span>Total Labor Cost ({totalLaborHours.toFixed(1)} hrs):</span>
                       <strong className="font-mono text-slate-900">${totalLaborCost.toFixed(2)}</strong>
                     </div>
@@ -648,36 +706,18 @@ export const QuotePrintModal: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-2">
-                  <div className="border-t-2 border-slate-900 pt-1.5">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Customer Authorization / Signature</span>
-                    {quote?.status === 'APPROVED' ? (
-                      <div className="mt-1">
-                        <span className="text-emerald-700 font-black text-xs block">
-                          ✓ AUTHORIZED: {quote.approvedBy || cleanRO.customerName}
-                        </span>
-                        {quote.approvedAt && (
-                          <span className="text-[10px] font-mono text-slate-500 block">
-                            Timestamp: {formatMilitaryDateTime(quote.approvedAt)}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="h-6 mt-1 flex items-end">
-                        <span className="text-[11px] text-slate-400 italic">Signature: ________________________________</span>
-                      </div>
-                    )}
+                  <div className="border-t-2 border-slate-400 pt-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Customer Signature</span>
+                    <span className="font-medium text-slate-900 text-xs">
+                      {quote?.status === 'APPROVED' ? `AUTHORIZED (${quote.approvedBy || cleanRO.customerName})` : 'X ___________________________________'}
+                    </span>
                   </div>
 
-                  <div className="border-t-2 border-slate-900 pt-1.5">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Service Advisor Acknowledgment</span>
-                    <div className="mt-1">
-                      <span className="text-slate-900 font-bold text-xs block">
-                        {cleanRO.advisorName}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-500 block">
-                        Date: {formatMilitaryDateTime(new Date())}
-                      </span>
-                    </div>
+                  <div className="border-t-2 border-slate-400 pt-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Authorization Date</span>
+                    <span className="font-medium text-slate-900 text-xs font-mono">
+                      {quote?.approvedAt ? formatMilitaryDate(quote.approvedAt) : formatMilitaryDate(new Date())}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -686,12 +726,12 @@ export const QuotePrintModal: React.FC = () => {
           </div>
 
           {/* Modal Footer (Excluded from Print) */}
-          <div className="p-4 bg-slate-900 border-t-2 border-slate-700 flex items-center justify-between gap-3 shrink-0 no-print">
+          <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 border-t-2 border-slate-700 shrink-0 no-print">
             <div className="text-xs text-slate-400">
               Dealership: <strong className="text-slate-200">{shopName || 'Woolwine CDJR'}</strong> • {DEALERSHIP_ADDRESS} • Phone: {DEALERSHIP_PHONE} • RO #{cleanRO.id}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={closeQuotePrintModal}
@@ -699,11 +739,20 @@ export const QuotePrintModal: React.FC = () => {
               >
                 Close Preview
               </button>
+
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download HTML File</span>
+              </button>
               
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer ring-2 ring-blue-400/40"
               >
                 <Printer className="w-4 h-4" />
                 <span>Print Quote (Ctrl+P)</span>
@@ -728,24 +777,22 @@ export const QuotePrintModal: React.FC = () => {
                   {shopName || 'Woolwine CDJR'}
                 </div>
                 <div className="text-xs font-black text-black tracking-wider uppercase mt-0.5">
-                  REPAIR ESTIMATE & QUOTE
+                  OFFICIAL REPAIR ESTIMATE & QUOTE
                 </div>
-                {/* Dealership Address & Phone Number */}
-                <div className="text-xs text-black font-bold mt-1.5 leading-snug">
-                  <div>{DEALERSHIP_ADDRESS}</div>
-                  <div className="text-[12px] font-black mt-0.5">Phone: {DEALERSHIP_PHONE}</div>
+                <div className="text-xs text-black mt-1">
+                  {DEALERSHIP_ADDRESS} • Phone: <strong>{DEALERSHIP_PHONE}</strong>
                 </div>
               </div>
 
-              <div className="text-right shrink-0">
-                <div className="inline-block px-3 py-1 bg-white text-black font-mono font-black text-sm rounded border-2 border-black">
+              <div className="text-right">
+                <div className="text-lg font-black font-mono border-2 border-black px-2.5 py-0.5 inline-block">
                   RO #{cleanRO.id}
                 </div>
-                <div className="text-[11px] text-black font-bold mt-1 font-mono">
+                <div className="text-xs font-mono font-bold mt-1">
                   Date: {cleanRO.createdAt ? formatMilitaryDate(cleanRO.createdAt) : formatMilitaryDate(new Date())}
                 </div>
-                <div className="text-[11px] font-black text-black mt-0.5 uppercase">
-                  Status: {quote?.status || 'PENDING AUTHORIZATION'}
+                <div className="text-xs font-bold uppercase mt-0.5">
+                  Status: {quote?.status || 'ESTIMATE DRAFT'}
                 </div>
               </div>
             </div>
@@ -755,9 +802,9 @@ export const QuotePrintModal: React.FC = () => {
           <div className="grid grid-cols-2 gap-4 border-2 border-black p-3 text-xs">
             <div>
               <div className="text-[10px] font-black uppercase text-black">Customer Details:</div>
-              <div className="font-black text-sm text-black">{cleanRO.customerName}</div>
+              <div className="font-black text-sm text-black">{cleanRO.customerName || 'Customer'}</div>
               <div className="text-black font-bold">Phone: {cleanRO.customerPhone || 'N/A'}</div>
-              <div className="text-black mt-1">Service Advisor: <strong>{cleanRO.advisorName}</strong></div>
+              <div className="text-black mt-1">Service Advisor: <strong>{cleanRO.advisorName || 'Advisor'}</strong></div>
             </div>
 
             <div>
@@ -782,7 +829,7 @@ export const QuotePrintModal: React.FC = () => {
 
             {unifiedLines.map((line) => {
               const lineNum = line.lineNum;
-              const payType: ConcernPayType = line.payType;
+              const payType: string = line.payType || 'CUSTOMER_PAY';
               const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
               const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
               const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
@@ -792,7 +839,7 @@ export const QuotePrintModal: React.FC = () => {
                 description: p.description,
                 quantity: p.quantity,
                 unitPrice: p.price,
-                subtotal: (p.price || 0) * (p.quantity || 1),
+                subtotal: (Number(p.price) || 0) * (Number(p.quantity) || 1),
                 status: 'PENDING' as const,
                 roLineNumber: lineNum
               }));
@@ -807,7 +854,7 @@ export const QuotePrintModal: React.FC = () => {
                 <div key={lineNum} className="border border-black p-2.5 space-y-2 quote-line-item">
                   <div className="flex justify-between items-center border-b border-black pb-1">
                     <div className="font-black text-xs">
-                      Line {lineNum}: {line.title} {line.isInspection ? '[Inspection Finding]' : ''} ({((payType || 'CUSTOMER_PAY') as string).replace(/_/g, ' ')})
+                      Line {lineNum}: {line.title} {line.isInspection ? '[Inspection Finding]' : ''} ({String(payType).replace(/_/g, ' ')})
                     </div>
                     <div className="font-mono font-black text-xs">
                       Line Total: ${lineTotalCost.toFixed(2)}
@@ -822,11 +869,11 @@ export const QuotePrintModal: React.FC = () => {
                   )}
 
                   {lLabor.length > 0 && (
-                    <div className="text-[11px]">
+                    <div className="text-[11px]" style={{ fontSize: '101.5%' }}>
                       <div className="font-bold underline mb-0.5">Labor:</div>
                       {lLabor.map((li, liIdx) => (
                         <div key={liIdx} className="flex justify-between pl-2">
-                          <span>{li.description} ({(Number(li.laborHours) || 0).toFixed(1)} hrs @ ${li.hourlyRate}/hr)</span>
+                          <span>{li.description} ({(Number(li.laborHours) || 0).toFixed(1)} hrs @ ${li.hourlyRate || 165}/hr)</span>
                           <span className="font-mono font-bold">${(Number(li.subtotal) || 0).toFixed(2)}</span>
                         </div>
                       ))}
@@ -838,7 +885,7 @@ export const QuotePrintModal: React.FC = () => {
                       <div className="font-bold underline mb-0.5">Parts:</div>
                       {effectiveParts.map((pi, piIdx) => (
                         <div key={piIdx} className="flex justify-between pl-2">
-                          <span>{pi.partNumber} - {pi.description} (Qty: {pi.quantity} @ ${pi.unitPrice}/ea)</span>
+                          <span>{pi.partNumber} - {pi.description} (Qty: {pi.quantity} @ ${pi.unitPrice || 0}/ea)</span>
                           <span className="font-mono font-bold">${(Number(pi.subtotal) || 0).toFixed(2)}</span>
                         </div>
                       ))}
@@ -851,7 +898,7 @@ export const QuotePrintModal: React.FC = () => {
 
           {/* Financial Totals */}
           <div className="border-2 border-black p-3 quote-summary-block space-y-1">
-            <div className="flex justify-between text-xs">
+            <div className="flex justify-between text-xs" style={{ fontSize: '101.5%' }}>
               <span>Total Labor Cost ({totalLaborHours.toFixed(1)} hrs):</span>
               <strong className="font-mono">${totalLaborCost.toFixed(2)}</strong>
             </div>

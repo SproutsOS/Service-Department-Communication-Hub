@@ -89,6 +89,7 @@ export interface ShopSettings {
   inspectionChecklist?: any;
   staffLeaveEntries?: any[];
   appointments?: any[];
+  specialParts?: any[];
   updatedAt?: string;
 }
 

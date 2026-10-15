@@ -40,14 +40,15 @@ import {
   StandaloneQuoteStatus,
   RollToROParams,
   ROStickyNote,
-  StickyNoteColor
+  StickyNoteColor,
+  SpecialPartNumber
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
 import { getInitialServiceAppointments } from '../data/defaultAppointments';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
 import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
-import { INITIAL_USERS, INITIAL_REPAIR_ORDERS, STATUS_CONFIG } from '../data/mockData';
+import { INITIAL_USERS, INITIAL_REPAIR_ORDERS, STATUS_CONFIG, INITIAL_SPECIAL_PARTS } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
   subscribeToRepairOrders,
@@ -382,6 +383,16 @@ interface AppContextType {
   stickyNoteModalROId: string | null;
   openStickyNoteModal: (roId: string) => void;
   closeStickyNoteModal: () => void;
+
+  // Special & Frequent Part Numbers (Service Manager Quick Reference)
+  specialParts: SpecialPartNumber[];
+  addSpecialPart: (name: string, partNumber: string) => void;
+  updateSpecialPart: (id: string, name: string, partNumber: string) => void;
+  deleteSpecialPart: (id: string) => void;
+  isSpecialPartsModalOpen: boolean;
+  setIsSpecialPartsModalOpen: (open: boolean) => void;
+  openSpecialPartsModal: () => void;
+  closeSpecialPartsModal: () => void;
 }
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
@@ -668,6 +679,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return getInitialServiceAppointments();
   });
   const [isAppointmentCalendarOpen, setIsAppointmentCalendarOpen] = useState(false);
+
+  // Special & Frequent Part Numbers (Service Manager Quick Reference)
+  const STORAGE_KEY_SPECIAL_PARTS = 'dealership_special_parts';
+  const [specialParts, setSpecialParts] = useState<SpecialPartNumber[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_SPECIAL_PARTS);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_SPECIAL_PARTS;
+  });
+  const [isSpecialPartsModalOpen, setIsSpecialPartsModalOpen] = useState(false);
+  const openSpecialPartsModal = useCallback(() => setIsSpecialPartsModalOpen(true), []);
+  const closeSpecialPartsModal = useCallback(() => setIsSpecialPartsModalOpen(false), []);
 
   // RO Change Alerts & Red Bell Notifications
   const [roChangeAlerts, setRoChangeAlerts] = useState<Record<string, ROChangeAlert>>(() => {
@@ -1200,6 +1227,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setAppointments(cloudSettings.appointments);
           try {
             localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(cloudSettings.appointments));
+          } catch {}
+        }
+        if (Array.isArray(cloudSettings.specialParts)) {
+          setSpecialParts(cloudSettings.specialParts);
+          try {
+            localStorage.setItem(STORAGE_KEY_SPECIAL_PARTS, JSON.stringify(cloudSettings.specialParts));
           } catch {}
         }
       }
@@ -5517,6 +5550,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newRoId;
   }, [appointments, repairOrders, currentUser, createRepairOrder, setSelectedRO, updateAppointment]);
 
+  // Special Part Numbers Actions (Service Manager)
+  const addSpecialPart = useCallback((name: string, partNumber: string) => {
+    const cleanName = (name || '').trim();
+    const cleanPn = (partNumber || '').trim().toUpperCase();
+    if (!cleanName || !cleanPn) return;
+    const newPart: SpecialPartNumber = {
+      id: `sp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: cleanName,
+      partNumber: cleanPn,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setSpecialParts(prev => {
+      const updated = [newPart, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_SPECIAL_PARTS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ specialParts: updated });
+      return updated;
+    });
+  }, []);
+
+  const updateSpecialPart = useCallback((id: string, name: string, partNumber: string) => {
+    const cleanName = (name || '').trim();
+    const cleanPn = (partNumber || '').trim().toUpperCase();
+    if (!cleanName || !cleanPn) return;
+    setSpecialParts(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, name: cleanName, partNumber: cleanPn, updatedAt: new Date().toISOString() } : p);
+      try {
+        localStorage.setItem(STORAGE_KEY_SPECIAL_PARTS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ specialParts: updated });
+      return updated;
+    });
+  }, []);
+
+  const deleteSpecialPart = useCallback((id: string) => {
+    setSpecialParts(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_SPECIAL_PARTS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ specialParts: updated });
+      return updated;
+    });
+  }, []);
+
   // Technician Repair Quote Workflow
   const saveRepairQuote = (
     roId: string, 
@@ -7015,6 +7095,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         stickyNoteModalROId,
         openStickyNoteModal,
         closeStickyNoteModal,
+        specialParts,
+        addSpecialPart,
+        updateSpecialPart,
+        deleteSpecialPart,
+        isSpecialPartsModalOpen,
+        setIsSpecialPartsModalOpen,
+        openSpecialPartsModal,
+        closeSpecialPartsModal,
       }}
     >
       {children}

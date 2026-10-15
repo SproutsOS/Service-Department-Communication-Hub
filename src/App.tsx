@@ -25,6 +25,7 @@ import { DraggableShopChatButton } from './components/DraggableShopChatButton';
 import { ManagerStaffCalendar } from './components/ManagerStaffCalendar';
 import { AppointmentCalendar } from './components/AppointmentCalendar';
 import { QuoteBuilderModal } from './components/QuoteBuilderModal';
+import { SpecialPartsModal } from './components/SpecialPartsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -958,6 +959,7 @@ const MainContent: React.FC = () => {
       <CustomerDirectoryModal />
       <ArchivedROsModal />
       <ROStickyNoteModal />
+      <SpecialPartsModal />
       <ErrorBoundary fallbackTitle="Quote Builder Error">
         <QuoteBuilderModal 
           isOpen={isQuoteBuilderOpen} 

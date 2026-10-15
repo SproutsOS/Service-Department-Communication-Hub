@@ -82,6 +82,7 @@
       "properties": {
         "shopName": { "type": "string" },
         "isSetupCompleted": { "type": "boolean" },
+        "specialParts": { "type": "array" },
         "updatedAt": { "type": "string" }
       },
       "required": ["shopName"]

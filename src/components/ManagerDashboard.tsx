@@ -26,7 +26,9 @@ import {
   Archive,
   ChevronRight,
   Bell,
-  X
+  X,
+  Bookmark,
+  Tag
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -59,6 +61,8 @@ export const ManagerDashboard: React.FC = () => {
     markNotificationRead,
     dismissPartsOrderAlert,
     setActiveRoleView,
+    specialParts,
+    openSpecialPartsModal,
   } = useApp();
 
   const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);
@@ -326,6 +330,21 @@ export const ManagerDashboard: React.FC = () => {
             {totalPartsOnOrderCount > 0 && (
               <span className="bg-orange-950 text-orange-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-orange-400">
                 {totalPartsOnOrderCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="open-special-parts-mgr"
+            onClick={() => openSpecialPartsModal()}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-amber-400"
+            title="Open Frequent & Special Part Numbers Cheat Sheet"
+          >
+            <Bookmark className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+            <span>Special Parts</span>
+            {specialParts.length > 0 && (
+              <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400/40">
+                {specialParts.length}
               </span>
             )}
           </button>

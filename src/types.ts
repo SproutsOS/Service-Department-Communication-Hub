@@ -651,4 +651,12 @@ export interface ROStickyNote {
   isUrgent?: boolean;
 }
 
+export interface SpecialPartNumber {
+  id: string;
+  name: string;        // Name of part
+  partNumber: string;  // Part number
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 

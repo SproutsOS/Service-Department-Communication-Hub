@@ -1013,6 +1013,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       <div 
                         onClick={(e) => e.stopPropagation()}
                         className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all shrink-0"
+                        style={{ fontSize: '101.5%' }}
                         title={`Enter labor hours requested for Line ${idx + 1} — automatically updates the repair quote`}
                       >
                         <Clock className="w-4 h-4 text-blue-600 shrink-0" />
@@ -1793,6 +1794,7 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                       <div 
                         onClick={(e) => e.stopPropagation()}
                         className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border-2 border-slate-400 shadow-sm hover:border-blue-500 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-200 transition-all shrink-0"
+                        style={{ fontSize: '101.5%' }}
                         title={`Enter labor hours for Line ${globalLineNum} — automatically updates the repair quote`}
                       >
                         <Clock className="w-4 h-4 text-blue-600 shrink-0" />

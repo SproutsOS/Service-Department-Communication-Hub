@@ -1422,7 +1422,7 @@ export const RepairQuoteModal: React.FC = () => {
           </div>
 
           {/* Section 1: Labor Operations */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4" style={{ fontSize: '101.5%' }}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
@@ -2351,7 +2351,7 @@ export const RepairQuoteModal: React.FC = () => {
           {isTech ? (
             <div className="max-w-2xl mx-auto w-full">
               {/* Job Labor Time Summary Card */}
-              <div className="bg-gradient-to-br from-blue-50 via-indigo-50/60 to-slate-50 rounded-2xl border border-blue-200 p-5 shadow-2xs flex flex-col justify-between">
+              <div className="bg-gradient-to-br from-blue-50 via-indigo-50/60 to-slate-50 rounded-2xl border border-blue-200 p-5 shadow-2xs flex flex-col justify-between" style={{ fontSize: '101.5%' }}>
                 <div>
                   <div className="flex items-center gap-3 pb-3 border-b border-blue-200/80">
                     <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs">

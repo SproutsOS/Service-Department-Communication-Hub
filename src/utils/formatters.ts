@@ -273,96 +273,105 @@ export function getPayTypeRate(payType?: string): number {
  */
 export function cleanRO3700<T>(ro: T): T {
   if (!ro || typeof ro !== 'object') return ro;
-  const anyRO = ro as any;
-  const isApproved = Boolean(
-    anyRO.status === 'APPROVED' ||
-    anyRO.quote?.status === 'APPROVED' ||
-    anyRO.quote?.approvedAt ||
-    ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(anyRO.status)
-  );
+  try {
+    const anyRO = ro as any;
+    const isApproved = Boolean(
+      anyRO.status === 'APPROVED' ||
+      anyRO.quote?.status === 'APPROVED' ||
+      anyRO.quote?.approvedAt ||
+      ['APPROVED', 'PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(anyRO.status)
+    );
 
-  if (!isApproved) return ro;
+    if (!isApproved) return ro;
 
-  let needsUpdate = false;
-  let updatedParts = Array.isArray(anyRO.parts) ? [...anyRO.parts] : [];
+    let needsUpdate = false;
+    let updatedParts = Array.isArray(anyRO.parts) ? [...anyRO.parts] : [];
 
-  // If repair order is already PARTS_ORDERED or further in workflow, all non-declined parts must be marked as ORDERED
-  const isPartsOrderedOrBeyond = ['PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(anyRO.status);
+    // If repair order is already PARTS_ORDERED or further in workflow, all non-declined parts must be marked as ORDERED
+    const isPartsOrderedOrBeyond = ['PARTS_ORDERED', 'PARTS_IN_TO_TECH', 'REPAIR_IN_PROGRESS', 'REPAIR_COMPLETE', 'READY_FOR_PICKUP', 'CLOSED'].includes(anyRO.status);
 
-  updatedParts = updatedParts.map(p => {
-    if (!p) return p;
+    updatedParts = updatedParts.map(p => {
+      if (!p) return p;
 
-    const isCompleteOrDeclined = [
-      'ORDERED', 
-      'DAILY_ORDER', 
-      'LOCAL_PURCHASE', 
-      'SPECIAL_ORDER', 
-      'SPECIAL_ORDER_1_5_DAYS', 
-      'VOR_UPGRADE', 
-      'IN_TRANSIT', 
-      'RECEIVED', 
-      'ISSUED_TO_TECH', 
-      'IN_STOCK', 
-      'DECLINED', 
-      'CANCELLED'
-    ].includes(p.status);
+      const isCompleteOrDeclined = [
+        'ORDERED', 
+        'DAILY_ORDER', 
+        'LOCAL_PURCHASE', 
+        'SPECIAL_ORDER', 
+        'SPECIAL_ORDER_1_5_DAYS', 
+        'VOR_UPGRADE', 
+        'IN_TRANSIT', 
+        'RECEIVED', 
+        'ISSUED_TO_TECH', 
+        'IN_STOCK', 
+        'DECLINED', 
+        'CANCELLED'
+      ].includes(p.status);
 
-    if (isPartsOrderedOrBeyond && !isCompleteOrDeclined) {
-      // Do not convert REQUESTED or QUOTE_ONLY parts that are still pending pricing or order
-      if (p.status !== 'REQUESTED' && p.status !== 'QUOTE_ONLY' && p.status !== 'NEEDED' && p.requestType !== 'QUOTE_ONLY') {
-        needsUpdate = true;
-        return {
-          ...p,
-          status: 'ORDERED',
-          requestType: 'ORDER_NOW',
-          orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
-          estimatedArrival: (p.estimatedArrival && !p.estimatedArrival.toLowerCase().includes('quote') && !p.estimatedArrival.toLowerCase().includes('estimate'))
-            ? p.estimatedArrival
-            : 'Special Order 1-5 Days',
-        };
+      if (isPartsOrderedOrBeyond && !isCompleteOrDeclined) {
+        // Do not convert REQUESTED or QUOTE_ONLY parts that are still pending pricing or order
+        if (p.status !== 'REQUESTED' && p.status !== 'QUOTE_ONLY' && p.status !== 'NEEDED' && p.requestType !== 'QUOTE_ONLY') {
+          needsUpdate = true;
+          const etaStr = typeof p.estimatedArrival === 'string' ? p.estimatedArrival.toLowerCase() : '';
+          return {
+            ...p,
+            status: 'ORDERED',
+            requestType: 'ORDER_NOW',
+            orderedAt: p.orderedAt || anyRO.quote?.approvedAt || new Date().toISOString(),
+            estimatedArrival: (p.estimatedArrival && !etaStr.includes('quote') && !etaStr.includes('estimate'))
+              ? p.estimatedArrival
+              : 'Special Order 1-5 Days',
+          };
+        }
       }
+
+      // Preserve QUOTE_ONLY parts as QUOTE_ONLY so they remain in the quoting queue
+      return p;
+    });
+
+    // If quote contains partsItems not yet in ro.parts, include them as ordered parts
+    if (anyRO.quote?.partsItems && Array.isArray(anyRO.quote.partsItems) && anyRO.quote.partsItems.length > 0) {
+      anyRO.quote.partsItems.forEach((qp: any, idx: number) => {
+        if (!qp) return;
+        const qpPartNum = String(qp.partNumber || '').trim().toUpperCase();
+        const qpDesc = String(qp.description || '').trim().toLowerCase();
+
+        const existingMatch = updatedParts.find((p: any) => 
+          (qp.sourcePartId && p.id === qp.sourcePartId) ||
+          (qp.id && p.id === qp.id) ||
+          (qpPartNum && qpPartNum !== 'TBD' && p.partNumber && String(p.partNumber).trim().toUpperCase() === qpPartNum) ||
+          (qpDesc && p.description && String(p.description).trim().toLowerCase() === qpDesc)
+        );
+        if (existingMatch) {
+          if (!qp.sourcePartId) {
+            qp.sourcePartId = existingMatch.id;
+          }
+        } else {
+          needsUpdate = true;
+          updatedParts.push({
+            id: qp.sourcePartId || qp.id || `qpart_approved_${anyRO.id || 'ro'}_${idx}`,
+            partNumber: qp.partNumber || 'TBD',
+            description: qp.description || 'Quoted Part',
+            quantity: qp.quantity || 1,
+            price: qp.unitPrice,
+            status: 'ORDERED',
+            requestType: 'ORDER_NOW',
+            orderedAt: anyRO.quote?.approvedAt || new Date().toISOString(),
+            estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
+            roLineNumber: qp.roLineNumber || 1,
+          });
+        }
+      });
     }
 
-    // Preserve QUOTE_ONLY parts as QUOTE_ONLY so they remain in the quoting queue
-    return p;
-  });
-
-  // If quote contains partsItems not yet in ro.parts, include them as ordered parts
-  if (anyRO.quote?.partsItems && Array.isArray(anyRO.quote.partsItems) && anyRO.quote.partsItems.length > 0) {
-    anyRO.quote.partsItems.forEach((qp: any, idx: number) => {
-      const existingMatch = updatedParts.find((p: any) => 
-        (qp.sourcePartId && p.id === qp.sourcePartId) ||
-        (qp.id && p.id === qp.id) ||
-        (qp.partNumber && qp.partNumber !== 'TBD' && p.partNumber && p.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
-        (qp.description && p.description && p.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
-      );
-      if (existingMatch) {
-        if (!qp.sourcePartId) {
-          qp.sourcePartId = existingMatch.id;
-        }
-      } else {
-        needsUpdate = true;
-        updatedParts.push({
-          id: qp.sourcePartId || qp.id || `qpart_approved_${anyRO.id || 'ro'}_${idx}`,
-          partNumber: qp.partNumber || 'TBD',
-          description: qp.description || 'Quoted Part',
-          quantity: qp.quantity || 1,
-          price: qp.unitPrice,
-          status: 'ORDERED',
-          requestType: 'ORDER_NOW',
-          orderedAt: anyRO.quote.approvedAt || new Date().toISOString(),
-          estimatedArrival: 'Daily Order (Arriving ~5:00 PM)',
-          roLineNumber: qp.roLineNumber || 1,
-        });
-      }
-    });
-  }
-
-  if (needsUpdate) {
-    return {
-      ...anyRO,
-      parts: updatedParts,
-    };
+    if (needsUpdate) {
+      return {
+        ...anyRO,
+        parts: updatedParts,
+      };
+    }
+  } catch (err) {
+    console.warn('cleanRO3700 error safe fallback:', err);
   }
 
   return ro;

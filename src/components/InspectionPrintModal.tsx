@@ -19,13 +19,14 @@ import {
   Layers,
   Gauge,
   MapPin,
-  Phone
+  Phone,
+  Download
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RepairOrder, InspectionCategory, InspectionChecklistItem } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { formatMilitaryDate, formatMilitaryDateTime } from '../utils/formatters';
-import { printIsolatedDocument } from '../utils/printUtils';
+import { printIsolatedDocument, downloadPrintableDocument } from '../utils/printUtils';
 
 const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
@@ -62,8 +63,8 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
   // Always use latest live RO data from AppContext
   const ro = repairOrders.find(r => r.id === initialRO.id) || initialRO;
 
-  const inMiles = ro.vehicle.mileage ?? 0;
-  const outMiles = ro.outMileage ?? ro.vehicle.outMileage;
+  const inMiles = ro.vehicle?.mileage ?? 0;
+  const outMiles = ro.outMileage ?? ro.vehicle?.outMileage;
   const testDriveDistance = outMiles !== undefined && inMiles > 0 ? Math.max(0, outMiles - inMiles) : undefined;
   const testDriveNotes = ro.testDriveNotes || (ro.testDriveCompleted || outMiles !== undefined ? 'Road test verified normal vehicle operation and performance.' : '');
 
@@ -169,8 +170,16 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
   });
 
   const handlePrint = () => {
-    const title = `Multi-Point Inspection - RO #${ro.id} - ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`;
+    const vehicleDesc = `${ro.vehicle?.year || ''} ${ro.vehicle?.make || ''} ${ro.vehicle?.model || ''}`.trim();
+    const title = `Multi-Point Inspection - RO #${ro.id} - ${vehicleDesc}`;
     printIsolatedDocument('printable-inspection-document', title);
+  };
+
+  const handleDownload = () => {
+    const vehicleDesc = `${ro.vehicle?.year || ''} ${ro.vehicle?.make || ''} ${ro.vehicle?.model || ''}`.trim();
+    const title = `Multi-Point Inspection - RO #${ro.id} - ${vehicleDesc}`;
+    const filename = `Inspection-MPI-RO-${(ro.id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    downloadPrintableDocument('printable-inspection-document', filename, title);
   };
 
   const handleCopySummary = () => {
@@ -242,7 +251,7 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
   return (
     <>
     <div 
-      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print"
+      className="fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print"
       onClick={onClose}
     >
       <div 
@@ -250,12 +259,12 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
         onClick={(e) => e.stopPropagation()}
       >
         {/* Screen Header Controls (Excluded from Print) */}
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b-2 border-slate-700 shrink-0 no-print">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-600 rounded-lg text-white">
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b-2 border-slate-700 shrink-0 no-print flex-wrap">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 bg-blue-600 rounded-lg text-white shrink-0">
               <ClipboardCheck className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm sm:text-base font-black uppercase tracking-wider">
                   21-Point Multi-Point Inspection Sheet (MPI)
@@ -264,13 +273,13 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
                   RO #{ro.id}
                 </span>
               </div>
-              <p className="text-xs text-slate-300">
+              <p className="text-xs text-slate-300 hidden sm:block truncate">
                 Official Multi-Point Inspection, Recommended Services & Out Miles Verification Record
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <button
               type="button"
               onClick={handleCopySummary}
@@ -279,6 +288,16 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              title="Download standalone printable HTML document (auto-prints on opening)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download HTML</span>
             </button>
 
             <button
@@ -587,14 +606,24 @@ export const InspectionPrintModal: React.FC<InspectionPrintModalProps> = ({ ro: 
             Close
           </button>
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all cursor-pointer flex items-center gap-1.5 ring-2 ring-blue-400/40"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print MPI Document (Ctrl+P)</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download HTML</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition-all cursor-pointer flex items-center gap-1.5 ring-2 ring-blue-400/40"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print MPI Document (Ctrl+P)</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

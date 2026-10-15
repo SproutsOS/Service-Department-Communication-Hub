@@ -55,7 +55,7 @@ export const LineTimePunchesSection: React.FC<LineTimePunchesSectionProps> = ({
     <div className="bg-white p-3 rounded-lg border-2 border-slate-300 space-y-2 shadow-2xs text-xs">
       <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200 pb-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 font-black text-slate-900">
+          <div className="flex items-center gap-1.5 font-black text-slate-900" style={{ fontSize: '101.5%' }}>
             <Clock className="w-4 h-4 text-blue-600" />
             <span>Line {lineNum} Labor Time Clock Logs</span>
           </div>

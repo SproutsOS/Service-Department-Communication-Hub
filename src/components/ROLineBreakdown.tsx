@@ -482,7 +482,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                       <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                       {hasLineQuote ? (
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
                             Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
                           </span>
                           <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
@@ -742,7 +742,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                       <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                       {hasLineQuote ? (
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
                             Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
                           </span>
                           <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
@@ -824,7 +824,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
         {/* Grand Total Breakdown */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs">
           <div className="flex items-center gap-4 text-slate-300 flex-wrap">
-            <span>Total Labor: <strong className="font-mono text-white">${(ro.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
+            <span style={{ fontSize: '101.5%' }}>Total Labor: <strong className="font-mono text-white">${(ro.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
             <span>Total Parts: <strong className="font-mono text-white">${(ro.quote?.totalPartsCost || 0).toFixed(2)}</strong></span>
             {(ro.quote?.shopSuppliesFee || 0) > 0 && (
               <span>Shop Supplies: <strong className="font-mono text-white">${(ro.quote?.shopSuppliesFee || 0).toFixed(2)}</strong></span>

@@ -195,7 +195,7 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
                     )}
 
                     {/* Labor Row */}
-                    <div className="flex items-center justify-between py-1 border-b border-slate-100 text-slate-800">
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100 text-slate-800" style={{ fontSize: '101.5%' }}>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">Professional Diagnostic & Installation Labor</span>
                         <span className="text-[10px] text-slate-500 font-mono">

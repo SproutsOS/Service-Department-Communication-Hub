@@ -96,17 +96,19 @@ export const RODetailModal: React.FC = () => {
     activeRoleView
   } = useApp();
 
-  const isTechScreen = activeRoleView === 'TECHNICIAN' || currentUser.role === 'TECHNICIAN';
-  const isAdvisorScreen = (activeRoleView === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_ADVISOR') && !isTechScreen;
-  const isManager = (currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER') && !isAdvisorScreen && !isTechScreen;
-  const isAdvisor = isAdvisorScreen;
-  const isPartsManager = currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST';
-  const isSales = currentUser.role === 'SALES' || activeRoleView === 'SALES';
-  const canChangePartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && !isAdvisorScreen && !isTechScreen;
-  const canOrderParts = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'SERVICE_MANAGER' || activeRoleView === 'PARTS_SPECIALIST') && !isAdvisorScreen && !isTechScreen && currentUser.role !== 'SERVICE_ADVISOR' && activeRoleView !== 'SERVICE_ADVISOR';
+  const currentRole = activeRoleView || currentUser.role;
+  const isManager = currentRole === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_MANAGER';
+  const isAdvisor = currentRole === 'SERVICE_ADVISOR' || currentUser.role === 'SERVICE_ADVISOR';
+  const isManagerOrAdvisor = isManager || isAdvisor;
+  const isTechScreen = currentRole === 'TECHNICIAN' && !isManager && !isAdvisor;
+  const isAdvisorScreen = isAdvisor;
+  const isPartsManager = currentRole === 'PARTS_SPECIALIST' || currentUser.role === 'PARTS_SPECIALIST';
+  const isSales = currentRole === 'SALES' || currentUser.role === 'SALES';
+  const canChangePartStatus = (isManager || isPartsManager) && !isSales;
+  const canOrderParts = (isManager || isPartsManager) && !isSales;
   const canSelectPayType = isManager || isAdvisor;
   const canAssignTech = isManager || isAdvisor;
-  const canReassignServiceWriter = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
+  const canReassignServiceWriter = isManager;
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
@@ -119,12 +121,12 @@ export const RODetailModal: React.FC = () => {
   // Editable fields initialized from selectedRO
   const [editCustomerName, setEditCustomerName] = useState(selectedRO?.customerName || '');
   const [editCustomerPhone, setEditCustomerPhone] = useState(selectedRO?.customerPhone || '');
-  const [editVehicleYear, setEditVehicleYear] = useState<number | string>(selectedRO?.vehicle.year || '');
-  const [editVehicleMake, setEditVehicleMake] = useState(selectedRO?.vehicle.make || '');
-  const [editVehicleModel, setEditVehicleModel] = useState(selectedRO?.vehicle.model || '');
-  const [editVehicleVin, setEditVehicleVin] = useState(selectedRO?.vehicle.vin || '');
-  const [editVehicleMileage, setEditVehicleMileage] = useState<number | string>(selectedRO?.vehicle.mileage ?? '');
-  const [editVehicleOutMileage, setEditVehicleOutMileage] = useState<number | string>(selectedRO?.outMileage ?? selectedRO?.vehicle.outMileage ?? '');
+  const [editVehicleYear, setEditVehicleYear] = useState<number | string>(selectedRO?.vehicle?.year || '');
+  const [editVehicleMake, setEditVehicleMake] = useState(selectedRO?.vehicle?.make || '');
+  const [editVehicleModel, setEditVehicleModel] = useState(selectedRO?.vehicle?.model || '');
+  const [editVehicleVin, setEditVehicleVin] = useState(selectedRO?.vehicle?.vin || '');
+  const [editVehicleMileage, setEditVehicleMileage] = useState<number | string>(selectedRO?.vehicle?.mileage ?? '');
+  const [editVehicleOutMileage, setEditVehicleOutMileage] = useState<number | string>(selectedRO?.outMileage ?? selectedRO?.vehicle?.outMileage ?? '');
   const [editPrimaryConcern, setEditPrimaryConcern] = useState(selectedRO?.primaryConcern || '');
   const [editConcerns, setEditConcerns] = useState<string[]>(
     selectedRO?.concerns && selectedRO.concerns.length > 0
@@ -184,9 +186,9 @@ export const RODetailModal: React.FC = () => {
   // Sync header mileage values when selectedRO changes
   useEffect(() => {
     if (selectedRO) {
-      const currentOut = selectedRO.outMileage ?? selectedRO.vehicle.outMileage;
+      const currentOut = selectedRO.outMileage ?? selectedRO.vehicle?.outMileage;
       setHeaderOutMileageInput(currentOut !== undefined && currentOut !== null ? String(currentOut) : '');
-      setHeaderMileageInput(selectedRO.vehicle.mileage ? String(selectedRO.vehicle.mileage) : '');
+      setHeaderMileageInput(selectedRO.vehicle?.mileage ? String(selectedRO.vehicle.mileage) : '');
     }
   }, [selectedRO?.id, selectedRO?.outMileage, selectedRO?.vehicle?.outMileage, selectedRO?.vehicle?.mileage]);
 
@@ -241,12 +243,12 @@ export const RODetailModal: React.FC = () => {
     if (!selectedRO || isEditingDetails) return;
     setEditCustomerName(selectedRO.customerName || '');
     setEditCustomerPhone(selectedRO.customerPhone || '');
-    setEditVehicleYear(selectedRO.vehicle.year || '');
-    setEditVehicleMake(selectedRO.vehicle.make || '');
-    setEditVehicleModel(selectedRO.vehicle.model || '');
-    setEditVehicleVin(selectedRO.vehicle.vin || '');
-    setEditVehicleMileage(selectedRO.vehicle.mileage ?? '');
-    setEditVehicleOutMileage(selectedRO.outMileage ?? selectedRO.vehicle.outMileage ?? '');
+    setEditVehicleYear(selectedRO.vehicle?.year || '');
+    setEditVehicleMake(selectedRO.vehicle?.make || '');
+    setEditVehicleModel(selectedRO.vehicle?.model || '');
+    setEditVehicleVin(selectedRO.vehicle?.vin || '');
+    setEditVehicleMileage(selectedRO.vehicle?.mileage ?? '');
+    setEditVehicleOutMileage(selectedRO.outMileage ?? selectedRO.vehicle?.outMileage ?? '');
     setEditPrimaryConcern(selectedRO.primaryConcern || '');
     setEditConcerns(selectedRO.concerns && selectedRO.concerns.length > 0 ? selectedRO.concerns : [selectedRO.primaryConcern || '']);
     setEditConcernPayTypes(
@@ -858,17 +860,18 @@ export const RODetailModal: React.FC = () => {
 
               {/* Row 2: Vehicle, VIN & Advisor */}
               <p className="text-xs sm:text-sm text-slate-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className="text-white font-extrabold">{selectedRO.vehicle.year} {selectedRO.vehicle.make} {selectedRO.vehicle.model}</span>
+                <span className="text-white font-extrabold">{selectedRO.vehicle?.year} {selectedRO.vehicle?.make} {selectedRO.vehicle?.model}</span>
                 <span className="text-slate-500">•</span>
                 <span className="flex items-center gap-1">
                   <span className="text-slate-300">VIN:</span>
-                  <span className="font-mono text-blue-300 font-bold tracking-wide select-all">{selectedRO.vehicle.vin || 'N/A'}</span>
-                  {selectedRO.vehicle.vin && (
+                  <span className="font-mono text-blue-300 font-bold tracking-wide select-all">{selectedRO.vehicle?.vin || 'N/A'}</span>
+                  {selectedRO.vehicle?.vin && (
                     <button
                       type="button"
                       onClick={() => {
                         navigator.clipboard.writeText(selectedRO.vehicle.vin);
-                        alert(`Copied VIN: ${selectedRO.vehicle.vin}`);
+                        setManagerActionFeedback(`Copied VIN: ${selectedRO.vehicle.vin}`);
+                        setTimeout(() => setManagerActionFeedback(null), 3000);
                       }}
                       className="p-0.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
                       title="Copy VIN to clipboard"
@@ -1139,7 +1142,7 @@ export const RODetailModal: React.FC = () => {
         </div>
 
         {/* 1-Click Jump to Stage Stepper: Promoted to the TOP OF THE SCREEN for Service Manager & Service Advisor */}
-        {(isManager || isAdvisor) && (
+        {isManagerOrAdvisor && (
           <div id="ro-screen-top-jump-to-stage" className="bg-slate-950 border-b-2 border-slate-700 p-2 sm:px-4 shrink-0 shadow-sm">
             <TicketFlowStepper 
               ro={selectedRO} 
@@ -1956,7 +1959,7 @@ export const RODetailModal: React.FC = () => {
                                     <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                                     {hasLineQuote ? (
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200">
+                                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
                                           Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
                                         </span>
                                         <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
@@ -2032,7 +2035,7 @@ export const RODetailModal: React.FC = () => {
 
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10 text-xs">
                         <div className="flex items-center gap-3 text-slate-300 flex-wrap">
-                          <span>Labor: <strong className="font-mono text-white">${(selectedRO.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
+                          <span style={{ fontSize: '101.5%' }}>Labor: <strong className="font-mono text-white">${(selectedRO.quote?.totalLaborCost || 0).toFixed(2)}</strong></span>
                           <span>Parts: <strong className="font-mono text-white">${(selectedRO.quote?.totalPartsCost || 0).toFixed(2)}</strong></span>
                           {(selectedRO.quote?.shopSuppliesFee || 0) > 0 && (
                             <span>Supplies: <strong className="font-mono text-white">${(selectedRO.quote?.shopSuppliesFee || 0).toFixed(2)}</strong></span>
