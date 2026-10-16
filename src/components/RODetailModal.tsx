@@ -1921,6 +1921,33 @@ export const RODetailModal: React.FC = () => {
                               />
                             </div>
 
+                            {/* Labor Hours (Same 18px font size as 3Cs) */}
+                            {(() => {
+                              const lineNum = idx + 1;
+                              const lineLabor = (selectedRO.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                              const lHours = lineLabor.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+                              const lCost = lineLabor.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                              return (
+                                <div className="space-y-1.5">
+                                  <label className="text-[16px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-blue-600" />
+                                    <span>Labor Hours</span>
+                                  </label>
+                                  <div className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold font-mono text-black bg-white shadow-2xs flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-blue-950 font-black">{lHours.toFixed(1)} hrs</span>
+                                      {lCost > 0 && <span className="text-slate-600">(${lCost.toFixed(2)})</span>}
+                                    </div>
+                                    {lineLabor.length > 0 && (
+                                      <span className="text-xs font-semibold text-slate-500 font-sans">
+                                        {lineLabor.length} labor operation{lineLabor.length === 1 ? '' : 's'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {/* 4. Integrated Parts for Line {idx + 1} (Part Name, Price, Qty, Availability) */}
                             <LinePartsSection ro={selectedRO} lineNum={idx + 1} allowAddPart={canOrderParts} />
 
@@ -1947,10 +1974,15 @@ export const RODetailModal: React.FC = () => {
                                     <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                                     {hasLineQuote ? (
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
-                                          Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                                        <span className="px-3 py-1 rounded-lg bg-blue-100 text-blue-950 font-bold text-[18px] border-2 border-blue-300 shadow-2xs inline-flex items-center gap-1.5">
+                                          <Clock className="w-4 h-4 text-blue-700 shrink-0" />
+                                          <span>Labor:</span>
+                                          <span className="font-mono font-black">{lineLaborHours.toFixed(1)} hrs</span>
+                                          {lineLaborCost > 0 && (
+                                            <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
+                                          )}
                                         </span>
-                                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                                        <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
                                           Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
                                         </span>
                                       </div>

@@ -448,6 +448,25 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 </p>
               </div>
 
+              {/* Labor Hours (Same 18px font size as 3Cs) */}
+              {(() => {
+                const lineLabor = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                const lHours = lineLabor.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0);
+                const lCost = lineLabor.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+                return (
+                  <div className="space-y-1.5 pt-2.5 border-t border-slate-200">
+                    <span className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-blue-600" />
+                      <span>Labor Hours:</span>
+                    </span>
+                    <p className="text-[18px] font-bold text-black pl-7 font-mono flex items-center gap-2.5 flex-wrap">
+                      <span className="text-blue-950 font-black">{lHours.toFixed(1)} hrs</span>
+                      {lCost > 0 && <span className="text-slate-600">(${lCost.toFixed(2)})</span>}
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* 4. Integrated Parts for this Line (Part Name, Price, Qty, Availability) */}
               <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={true} />
 
@@ -482,10 +501,15 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                       <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                       {hasLineQuote ? (
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
-                            Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                          <span className="px-3 py-1 rounded-lg bg-blue-100 text-blue-950 font-bold text-[18px] border-2 border-blue-300 shadow-2xs inline-flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-blue-700 shrink-0" />
+                            <span>Labor:</span>
+                            <span className="font-mono font-black">{lineLaborHours.toFixed(1)} hrs</span>
+                            {lineLaborCost > 0 && (
+                              <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
+                            )}
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
                             Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
                           </span>
                         </div>
@@ -695,18 +719,29 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
               </div>
 
               {/* Cause & Correction if documented */}
-              {(rec.cause || rec.correction) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-white p-3.5 rounded-lg border-2 border-slate-300">
-                  <div>
-                    <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Cause:</span>
-                    <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed">{rec.cause || 'Diagnostic finding pending'}</p>
+              {(() => {
+                const recLabor = (ro.quote?.laborItems || []).filter(item => (item.roLineNumber || 1) === lineNum);
+                const recLaborHours = recLabor.reduce((acc, item) => acc + (Number(item.laborHours) || 0), 0) || Number(rec.laborHours) || 0;
+                if (!rec.cause && !rec.correction && recLaborHours === 0) return null;
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm bg-white p-3.5 rounded-lg border-2 border-slate-300">
+                    <div>
+                      <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Cause:</span>
+                      <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed">{rec.cause || 'Diagnostic finding pending'}</p>
+                    </div>
+                    <div>
+                      <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Correction:</span>
+                      <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed">{rec.correction || 'Repair correction pending'}</p>
+                    </div>
+                    <div>
+                      <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Labor Hours:</span>
+                      <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed text-blue-950">
+                        {recLaborHours > 0 ? `${recLaborHours.toFixed(1)} hrs` : '0.0 hrs'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="font-black text-black uppercase block text-[15px] tracking-wider mb-1">Correction:</span>
-                    <p className="font-mono text-black font-bold text-[18px] whitespace-pre-wrap leading-relaxed">{rec.correction || 'Repair correction pending'}</p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Integrated Parts for Line */}
               <LinePartsSection ro={ro} lineNum={lineNum} allowAddPart={true} />
@@ -742,10 +777,15 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                       <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                       {hasLineQuote ? (
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
-                            Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                          <span className="px-3 py-1 rounded-lg bg-blue-100 text-blue-950 font-bold text-[18px] border-2 border-blue-300 shadow-2xs inline-flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-blue-700 shrink-0" />
+                            <span>Labor:</span>
+                            <span className="font-mono font-black">{lineLaborHours.toFixed(1)} hrs</span>
+                            {lineLaborCost > 0 && (
+                              <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
+                            )}
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
                             Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
                           </span>
                         </div>

@@ -733,6 +733,12 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                           <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
                             Line {lineNum}
                           </span>
+                          {lineLaborHours > 0 && (
+                            <span className="font-mono text-[18px] font-black px-3 py-0.5 rounded-lg bg-blue-100 text-blue-950 border-2 border-blue-300 shadow-2xs inline-flex items-center gap-1.5" title={`Labor time logged for Line ${lineNum}`}>
+                              <Clock className="w-4 h-4 text-blue-700 shrink-0" />
+                              <span>{lineLaborHours.toFixed(1)} hrs</span>
+                            </span>
+                          )}
                           {idx === 0 && (
                             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                               Primary Concern
@@ -993,6 +999,31 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                         )}
                       </div>
 
+                      {/* Labor Hours Display for Line (Same 18px font size as 3Cs) */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="text-[16px] font-black text-black uppercase tracking-wider flex items-center gap-2">
+                          <Clock className="w-5 h-5 text-blue-600" />
+                          <span>Labor Hours:</span>
+                        </label>
+                        <div className="bg-white px-3.5 py-2.5 rounded-lg border-2 border-slate-300 text-[18px] font-bold text-black font-mono shadow-2xs flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-blue-950 font-black text-[18px]">{lineLaborHours.toFixed(1)} hrs</span>
+                            {lineLaborCost > 0 && (
+                              <span className="text-slate-600 font-bold text-[18px]">(${lineLaborCost.toFixed(2)})</span>
+                            )}
+                          </div>
+                          {lineLaborItems.length > 0 ? (
+                            <span className="text-xs font-semibold text-slate-500 font-sans">
+                              {lineLaborItems.map(i => i.description ? `${i.description} (${(Number(i.laborHours) || 0).toFixed(1)} hrs)` : `${(Number(i.laborHours) || 0).toFixed(1)} hrs`).join(', ')}
+                            </span>
+                          ) : (
+                            <span className="text-xs italic text-slate-400 font-sans font-normal">
+                              No labor operations assigned yet
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Save / Cancel buttons when editing this line */}
                       {editingLineIdx === idx && (
                         <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
@@ -1033,10 +1064,15 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                           <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Line {lineNum} Quote:</span>
                           {hasLineQuote ? (
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold text-[11px] border border-blue-200" style={{ fontSize: '101.5%' }}>
-                                Labor: {lineLaborHours.toFixed(1)} hrs (${lineLaborCost.toFixed(2)})
+                              <span className="px-3 py-1 rounded-lg bg-blue-100 text-blue-950 font-bold text-[18px] border-2 border-blue-300 shadow-2xs inline-flex items-center gap-1.5">
+                                <Clock className="w-4 h-4 text-blue-700 shrink-0" />
+                                <span>Labor:</span>
+                                <span className="font-mono font-black">{lineLaborHours.toFixed(1)} hrs</span>
+                                {lineLaborCost > 0 && (
+                                  <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
+                                )}
                               </span>
-                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold text-[11px] border border-amber-200">
+                              <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
                                 Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
                               </span>
                             </div>

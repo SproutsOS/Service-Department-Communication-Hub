@@ -1698,7 +1698,7 @@ export const RepairQuoteModal: React.FC = () => {
 
                         {/* Labor Hours (ProDemand) */}
                         <div className="flex items-center gap-2 shrink-0">
-                          <label className="text-xs font-black text-slate-950 uppercase">Hours:</label>
+                          <label className="text-[14px] font-black text-slate-950 uppercase">Hours:</label>
                           <input
                             type="number"
                             step="0.1"
@@ -1712,7 +1712,7 @@ export const RepairQuoteModal: React.FC = () => {
                               });
                             }}
                             onFocus={(e) => e.target.select()}
-                            className="w-24 px-3 py-2 bg-white border-2 border-slate-400 rounded-lg text-sm font-black text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-600 focus:outline-none shadow-2xs"
+                            className="w-28 px-3 py-1.5 bg-white border-2 border-slate-600 rounded-lg text-[18px] font-black font-mono text-slate-950 text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-600 focus:outline-none shadow-2xs"
                           />
                         </div>
 
