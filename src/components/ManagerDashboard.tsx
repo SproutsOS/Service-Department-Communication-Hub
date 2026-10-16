@@ -344,13 +344,43 @@ export const ManagerDashboard: React.FC = () => {
             id="open-special-parts-mgr"
             onClick={() => openSpecialPartsModal()}
             className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-amber-400"
-            title="Open Frequent & Special Part Numbers Cheat Sheet"
+            title="Open Frequent & Special Part Numbers Directory"
           >
             <Bookmark className="w-4 h-4 text-amber-400 fill-amber-400/20" />
             <span>Special Parts</span>
             {specialParts.length > 0 && (
               <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400/40">
                 {specialParts.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="open-important-numbers-mgr"
+            onClick={() => openImportantNumbersModal()}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-sky-400"
+            title="Open Important Phone Numbers & Vendor Directory"
+          >
+            <Phone className="w-4 h-4 text-sky-400" />
+            <span>Important Numbers</span>
+            {importantNumbers.length > 0 && (
+              <span className="bg-sky-500/20 text-sky-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-sky-400/40">
+                {importantNumbers.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="open-manager-passwords-mgr"
+            onClick={() => openManagerPasswordsModal()}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-indigo-400"
+            title="Open Manager Passwords & Portal Credentials Vault"
+          >
+            <KeyRound className="w-4 h-4 text-indigo-400" />
+            <span>Passwords</span>
+            {managerPasswords.length > 0 && (
+              <span className="bg-indigo-500/20 text-indigo-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-indigo-400/40">
+                {managerPasswords.length}
               </span>
             )}
           </button>
