@@ -20,7 +20,8 @@ import {
   CalendarCheck,
   Receipt,
   Archive,
-  Package
+  Package,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -58,6 +59,8 @@ export const Navbar: React.FC = () => {
     markNotificationRead,
     dismissPartsOrderAlert,
     setActiveRoleView,
+    openShopChat,
+    unreadShopCount,
   } = useApp();
 
   const archivedCount = useMemo(() => {
@@ -549,6 +552,31 @@ export const Navbar: React.FC = () => {
             <span className="hidden md:inline">Staff ({users.length})</span>
           </button>
         )}
+
+        {/* Shop Chat Button with Live Red Dot Indicator */}
+        <button
+          id="navbar-shop-chat-btn"
+          onClick={() => openShopChat()}
+          className={`relative inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-xs ${
+            unreadShopCount > 0
+              ? 'bg-blue-600 text-white border-blue-400 ring-2 ring-blue-400/50'
+              : 'bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-600'
+          }`}
+          title={unreadShopCount > 0 ? `${unreadShopCount} unread shop chat message(s) - Click to open` : "Open Shop Chat"}
+        >
+          <div className="relative">
+            <MessageSquare className="w-4 h-4 text-blue-300" />
+            {unreadShopCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-slate-800 animate-pulse" />
+            )}
+          </div>
+          <span className="hidden sm:inline">Shop Chat</span>
+          {unreadShopCount > 0 && (
+            <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+              {unreadShopCount}
+            </span>
+          )}
+        </button>
 
         {/* Active User Badge */}
         <div className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/70 text-xs">

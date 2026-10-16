@@ -29,6 +29,7 @@ import { SpecialPartsModal } from './components/SpecialPartsModal';
 import { ImportantNumbersModal } from './components/ImportantNumbersModal';
 import { ManagerPasswordsModal } from './components/ManagerPasswordsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { useBrowserTabNotification } from './utils/useBrowserTabNotification';
 import { 
   LayoutDashboard, 
   Wrench, 
@@ -88,6 +89,9 @@ const MainContent: React.FC = () => {
     notifications,
   } = useApp();
   
+  // Dynamic red dot notification on the browser tab title & favicon when chat messages are received
+  useBrowserTabNotification(unreadShopCount);
+
   // Only managers can inspect other department dashboards; all individual staff are strictly locked to their own role space
   const isManager = currentUser.role === 'SERVICE_MANAGER';
 
