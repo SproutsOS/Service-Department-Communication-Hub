@@ -1869,23 +1869,23 @@ export const RepairQuoteModal: React.FC = () => {
                                                 placeholder="Part description (e.g. Front Brake Pad Set)..."
                                                 value={p.description}
                                                 onChange={(e) => handleUpdatePartItem(p.id, { description: e.target.value })}
-                                                className={`w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none ${isPartDeclined ? 'line-through text-slate-400' : ''}`}
+                                                className={`w-full px-3 py-1.5 bg-white border-2 border-slate-400 rounded-lg text-[18px] font-black text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none ${isPartDeclined ? 'line-through text-slate-400' : ''}`}
                                               />
                                               <input
                                                 type="text"
                                                 placeholder="Part # (opt)"
                                                 value={p.partNumber || ''}
                                                 onChange={(e) => handleUpdatePartItem(p.id, { partNumber: e.target.value })}
-                                                className="w-28 px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none shrink-0"
+                                                className="w-36 px-2.5 py-1.5 bg-white border-2 border-slate-400 rounded-lg text-[18px] font-mono font-bold text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none shrink-0"
                                               />
                                             </div>
                                           ) : (
                                             <div className="flex-1 flex items-center gap-2 min-w-0 flex-wrap">
-                                              <span className={`font-black text-xs ${isPartDeclined ? 'line-through text-slate-400' : 'text-slate-950'}`}>
+                                              <span className={`font-black text-[18px] ${isPartDeclined ? 'line-through text-slate-400' : 'text-slate-950'}`}>
                                                 {p.description}
                                               </span>
                                               {p.partNumber && (
-                                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+                                                <span className="font-mono text-[18px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 border-2 border-slate-300 shrink-0">
                                                   #{p.partNumber}
                                                 </span>
                                               )}
@@ -1893,11 +1893,11 @@ export const RepairQuoteModal: React.FC = () => {
                                           )}
 
                                           {/* Qty, Price, Subtotal & Actions */}
-                                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
                                             {canManageParts ? (
                                               <>
-                                                <div className="flex items-center gap-1">
-                                                  <label className="text-[10px] font-black text-slate-700 uppercase">Qty:</label>
+                                                <div className="flex items-center gap-1.5">
+                                                  <label className="text-xs font-black text-slate-950 uppercase">Qty:</label>
                                                   <input
                                                     type="number"
                                                     min="1"
@@ -1906,14 +1906,14 @@ export const RepairQuoteModal: React.FC = () => {
                                                       const val = e.target.value;
                                                       handleUpdatePartItem(p.id, { quantity: val === '' ? ('' as any) : Number(val) });
                                                     }}
-                                                    className="w-14 px-1.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 text-center focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                    className="w-16 px-2 py-1.5 bg-white border-2 border-slate-400 rounded-lg text-[18px] font-black font-mono text-slate-950 text-center focus:ring-2 focus:ring-amber-500 focus:outline-none"
                                                   />
                                                 </div>
 
-                                                <div className="flex items-center gap-1">
-                                                  <label className="text-[10px] font-black text-slate-700 uppercase">Price:</label>
-                                                  <div className="relative w-22">
-                                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-xs">$</span>
+                                                <div className="flex items-center gap-1.5">
+                                                  <label className="text-xs font-black text-slate-950 uppercase">Price:</label>
+                                                  <div className="relative w-32">
+                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-base">$</span>
                                                     <input
                                                       type="text"
                                                       inputMode="decimal"
@@ -1933,25 +1933,25 @@ export const RepairQuoteModal: React.FC = () => {
                                                           handleUpdatePartItem(p.id, { unitPrice: 0 });
                                                         }
                                                       }}
-                                                      className="w-full pl-4 pr-1.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                      className="w-full pl-6 pr-2 py-1.5 bg-white border-2 border-slate-400 rounded-lg text-[18px] font-black font-mono text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                                                     />
                                                   </div>
                                                 </div>
                                               </>
                                             ) : (
                                               <div className="flex items-center gap-2">
-                                                <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                                <span className="text-[18px] font-bold font-mono text-slate-900 bg-white px-2.5 py-1 rounded-lg border-2 border-slate-300">
                                                   Qty: {p.quantity}
                                                 </span>
-                                                <span className="text-[11px] font-mono font-bold text-slate-700">
+                                                <span className="text-[18px] font-black font-mono text-emerald-950 bg-emerald-100 px-3 py-1 rounded-lg border-2 border-emerald-300 shadow-2xs">
                                                   ${(Number(p.unitPrice) || 0).toFixed(2)} ea
                                                 </span>
                                               </div>
                                             )}
 
-                                            <div className="text-right min-w-[70px]">
-                                              <span className="text-[9px] text-slate-500 block uppercase font-bold">Subtotal</span>
-                                              <span className={`text-xs font-black font-mono ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-800'}`}>
+                                            <div className="text-right min-w-[80px]">
+                                              <span className="text-[10px] text-slate-600 block uppercase font-black">Subtotal</span>
+                                              <span className={`text-[18px] font-black font-mono ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-950 bg-emerald-100 px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block'}`}>
                                                 ${(Number(p.subtotal) || 0).toFixed(2)}
                                               </span>
                                             </div>

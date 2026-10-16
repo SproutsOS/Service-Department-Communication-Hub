@@ -1243,17 +1243,24 @@ export const RODetailModal: React.FC = () => {
                     : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
                 }`}
               >
-                <MessageSquare className={`w-3.5 h-3.5 ${
-                  hasUnreadUrgent || unreadCount > 0 || activeTab === 'CHAT' ? 'text-white' : 'text-slate-700'
-                }`} />
+                <div className="relative">
+                  <MessageSquare className={`w-3.5 h-3.5 ${
+                    hasUnreadUrgent || unreadCount > 0 || activeTab === 'CHAT' ? 'text-white' : 'text-slate-700'
+                  }`} />
+                  {(hasUnreadUrgent || unreadCount > 0) && (
+                    <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
+                  )}
+                </div>
                 <span>Live Communication</span>
                 {hasUnreadUrgent ? (
-                  <span className="bg-white text-red-700 text-[10px] px-1.5 py-0.2 rounded-full font-black animate-ping">
-                    NEW
+                  <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black animate-ping flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                    URGENT
                   </span>
                 ) : unreadCount > 0 ? (
-                  <span className="bg-white text-blue-700 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                    NEW
+                  <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black flex items-center gap-1 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                    {unreadCount}
                   </span>
                 ) : null}
               </button>
@@ -1982,8 +1989,10 @@ export const RODetailModal: React.FC = () => {
                                             <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
                                           )}
                                         </span>
-                                        <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
-                                          Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                                        <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-950 font-bold text-[18px] border-2 border-amber-300 shadow-2xs inline-flex items-center gap-1.5">
+                                          <Package className="w-4 h-4 text-amber-700 shrink-0" />
+                                          <span>Parts ({linePartsCount}):</span>
+                                          <span className="font-mono font-black">${linePartsCost.toFixed(2)}</span>
                                         </span>
                                       </div>
                                     ) : (
@@ -1992,7 +2001,7 @@ export const RODetailModal: React.FC = () => {
                                   </div>
 
                                   <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-                                    <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
+                                    <span className="text-[18px] font-black font-mono text-indigo-950 bg-white px-3 py-1 rounded-lg border-2 border-indigo-300 shadow-2xs">
                                       Line {lineNum} Total: ${lineTotal.toFixed(2)}
                                     </span>
                                   </div>
@@ -2551,29 +2560,34 @@ export const RODetailModal: React.FC = () => {
                               }`}
                             >
                               {/* Part Details */}
-                              <div className="space-y-1.5 min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
+                              <div className="space-y-2 min-w-0 flex-1">
+                                <div className="flex items-center gap-2.5 flex-wrap">
                                   {part.roLineNumber && (
-                                    <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
+                                    <span className="font-mono text-xs font-black uppercase px-2.5 py-1 rounded bg-slate-900 text-white shadow-2xs">
                                       Line {part.roLineNumber}
                                     </span>
                                   )}
                                   {part.partNumber && (
-                                    <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-300">
+                                    <span className="font-mono text-[18px] font-bold text-slate-900 bg-white px-3 py-1 rounded-lg border-2 border-slate-300">
                                       #{part.partNumber}
                                     </span>
                                   )}
-                                  <span className="text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                  <span className="text-[18px] font-bold font-mono text-black bg-white px-3 py-1 rounded-lg border-2 border-slate-300">
                                     Qty: {part.quantity}
                                   </span>
                                   {part.price !== undefined && part.price > 0 && (
-                                    <span className="text-xs font-black font-mono text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                                    <span className="text-[18px] font-black font-mono text-emerald-950 bg-emerald-100 px-3 py-1 rounded-lg border-2 border-emerald-300 shadow-2xs">
                                       ${part.price.toFixed(2)} ea
+                                      {part.quantity > 1 && (
+                                        <span className="text-[18px] font-bold text-emerald-900 ml-1.5">
+                                          (${((part.quantity || 1) * part.price).toFixed(2)})
+                                        </span>
+                                      )}
                                     </span>
                                   )}
                                 </div>
 
-                                <div className="text-base font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                                <div className="text-[18px] font-black text-slate-950 flex items-center gap-2 flex-wrap">
                                   <span>{part.name}</span>
                                 </div>
 

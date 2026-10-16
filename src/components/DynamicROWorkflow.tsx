@@ -1072,8 +1072,10 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                                   <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
                                 )}
                               </span>
-                              <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
-                                Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                              <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-950 font-bold text-[18px] border-2 border-amber-300 shadow-2xs inline-flex items-center gap-1.5">
+                                <Package className="w-4 h-4 text-amber-700 shrink-0" />
+                                <span>Parts ({linePartsCount}):</span>
+                                <span className="font-mono font-black">${linePartsCost.toFixed(2)}</span>
                               </span>
                             </div>
                           ) : (
@@ -1082,7 +1084,7 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-                          <span className="text-xs font-black font-mono text-indigo-950 bg-white px-2.5 py-1 rounded-md border border-indigo-300 shadow-2xs">
+                          <span className="text-[18px] font-black font-mono text-indigo-950 bg-white px-3 py-1 rounded-lg border-2 border-indigo-300 shadow-2xs">
                             Line {lineNum} Total: ${lineTotal.toFixed(2)}
                           </span>
                         </div>

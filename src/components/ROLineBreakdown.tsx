@@ -14,6 +14,7 @@ import {
   Receipt,
   Calculator,
   Plus,
+  Package,
   Check,
   X
 } from 'lucide-react';
@@ -509,8 +510,10 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                               <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
                             )}
                           </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
-                            Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                          <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-950 font-bold text-[18px] border-2 border-amber-300 shadow-2xs inline-flex items-center gap-1.5">
+                            <Package className="w-4 h-4 text-amber-700 shrink-0" />
+                            <span>Parts ({linePartsCount}):</span>
+                            <span className="font-mono font-black">${linePartsCost.toFixed(2)}</span>
                           </span>
                         </div>
                       ) : (
@@ -520,11 +523,11 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
 
                     <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
                       {lineStatus === 'DECLINED' && (
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300">
+                        <span className="text-xs font-black uppercase px-2.5 py-1 rounded bg-rose-100 text-rose-900 border border-rose-300">
                           Declined
                         </span>
                       )}
-                      <span className={`text-xs font-black font-mono px-2.5 py-1 rounded-md border shadow-2xs ${
+                      <span className={`text-[18px] font-black font-mono px-3 py-1 rounded-lg border-2 shadow-2xs ${
                         lineStatus === 'DECLINED' 
                           ? 'bg-rose-50 text-rose-900 line-through border-rose-300' 
                           : 'text-indigo-950 bg-white border-indigo-300'
@@ -785,8 +788,10 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                               <span className="text-blue-900 font-bold text-[16px] font-mono">(${lineLaborCost.toFixed(2)})</span>
                             )}
                           </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold text-xs border border-amber-200">
-                            Parts ({linePartsCount}): ${linePartsCost.toFixed(2)}
+                          <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-950 font-bold text-[18px] border-2 border-amber-300 shadow-2xs inline-flex items-center gap-1.5">
+                            <Package className="w-4 h-4 text-amber-700 shrink-0" />
+                            <span>Parts ({linePartsCount}):</span>
+                            <span className="font-mono font-black">${linePartsCost.toFixed(2)}</span>
                           </span>
                         </div>
                       ) : (
@@ -795,7 +800,7 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-                      <span className="text-xs font-black font-mono px-2.5 py-1 rounded-md border shadow-2xs text-indigo-950 bg-white border-indigo-300">
+                      <span className="text-[18px] font-black font-mono px-3 py-1 rounded-lg border-2 shadow-2xs text-indigo-950 bg-white border-indigo-300">
                         Line {lineNum} Total: ${lineTotal.toFixed(2)}
                       </span>
                     </div>
