@@ -49,7 +49,6 @@ import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { formatDateTime, formatTimeOnly, formatRelativeTime, formatEtaBadge, formatDurationSince, getDiagnosticStatusDetails, formatCurrency, cleanRO3700 } from '../utils/formatters';
 import { ArrivalTimeFrameDropdown } from './ArrivalTimeFrameDropdown';
 import { computeEtaAndStatus } from '../utils/partArrivalOptions';
-import { TicketFlowStepper } from './TicketFlowStepper';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { WarrantyTimeClockSection } from './WarrantyTimeClockSection';
@@ -1140,17 +1139,6 @@ export const RODetailModal: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* 1-Click Jump to Stage Stepper: Promoted to the TOP OF THE SCREEN for Service Manager & Service Advisor */}
-        {isManagerOrAdvisor && (
-          <div id="ro-screen-top-jump-to-stage" className="bg-slate-950 border-b-2 border-slate-700 p-2 sm:px-4 shrink-0 shadow-sm">
-            <TicketFlowStepper 
-              ro={selectedRO} 
-              onUpdateStatus={(newStatus, notes) => updateROStatus(selectedRO.id, newStatus, notes)} 
-              canEdit={!isSales}
-            />
-          </div>
-        )}
 
         {/* Navigation Tabs */}
         {isSales && (

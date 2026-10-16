@@ -33,7 +33,6 @@ import { useApp } from '../context/AppContext';
 import { formatTimeOnly, formatDurationSince, formatRelativeTime, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, formatContactOutcome, isWoolwineVehicle } from '../utils/cadenceUtils';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
-import { TicketFlowStepper } from './TicketFlowStepper';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
 
@@ -1730,22 +1729,6 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
           )}
         </div>
       )
-    },
-
-    // 10. Visual Ticket Flow Pipeline Stepper
-    {
-      key: 'section-pipeline-stepper',
-      naturalOrder: 10,
-      title: 'Ticket Flow Pipeline Stepper',
-      isComplete: ro.status === 'CLOSED',
-      completeBadgeText: 'Full Workflow Pipeline',
-      render: () => (
-        <TicketFlowStepper 
-          ro={ro} 
-          onUpdateStatus={handleStatusChange} 
-          canEdit={!isSales}
-        />
-      )
     }
   ];
 
@@ -1754,9 +1737,6 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
   const sortedSections = useMemo(() => {
     const list = sections.filter(sec => {
       if (isTechScreen && sec.key === 'section-cadence') return false;
-      // For Service Manager and Service Advisor, the 1-Click Jump to Stage Stepper is promoted to the very TOP of the screen,
-      // so we filter it out of the lower sections list to prevent duplication.
-      if (isManagerOrAdvisor && sec.key === 'section-pipeline-stepper') return false;
       return true;
     });
 
@@ -1787,21 +1767,10 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
 
       return getOrderScore(a.key, a.naturalOrder) - getOrderScore(b.key, b.naturalOrder);
     });
-  }, [smartWorkflowOrder, activeAction.sectionKey, sections, isTechScreen, isManagerOrAdvisor]);
+  }, [smartWorkflowOrder, activeAction.sectionKey, sections, isTechScreen]);
 
   return (
     <div className="space-y-4">
-      {/* 1-Click Jump to Stage & Flow Pipeline: Promoted to the TOP of the screen for Service Manager & Service Advisor */}
-      {isManagerOrAdvisor && (
-        <div id="top-jump-to-stage-stepper" className="space-y-1">
-          <TicketFlowStepper 
-            ro={ro} 
-            onUpdateStatus={handleStatusChange} 
-            canEdit={!isSales}
-          />
-        </div>
-      )}
-
       {/* Simple, clean Next Action Required indicator without cluttered boxes */}
       {smartWorkflowOrder && activeAction.id !== 'NONE' ? (
         <div className="flex items-center justify-between pb-1 pt-0.5 text-xs">
