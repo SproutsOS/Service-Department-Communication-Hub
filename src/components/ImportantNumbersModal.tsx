@@ -14,7 +14,9 @@ import {
   KeyRound,
   ExternalLink,
   Building2,
-  Clock
+  Clock,
+  ShieldAlert,
+  PhoneForwarded
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ImportantNumberEntry } from '../types';
@@ -42,8 +44,12 @@ export const ImportantNumbersModal: React.FC = () => {
     deleteImportantNumber,
     openSpecialPartsModal,
     openManagerPasswordsModal,
+    openRecallWaitingModal,
+    openInternalExtensionModal,
     specialParts,
-    managerPasswords
+    managerPasswords,
+    recallWaitingList,
+    internalExtensions
   } = useApp();
 
   const [newCategory, setNewCategory] = useState('');
@@ -164,25 +170,31 @@ export const ImportantNumbersModal: React.FC = () => {
     }
   };
 
-  const handleSwitchTab = (tab: 'parts' | 'numbers' | 'passwords') => {
+  const handleSwitchTab = (tab: 'parts' | 'numbers' | 'passwords' | 'recalls' | 'extensions') => {
     if (tab === 'parts') {
       closeImportantNumbersModal();
       openSpecialPartsModal();
     } else if (tab === 'passwords') {
       closeImportantNumbersModal();
       openManagerPasswordsModal();
+    } else if (tab === 'recalls') {
+      closeImportantNumbersModal();
+      openRecallWaitingModal();
+    } else if (tab === 'extensions') {
+      closeImportantNumbersModal();
+      openInternalExtensionModal();
     }
   };
 
   return (
     <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div 
-        className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 max-h-[92vh] animate-in zoom-in-95 duration-200"
+        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 max-h-[92vh] animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Navigation Tabs Bar */}
         <div className="bg-slate-950 px-5 pt-3 pb-1 border-b border-slate-800 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800 text-xs">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800 text-xs flex-wrap">
             <button
               type="button"
               onClick={() => handleSwitchTab('parts')}
@@ -215,6 +227,30 @@ export const ImportantNumbersModal: React.FC = () => {
               <span>Passwords</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-emerald-300 font-mono">
                 {managerPasswords.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('recalls')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 font-semibold transition-colors cursor-pointer"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+              <span>Recall Waiting List</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-red-300 font-mono">
+                {recallWaitingList.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('extensions')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 font-semibold transition-colors cursor-pointer"
+            >
+              <PhoneForwarded className="w-3.5 h-3.5 text-teal-400" />
+              <span>Phone Extensions</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-teal-300 font-mono">
+                {internalExtensions.length}
               </span>
             </button>
           </div>

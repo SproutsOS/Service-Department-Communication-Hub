@@ -32,7 +32,10 @@ import {
   List,
   Store,
   ChevronDown,
-  Calculator
+  Calculator,
+  ShieldAlert,
+  Bookmark,
+  PhoneForwarded
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PartItem, PartStatus, RepairOrder, QuotePartItem, RepairQuote, UrgentNotification } from '../types';
@@ -84,7 +87,13 @@ export const PartsDashboard: React.FC = () => {
     setSelectedRO, 
     notifications,
     markNotificationRead,
-    users 
+    users,
+    openRecallWaitingModal,
+    recallWaitingList,
+    openSpecialPartsModal,
+    specialParts,
+    internalExtensions,
+    openInternalExtensionModal
   } = useApp();
 
   // Active view: 'RO_LIST' (Access all ROs directly) or 'PARTS_LIST' (Tracked Logistics)
@@ -2731,6 +2740,52 @@ export const PartsDashboard: React.FC = () => {
             }`}>
               {allParts.length}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openRecallWaitingModal()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 shadow-2xs"
+            title="Open Recall Waiting List (Track customers waiting on recall parts, ordered oldest to newest)"
+          >
+            <ShieldAlert className="w-4 h-4 text-red-600" />
+            <span>Recall Waiting List</span>
+            {recallWaitingList.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-red-600 text-white font-mono">
+                {recallWaitingList.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openSpecialPartsModal()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs"
+            title="Open Frequent & Special Part Numbers Directory"
+          >
+            <Bookmark className="w-4 h-4 text-amber-600" />
+            <span>Special Parts</span>
+            {specialParts.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-600 text-white font-mono">
+                {specialParts.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            id="parts-open-extensions-btn"
+            onClick={() => openInternalExtensionModal()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 shadow-2xs"
+            title="Open Dealership Internal Phone & Extension Directory"
+          >
+            <PhoneForwarded className="w-4 h-4 text-teal-600" />
+            <span>Extensions</span>
+            {internalExtensions.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-teal-600 text-white font-mono">
+                {internalExtensions.length}
+              </span>
+            )}
           </button>
         </div>
 

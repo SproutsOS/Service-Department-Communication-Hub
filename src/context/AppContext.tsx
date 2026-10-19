@@ -43,7 +43,9 @@ import {
   StickyNoteColor,
   SpecialPartNumber,
   ImportantNumberEntry,
-  ManagerPasswordEntry
+  ManagerPasswordEntry,
+  RecallWaitingEntry,
+  InternalExtensionEntry
 } from '../types';
 import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist';
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
@@ -56,7 +58,9 @@ import {
   STATUS_CONFIG, 
   INITIAL_SPECIAL_PARTS,
   INITIAL_IMPORTANT_NUMBERS,
-  INITIAL_MANAGER_PASSWORDS 
+  INITIAL_MANAGER_PASSWORDS,
+  INITIAL_RECALL_WAITING_LIST,
+  INITIAL_INTERNAL_EXTENSIONS
 } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
@@ -422,6 +426,27 @@ interface AppContextType {
   setIsManagerPasswordsModalOpen: (open: boolean) => void;
   openManagerPasswordsModal: () => void;
   closeManagerPasswordsModal: () => void;
+
+  // Recall Waiting on Parts Directory (Service Manager & Parts Waiting List)
+  recallWaitingList: RecallWaitingEntry[];
+  addRecallWaitingEntry: (entry: Omit<RecallWaitingEntry, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateRecallWaitingEntry: (id: string, updates: Partial<RecallWaitingEntry>) => void;
+  deleteRecallWaitingEntry: (id: string) => void;
+  markRecallCustomerCalled: (id: string, dateCalled?: string) => void;
+  isRecallWaitingModalOpen: boolean;
+  setIsRecallWaitingModalOpen: (open: boolean) => void;
+  openRecallWaitingModal: () => void;
+  closeRecallWaitingModal: () => void;
+
+  // Internal Phone & Extension Directory (By Name, Extension #, Department)
+  internalExtensions: InternalExtensionEntry[];
+  addInternalExtension: (entry: Omit<InternalExtensionEntry, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateInternalExtension: (id: string, updates: Partial<InternalExtensionEntry>) => void;
+  deleteInternalExtension: (id: string) => void;
+  isInternalExtensionModalOpen: boolean;
+  setIsInternalExtensionModalOpen: (open: boolean) => void;
+  openInternalExtensionModal: () => void;
+  closeInternalExtensionModal: () => void;
 }
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
@@ -765,6 +790,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isManagerPasswordsModalOpen, setIsManagerPasswordsModalOpen] = useState(false);
   const openManagerPasswordsModal = useCallback(() => setIsManagerPasswordsModalOpen(true), []);
   const closeManagerPasswordsModal = useCallback(() => setIsManagerPasswordsModalOpen(false), []);
+
+  // Recall Waiting on Parts Directory (Service Manager & Parts Waiting List)
+  const STORAGE_KEY_RECALL_WAITING_LIST = 'dealership_recall_waiting_list';
+  const [recallWaitingList, setRecallWaitingList] = useState<RecallWaitingEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_RECALL_WAITING_LIST);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_RECALL_WAITING_LIST;
+  });
+  const [isRecallWaitingModalOpen, setIsRecallWaitingModalOpen] = useState(false);
+  const openRecallWaitingModal = useCallback(() => setIsRecallWaitingModalOpen(true), []);
+  const closeRecallWaitingModal = useCallback(() => setIsRecallWaitingModalOpen(false), []);
+
+  // Internal Phone & Extension Directory (By Name, Extension #, Department)
+  const STORAGE_KEY_INTERNAL_EXTENSIONS = 'dealership_internal_extensions_list';
+  const [internalExtensions, setInternalExtensions] = useState<InternalExtensionEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_INTERNAL_EXTENSIONS);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_INTERNAL_EXTENSIONS;
+  });
+  const [isInternalExtensionModalOpen, setIsInternalExtensionModalOpen] = useState(false);
+  const openInternalExtensionModal = useCallback(() => setIsInternalExtensionModalOpen(true), []);
+  const closeInternalExtensionModal = useCallback(() => setIsInternalExtensionModalOpen(false), []);
 
   // RO Change Alerts & Red Bell Notifications
   const [roChangeAlerts, setRoChangeAlerts] = useState<Record<string, ROChangeAlert>>(() => {
@@ -1315,6 +1372,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setManagerPasswords(cloudSettings.managerPasswords);
           try {
             localStorage.setItem(STORAGE_KEY_MANAGER_PASSWORDS, JSON.stringify(cloudSettings.managerPasswords));
+          } catch {}
+        }
+        if (Array.isArray(cloudSettings.recallWaitingList)) {
+          setRecallWaitingList(cloudSettings.recallWaitingList);
+          try {
+            localStorage.setItem(STORAGE_KEY_RECALL_WAITING_LIST, JSON.stringify(cloudSettings.recallWaitingList));
+          } catch {}
+        }
+        if (Array.isArray(cloudSettings.internalExtensions)) {
+          setInternalExtensions(cloudSettings.internalExtensions);
+          try {
+            localStorage.setItem(STORAGE_KEY_INTERNAL_EXTENSIONS, JSON.stringify(cloudSettings.internalExtensions));
           } catch {}
         }
       }
@@ -5816,6 +5885,198 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  // Recall Waiting on Parts Actions (Service Manager & Parts Waiting List)
+  const addRecallWaitingEntry = useCallback((entry: Omit<RecallWaitingEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const cleanCustomerName = (entry.customerName || '').trim();
+    const cleanVin = (entry.vin || '').trim().toUpperCase();
+    const cleanPartNumber = (entry.partNumber || '').trim().toUpperCase();
+    const cleanDatePutOnList = (entry.datePutOnList || '').trim() || new Date().toISOString().split('T')[0];
+    const cleanPhone = (entry.phoneNumber || '').trim();
+    const cleanDateCalled = (entry.dateCalled || '').trim();
+    const cleanRecallNumber = (entry.recallNumber || entry.campaignCode || '').trim().toUpperCase();
+    const cleanNotes = (entry.notes || '').trim();
+    if (!cleanCustomerName || !cleanPartNumber) return;
+
+    const newEntry: RecallWaitingEntry = {
+      id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      customerName: cleanCustomerName,
+      vin: cleanVin,
+      partNumber: cleanPartNumber,
+      datePutOnList: cleanDatePutOnList,
+      phoneNumber: cleanPhone,
+      dateCalled: cleanDateCalled || undefined,
+      recallNumber: cleanRecallNumber || undefined,
+      campaignCode: cleanRecallNumber || undefined,
+      notes: cleanNotes || undefined,
+      status: entry.status || 'WAITING_ON_PART',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setRecallWaitingList(prev => {
+      // Keep sorted by oldest datePutOnList first
+      const updated = [...prev, newEntry].sort((a, b) => {
+        const timeA = new Date(a.datePutOnList || a.createdAt || 0).getTime();
+        const timeB = new Date(b.datePutOnList || b.createdAt || 0).getTime();
+        return timeA - timeB;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_RECALL_WAITING_LIST, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ recallWaitingList: updated });
+      return updated;
+    });
+  }, []);
+
+  const updateRecallWaitingEntry = useCallback((id: string, updates: Partial<RecallWaitingEntry>) => {
+    setRecallWaitingList(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
+        const updatedRecall = updates.recallNumber !== undefined 
+          ? updates.recallNumber.trim().toUpperCase() 
+          : updates.campaignCode !== undefined 
+          ? updates.campaignCode.trim().toUpperCase() 
+          : (item.recallNumber || item.campaignCode);
+
+        return {
+          ...item,
+          ...updates,
+          vin: updates.vin !== undefined ? updates.vin.trim().toUpperCase() : item.vin,
+          partNumber: updates.partNumber !== undefined ? updates.partNumber.trim().toUpperCase() : item.partNumber,
+          customerName: updates.customerName !== undefined ? updates.customerName.trim() : item.customerName,
+          phoneNumber: updates.phoneNumber !== undefined ? updates.phoneNumber.trim() : item.phoneNumber,
+          datePutOnList: updates.datePutOnList !== undefined ? updates.datePutOnList.trim() : item.datePutOnList,
+          dateCalled: updates.dateCalled !== undefined ? updates.dateCalled.trim() : item.dateCalled,
+          recallNumber: updatedRecall,
+          campaignCode: updatedRecall,
+          notes: updates.notes !== undefined ? updates.notes.trim() : item.notes,
+          status: updates.status || item.status,
+          updatedAt: new Date().toISOString(),
+        };
+      }).sort((a, b) => {
+        const timeA = new Date(a.datePutOnList || a.createdAt || 0).getTime();
+        const timeB = new Date(b.datePutOnList || b.createdAt || 0).getTime();
+        return timeA - timeB;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_RECALL_WAITING_LIST, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ recallWaitingList: updated });
+      return updated;
+    });
+  }, []);
+
+  const deleteRecallWaitingEntry = useCallback((id: string) => {
+    setRecallWaitingList(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_RECALL_WAITING_LIST, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ recallWaitingList: updated });
+      return updated;
+    });
+  }, []);
+
+  const markRecallCustomerCalled = useCallback((id: string, dateCalled?: string) => {
+    const effectiveDate = dateCalled || new Date().toISOString().split('T')[0];
+    setRecallWaitingList(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
+        return {
+          ...item,
+          dateCalled: effectiveDate,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_RECALL_WAITING_LIST, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ recallWaitingList: updated });
+      return updated;
+    });
+  }, []);
+
+  // Internal Phone Directory Actions (By Name, Extension #, Department)
+  const addInternalExtension = useCallback((entry: Omit<InternalExtensionEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const cleanName = (entry.name || '').trim();
+    const cleanExtension = (entry.extension || '').trim();
+    const cleanDept = (entry.department || '').trim() || 'General';
+    const cleanPhone = (entry.directPhone || '').trim();
+    const cleanTitle = (entry.title || '').trim();
+    const cleanNotes = (entry.notes || '').trim();
+    if (!cleanName || !cleanExtension) return;
+
+    const newEntry: InternalExtensionEntry = {
+      id: `ext_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: cleanName,
+      extension: cleanExtension,
+      department: cleanDept,
+      directPhone: cleanPhone || undefined,
+      title: cleanTitle || undefined,
+      notes: cleanNotes || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setInternalExtensions(prev => {
+      const updated = [...prev, newEntry].sort((a, b) => {
+        const numA = parseInt(a.extension.replace(/\D/g, ''), 10);
+        const numB = parseInt(b.extension.replace(/\D/g, ''), 10);
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return numA - numB;
+        }
+        return a.extension.localeCompare(b.extension);
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_INTERNAL_EXTENSIONS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ internalExtensions: updated });
+      return updated;
+    });
+  }, []);
+
+  const updateInternalExtension = useCallback((id: string, updates: Partial<InternalExtensionEntry>) => {
+    setInternalExtensions(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== id) return item;
+        return {
+          ...item,
+          ...updates,
+          name: updates.name !== undefined ? updates.name.trim() : item.name,
+          extension: updates.extension !== undefined ? updates.extension.trim() : item.extension,
+          department: updates.department !== undefined ? updates.department.trim() : item.department,
+          directPhone: updates.directPhone !== undefined ? updates.directPhone.trim() : item.directPhone,
+          title: updates.title !== undefined ? updates.title.trim() : item.title,
+          notes: updates.notes !== undefined ? updates.notes.trim() : item.notes,
+          updatedAt: new Date().toISOString(),
+        };
+      }).sort((a, b) => {
+        const numA = parseInt(a.extension.replace(/\D/g, ''), 10);
+        const numB = parseInt(b.extension.replace(/\D/g, ''), 10);
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return numA - numB;
+        }
+        return a.extension.localeCompare(b.extension);
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_INTERNAL_EXTENSIONS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ internalExtensions: updated });
+      return updated;
+    });
+  }, []);
+
+  const deleteInternalExtension = useCallback((id: string) => {
+    setInternalExtensions(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEY_INTERNAL_EXTENSIONS, JSON.stringify(updated));
+      } catch {}
+      syncShopSettings({ internalExtensions: updated });
+      return updated;
+    });
+  }, []);
+
   // Technician Repair Quote Workflow
   const saveRepairQuote = (
     roId: string, 
@@ -7338,6 +7599,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsManagerPasswordsModalOpen,
         openManagerPasswordsModal,
         closeManagerPasswordsModal,
+        recallWaitingList,
+        addRecallWaitingEntry,
+        updateRecallWaitingEntry,
+        deleteRecallWaitingEntry,
+        markRecallCustomerCalled,
+        isRecallWaitingModalOpen,
+        setIsRecallWaitingModalOpen,
+        openRecallWaitingModal,
+        closeRecallWaitingModal,
+        internalExtensions,
+        addInternalExtension,
+        updateInternalExtension,
+        deleteInternalExtension,
+        isInternalExtensionModalOpen,
+        setIsInternalExtensionModalOpen,
+        openInternalExtensionModal,
+        closeInternalExtensionModal,
       }}
     >
       {children}

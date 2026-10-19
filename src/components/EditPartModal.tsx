@@ -203,6 +203,8 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
 
     const parsedPrice = price.trim() !== '' && !isNaN(parseFloat(price)) ? parseFloat(parseFloat(price).toFixed(2)) : undefined;
     const parsedCost = cost.trim() !== '' && !isNaN(parseFloat(cost)) ? parseFloat(parseFloat(cost).toFixed(2)) : undefined;
+    const isQuoteOnly = requestType === 'QUOTE_ONLY';
+    const effectiveStatus: PartStatus = isQuoteOnly ? 'QUOTE_ONLY' : status;
 
     if (isEditing && part) {
       updatePartItem(selectedRoId, part.id, {
@@ -213,8 +215,8 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
         cost: parsedCost,
         price: parsedPrice,
         vendor: effectiveVendor,
-        status,
-        estimatedArrival: estimatedArrival || 'Pending ETA',
+        status: effectiveStatus,
+        estimatedArrival: isQuoteOnly ? 'Price Quoted for Estimate' : (estimatedArrival || 'Pending ETA'),
         timeFrameId: timeFrameId || undefined,
         trackingNumber: trackingNumber.trim() || undefined,
         roLineNumber,
@@ -233,8 +235,8 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
         cost: parsedCost,
         price: parsedPrice,
         vendor: effectiveVendor,
-        status,
-        estimatedArrival: estimatedArrival || 'Pending ETA',
+        status: effectiveStatus,
+        estimatedArrival: isQuoteOnly ? 'Price Quoted for Estimate' : (estimatedArrival || 'Pending ETA'),
         timeFrameId: timeFrameId || undefined,
         trackingNumber: trackingNumber.trim() || undefined,
         roLineNumber,
@@ -296,6 +298,56 @@ export const EditPartModal: React.FC<EditPartModalProps> = ({
               <span>{errorMsg}</span>
             </div>
           )}
+
+          {/* Direct Destination Selection: Live Ticket vs Quote / Estimate */}
+          <div className="p-3 bg-gradient-to-r from-slate-900 to-slate-800 rounded-xl text-white shadow-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-amber-400" />
+                <span>Service Manager Part Entry</span>
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                ✓ No Tech Request Required
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRequestType('ORDER_NOW');
+                  if (status === 'QUOTE_ONLY') setStatus('ORDERED');
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  requestType === 'ORDER_NOW'
+                    ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-sm ring-2 ring-amber-400/50'
+                    : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                <span>Live Ticket (Order Now)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRequestType('QUOTE_ONLY');
+                  setStatus('QUOTE_ONLY');
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  requestType === 'QUOTE_ONLY'
+                    ? 'bg-purple-600 text-white border-purple-400 shadow-sm ring-2 ring-purple-400/50'
+                    : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Quote / Estimate Only</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-300">
+              {requestType === 'ORDER_NOW'
+                ? 'Adds part directly to the live repair order and parts queue for immediate ordering & tracking.'
+                : 'Adds part pricing directly to the customer estimate/quote for customer approval before ordering.'}
+            </p>
+          </div>
 
           {/* Target RO & Job Line Selection */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">

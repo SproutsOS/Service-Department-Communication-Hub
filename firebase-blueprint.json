@@ -85,6 +85,8 @@
         "specialParts": { "type": "array" },
         "importantNumbers": { "type": "array" },
         "managerPasswords": { "type": "array" },
+        "recallWaitingList": { "type": "array" },
+        "internalExtensions": { "type": "array" },
         "updatedAt": { "type": "string" }
       },
       "required": ["shopName"]

@@ -15,7 +15,8 @@ import {
   Sparkles,
   CheckCircle,
   Camera,
-  Bell
+  Bell,
+  Plus
 } from 'lucide-react';
 import { RepairOrder, ROStatus } from '../types';
 import { STATUS_CONFIG } from '../data/mockData';
@@ -44,7 +45,8 @@ export const ROCard: React.FC<ROCardProps> = ({
   isMainCard = false
 }) => {
   const ro = cleanRO3700(rawRO);
-  const { users, currentUser, setSelectedRO, hasROChange, roChangeAlerts } = useApp();
+  const { users, currentUser, activeRoleView, setSelectedRO, hasROChange, roChangeAlerts } = useApp();
+  const isManager = currentUser?.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
   const hasChangeAlert = hasROChange ? hasROChange(ro.id, ro) : false;
   const changeAlert = roChangeAlerts ? roChangeAlerts[ro.id] : undefined;
   const shouldHideCauseCorrection = hideCauseCorrection || currentUser?.role === 'SERVICE_ADVISOR';
@@ -571,9 +573,26 @@ export const ROCard: React.FC<ROCardProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-1 text-blue-600 font-bold group-hover:translate-x-0.5 transition-transform text-xs">
-          <span>View Details</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedRO(ro, 'PARTS');
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 text-[11px] font-black border border-amber-600 shadow-2xs transition-all cursor-pointer"
+              title="Service Manager: Direct parts entry on this ticket (no tech request needed)"
+            >
+              <Plus className="w-3 h-3 text-slate-950 stroke-[3]" />
+              <span>+ Part</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-1 text-blue-600 font-bold group-hover:translate-x-0.5 transition-transform text-xs">
+            <span>View Details</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
       </div>
 

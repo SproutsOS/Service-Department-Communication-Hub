@@ -28,6 +28,8 @@ import { QuoteBuilderModal } from './components/QuoteBuilderModal';
 import { SpecialPartsModal } from './components/SpecialPartsModal';
 import { ImportantNumbersModal } from './components/ImportantNumbersModal';
 import { ManagerPasswordsModal } from './components/ManagerPasswordsModal';
+import { RecallWaitingModal } from './components/RecallWaitingModal';
+import { InternalExtensionModal } from './components/InternalExtensionModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useBrowserTabNotification } from './utils/useBrowserTabNotification';
 import { 
@@ -968,6 +970,8 @@ const MainContent: React.FC = () => {
       <SpecialPartsModal />
       <ImportantNumbersModal />
       <ManagerPasswordsModal />
+      <RecallWaitingModal />
+      <InternalExtensionModal />
       <ErrorBoundary fallbackTitle="Quote Builder Error">
         <QuoteBuilderModal 
           isOpen={isQuoteBuilderOpen} 

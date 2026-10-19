@@ -1,4 +1,4 @@
-import { User, RepairOrder, SpecialPartNumber, ImportantNumberEntry, ManagerPasswordEntry } from '../types';
+import { User, RepairOrder, SpecialPartNumber, ImportantNumberEntry, ManagerPasswordEntry, RecallWaitingEntry, InternalExtensionEntry } from '../types';
 
 export const STANDARD_JOB_TITLES: string[] = [
   'Oil Bay',
@@ -469,5 +469,315 @@ export const INITIAL_MANAGER_PASSWORDS: ManagerPasswordEntry[] = [
   { id: 'pw_2', category: 'Diagnostic Tools', title: 'WiTECH 2.0 Cloud Diagnostic', username: 'wo_service_lead', password: 'WiTech#Pass4491', websiteUrl: 'https://login.witechcloud.com', notes: 'Vehicle flash and ECU configuration', createdAt: '2026-01-01T08:00:00Z' },
   { id: 'pw_3', category: 'Estimating & Labor', title: 'ProDemand / Mitchell 1', username: 'woolwine_advisor', password: 'ProDemand2026!', websiteUrl: 'https://www.prodemand.com', notes: 'Flat rate labor times & OEM procedures', createdAt: '2026-01-01T08:00:00Z' },
   { id: 'pw_4', category: 'Tire Program', title: 'Mopar National Tire Program', username: 'woolwine_tires', password: 'TireOrder#9042', websiteUrl: 'https://www.tirerackdealer.com', notes: 'OEM tire price match & distributor stock', createdAt: '2026-01-01T08:00:00Z' },
+];
+
+export const INITIAL_RECALL_WAITING_LIST: RecallWaitingEntry[] = [
+  {
+    id: 'rec_1',
+    customerName: 'Michael Henderson',
+    vin: '1C4HJXDG8MW681240',
+    partNumber: '68518241AA',
+    datePutOnList: '2026-08-15',
+    phoneNumber: '(555) 234-8910',
+    dateCalled: '2026-09-02',
+    recallNumber: '66A',
+    campaignCode: '66A',
+    notes: '2021 Jeep Wrangler 3.0L EcoDiesel HPFP fuel pump kit',
+    status: 'WAITING_ON_PART',
+    createdAt: '2026-08-15T10:30:00Z',
+    updatedAt: '2026-09-02T14:15:00Z'
+  },
+  {
+    id: 'rec_6',
+    customerName: 'Thomas Vance',
+    vin: '1C4JJXR62MW719034',
+    partNumber: '68518241AA',
+    datePutOnList: '2026-08-28',
+    phoneNumber: '(555) 345-6712',
+    dateCalled: '',
+    recallNumber: '66A',
+    campaignCode: '66A',
+    notes: '2021 Jeep Gladiator 3.0L EcoDiesel HPFP fuel pump kit',
+    status: 'WAITING_ON_PART',
+    createdAt: '2026-08-28T14:00:00Z',
+    updatedAt: '2026-08-28T14:00:00Z'
+  },
+  {
+    id: 'rec_7',
+    customerName: 'Daniel Clark',
+    vin: '1C4HJXDG4NW110823',
+    partNumber: '68518241AA',
+    datePutOnList: '2026-09-18',
+    phoneNumber: '(555) 456-7890',
+    dateCalled: '2026-10-12',
+    recallNumber: '66A',
+    campaignCode: '66A',
+    notes: '2022 Jeep Wrangler EcoDiesel high pressure fuel pump',
+    status: 'PART_ARRIVED',
+    createdAt: '2026-09-18T11:20:00Z',
+    updatedAt: '2026-10-12T09:30:00Z'
+  },
+  {
+    id: 'rec_2',
+    customerName: 'Brenda Collins',
+    vin: '3C6UR5FL8NG219455',
+    partNumber: '68374981AC',
+    datePutOnList: '2026-09-05',
+    phoneNumber: '(555) 412-7801',
+    dateCalled: '',
+    recallNumber: '04A',
+    campaignCode: '04A',
+    notes: '2022 Ram 2500 Cummins intake heater grid relay',
+    status: 'WAITING_ON_PART',
+    createdAt: '2026-09-05T09:15:00Z',
+    updatedAt: '2026-09-05T09:15:00Z'
+  },
+  {
+    id: 'rec_8',
+    customerName: 'Gregory Scott',
+    vin: '3C6UR5DL7MG640192',
+    partNumber: '68374981AC',
+    datePutOnList: '2026-09-29',
+    phoneNumber: '(555) 567-8901',
+    dateCalled: '',
+    recallNumber: '04A',
+    campaignCode: '04A',
+    notes: '2021 Ram 3500 Cummins 6.7L intake heater relay',
+    status: 'WAITING_ON_PART',
+    createdAt: '2026-09-29T15:45:00Z',
+    updatedAt: '2026-09-29T15:45:00Z'
+  },
+  {
+    id: 'rec_3',
+    customerName: 'David Kowalski',
+    vin: '2C3CDXHG5NH190342',
+    partNumber: '68249821AD',
+    datePutOnList: '2026-09-22',
+    phoneNumber: '(555) 890-3344',
+    dateCalled: '2026-10-05',
+    recallNumber: 'V07',
+    campaignCode: 'V07',
+    notes: '2022 Dodge Charger steering column wire harness bracket',
+    status: 'WAITING_ON_PART',
+    createdAt: '2026-09-22T11:45:00Z',
+    updatedAt: '2026-10-05T16:20:00Z'
+  },
+  {
+    id: 'rec_4',
+    customerName: 'Sarah Jenkins',
+    vin: '1C4PJLCB4KD382109',
+    partNumber: '68493120AA',
+    datePutOnList: '2026-10-01',
+    phoneNumber: '(555) 671-9022',
+    dateCalled: '2026-10-14',
+    recallNumber: 'W12',
+    campaignCode: 'W12',
+    notes: '2019 Jeep Cherokee power liftgate module & latch',
+    status: 'PART_ARRIVED',
+    createdAt: '2026-10-01T14:00:00Z',
+    updatedAt: '2026-10-14T11:30:00Z'
+  },
+  {
+    id: 'rec_5',
+    customerName: 'Robert Martinez',
+    vin: '1C6SRFHT8NN340192',
+    partNumber: '68541290AB',
+    datePutOnList: '2026-10-10',
+    phoneNumber: '(555) 789-1123',
+    dateCalled: '',
+    recallNumber: '24B',
+    campaignCode: '24B',
+    notes: '2022 Ram 1500 rearview camera central vision module',
+    status: 'WAITING_ON_PART',
+    createdAt: '2026-10-10T16:10:00Z',
+    updatedAt: '2026-10-10T16:10:00Z'
+  }
+];
+
+export const INITIAL_INTERNAL_EXTENSIONS: InternalExtensionEntry[] = [
+  // Service Department
+  {
+    id: 'ext_1',
+    name: 'Service Manager Desk',
+    extension: '201',
+    department: 'Service',
+    title: 'Service Manager',
+    directPhone: '(555) 330-2201',
+    notes: 'Direct office line & dispatch escalation',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_2',
+    name: 'Mark Reynolds',
+    extension: '202',
+    department: 'Service',
+    title: 'Lead Service Advisor',
+    directPhone: '(555) 330-2202',
+    notes: 'Lane 1 - Truck & Diesel Specialist',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_3',
+    name: 'Rachel Adams',
+    extension: '203',
+    department: 'Service',
+    title: 'Service Advisor',
+    directPhone: '(555) 330-2203',
+    notes: 'Lane 2 - Express & Maintenance',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_4',
+    name: 'Shop Foreman (Tech Floor)',
+    extension: '210',
+    department: 'Service',
+    title: 'Shop Foreman / Diagnostics',
+    notes: 'Main shop floor desk & diagnostic lead',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_5',
+    name: 'Service BDC & Appointments',
+    extension: '215',
+    department: 'Service',
+    title: 'BDC Appointment Coordinator',
+    directPhone: '(555) 330-2215',
+    notes: 'Inbound customer appointments & recall checks',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_6',
+    name: 'Warranty Administrator',
+    extension: '218',
+    department: 'Service',
+    title: 'Warranty Clerk',
+    notes: 'OEM claim submissions & pre-authorizations',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Parts Department
+  {
+    id: 'ext_7',
+    name: 'Parts Front Counter',
+    extension: '301',
+    department: 'Parts',
+    title: 'Retail Counter Specialist',
+    directPhone: '(555) 330-2301',
+    notes: 'Retail customers, batteries, accessories',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_8',
+    name: 'Parts Back Counter (Tech Window)',
+    extension: '302',
+    department: 'Parts',
+    title: 'Shop Parts Specialist',
+    notes: 'Direct technician parts requests & RO issue window',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_9',
+    name: 'Parts Manager Desk',
+    extension: '300',
+    department: 'Parts',
+    title: 'Parts Department Director',
+    directPhone: '(555) 330-2300',
+    notes: 'Vendor accounts & special purchase orders',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_10',
+    name: 'Wholesale Parts Desk',
+    extension: '310',
+    department: 'Parts',
+    title: 'Wholesale Logistics',
+    directPhone: '(555) 330-2310',
+    notes: 'Body shop & independent repair facility orders',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_11',
+    name: 'Parts Shipping & Receiving',
+    extension: '305',
+    department: 'Parts',
+    title: 'Warehouse & Receiving',
+    notes: 'Stock check-in, freight deliveries & VOR check-in',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Sales Department
+  {
+    id: 'ext_12',
+    name: 'Sales Desk / Desk Manager',
+    extension: '101',
+    department: 'Sales',
+    title: 'Sales Desk Manager',
+    directPhone: '(555) 330-2101',
+    notes: 'Appraisals, trade-ins, sales floor oversight',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_13',
+    name: 'Finance & Insurance (F&I Office)',
+    extension: '105',
+    department: 'Sales',
+    title: 'Finance Director',
+    directPhone: '(555) 330-2105',
+    notes: 'Contracts, warranties, customer financing',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_14',
+    name: 'Internet Sales / BDC',
+    extension: '110',
+    department: 'Sales',
+    title: 'BDC Director',
+    directPhone: '(555) 330-2110',
+    notes: 'Web leads, phone sales inquiries',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Accounting & Office
+  {
+    id: 'ext_15',
+    name: 'Main Cashier & Reception',
+    extension: '401',
+    department: 'Accounting / Office',
+    title: 'Service Cashier',
+    directPhone: '(555) 330-2401',
+    notes: 'Customer payment processing, key release & loaner check-in',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_16',
+    name: 'Title & Registration Office',
+    extension: '405',
+    department: 'Accounting / Office',
+    title: 'Title Clerk',
+    notes: 'Tag & title processing, DMV paperwork',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_17',
+    name: 'Office Manager / Controller',
+    extension: '410',
+    department: 'Accounting / Office',
+    title: 'Dealership Controller',
+    directPhone: '(555) 330-2410',
+    notes: 'Payroll, accounts payable & financial records',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Management
+  {
+    id: 'ext_18',
+    name: 'General Manager',
+    extension: '100',
+    department: 'Management',
+    title: 'General Manager',
+    directPhone: '(555) 330-2100',
+    notes: 'Dealership Executive Office',
+    createdAt: '2026-01-01T08:00:00Z'
+  }
 ];
 

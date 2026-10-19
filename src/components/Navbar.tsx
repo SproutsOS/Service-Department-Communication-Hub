@@ -21,7 +21,8 @@ import {
   Receipt,
   Archive,
   Package,
-  MessageSquare
+  MessageSquare,
+  PhoneForwarded
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -61,6 +62,8 @@ export const Navbar: React.FC = () => {
     setActiveRoleView,
     openShopChat,
     unreadShopCount,
+    internalExtensions,
+    openInternalExtensionModal,
   } = useApp();
 
   const archivedCount = useMemo(() => {
@@ -501,6 +504,23 @@ export const Navbar: React.FC = () => {
           {archivedCount > 0 && (
             <span className="bg-slate-900 text-amber-300 text-[10px] font-black px-1.5 py-0.2 rounded-full border border-slate-600">
               {archivedCount}
+            </span>
+          )}
+        </button>
+
+        {/* Dealership Internal Phone & Extension Directory Button */}
+        <button
+          id="navbar-internal-directory-btn"
+          onClick={() => openInternalExtensionModal()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-teal-950/70 hover:bg-teal-900 text-teal-200 hover:text-white border border-teal-700/80 shadow-xs"
+          title="Internal Phone Directory (Look up employee extension numbers, departments, desks, and direct dial lines)"
+        >
+          <PhoneForwarded className="w-4 h-4 text-teal-400" />
+          <span className="hidden sm:inline">Extensions</span>
+          <span className="sm:hidden">Ext</span>
+          {internalExtensions.length > 0 && (
+            <span className="bg-teal-900 text-teal-200 text-[10px] font-black px-1.5 py-0.2 rounded-full border border-teal-600">
+              {internalExtensions.length}
             </span>
           )}
         </button>

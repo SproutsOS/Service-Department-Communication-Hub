@@ -30,7 +30,9 @@ import {
   Bookmark,
   Tag,
   Phone,
-  KeyRound
+  KeyRound,
+  ShieldAlert,
+  PhoneForwarded
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -69,6 +71,10 @@ export const ManagerDashboard: React.FC = () => {
     openImportantNumbersModal,
     managerPasswords,
     openManagerPasswordsModal,
+    recallWaitingList,
+    openRecallWaitingModal,
+    internalExtensions,
+    openInternalExtensionModal,
   } = useApp();
 
   const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);
@@ -381,6 +387,36 @@ export const ManagerDashboard: React.FC = () => {
             {managerPasswords.length > 0 && (
               <span className="bg-indigo-500/20 text-indigo-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-indigo-400/40">
                 {managerPasswords.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="open-recall-waiting-mgr"
+            onClick={() => openRecallWaitingModal()}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-red-400"
+            title="Open Recall Waiting List (Track customers waiting on recall parts, ordered oldest to newest)"
+          >
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            <span>Recall Waiting List</span>
+            {recallWaitingList.length > 0 && (
+              <span className="bg-red-500/20 text-red-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-red-400/40 font-mono">
+                {recallWaitingList.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="open-internal-extensions-mgr"
+            onClick={() => openInternalExtensionModal()}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-teal-400"
+            title="Open Dealership Internal Phone & Extension Directory (By Name, Extension #, Department)"
+          >
+            <PhoneForwarded className="w-4 h-4 text-teal-400" />
+            <span>Phone Extensions</span>
+            {internalExtensions.length > 0 && (
+              <span className="bg-teal-500/20 text-teal-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-teal-400/40 font-mono">
+                {internalExtensions.length}
               </span>
             )}
           </button>

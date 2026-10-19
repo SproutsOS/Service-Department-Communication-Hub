@@ -92,6 +92,8 @@ export interface ShopSettings {
   specialParts?: any[];
   importantNumbers?: any[];
   managerPasswords?: any[];
+  recallWaitingList?: any[];
+  internalExtensions?: any[];
   updatedAt?: string;
 }
 

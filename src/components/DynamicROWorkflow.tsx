@@ -33,6 +33,7 @@ import { useApp } from '../context/AppContext';
 import { formatTimeOnly, formatDurationSince, formatRelativeTime, cleanRO3700 } from '../utils/formatters';
 import { getContactCadenceStatus, formatContactOutcome, isWoolwineVehicle } from '../utils/cadenceUtils';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
+import { TicketFlowStepper } from './TicketFlowStepper';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
 
@@ -1765,6 +1766,43 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
               <span>Log Customer Touchpoint</span>
             </button>
           )}
+        </div>
+      )
+    },
+
+    // 10. Visual Ticket Flow Pipeline Stepper (Part of the Repair Order Workflow)
+    {
+      key: 'section-pipeline-stepper',
+      naturalOrder: 10,
+      title: 'Ticket Flow Pipeline Stepper',
+      isComplete: ro.status === 'CLOSED',
+      completeBadgeText: 'Pipeline Completed',
+      render: (isPromoted: boolean) => (
+        <div className={`p-4 rounded-xl border space-y-3 shadow-2xs transition-all ${
+          isPromoted
+            ? 'bg-slate-900 text-white border-blue-500 ring-2 ring-blue-400'
+            : 'bg-white border-slate-300'
+        }`}>
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                <span>Ticket Workflow Pipeline:</span>
+              </span>
+              <span className="text-xs text-slate-500 font-medium">
+                (Click any stage to fast-track or log transition notes)
+              </span>
+            </div>
+            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-300">
+              Stage: {ro.status.replace(/_/g, ' ')}
+            </span>
+          </div>
+
+          <TicketFlowStepper 
+            ro={ro} 
+            onUpdateStatus={(newStatus, notes) => handleStatusChange(newStatus, notes)} 
+            canEdit={!isSales} 
+          />
         </div>
       )
     }

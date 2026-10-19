@@ -1081,6 +1081,21 @@ export const RODetailModal: React.FC = () => {
               hasNote={Boolean(selectedRO.stickyNote)}
             />
 
+            {/* Service Manager Direct Part Entry (Ticket or Quote - No Tech Request Required) */}
+            {isManager && (
+              <button
+                type="button"
+                id="ro-modal-mgr-add-part-btn"
+                onClick={() => setIsAddPartModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-amber-600 hover:bg-amber-500 active:scale-98 text-white border border-amber-400 shadow-sm transition-all cursor-pointer shrink-0"
+                title="Service Manager Direct Part Entry: Add parts to ticket or quote without waiting for a tech request"
+              >
+                <Plus className="w-3.5 h-3.5 text-white" />
+                <Package className="w-3.5 h-3.5 text-amber-200" />
+                <span>+ Add Part</span>
+              </button>
+            )}
+
             {/* Edit RO Info (Service Advisor & Service Manager) */}
             {(isManager || isAdvisor) && (
               <button

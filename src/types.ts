@@ -682,4 +682,32 @@ export interface ManagerPasswordEntry {
   updatedAt?: string;
 }
 
+export interface RecallWaitingEntry {
+  id: string;
+  customerName: string;   // Name of customer
+  vin: string;            // Vehicle VIN
+  partNumber: string;     // Recall Part Number
+  datePutOnList: string;  // Date put on waiting list (YYYY-MM-DD)
+  phoneNumber: string;    // Customer phone number
+  dateCalled?: string;    // Date called / customer notified (YYYY-MM-DD or empty)
+  recallNumber?: string;  // Recall Number / Campaign Code (e.g. "66A", "04A", "V07")
+  campaignCode?: string;  // Optional Recall campaign code / number (alias)
+  notes?: string;         // Optional notes or vehicle model
+  status?: 'WAITING_ON_PART' | 'PART_ARRIVED' | 'SCHEDULED' | 'COMPLETED';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InternalExtensionEntry {
+  id: string;
+  name: string;             // Staff name or desk/station (e.g. "Mark Reynolds", "Service Counter Line 1")
+  extension: string;        // Phone Extension Number (e.g. "201", "302")
+  department: string;       // Department (e.g. "Service", "Parts", "Sales", "Accounting / Office", "Management")
+  directPhone?: string;     // Optional Direct Dial / Outside number
+  title?: string;           // Optional Title or Role (e.g. "Lead Service Advisor", "Parts Specialist")
+  notes?: string;           // Optional notes / desk location
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 

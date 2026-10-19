@@ -2140,9 +2140,9 @@ export const RepairQuoteModal: React.FC = () => {
                       <span>+ Add Part Item</span>
                     </button>
                   )}
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-950 rounded-lg text-xs font-bold border border-amber-300">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Managed by Parts Specialist</span>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-950 rounded-lg text-xs font-bold border border-emerald-300">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Service Manager Direct Access • No Tech Request Needed</span>
                   </div>
                 </div>
               </div>
@@ -2152,7 +2152,7 @@ export const RepairQuoteModal: React.FC = () => {
                   <Package className="w-7 h-7 text-slate-600 mx-auto mb-1.5" />
                   <p className="text-xs font-bold text-slate-900">No parts on quote yet (Labor only)</p>
                   <p className="text-[11px] text-slate-800 font-semibold mt-0.5">
-                    Parts requested through the Parts Counter will appear here automatically.
+                    As Service Manager, you can add parts to any line on this quote directly at any time without waiting for a technician request.
                   </p>
                   {canManageParts && (
                     <button
