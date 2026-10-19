@@ -64,6 +64,13 @@ import {
 } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
+  consolidateWoolwineCustomers,
+  mergeTwoCustomers,
+  isWoolwineCustomerName,
+  updateROsForWoolwineConsolidation,
+  updateQuotesForWoolwineConsolidation
+} from '../utils/customerMergeUtils';
+import {
   subscribeToRepairOrders,
   subscribeToUsers,
   subscribeToNotifications,
@@ -148,6 +155,8 @@ interface AppContextType {
   setPrefilledCustomerForNewRO: (cust: Customer | null) => void;
   saveCustomer: (customer: Customer) => Promise<boolean>;
   deleteCustomer: (customerId: string) => Promise<void>;
+  mergeCustomers: (primaryCustomerId: string, secondaryCustomerId: string, newPrimaryName?: string) => Promise<boolean>;
+  consolidateWoolwineAccounts: () => Promise<{ merged: boolean; message: string }>;
   toggleSound: () => void;
   requestPushPermission: () => Promise<void>;
   
@@ -616,7 +625,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const { consolidatedCustomers } = consolidateWoolwineCustomers(parsed);
+          return consolidatedCustomers;
+        }
       }
     } catch {
       // ignore
@@ -1437,7 +1449,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Subscribe to real-time Customers in Google Cloud Firestore
     const unsubscribeCustomers = subscribeToCustomers((cloudCustomers) => {
       if (cloudCustomers.length > 0) {
-        setCustomers(cloudCustomers);
+        const { consolidatedCustomers, primaryCustomer, removedCustomerIds, wasConsolidated } = consolidateWoolwineCustomers(cloudCustomers);
+        setCustomers(consolidatedCustomers);
+        try {
+          localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(consolidatedCustomers));
+        } catch {}
+
+        if (wasConsolidated && primaryCustomer) {
+          syncCustomer(primaryCustomer);
+          removedCustomerIds.forEach(id => {
+            deleteCustomerDoc(id);
+          });
+          setRepairOrders(prev => {
+            const { updatedROs, changedCount } = updateROsForWoolwineConsolidation(prev, primaryCustomer);
+            if (changedCount > 0) {
+              updatedROs.filter(ro => ro.customerName === 'Woolwine CDJR').forEach(ro => syncRepairOrder(ro));
+              return updatedROs;
+            }
+            return prev;
+          });
+          setQuotes(prev => {
+            const { updatedQuotes, changedCount } = updateQuotesForWoolwineConsolidation(prev);
+            if (changedCount > 0) {
+              updatedQuotes.filter(q => q.customerName === 'Woolwine CDJR').forEach(q => syncStandaloneQuote(q));
+              return updatedQuotes;
+            }
+            return prev;
+          });
+        }
       }
     });
 
@@ -3021,9 +3060,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const effectiveAdvisorId = chosenAdvisor?.id || (currentUser.role === 'SERVICE_ADVISOR' ? currentUser.id : fallbackAdvisor.id);
     const effectiveAdvisorName = data.advisorName || chosenAdvisor?.name || (currentUser.role === 'SERVICE_ADVISOR' ? currentUser.name : fallbackAdvisor.name);
 
+    const isWoolwineOrder = isWoolwineCustomerName(data.customerName);
+    const standardCustomerName = isWoolwineOrder ? 'Woolwine CDJR' : data.customerName;
+
     const newRO: RepairOrder = {
       id: newId,
-      customerName: data.customerName,
+      customerName: standardCustomerName,
       customerPhone: data.customerPhone,
       vehicle: data.vehicle,
       createdAt: now,
@@ -3069,11 +3111,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Automatically persist customer in cloud database for future visits
     try {
-      const custName = (data.customerName || '').trim();
+      const rawCustName = (data.customerName || '').trim();
+      const isWoolwine = isWoolwineCustomerName(rawCustName);
+      const custName = isWoolwine ? 'Woolwine CDJR' : rawCustName;
       const custPhone = (data.customerPhone || '').trim();
       if (custName) {
         setCustomers(prev => {
           const match = prev.find(c => 
+            (isWoolwine && isWoolwineCustomerName(c.name)) ||
             (custPhone && c.phone && c.phone.replace(/\D/g, '') === custPhone.replace(/\D/g, '')) ||
             (c.name.toLowerCase() === custName.toLowerCase())
           );
@@ -3380,6 +3425,127 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteCustomer = async (customerId: string): Promise<void> => {
     setCustomers(prev => prev.filter(c => c.id !== customerId));
     await deleteCustomerDoc(customerId);
+  };
+
+  const mergeCustomers = async (primaryCustomerId: string, secondaryCustomerId: string, newPrimaryName?: string): Promise<boolean> => {
+    const primary = customers.find(c => c.id === primaryCustomerId);
+    const secondary = customers.find(c => c.id === secondaryCustomerId);
+    if (!primary || !secondary) return false;
+
+    const merged = mergeTwoCustomers(primary, secondary, newPrimaryName);
+    
+    // Update customers state
+    setCustomers(prev => {
+      const filtered = prev.filter(c => c.id !== secondaryCustomerId);
+      const updated = filtered.map(c => c.id === primaryCustomerId ? merged : c);
+      try {
+        localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Sync to cloud
+    await syncCustomer(merged);
+    await deleteCustomerDoc(secondaryCustomerId);
+
+    // Update all repair orders that belonged to secondary or primary to the unified name
+    setRepairOrders(prev => {
+      let changed = false;
+      const nextROs = prev.map(ro => {
+        const matchesSecondary = ro.customerName?.trim().toLowerCase() === secondary.name?.trim().toLowerCase();
+        const matchesPrimary = ro.customerName?.trim().toLowerCase() === primary.name?.trim().toLowerCase();
+        if (matchesSecondary || (newPrimaryName && matchesPrimary)) {
+          changed = true;
+          const updatedRO: RepairOrder = {
+            ...ro,
+            customerName: merged.name,
+            customerPhone: merged.phone || ro.customerPhone,
+            isTaxExempt: merged.isTaxExempt !== undefined ? merged.isTaxExempt : ro.isTaxExempt,
+            taxExemptNumber: merged.taxExemptNumber || ro.taxExemptNumber,
+            updatedAt: new Date().toISOString()
+          };
+          syncRepairOrder(updatedRO);
+          return updatedRO;
+        }
+        return ro;
+      });
+      return changed ? nextROs : prev;
+    });
+
+    // Update quotes as well
+    setQuotes(prev => {
+      let changed = false;
+      const nextQuotes = prev.map(q => {
+        const matchesSecondary = q.customerName?.trim().toLowerCase() === secondary.name?.trim().toLowerCase();
+        if (matchesSecondary) {
+          changed = true;
+          const updatedQ: StandaloneQuote = {
+            ...q,
+            customerName: merged.name,
+            customerPhone: merged.phone || q.customerPhone,
+            updatedAt: new Date().toISOString()
+          };
+          syncStandaloneQuote(updatedQ);
+          return updatedQ;
+        }
+        return q;
+      });
+      return changed ? nextQuotes : prev;
+    });
+
+    return true;
+  };
+
+  const consolidateWoolwineAccounts = async (): Promise<{ merged: boolean; message: string }> => {
+    const { consolidatedCustomers, primaryCustomer, removedCustomerIds, wasConsolidated } = consolidateWoolwineCustomers(customers);
+    
+    if (!wasConsolidated && (!primaryCustomer || primaryCustomer.name === 'Woolwine CDJR')) {
+      const { updatedROs, changedCount } = primaryCustomer 
+        ? updateROsForWoolwineConsolidation(repairOrders, primaryCustomer) 
+        : { updatedROs: repairOrders, changedCount: 0 };
+      if (changedCount > 0) {
+        setRepairOrders(updatedROs);
+        updatedROs.filter(ro => ro.customerName === 'Woolwine CDJR').forEach(ro => syncRepairOrder(ro));
+        return { merged: true, message: `Consolidated ${changedCount} repair order(s) under Woolwine CDJR.` };
+      }
+      return { merged: false, message: 'Woolwine CDJR is already unified as a single customer account.' };
+    }
+
+    setCustomers(consolidatedCustomers);
+    try {
+      localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(consolidatedCustomers));
+    } catch {}
+
+    if (primaryCustomer) {
+      await syncCustomer(primaryCustomer);
+    }
+    for (const id of removedCustomerIds) {
+      await deleteCustomerDoc(id);
+    }
+
+    if (primaryCustomer) {
+      setRepairOrders(prev => {
+        const { updatedROs, changedCount } = updateROsForWoolwineConsolidation(prev, primaryCustomer);
+        if (changedCount > 0) {
+          updatedROs.filter(ro => ro.customerName === 'Woolwine CDJR').forEach(ro => syncRepairOrder(ro));
+          return updatedROs;
+        }
+        return prev;
+      });
+      setQuotes(prev => {
+        const { updatedQuotes, changedCount } = updateQuotesForWoolwineConsolidation(prev);
+        if (changedCount > 0) {
+          updatedQuotes.filter(q => q.customerName === 'Woolwine CDJR').forEach(q => syncStandaloneQuote(q));
+          return updatedQuotes;
+        }
+        return prev;
+      });
+    }
+
+    return {
+      merged: true,
+      message: `Successfully combined Woolwine CDJR and Woolwine CDJR Inc into one customer profile with ${primaryCustomer?.vehicles?.length || 0} vehicle(s) archived.`
+    };
   };
 
   const markNotificationRead = (notifId: string) => {
@@ -7451,6 +7617,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPrefilledCustomerForNewRO,
         saveCustomer,
         deleteCustomer,
+        mergeCustomers,
+        consolidateWoolwineAccounts,
         toggleSound,
         requestPushPermission,
         addUser,
