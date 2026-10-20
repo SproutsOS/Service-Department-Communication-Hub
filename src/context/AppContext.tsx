@@ -2534,9 +2534,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     eta?: string, 
     notes?: string
   ) => {
-    // Restrict part status changes: only Service Manager and Parts Manager, and disabled on the Service Advisor screen
-    if (activeRoleView === 'SERVICE_ADVISOR' || (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'PARTS_SPECIALIST')) {
-      console.warn('Unauthorized: Part order status changes are restricted to Service Manager and Parts Manager, and disabled on the Service Advisor screen.');
+    // Allow Service Manager, Parts Specialist, Service Advisor, and assigned Technician to update part status directly on the RO
+    if (currentUser.role === 'SALES' && activeRoleView === 'SALES') {
+      console.warn('Unauthorized: Sales workspace is read-only for part ordering.');
       return;
     }
 

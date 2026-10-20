@@ -41,7 +41,8 @@ import {
   Copy,
   Gauge,
   ClipboardCheck,
-  Ban
+  Ban,
+  Columns
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROStatus, PartStatus, UserRole, RepairOrder, ConcernPayType, PartItem } from '../types';
@@ -92,7 +93,8 @@ export const RODetailModal: React.FC = () => {
     addVehiclePhoto,
     deleteVehiclePhoto,
     addRepairOrderConcern,
-    activeRoleView
+    activeRoleView,
+    markAllPartsOrderedOnRO
   } = useApp();
 
   const currentRole = activeRoleView || currentUser.role;
@@ -112,6 +114,10 @@ export const RODetailModal: React.FC = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [managerActionFeedback, setManagerActionFeedback] = useState<string | null>(null);
+
+  // View mode within unified Parts & Quote Message Center: SPLIT (side-by-side) | PARTS_ONLY | MESSAGES_ONLY
+  const [partsCenterViewMode, setPartsCenterViewMode] = useState<'SPLIT' | 'PARTS_ONLY' | 'MESSAGES_ONLY'>('SPLIT');
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
 
   // Edit Part Modal State
   const [editingPartItem, setEditingPartItem] = useState<PartItem | null>(null);
@@ -605,17 +611,13 @@ export const RODetailModal: React.FC = () => {
 
   useEffect(() => {
     if (selectedROModalTab) {
-      if (isTechScreen && selectedROModalTab === 'CHAT') {
-        setActiveTab('DETAILS');
-      } else {
-        setActiveTab(selectedROModalTab);
-      }
+      setActiveTab(selectedROModalTab);
       setSelectedROModalTab(null);
     }
-  }, [selectedROModalTab, setSelectedROModalTab, isTechScreen]);
+  }, [selectedROModalTab, setSelectedROModalTab]);
 
   useEffect(() => {
-    if (isTechScreen && (activeTab === 'LINES' || activeTab === 'CHAT' || activeTab === 'HISTORY' || activeTab === 'CONTACTS' || activeTab === 'PHOTOS')) {
+    if (isTechScreen && (activeTab === 'LINES' || activeTab === 'HISTORY' || activeTab === 'CONTACTS' || activeTab === 'PHOTOS')) {
       setActiveTab('DETAILS');
     }
     if (isAdvisorScreen && (activeTab === 'LINES' || activeTab === 'HISTORY' || activeTab === 'WARRANTY')) {
@@ -623,16 +625,27 @@ export const RODetailModal: React.FC = () => {
     }
   }, [isTechScreen, isAdvisorScreen, activeTab]);
 
-  // When CHAT tab is open and there are unread messages, mark them as read
+  // When CHAT or PARTS tab is open and there are unread messages, mark them as read
   useEffect(() => {
-    if (activeTab === 'CHAT' && selectedRO?.id) {
+    if ((activeTab === 'CHAT' || activeTab === 'PARTS') && selectedRO?.id) {
       const hasUnread = (selectedRO.messages || []).some(m => !(m.readBy || []).includes(currentUser.id));
       if (hasUnread) {
         markROMessagesAsRead(selectedRO.id);
       }
     }
   }, [activeTab, selectedRO?.id, selectedRO?.messages, currentUser.id, markROMessagesAsRead]);
+
   const [chatInput, setChatInput] = useState('');
+  const [embeddedMsgInput, setEmbeddedMsgInput] = useState('');
+  const [isEmbeddedUrgent, setIsEmbeddedUrgent] = useState(false);
+
+  // Quick Order State inside RO
+  const [quickOrderPart, setQuickOrderPart] = useState<any | null>(null);
+  const [quickOrderVendor, setQuickOrderVendor] = useState('STELLANTIS');
+  const [quickOrderEtaOption, setQuickOrderEtaOption] = useState<'TODAY_AFTERNOON' | 'TOMORROW_MORNING' | '1_2_DAYS' | 'CUSTOM'>('TOMORROW_MORNING');
+  const [quickOrderCustomEta, setQuickOrderCustomEta] = useState('');
+  const [quickOrderTracking, setQuickOrderTracking] = useState('');
+  const [quickOrderSuccessNote, setQuickOrderSuccessNote] = useState<string | null>(null);
   const [isUrgentMessage, setIsUrgentMessage] = useState(false);
   const [statusNote, setStatusNote] = useState('');
   const [isUrgentStatusUpdate, setIsUrgentStatusUpdate] = useState(false);
@@ -694,6 +707,90 @@ export const RODetailModal: React.FC = () => {
     sendMessage(selectedRO.id, chatInput, isUrgentMessage);
     setChatInput('');
     setIsUrgentMessage(false);
+  };
+
+  const handleSendEmbeddedMessage = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!embeddedMsgInput.trim() || !selectedRO) return;
+    sendMessage(selectedRO.id, embeddedMsgInput.trim(), isEmbeddedUrgent);
+    setEmbeddedMsgInput('');
+    setIsEmbeddedUrgent(false);
+  };
+
+  const handleSendQuickMessage = (text: string) => {
+    if (!selectedRO) return;
+    sendMessage(selectedRO.id, text, false);
+  };
+
+  const handleQuickMarkOrderedSubmit = () => {
+    if (!quickOrderPart || !selectedRO) return;
+    
+    let etaString = '';
+    const now = new Date();
+    if (quickOrderEtaOption === 'TODAY_AFTERNOON') {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0);
+      etaString = d.toISOString();
+    } else if (quickOrderEtaOption === 'TOMORROW_MORNING') {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 30);
+      etaString = d.toISOString();
+    } else if (quickOrderEtaOption === '1_2_DAYS') {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 12, 0);
+      etaString = d.toISOString();
+    } else if (quickOrderEtaOption === 'CUSTOM' && quickOrderCustomEta) {
+      etaString = new Date(quickOrderCustomEta).toISOString();
+    } else {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 30);
+      etaString = d.toISOString();
+    }
+
+    const etaDisplay = quickOrderEtaOption === 'TODAY_AFTERNOON' ? 'Today Afternoon (4:00 PM)' :
+      quickOrderEtaOption === 'TOMORROW_MORNING' ? 'Tomorrow Morning (9:30 AM)' :
+      quickOrderEtaOption === '1_2_DAYS' ? '1-2 Business Days' :
+      quickOrderCustomEta || 'Pending ETA';
+
+    const notes = quickOrderTracking.trim() ? `PO / Tracking: ${quickOrderTracking.trim()}` : undefined;
+
+    updatePartStatus(selectedRO.id, quickOrderPart.id, 'ORDERED', etaString, notes);
+
+    // Automatically post status update announcement into Message Center thread
+    const partLabel = quickOrderPart.partNumber ? `#${quickOrderPart.partNumber} (${quickOrderPart.name})` : quickOrderPart.name;
+    const autoMsg = `🚚 Part ${partLabel} marked ON ORDER from ${quickOrderVendor} • Expected: ${etaDisplay}${quickOrderTracking ? ` • Ref/Tracking: ${quickOrderTracking.trim()}` : ''}`;
+    sendMessage(selectedRO.id, autoMsg, false);
+
+    setQuickOrderSuccessNote(`Ordered ${partLabel}`);
+    setTimeout(() => setQuickOrderSuccessNote(null), 3000);
+    setQuickOrderPart(null);
+    setQuickOrderTracking('');
+    setQuickOrderCustomEta('');
+  };
+
+  const handleQuickMarkArrived = (part: any) => {
+    if (!selectedRO) return;
+    updatePartStatus(selectedRO.id, part.id, 'RECEIVED');
+    const partLabel = part.partNumber ? `#${part.partNumber} (${part.name})` : part.name;
+    const autoMsg = `🟢 Parts Arrived: ${partLabel} is at the parts counter / staged in bin ready for technician ${selectedRO.techName || ''}!`;
+    sendMessage(selectedRO.id, autoMsg, true);
+    setQuickOrderSuccessNote(`Part marked arrived: ${partLabel}`);
+    setTimeout(() => setQuickOrderSuccessNote(null), 3000);
+  };
+
+  const handleQuickIssueToTech = (part: any) => {
+    if (!selectedRO) return;
+    updatePartStatus(selectedRO.id, part.id, 'ISSUED_TO_TECH');
+    const partLabel = part.partNumber ? `#${part.partNumber} (${part.name})` : part.name;
+    const autoMsg = `🔧 ${partLabel} issued to technician ${selectedRO.techName || ''} for active installation.`;
+    sendMessage(selectedRO.id, autoMsg, false);
+  };
+
+  const handleMarkAllPendingOrdered = () => {
+    if (!selectedRO) return;
+    const success = markAllPartsOrderedOnRO(selectedRO.id);
+    if (success) {
+      const autoMsg = `🚚 All approved & pending parts for RO #${selectedRO.id} marked ON ORDER with suppliers. Live ETAs initialized.`;
+      sendMessage(selectedRO.id, autoMsg, false);
+      setQuickOrderSuccessNote(`All approved parts marked ON ORDER!`);
+      setTimeout(() => setQuickOrderSuccessNote(null), 3000);
+    }
   };
 
   const handleStatusChange = (newStatus: ROStatus, note?: string) => {
@@ -1233,40 +1330,54 @@ export const RODetailModal: React.FC = () => {
             </button>
           )}
 
-          {!isTechScreen && (() => {
+          {/* Unified Tab Button: Parts & Quote Message Center (Consolidated) */}
+          {(() => {
             const unreadMessages = (selectedRO.messages || []).filter(m => !(m.readBy || []).includes(currentUser.id));
             const hasUnreadUrgent = unreadMessages.some(m => m.isUrgent);
             const unreadCount = unreadMessages.length;
+            const isPartsOrChatActive = activeTab === 'PARTS' || activeTab === 'CHAT';
+            const totalPartsCount = (selectedRO.parts?.length || 0) + (selectedRO.quote?.partsItems?.length || 0);
 
             return (
               <button
-                id="ro-tab-chat"
+                id="ro-tab-parts-center"
                 type="button"
                 onClick={() => {
-                  setActiveTab('CHAT');
+                  setActiveTab('PARTS');
                   if (selectedRO?.id) {
                     markROMessagesAsRead(selectedRO.id);
                   }
                 }}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
-                  hasUnreadUrgent
+                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
+                  isPartsOrChatActive
+                    ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700 shadow-md ring-2 ring-blue-400/40'
+                    : hasUnreadUrgent
                     ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white animate-pulse border-red-700 ring-2 ring-red-400'
                     : unreadCount > 0
-                    ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700 ring-2 ring-blue-300'
-                    : activeTab === 'CHAT'
-                    ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
+                    ? 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white border-blue-600 ring-1 ring-blue-300'
                     : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
                 }`}
+                title="Parts Quoting, Ordering, Live Delivery ETAs & Inter-Department Message Center"
               >
-                <div className="relative">
-                  <MessageSquare className={`w-3.5 h-3.5 ${
-                    hasUnreadUrgent || unreadCount > 0 || activeTab === 'CHAT' ? 'text-white' : 'text-slate-700'
-                  }`} />
+                <div className="relative flex items-center gap-1.5">
+                  <Package className={`w-3.5 h-3.5 ${isPartsOrChatActive || hasUnreadUrgent || unreadCount > 0 ? 'text-white' : 'text-amber-600'}`} />
+                  <MessageSquare className={`w-3 h-3 ${isPartsOrChatActive || hasUnreadUrgent || unreadCount > 0 ? 'text-blue-200' : 'text-blue-600'}`} />
+                  <span>Parts & Quote Message Center</span>
                   {(hasUnreadUrgent || unreadCount > 0) && (
-                    <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
+                    <span className="absolute -top-1.5 -right-2 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
                   )}
                 </div>
-                <span>Live Communication</span>
+
+                {/* Parts Count Badge */}
+                {totalPartsCount > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    isPartsOrChatActive ? 'bg-blue-800 text-white' : 'bg-purple-100 text-purple-900 border border-purple-200'
+                  }`}>
+                    {totalPartsCount} Parts
+                  </span>
+                )}
+
+                {/* Message Badges */}
                 {hasUnreadUrgent ? (
                   <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black animate-ping flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-white" />
@@ -1304,36 +1415,6 @@ export const RODetailModal: React.FC = () => {
               )}
             </button>
           )}
-
-          {/* Tab 3 Button: Parts (Quotes, Orders & ETA) */}
-          <button
-            id="ro-tab-parts"
-            type="button"
-            onClick={() => setActiveTab('PARTS')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
-              activeTab === 'PARTS'
-                ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-blue-700'
-                : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
-            }`}
-          >
-            <Package className={`w-3.5 h-3.5 ${activeTab === 'PARTS' ? 'text-white' : 'text-slate-700'}`} />
-            <span>
-              {(() => {
-                const hasQuoteOnly = (selectedRO.quote?.partsItems && selectedRO.quote.partsItems.length > 0) || selectedRO.parts.some(p => p.status === 'QUOTE_ONLY' || p.requestType === 'QUOTE_ONLY');
-                const hasOrdered = selectedRO.parts.some(p => ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'IN_STOCK', 'RECEIVED', 'ISSUED_TO_TECH'].includes(p.status));
-                if (hasQuoteOnly && hasOrdered) return 'Parts (Quote & Orders)';
-                if (hasQuoteOnly) return 'Parts on Estimate (Quote)';
-                return 'Parts Ordered (ETA)';
-              })()}
-            </span>
-            {(selectedRO.parts.length > 0 || (selectedRO.quote?.partsItems && selectedRO.quote.partsItems.length > 0)) && (
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                activeTab === 'PARTS' ? 'bg-blue-800 text-white' : 'bg-purple-100 text-purple-900 border border-purple-200'
-              }`}>
-                {selectedRO.parts.length || selectedRO.quote?.partsItems?.length}
-              </span>
-            )}
-          </button>
 
           {!isTechScreen && !isAdvisorScreen && (
             <button
@@ -2272,126 +2353,10 @@ export const RODetailModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: LIVE COMMUNICATION THREAD */}
-          {activeTab === 'CHAT' && (
-            <div className="flex flex-col h-[480px]">
-              
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">
-                    Inter-Department Communication Thread
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Direct channel between Service Manager, Service Advisors, Techs, & Parts
-                  </p>
-                </div>
-              </div>
 
-              {/* Message List */}
-              <div className="flex-1 overflow-y-auto py-3 space-y-3">
-                {selectedRO.messages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                    <MessageSquare className="w-8 h-8 text-slate-300 mb-2" />
-                    No messages yet on {selectedRO.id}. Start the conversation below.
-                  </div>
-                ) : (
-                  selectedRO.messages.map(msg => {
-                    const isSelf = msg.senderId === currentUser.id;
-                    return (
-                      <div 
-                        key={msg.id} 
-                        className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}
-                      >
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[11px] font-bold text-slate-700">
-                            {msg.senderName}
-                          </span>
-                          {(() => {
-                            const sender = users.find(u => u.id === msg.senderId);
-                            return sender?.employeeNumber ? (
-                              <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                {sender.employeeNumber}
-                              </span>
-                            ) : null;
-                          })()}
-                          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-bold uppercase">
-                            {msg.senderRole.replace('_', ' ')}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {formatRelativeTime(msg.timestamp)}
-                          </span>
-                        </div>
 
-                        <div 
-                          className={`max-w-md p-3 rounded-xl text-xs leading-relaxed ${
-                            msg.isUrgent
-                              ? 'bg-red-50 text-red-950 border-2 border-red-300 font-medium'
-                              : isSelf
-                              ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
-                              : 'bg-slate-100 text-slate-900 rounded-bl-xs border-2 border-slate-300'
-                          }`}
-                        >
-                          {msg.isUrgent && (
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">
-                              <AlertTriangle className="w-3 h-3" /> Urgent Notice
-                            </div>
-                          )}
-                          {msg.content}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Message Input Box */}
-              {isSales ? (
-                <div className="p-3 bg-slate-50 border-2 border-slate-300 rounded-xl text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Inter-department messaging is read-only for the Sales position.</span>
-                </div>
-              ) : (
-                <form onSubmit={handleSendMessage} className="pt-3 border-t-2 border-slate-200">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isUrgentMessage}
-                        onChange={e => setIsUrgentMessage(e.target.checked)}
-                        className="rounded text-red-600 focus:ring-red-500"
-                      />
-                      <span className="text-red-600 font-semibold text-xs flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> Flag as Urgent Push Notification
-                      </span>
-                    </label>
-                    <span className="text-[10px] text-slate-400">Press Enter to send</span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder={`Message regarding ${selectedRO.id} as ${currentUser.name}...`}
-                      value={chatInput}
-                      onChange={e => setChatInput(e.target.value)}
-                      className="flex-1 text-sm px-3.5 py-2 border-2 border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs bg-white text-slate-800"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!chatInput.trim()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer border-2 border-blue-700"
-                    >
-                      <span>Send</span>
-                      <Send className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </form>
-              )}
-
-            </div>
-          )}
-
-          {/* TAB 3: PARTS (QUOTED, ORDERED, IN STOCK & ETA) */}
-          {activeTab === 'PARTS' && (
+          {/* TAB: UNIFIED PARTS, QUOTES & INTER-DEPARTMENT MESSAGE CENTER */}
+          {(activeTab === 'PARTS' || activeTab === 'CHAT') && (
             <div className="space-y-4">
               {(() => {
                 // Collect all unified parts from selectedRO.parts and selectedRO.quote.partsItems
@@ -2486,58 +2451,131 @@ export const RODetailModal: React.FC = () => {
                   p.status === 'DECLINED' || p.status === 'CANCELLED'
                 );
 
+                const hasPendingToOrder = quoteParts.length > 0 || requestedParts.length > 0;
+
                 return (
                   <>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b-2 border-slate-200 gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-purple-100 rounded-lg border-2 border-purple-300 text-purple-700">
-                          <Package className="w-5 h-5" />
+                    {/* Unified Command & Status Banner */}
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="p-1.5 bg-blue-600 text-white rounded-lg shadow-2xs">
+                            <Package className="w-4 h-4" />
+                          </span>
+                          <h3 className="text-base font-black text-white uppercase tracking-tight">
+                            Parts Ordering, Quotes & Live Message Center
+                          </h3>
                         </div>
-                        <div>
-                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                            Parts Logistics, Quotes & ETA Tracker
-                          </h4>
-                          <p className="text-xs text-slate-500">
-                            Comprehensive view of quoted estimate parts, pending requests, ordered components, and live ETA delivery tracking.
-                          </p>
+                        <p className="text-xs text-slate-300 max-w-xl">
+                          All parts quoting, ordering, live arrival ETAs, and inter-department messaging are consolidated directly on RO #{selectedRO.id}.
+                        </p>
+
+                        {/* Metric Counts */}
+                        <div className="flex items-center gap-2 pt-2 flex-wrap text-xs font-bold">
+                          {quoteParts.length > 0 && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-purple-900/80 text-purple-200 border border-purple-500/50">
+                              📋 {quoteParts.length} on Quote
+                            </span>
+                          )}
+                          {orderedParts.length > 0 && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-900/80 text-amber-200 border border-amber-500/50">
+                              🚚 {orderedParts.length} Ordered (ETA)
+                            </span>
+                          )}
+                          {inStockParts.length > 0 && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-900/80 text-emerald-200 border border-emerald-500/50">
+                              ✓ {inStockParts.length} In Bay / Ready
+                            </span>
+                          )}
+                          <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                            💬 {selectedRO.messages.length} Messages
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {canOrderParts && (
+
+                      {/* Header Actions & View Mode Switcher */}
+                      <div className="flex flex-col sm:items-end gap-2.5 shrink-0">
+                        {/* Quick Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {canOrderParts && (
+                            <button
+                              type="button"
+                              onClick={() => setIsAddPartModalOpen(true)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer"
+                              title="Add a new part to this Repair Order"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-white" />
+                              <span>+ Add Part</span>
+                            </button>
+                          )}
+
+                          {canOrderParts && hasPendingToOrder && (
+                            <button
+                              type="button"
+                              onClick={handleMarkAllPendingOrdered}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs transition-all cursor-pointer"
+                              title="Mark all pending parts ordered with standard 1-5 day ETA"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>Mark All Ordered</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
-                            onClick={() => setIsAddPartModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer mr-1"
-                            title="Add a new part to this Repair Order"
+                            onClick={() => openQuoteModal(selectedRO.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-600 shadow-2xs transition-all cursor-pointer"
+                            title="Open Quote Builder / Pricing Estimate"
                           >
-                            <Plus className="w-3.5 h-3.5 text-white" />
-                            <span>+ Add Part</span>
+                            <Receipt className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Quote Builder</span>
                           </button>
-                        )}
-                        {quoteParts.length > 0 && (
-                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
-                            📋 {quoteParts.length} on Quote
-                          </span>
-                        )}
-                        {orderedParts.length > 0 && (
-                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                            🚚 {orderedParts.length} Ordered
-                          </span>
-                        )}
-                        {inStockParts.length > 0 && (
-                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                            ✓ {inStockParts.length} In Stock / In Bay
-                          </span>
-                        )}
-                        {declinedParts.length > 0 && (
-                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-red-100 text-red-900 border border-red-300">
-                            🛑 {declinedParts.length} Declined
-                          </span>
-                        )}
+                        </div>
+
+                        {/* View Mode Switcher: Dual View vs Single View */}
+                        <div className="inline-flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700 text-xs font-bold text-slate-300">
+                          <button
+                            type="button"
+                            onClick={() => setPartsCenterViewMode('SPLIT')}
+                            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                              partsCenterViewMode === 'SPLIT' ? 'bg-blue-600 text-white shadow-2xs' : 'hover:text-white'
+                            }`}
+                            title="View Parts list and live Messages side-by-side"
+                          >
+                            <Columns className="w-3.5 h-3.5" />
+                            <span>Dual View</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPartsCenterViewMode('PARTS_ONLY')}
+                            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                              partsCenterViewMode === 'PARTS_ONLY' ? 'bg-blue-600 text-white shadow-2xs' : 'hover:text-white'
+                            }`}
+                            title="View full-width Parts list and ordering only"
+                          >
+                            <Package className="w-3.5 h-3.5" />
+                            <span>Parts Only</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPartsCenterViewMode('MESSAGES_ONLY')}
+                            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                              partsCenterViewMode === 'MESSAGES_ONLY' ? 'bg-blue-600 text-white shadow-2xs' : 'hover:text-white'
+                            }`}
+                            title="View full-width Live Message Center only"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Messages Only</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    {allPartsList.length === 0 ? (
+                    {/* Responsive Dual-View Grid: Parts & Orders (Left) + Live Messages (Right) */}
+                    <div className={partsCenterViewMode === 'SPLIT' ? 'grid grid-cols-1 lg:grid-cols-12 gap-5 items-start' : 'space-y-4'}>
+                      {partsCenterViewMode !== 'MESSAGES_ONLY' && (
+                        <div className={partsCenterViewMode === 'SPLIT' ? 'lg:col-span-7 space-y-4' : 'space-y-4'}>
+                          {allPartsList.length === 0 ? (
                       <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-slate-300">
                         <Package className="w-10 h-10 text-slate-400 mx-auto mb-2" />
                         <h5 className="text-sm font-bold text-slate-800">No Parts Recorded</h5>
@@ -2715,39 +2753,353 @@ export const RODetailModal: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Edit Part Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const foundPart = (selectedRO.parts || []).find(p => p.id === part.id) || {
-                                      id: part.id,
-                                      roId: selectedRO.id,
-                                      partNumber: part.partNumber || '',
-                                      description: part.name,
-                                      name: part.name,
-                                      quantity: part.quantity || 1,
-                                      status: part.status as any,
-                                      price: part.price,
-                                      vendor: part.vendor || 'STELLANTIS',
-                                      estimatedArrival: part.estimatedArrival || 'Pending ETA',
-                                      notes: part.notes,
-                                      roLineNumber: part.roLineNumber,
-                                      requestType: part.requestType as any
-                                    };
-                                    setEditingPartItem(foundPart as PartItem);
-                                  }}
-                                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-white hover:bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-slate-300 shadow-2xs transition-all cursor-pointer"
-                                  title="Edit part details, pricing, supplier, ETA and line assignment"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>Edit Part</span>
-                                </button>
+                                {/* Quick Action Buttons */}
+                                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                  {(isQuote || isRequested) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setQuickOrderPart(part);
+                                        setQuickOrderVendor(part.vendor || 'STELLANTIS');
+                                        setQuickOrderEtaOption('TOMORROW_MORNING');
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-lg text-xs shadow-xs transition-all cursor-pointer"
+                                      title="Mark this part as Ordered with live ETA & supplier"
+                                    >
+                                      <Truck className="w-3.5 h-3.5" />
+                                      <span>Mark Ordered</span>
+                                    </button>
+                                  )}
+
+                                  {isOrdered && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickMarkArrived(part)}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-lg text-xs shadow-xs transition-all cursor-pointer"
+                                        title="Mark part as arrived at counter/staged for technician"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <span>Mark Arrived / In Bay</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setQuickOrderPart(part);
+                                          setQuickOrderVendor(part.vendor || 'STELLANTIS');
+                                          setQuickOrderEtaOption('1_2_DAYS');
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-lg text-xs border border-slate-300 transition-all cursor-pointer"
+                                        title="Update ETA arrival date or vendor tracking"
+                                      >
+                                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                        <span>Update ETA</span>
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {isInStock && part.status !== 'ISSUED_TO_TECH' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickIssueToTech(part)}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-lg text-xs shadow-xs transition-all cursor-pointer"
+                                      title="Issue part to technician for active installation"
+                                    >
+                                      <Wrench className="w-3.5 h-3.5" />
+                                      <span>Issue to Tech</span>
+                                    </button>
+                                  )}
+
+                                  {/* Edit Part Details Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const foundPart = (selectedRO.parts || []).find(p => p.id === part.id) || {
+                                        id: part.id,
+                                        roId: selectedRO.id,
+                                        partNumber: part.partNumber || '',
+                                        description: part.name,
+                                        name: part.name,
+                                        quantity: part.quantity || 1,
+                                        status: part.status as any,
+                                        price: part.price,
+                                        vendor: part.vendor || 'STELLANTIS',
+                                        estimatedArrival: part.estimatedArrival || 'Pending ETA',
+                                        notes: part.notes,
+                                        roLineNumber: part.roLineNumber,
+                                        requestType: part.requestType as any
+                                      };
+                                      setEditingPartItem(foundPart as PartItem);
+                                    }}
+                                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-slate-300 shadow-2xs transition-all cursor-pointer"
+                                    title="Edit part details, pricing, supplier, ETA and line assignment"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>Edit</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
                         })}
                       </div>
                     )}
+
+                    {/* Quick Order Success Notice */}
+                    {quickOrderSuccessNote && (
+                      <div className="p-3 bg-emerald-100 border border-emerald-400 text-emerald-950 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                          <span>{quickOrderSuccessNote}</span>
+                        </div>
+                        <span className="text-[11px] font-normal text-emerald-800">Recorded on RO & posted to Message Center</span>
+                      </div>
+                    )}
+
+                    {/* Quick Order Popover Form (When marking a part on order) */}
+                    {quickOrderPart && (
+                      <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-400 rounded-2xl shadow-md space-y-3 animate-in zoom-in-95">
+                        <div className="flex items-center justify-between pb-2 border-b border-amber-300">
+                          <div className="flex items-center gap-2">
+                            <Truck className="w-5 h-5 text-amber-700" />
+                            <h4 className="text-sm font-black text-slate-900">
+                              Mark Part On Order: {quickOrderPart.partNumber ? `#${quickOrderPart.partNumber} - ` : ''}{quickOrderPart.name}
+                            </h4>
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => setQuickOrderPart(null)}
+                            className="text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Supplier / Vendor */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1">
+                              Supplier / Vendor *
+                            </label>
+                            <select
+                              value={quickOrderVendor}
+                              onChange={e => setQuickOrderVendor(e.target.value)}
+                              className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500"
+                            >
+                              <option value="STELLANTIS">Mopar / Stellantis</option>
+                              <option value="FORD">Ford Motor Co / Motorcraft</option>
+                              <option value="OREILLY">O'Reilly Auto Parts</option>
+                              <option value="AUTOZONE">AutoZone Commercial</option>
+                              <option value="HOLLANDS">Hollands Auto Parts</option>
+                              <option value="RICKS PRO TRUCK">Ricks Pro Truck</option>
+                              <option value="LOCAL DEALER">Local Dealership Transfer</option>
+                              <option value="AFTERMARKET">Aftermarket / Other</option>
+                            </select>
+                          </div>
+
+                          {/* Arrival Timeframe / ETA */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1">
+                              Expected Arrival *
+                            </label>
+                            <select
+                              value={quickOrderEtaOption}
+                              onChange={e => setQuickOrderEtaOption(e.target.value as any)}
+                              className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500"
+                            >
+                              <option value="TODAY_AFTERNOON">Today Afternoon (4:00 PM)</option>
+                              <option value="TOMORROW_MORNING">Tomorrow Morning (9:30 AM)</option>
+                              <option value="1_2_DAYS">1 to 2 Business Days</option>
+                              <option value="CUSTOM">Specific Date / Time</option>
+                            </select>
+                            {quickOrderEtaOption === 'CUSTOM' && (
+                              <input
+                                type="datetime-local"
+                                value={quickOrderCustomEta}
+                                onChange={e => setQuickOrderCustomEta(e.target.value)}
+                                className="w-full text-xs font-bold p-1.5 mt-1 bg-white border border-slate-300 rounded-lg text-slate-900"
+                              />
+                            )}
+                          </div>
+
+                          {/* Optional Tracking / PO # */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1">
+                              PO / Reference / Tracking (Opt)
+                            </label>
+                            <input
+                              type="text"
+                              value={quickOrderTracking}
+                              onChange={e => setQuickOrderTracking(e.target.value)}
+                              placeholder="e.g. PO-8492 or FedEx tracking"
+                              className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] text-amber-900 font-medium">
+                            Will automatically notify Advisor & Technician and post update to RO Message Center
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setQuickOrderPart(null)}
+                              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleQuickMarkOrderedSubmit}
+                              className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Check className="w-4 h-4" />
+                              <span>Confirm & Order Part</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                        </div>
+                      )}
+
+                      {/* Right Column: Embedded Quote & Parts Message Center */}
+                      {partsCenterViewMode !== 'PARTS_ONLY' && (
+                        <div className={partsCenterViewMode === 'SPLIT' ? 'lg:col-span-5 sticky top-4' : 'w-full'}>
+                          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden flex flex-col">
+                            <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-blue-600 text-white shadow-2xs">
+                                  <MessageSquare className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                                    Quote & Parts Message Center
+                                  </h4>
+                                  <p className="text-[11px] text-slate-300">
+                                    Live RO #{selectedRO.id} parts chat thread
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                                  {selectedRO.messages.length} Messages
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Quick Response Pill Buttons */}
+                            <div className="p-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto text-xs">
+                              <span className="text-[10px] font-bold uppercase text-slate-500 shrink-0 mr-1">
+                                Quick:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleSendQuickMessage('🚚 Parts are on order, ETA tomorrow morning.')}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-semibold shrink-0 cursor-pointer shadow-2xs"
+                              >
+                                🚚 On order, ETA tomorrow
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSendQuickMessage('🟢 All parts have arrived at the parts counter - ready for tech.')}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-semibold shrink-0 cursor-pointer shadow-2xs"
+                              >
+                                🟢 Parts arrived at counter
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSendQuickMessage('📋 Customer approved quote - ready to order parts.')}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-semibold shrink-0 cursor-pointer shadow-2xs"
+                              >
+                                📋 Customer approved quote
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSendQuickMessage('🔍 Need part number clarification or VIN verification.')}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-semibold shrink-0 cursor-pointer shadow-2xs"
+                              >
+                                🔍 Need part # / VIN
+                              </button>
+                            </div>
+
+                            {/* Message List */}
+                            <div className="p-4 max-h-[380px] overflow-y-auto space-y-2.5 bg-slate-50/50">
+                              {selectedRO.messages.length === 0 ? (
+                                <div className="py-6 text-center text-slate-400 text-xs">
+                                  <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                  No messages yet on #{selectedRO.id}. Use the box below to ask questions about parts, ETAs, or quotes.
+                                </div>
+                              ) : (
+                                selectedRO.messages.map(msg => {
+                                  const isSelf = msg.senderId === currentUser.id;
+                                  return (
+                                    <div key={msg.id} className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
+                                      <div className="flex items-center gap-1.5 mb-0.5">
+                                        <span className="text-[11px] font-bold text-slate-700">{msg.senderName}</span>
+                                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 font-bold uppercase">
+                                          {msg.senderRole.replace('_', ' ')}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400">{formatRelativeTime(msg.timestamp)}</span>
+                                      </div>
+                                      <div className={`max-w-md p-2.5 rounded-xl text-xs leading-relaxed ${
+                                        msg.isUrgent
+                                          ? 'bg-red-50 text-red-950 border-2 border-red-300 font-medium'
+                                          : isSelf
+                                          ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
+                                          : 'bg-white text-slate-900 rounded-bl-xs border border-slate-300 shadow-2xs'
+                                      }`}>
+                                        {msg.isUrgent && (
+                                          <div className="flex items-center gap-1 text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">
+                                            <AlertTriangle className="w-3 h-3" /> Urgent Notice
+                                          </div>
+                                        )}
+                                        {msg.content}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {/* Message Input Box */}
+                            <div className="p-3 bg-white border-t border-slate-200">
+                              <form onSubmit={handleSendEmbeddedMessage} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={embeddedMsgInput}
+                                  onChange={e => setEmbeddedMsgInput(e.target.value)}
+                                  placeholder="Type a message to Tech, Advisor, or Parts Counter..."
+                                  className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-900"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEmbeddedUrgent(!isEmbeddedUrgent)}
+                                  className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
+                                    isEmbeddedUrgent
+                                      ? 'bg-red-600 text-white border-red-700 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                  title="Mark message as urgent priority"
+                                >
+                                  <AlertTriangle className={`w-3.5 h-3.5 ${isEmbeddedUrgent ? 'text-white' : 'text-slate-400'}`} />
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={!embeddedMsgInput.trim()}
+                                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-black rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                  <span>Send</span>
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </>
                 );
               })()}

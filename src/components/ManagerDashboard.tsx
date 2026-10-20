@@ -1425,7 +1425,7 @@ export const ManagerDashboard: React.FC = () => {
       <ManagerPartsOnOrderModal
         isOpen={isPartsOnOrderModalOpen}
         onClose={() => setIsPartsOnOrderModalOpen(false)}
-        onOpenRO={(ro) => setSelectedRO(ro)}
+        onOpenRO={(ro) => setSelectedRO(ro, 'PARTS')}
       />
 
       {/* Service Manager: Technician Workload Modal (View all assigned ROs and click to see whole RO) */}

@@ -1488,6 +1488,28 @@ export const PartsDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Informational Guidance: Unified Parts Ordering on Repair Order */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-blue-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="p-2.5 rounded-xl bg-blue-600 text-white shadow-md shrink-0 mt-0.5">
+            <Package className="w-5 h-5 text-white" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-black tracking-tight text-white uppercase">
+                Parts Quoting, Ordering & Tracking Unified on Repair Orders
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/30 text-[10px] font-black uppercase tracking-wider">
+                Direct On RO
+              </span>
+            </div>
+            <p className="text-xs text-blue-100 max-w-2xl leading-relaxed">
+              Instead of switching to a separate parts system, every Repair Order now features a dedicated <strong>Parts & Quote Message Center</strong>. View parts quotes, place vendor orders, set delivery ETAs, and chat directly with Techs & Advisors all in one unified place on each RO.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ========================================================================= */}
       {/* SECTION 0: UNREAD NOTIFICATIONS TO ORDER PARTS                           */}
       {/* ========================================================================= */}
@@ -1568,7 +1590,7 @@ export const PartsDashboard: React.FC = () => {
                           setDismissedAlertIds(prev => new Set([...prev, notif.id, notif.roId, `auto_alert_ro_${notif.roId}`, `auto_alert_ro_${String(notif.roId)}`, `parts_alert_${notif.roId}`]));
                           markNotificationRead(notif.id);
                           dismissPartsOrderAlert(notif.roId, notif.id, true);
-                          setSelectedRO(notifRO);
+                          setSelectedRO(notifRO, 'PARTS');
                           setActiveTab('RO_LIST');
                           setRoStatusFilter('APPROVED_READY_ORDER');
                           setShowAllBackgroundROs(true);
@@ -1960,11 +1982,11 @@ export const PartsDashboard: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => setSelectedRO(ro)}
+                        onClick={() => setSelectedRO(ro, 'PARTS')}
                         className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
                       >
                         <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                        <span>View Full RO</span>
+                        <span>Open RO Parts & Message Hub</span>
                       </button>
                     </div>
                   </div>
@@ -3047,7 +3069,7 @@ export const PartsDashboard: React.FC = () => {
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               <button
                                 type="button"
-                                onClick={() => setSelectedRO(ro)}
+                                onClick={() => setSelectedRO(ro, 'PARTS')}
                                 className="font-mono font-black text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                               >
                                 RO #{ro.id}
@@ -3114,7 +3136,7 @@ export const PartsDashboard: React.FC = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedRO(ro)}
+                                  onClick={() => setSelectedRO(ro, 'PARTS')}
                                   className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-bold border border-slate-300 transition-colors cursor-pointer"
                                 >
                                   View
@@ -3153,7 +3175,7 @@ export const PartsDashboard: React.FC = () => {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span 
-                            onClick={() => setSelectedRO(ro)}
+                            onClick={() => setSelectedRO(ro, 'PARTS')}
                             className="text-base font-black text-blue-600 hover:text-blue-800 cursor-pointer font-mono"
                           >
                             RO #{ro.id}
@@ -3263,12 +3285,12 @@ export const PartsDashboard: React.FC = () => {
                           </button>
 
                           <button
-                            onClick={() => setSelectedRO(ro)}
+                            onClick={() => setSelectedRO(ro, 'PARTS')}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer border-2 border-slate-400"
-                            title="Open Complete RO Details Modal"
+                            title="Open RO Parts & Quote Message Center"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
-                            <span>Open RO</span>
+                            <span>Open RO Parts</span>
                           </button>
                         </div>
 
@@ -3565,7 +3587,7 @@ export const PartsDashboard: React.FC = () => {
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <button
                               type="button"
-                              onClick={() => targetRO && setSelectedRO(targetRO)}
+                              onClick={() => targetRO && setSelectedRO(targetRO, 'PARTS')}
                               className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                             >
                               #{part.roId}
@@ -3631,9 +3653,9 @@ export const PartsDashboard: React.FC = () => {
                               )}
                               <button
                                 type="button"
-                                onClick={() => targetRO && setSelectedRO(targetRO)}
+                                onClick={() => targetRO && setSelectedRO(targetRO, 'PARTS')}
                                 className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-                                title="View Full RO Details"
+                                title="Open RO Parts & Quote Message Center"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                               </button>
@@ -3706,7 +3728,7 @@ export const PartsDashboard: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-                        <span className="font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => targetRO && setSelectedRO(targetRO)}>
+                        <span className="font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => targetRO && setSelectedRO(targetRO, 'PARTS')}>
                           #{part.roId}
                         </span>
                         <span className="flex items-center gap-1">
@@ -3788,9 +3810,9 @@ export const PartsDashboard: React.FC = () => {
                         )}
 
                         <button
-                          onClick={() => targetRO && setSelectedRO(targetRO)}
+                          onClick={() => targetRO && setSelectedRO(targetRO, 'PARTS')}
                           className="p-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
-                          title="View Full RO Details"
+                          title="Open RO Parts & Quote Message Center"
                         >
                           <ExternalLink className="w-4 h-4" />
                         </button>
