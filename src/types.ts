@@ -703,6 +703,7 @@ export interface InternalExtensionEntry {
   name: string;             // Staff name or desk/station (e.g. "Mark Reynolds", "Service Counter Line 1")
   extension: string;        // Phone Extension Number (e.g. "201", "302")
   department: string;       // Department (e.g. "Service", "Parts", "Sales", "Accounting / Office", "Management")
+  dealership?: 'WOOLWINE_CDJR' | 'WOOLWINE_FORD' | string; // Dealership location (Woolwine CDJR vs Woolwine Ford)
   directPhone?: string;     // Optional Direct Dial / Outside number
   title?: string;           // Optional Title or Role (e.g. "Lead Service Advisor", "Parts Specialist")
   notes?: string;           // Optional notes / desk location

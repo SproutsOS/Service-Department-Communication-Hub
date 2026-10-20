@@ -60,6 +60,24 @@ export const InternalExtensionModal: React.FC = () => {
     openRecallWaitingModal
   } = useApp();
 
+  // Dealership Switcher State (Woolwine CDJR vs Woolwine Ford)
+  const [selectedDealership, setSelectedDealership] = useState<'WOOLWINE_CDJR' | 'WOOLWINE_FORD'>(() => {
+    try {
+      const saved = localStorage.getItem('dealership_phone_directory_active_location');
+      if (saved === 'WOOLWINE_FORD' || saved === 'WOOLWINE_CDJR') return saved;
+    } catch {}
+    return 'WOOLWINE_CDJR';
+  });
+
+  const handleSelectDealership = (dealership: 'WOOLWINE_CDJR' | 'WOOLWINE_FORD') => {
+    setSelectedDealership(dealership);
+    setAddDealership(dealership);
+    setSelectedDepartmentFilter('ALL');
+    try {
+      localStorage.setItem('dealership_phone_directory_active_location', dealership);
+    } catch {}
+  };
+
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepartmentFilter, setSelectedDepartmentFilter] = useState<string>('ALL');
@@ -67,6 +85,7 @@ export const InternalExtensionModal: React.FC = () => {
 
   // Form State
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [addDealership, setAddDealership] = useState<'WOOLWINE_CDJR' | 'WOOLWINE_FORD'>(selectedDealership);
   const [name, setName] = useState('');
   const [extension, setExtension] = useState('');
   const [department, setDepartment] = useState('Service');
@@ -78,6 +97,7 @@ export const InternalExtensionModal: React.FC = () => {
 
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDealership, setEditDealership] = useState<'WOOLWINE_CDJR' | 'WOOLWINE_FORD'>('WOOLWINE_CDJR');
   const [editName, setEditName] = useState('');
   const [editExtension, setEditExtension] = useState('');
   const [editDepartment, setEditDepartment] = useState('');
@@ -116,18 +136,39 @@ export const InternalExtensionModal: React.FC = () => {
     }
   };
 
+  const activeDealershipName = selectedDealership === 'WOOLWINE_CDJR' ? 'Woolwine CDJR' : 'Woolwine Ford';
+
   const handlePrint = () => {
-    printIsolatedDocument('printable-internal-extensions', `Internal Phone Extensions Directory - ${shopName || 'Dealership'}`);
+    printIsolatedDocument('printable-internal-extensions', `Internal Phone Extensions Directory - ${activeDealershipName}`);
   };
 
-  // Distinct departments for filter pills
+  // Extension counts per dealership
+  const cdjrCount = useMemo(() => {
+    return internalExtensions.filter(i => !i.dealership || i.dealership === 'WOOLWINE_CDJR').length;
+  }, [internalExtensions]);
+
+  const fordCount = useMemo(() => {
+    return internalExtensions.filter(i => i.dealership === 'WOOLWINE_FORD').length;
+  }, [internalExtensions]);
+
+  // Extensions filtered by selected dealership
+  const dealershipExtensions = useMemo(() => {
+    return internalExtensions.filter(item => {
+      if (selectedDealership === 'WOOLWINE_FORD') {
+        return item.dealership === 'WOOLWINE_FORD';
+      }
+      return !item.dealership || item.dealership === 'WOOLWINE_CDJR';
+    });
+  }, [internalExtensions, selectedDealership]);
+
+  // Distinct departments for filter pills for current dealership
   const distinctDepartments = useMemo(() => {
     const set = new Set<string>();
-    internalExtensions.forEach(item => {
+    dealershipExtensions.forEach(item => {
       if (item.department) set.add(item.department);
     });
     return Array.from(set).sort();
-  }, [internalExtensions]);
+  }, [dealershipExtensions]);
 
   // Submit new extension
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -147,6 +188,7 @@ export const InternalExtensionModal: React.FC = () => {
       name: name.trim(),
       extension: extension.trim(),
       department: finalDept,
+      dealership: addDealership,
       directPhone: directPhone.trim() || undefined,
       title: title.trim() || undefined,
       notes: notes.trim() || undefined
@@ -167,6 +209,7 @@ export const InternalExtensionModal: React.FC = () => {
   // Start editing
   const handleStartEdit = (entry: InternalExtensionEntry) => {
     setEditingId(entry.id);
+    setEditDealership(entry.dealership === 'WOOLWINE_FORD' ? 'WOOLWINE_FORD' : 'WOOLWINE_CDJR');
     setEditName(entry.name);
     setEditExtension(entry.extension);
     setEditDepartment(entry.department || 'Service');
@@ -183,6 +226,7 @@ export const InternalExtensionModal: React.FC = () => {
       name: editName.trim(),
       extension: editExtension.trim(),
       department: editDepartment.trim(),
+      dealership: editDealership,
       directPhone: editDirectPhone.trim() || undefined,
       title: editTitle.trim() || undefined,
       notes: editNotes.trim() || undefined
@@ -191,9 +235,9 @@ export const InternalExtensionModal: React.FC = () => {
     setEditingId(null);
   };
 
-  // Filtered list
+  // Filtered list for active dealership
   const filteredList = useMemo(() => {
-    let result = [...internalExtensions];
+    let result = [...dealershipExtensions];
 
     // Search query
     const q = searchQuery.toLowerCase().trim();
@@ -222,7 +266,7 @@ export const InternalExtensionModal: React.FC = () => {
       }
       return a.extension.localeCompare(b.extension);
     });
-  }, [internalExtensions, searchQuery, selectedDepartmentFilter]);
+  }, [dealershipExtensions, searchQuery, selectedDepartmentFilter]);
 
   // Grouped by Department
   const groupedByDepartment = useMemo(() => {
@@ -359,7 +403,9 @@ export const InternalExtensionModal: React.FC = () => {
         {/* Modal Header */}
         <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0 border-b border-slate-800 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-teal-600 text-white shadow-sm shrink-0">
+            <div className={`p-2.5 rounded-xl shadow-sm shrink-0 transition-colors ${
+              selectedDealership === 'WOOLWINE_FORD' ? 'bg-blue-600 text-white' : 'bg-amber-600 text-white'
+            }`}>
               <PhoneForwarded className="w-6 h-6" />
             </div>
             <div>
@@ -367,8 +413,12 @@ export const InternalExtensionModal: React.FC = () => {
                 <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
                   Dealership Internal Phone Directory
                 </h3>
-                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/40">
-                  {internalExtensions.length} Extensions Active
+                <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                  selectedDealership === 'WOOLWINE_FORD'
+                    ? 'bg-blue-500/20 text-blue-300 border-blue-400/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                }`}>
+                  {activeDealershipName} • {dealershipExtensions.length} Active Extensions
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
@@ -382,20 +432,95 @@ export const InternalExtensionModal: React.FC = () => {
               type="button"
               onClick={handlePrint}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold border border-slate-700 shadow-xs transition-colors cursor-pointer"
-              title="Print Internal Extension Directory Sheet (Post on desks & phone stations)"
+              title={`Print ${activeDealershipName} Extension Directory Sheet (Post on desks & phone stations)`}
             >
               <Printer className="w-4 h-4 text-teal-400" />
-              <span className="hidden sm:inline">Print Directory</span>
+              <span className="hidden sm:inline">Print {activeDealershipName} Directory</span>
               <span className="sm:hidden">Print</span>
             </button>
 
             <button
               type="button"
-              onClick={() => setIsAddFormOpen(!isAddFormOpen)}
+              onClick={() => {
+                setAddDealership(selectedDealership);
+                setIsAddFormOpen(!isAddFormOpen);
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-black shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>{isAddFormOpen ? 'Cancel' : '+ Add Extension'}</span>
+              <span>{isAddFormOpen ? 'Cancel' : `+ Add to ${activeDealershipName}`}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Dealership Switcher Bar - Switch between Woolwine CDJR and Woolwine Ford */}
+        <div className="p-3 sm:px-5 bg-slate-950 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded-md bg-slate-900 border border-slate-800 text-slate-400">
+              <Store className="w-4 h-4 text-teal-400" />
+            </div>
+            <div>
+              <div className="text-xs font-black uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                <span>Select Dealership Directory:</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Click below to switch between Woolwine CDJR and Woolwine Ford extensions
+              </p>
+            </div>
+          </div>
+
+          {/* Dealership Selection Button Group */}
+          <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 self-stretch sm:self-auto">
+            {/* Woolwine CDJR Toggle Button */}
+            <button
+              type="button"
+              onClick={() => handleSelectDealership('WOOLWINE_CDJR')}
+              className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                selectedDealership === 'WOOLWINE_CDJR'
+                  ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400/60'
+                  : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              <Building2 className={`w-4 h-4 ${selectedDealership === 'WOOLWINE_CDJR' ? 'text-slate-950' : 'text-amber-400'}`} />
+              <div className="text-left">
+                <div className="leading-tight">Woolwine CDJR</div>
+                <div className={`text-[10px] font-normal ${selectedDealership === 'WOOLWINE_CDJR' ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
+                  (662) 287-3181
+                </div>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ml-1 ${
+                selectedDealership === 'WOOLWINE_CDJR'
+                  ? 'bg-amber-950 text-amber-200'
+                  : 'bg-slate-950 text-amber-300 border border-slate-800'
+              }`}>
+                {cdjrCount} Ext
+              </span>
+            </button>
+
+            {/* Woolwine Ford Toggle Button */}
+            <button
+              type="button"
+              onClick={() => handleSelectDealership('WOOLWINE_FORD')}
+              className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                selectedDealership === 'WOOLWINE_FORD'
+                  ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/60'
+                  : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700/80 border border-slate-700/60'
+              }`}
+            >
+              <Store className={`w-4 h-4 ${selectedDealership === 'WOOLWINE_FORD' ? 'text-white' : 'text-blue-400'}`} />
+              <div className="text-left">
+                <div className="leading-tight">Woolwine Ford</div>
+                <div className={`text-[10px] font-normal ${selectedDealership === 'WOOLWINE_FORD' ? 'text-blue-100 font-semibold' : 'text-slate-400'}`}>
+                  (662) 287-5501
+                </div>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ml-1 ${
+                selectedDealership === 'WOOLWINE_FORD'
+                  ? 'bg-blue-950 text-blue-200'
+                  : 'bg-slate-950 text-blue-300 border border-slate-800'
+              }`}>
+                {fordCount} Ext
+              </span>
             </button>
           </div>
         </div>
@@ -417,11 +542,11 @@ export const InternalExtensionModal: React.FC = () => {
                   : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
               }`}
             >
-              All ({internalExtensions.length})
+              All ({dealershipExtensions.length})
             </button>
 
             {COMMON_DEPARTMENTS.map(dept => {
-              const count = internalExtensions.filter(i => i.department === dept).length;
+              const count = dealershipExtensions.filter(i => i.department === dept).length;
               if (count === 0 && !distinctDepartments.includes(dept)) return null;
 
               return (
@@ -500,6 +625,38 @@ export const InternalExtensionModal: React.FC = () => {
                 <span>{formError}</span>
               </div>
             )}
+
+            <div className="p-2.5 bg-slate-900/10 border border-slate-300 rounded-xl space-y-1">
+              <label className="block text-[11px] font-bold text-slate-900 uppercase tracking-wider">
+                Dealership Location *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAddDealership('WOOLWINE_CDJR')}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold border flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                    addDealership === 'WOOLWINE_CDJR'
+                      ? 'bg-amber-100 border-amber-500 text-amber-950 ring-2 ring-amber-400/50 shadow-xs'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Woolwine CDJR</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddDealership('WOOLWINE_FORD')}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold border flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                    addDealership === 'WOOLWINE_FORD'
+                      ? 'bg-blue-100 border-blue-500 text-blue-950 ring-2 ring-blue-400/50 shadow-xs'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Store className="w-3.5 h-3.5 text-blue-700" />
+                  <span>Woolwine Ford</span>
+                </button>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Name / Station */}
@@ -644,7 +801,7 @@ export const InternalExtensionModal: React.FC = () => {
             )}
           </div>
           <span className="text-[11px] text-slate-500 font-mono font-bold shrink-0">
-            {filteredList.length} of {internalExtensions.length} listed
+            {filteredList.length} of {dealershipExtensions.length} listed ({activeDealershipName})
           </span>
         </div>
 
@@ -653,20 +810,23 @@ export const InternalExtensionModal: React.FC = () => {
           {filteredList.length === 0 ? (
             <div className="text-center py-12 px-4 bg-white rounded-2xl border-2 border-dashed border-slate-300 space-y-2">
               <PhoneForwarded className="w-10 h-10 text-slate-400 mx-auto" />
-              <h4 className="text-sm font-bold text-slate-800">No Extensions Found</h4>
+              <h4 className="text-sm font-bold text-slate-800">No {activeDealershipName} Extensions Found</h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 {searchQuery || selectedDepartmentFilter !== 'ALL'
-                  ? 'No extension entries match your current search or department filter.'
-                  : 'There are no internal extensions configured yet.'}
+                  ? `No extension entries match your current search or department filter in ${activeDealershipName}.`
+                  : `There are no internal extensions configured yet for ${activeDealershipName}.`}
               </p>
               {!isAddFormOpen && (
                 <button
                   type="button"
-                  onClick={() => setIsAddFormOpen(true)}
+                  onClick={() => {
+                    setAddDealership(selectedDealership);
+                    setIsAddFormOpen(true);
+                  }}
                   className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Add First Extension</span>
+                  <span>Add First {activeDealershipName} Extension</span>
                 </button>
               )}
             </div>
@@ -747,15 +907,15 @@ export const InternalExtensionModal: React.FC = () => {
             <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
-                  {shopName || 'Dealership'} - Internal Phone & Extension Directory
+                  {activeDealershipName} - Internal Phone & Extension Directory
                 </h1>
                 <p className="text-xs text-slate-600 mt-1 font-semibold">
-                  Official Dealership Extension Listing • Post at Service Desks, Parts Counters & Technicians Floor
+                  Official Dealership Extension Listing • {selectedDealership === 'WOOLWINE_CDJR' ? 'Main Campus: 3980 Highway 72 E, Corinth, MS 38834 • Phone: (662) 287-3181' : 'Ford Sales & Service Facility • Phone: (662) 287-5501'} • Post at Service Desks, Parts Counters & Technicians Floor
                 </p>
               </div>
               <div className="text-right text-xs text-slate-500 font-mono">
                 <div>Printed: {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                <div className="font-bold text-slate-800">{internalExtensions.length} Active Extensions</div>
+                <div className="font-bold text-slate-800">{dealershipExtensions.length} Active Extensions</div>
               </div>
             </div>
 
@@ -837,7 +997,18 @@ export const InternalExtensionModal: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Dealership *</label>
+              <select
+                value={editDealership}
+                onChange={e => setEditDealership(e.target.value as 'WOOLWINE_CDJR' | 'WOOLWINE_FORD')}
+                className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg text-slate-900"
+              >
+                <option value="WOOLWINE_CDJR">Woolwine CDJR</option>
+                <option value="WOOLWINE_FORD">Woolwine Ford</option>
+              </select>
+            </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Name / Station *</label>
               <input
@@ -942,6 +1113,15 @@ export const InternalExtensionModal: React.FC = () => {
               {/* Department Tag */}
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getDeptColor(entry.department)}`}>
                 {entry.department}
+              </span>
+
+              {/* Dealership Location Tag */}
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                entry.dealership === 'WOOLWINE_FORD'
+                  ? 'bg-blue-50 text-blue-900 border-blue-200'
+                  : 'bg-amber-50 text-amber-900 border-amber-200'
+              }`}>
+                {entry.dealership === 'WOOLWINE_FORD' ? 'Woolwine Ford' : 'Woolwine CDJR'}
               </span>
 
               {/* Job Title */}

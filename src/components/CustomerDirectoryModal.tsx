@@ -24,14 +24,20 @@ import {
   ArrowUpRight,
   Save,
   AlertCircle,
-  Receipt
+  Receipt,
+  Building2,
+  GitMerge,
+  AlertTriangle
 } from 'lucide-react';
+import { isWoolwineCustomerName } from '../utils/customerMergeUtils';
 
 export const CustomerDirectoryModal: React.FC = () => {
   const { 
     customers, 
     saveCustomer, 
     deleteCustomer, 
+    mergeCustomers,
+    consolidateWoolwineAccounts,
     repairOrders, 
     setSelectedRO, 
     setIsNewROModalOpen,
@@ -83,6 +89,61 @@ export const CustomerDirectoryModal: React.FC = () => {
   const [addVehModel, setAddVehModel] = useState('');
   const [addVehVin, setAddVehVin] = useState('');
   const [addVehMileage, setAddVehMileage] = useState('');
+
+  // Woolwine Consolidation & Merge State
+  const [isConsolidatingWoolwine, setIsConsolidatingWoolwine] = useState(false);
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [targetMergeCustomerId, setTargetMergeCustomerId] = useState<string>('');
+  const [mergeTargetName, setMergeTargetName] = useState<string>('');
+  const [isMerging, setIsMerging] = useState(false);
+
+  // Check if multiple or non-standard Woolwine accounts exist (e.g. "Woolwine CDJR Inc")
+  const woolwineAccounts = useMemo(() => {
+    return customers.filter(c => isWoolwineCustomerName(c.name));
+  }, [customers]);
+
+  const hasMultipleWoolwineAccounts = woolwineAccounts.length > 1;
+  const hasNonStandardWoolwineAccount = woolwineAccounts.some(c => c.name.trim() !== 'Woolwine CDJR');
+  const showWoolwineNotice = hasMultipleWoolwineAccounts || hasNonStandardWoolwineAccount;
+
+  const handleConsolidateWoolwine = async () => {
+    setIsConsolidatingWoolwine(true);
+    try {
+      const result = await consolidateWoolwineAccounts();
+      setStatusMessage(result.message);
+      const unified = customers.find(c => isWoolwineCustomerName(c.name));
+      if (unified) {
+        setSelectedCustomerId(unified.id);
+      }
+    } catch {
+      setStatusMessage('Error executing Woolwine customer consolidation.');
+    } finally {
+      setIsConsolidatingWoolwine(false);
+      setTimeout(() => setStatusMessage(null), 5000);
+    }
+  };
+
+  const handleExecuteMerge = async () => {
+    if (!activeCustomer || !targetMergeCustomerId) return;
+    setIsMerging(true);
+    try {
+      const isWoolwine = isWoolwineCustomerName(activeCustomer.name) || isWoolwineCustomerName(customers.find(c => c.id === targetMergeCustomerId)?.name);
+      const chosenName = isWoolwine ? 'Woolwine CDJR' : (mergeTargetName.trim() || activeCustomer.name);
+      const success = await mergeCustomers(activeCustomer.id, targetMergeCustomerId, chosenName);
+      if (success) {
+        setStatusMessage(`Successfully combined profiles into "${chosenName}".`);
+        setIsMergeModalOpen(false);
+        setTargetMergeCustomerId('');
+      } else {
+        setStatusMessage('Could not complete customer merge.');
+      }
+    } catch {
+      setStatusMessage('Error merging customers.');
+    } finally {
+      setIsMerging(false);
+      setTimeout(() => setStatusMessage(null), 4000);
+    }
+  };
 
   // Filtered customers list
   const filteredCustomers = useMemo(() => {
@@ -362,6 +423,21 @@ export const CustomerDirectoryModal: React.FC = () => {
 
           <div className="flex items-center gap-2.5">
             <button
+              id="customer-directory-combine-woolwine-btn"
+              type="button"
+              onClick={handleConsolidateWoolwine}
+              disabled={isConsolidatingWoolwine}
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-xs cursor-pointer ${
+                hasMultipleWoolwineAccounts
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white animate-pulse'
+                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+              }`}
+              title="Combine Woolwine CDJR and Woolwine CDJR Inc into one customer profile"
+            >
+              <Building2 className="w-4 h-4 text-amber-400" />
+              <span>{isConsolidatingWoolwine ? 'Combining...' : 'Combine Woolwine CDJR'}</span>
+            </button>
+            <button
               id="customer-directory-add-new-btn"
               type="button"
               onClick={() => {
@@ -385,6 +461,29 @@ export const CustomerDirectoryModal: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Dealership Account Consolidation Banner */}
+        {showWoolwineNotice && (
+          <div className="bg-amber-50 border-b border-amber-300 px-5 py-2.5 text-xs text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0 animate-in slide-in-from-top duration-200">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <div>
+                <span className="font-bold">Dealership Account Consolidation: </span>
+                <span>
+                  Detected separate customer records ({woolwineAccounts.map(c => `"${c.name}"`).join(', ')}). Combine them into one unified "Woolwine CDJR" profile with combined vehicles and 0% dealer tax exemption.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleConsolidateWoolwine}
+              disabled={isConsolidatingWoolwine}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs cursor-pointer shrink-0"
+            >
+              {isConsolidatingWoolwine ? 'Combining...' : 'Combine Accounts Now'}
+            </button>
+          </div>
+        )}
 
         {/* Global Feedback Banner */}
         {statusMessage && (
@@ -509,8 +608,13 @@ export const CustomerDirectoryModal: React.FC = () => {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate flex items-center gap-1.5">
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate flex items-center gap-1.5 flex-wrap">
                             <span>{cust.name}</span>
+                            {isWoolwineCustomerName(cust.name) && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-extrabold bg-blue-100 text-blue-900 px-1.5 py-0.2 rounded border border-blue-300 uppercase shrink-0">
+                                <Building2 className="w-2.5 h-2.5" /> Dealership Account
+                              </span>
+                            )}
                             {cust.isTaxExempt && (
                               <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-300 uppercase shrink-0">
                                 0% Tax Exempt
@@ -758,6 +862,36 @@ export const CustomerDirectoryModal: React.FC = () => {
               /* Customer Details Pane */
               <div className="space-y-6">
                 
+                {/* Dealership House Account Callout */}
+                {isWoolwineCustomerName(activeCustomer.name) && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-blue-950 flex items-center gap-2">
+                          <span>Woolwine CDJR Dealership House Account</span>
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300 uppercase">
+                            Unified Profile • 0% Sales Tax
+                          </span>
+                        </div>
+                        <p className="text-xs text-blue-800 mt-0.5">
+                          Woolwine CDJR internal vehicles, used car reconditioning, and house repairs are consolidated into this single customer profile.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleConsolidateWoolwine}
+                      disabled={isConsolidatingWoolwine}
+                      className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-xs cursor-pointer shrink-0"
+                    >
+                      {isConsolidatingWoolwine ? 'Consolidating...' : 'Re-verify & Consolidate'}
+                    </button>
+                  </div>
+                )}
+
                 {/* Profile Header Card */}
                 <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200">
                   <div className="flex items-start justify-between flex-wrap gap-3">
@@ -805,7 +939,34 @@ export const CustomerDirectoryModal: React.FC = () => {
                     </div>
 
                     {/* Quick Top Actions */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isWoolwineCustomerName(activeCustomer.name) && (
+                        <button
+                          type="button"
+                          onClick={handleConsolidateWoolwine}
+                          disabled={isConsolidatingWoolwine}
+                          className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+                          title="Consolidate all Woolwine CDJR and Woolwine CDJR Inc records"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>{isConsolidatingWoolwine ? 'Consolidating...' : 'Combine Dealership Records'}</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMergeModalOpen(true);
+                          setTargetMergeCustomerId('');
+                          setMergeTargetName(isWoolwineCustomerName(activeCustomer.name) ? 'Woolwine CDJR' : activeCustomer.name);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 px-3 py-2 rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                        title="Merge this customer profile with another record"
+                      >
+                        <GitMerge className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Merge Profile</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleCreateQuoteForCustomer()}
@@ -1191,6 +1352,101 @@ export const CustomerDirectoryModal: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Customer Merge Dialog */}
+      {isMergeModalOpen && activeCustomer && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
+                  <GitMerge className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Merge Customer Profiles</h4>
+                  <p className="text-xs text-slate-500">Combine vehicle records, visits, and repair history</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMergeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="text-[11px] font-bold uppercase text-slate-500 mb-1">Primary Customer (Keep)</div>
+                <div className="font-bold text-slate-900 text-sm">{activeCustomer.name}</div>
+                <div className="text-slate-600">{activeCustomer.phone || 'No phone'} • {activeCustomer.vehicles?.length || 0} vehicle(s)</div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-slate-700 block mb-1">
+                  Select Customer to Merge Into {activeCustomer.name} *
+                </label>
+                <select
+                  value={targetMergeCustomerId}
+                  onChange={e => {
+                    setTargetMergeCustomerId(e.target.value);
+                    const target = customers.find(c => c.id === e.target.value);
+                    if (target && isWoolwineCustomerName(target.name)) {
+                      setMergeTargetName('Woolwine CDJR');
+                    }
+                  }}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Choose customer to merge & remove --</option>
+                  {customers
+                    .filter(c => c.id !== activeCustomer.id)
+                    .map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.phone ? `(${c.phone})` : ''} - {c.vehicles?.length || 0} vehicle(s)
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase text-slate-700 block mb-1">
+                  Final Merged Customer Name
+                </label>
+                <input
+                  type="text"
+                  value={mergeTargetName}
+                  onChange={e => setMergeTargetName(e.target.value)}
+                  placeholder="Woolwine CDJR"
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 font-medium"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  All vehicles from both profiles will be merged and deduplicated. All existing repair orders and quotes will be updated to point to this customer.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsMergeModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteMerge}
+                disabled={!targetMergeCustomerId || isMerging}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg shadow-xs cursor-pointer"
+              >
+                <GitMerge className="w-4 h-4" />
+                <span>{isMerging ? 'Merging...' : 'Confirm & Merge Profiles'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Customer Vehicles Fleet Selection Modal */}
       <CustomerVehiclesModal

@@ -60,7 +60,8 @@ import {
   INITIAL_IMPORTANT_NUMBERS,
   INITIAL_MANAGER_PASSWORDS,
   INITIAL_RECALL_WAITING_LIST,
-  INITIAL_INTERNAL_EXTENSIONS
+  INITIAL_INTERNAL_EXTENSIONS,
+  INITIAL_CUSTOMERS
 } from '../data/mockData';
 import { playNotificationChime, requestBrowserNotification } from '../utils/audio';
 import {
@@ -68,8 +69,10 @@ import {
   mergeTwoCustomers,
   isWoolwineCustomerName,
   updateROsForWoolwineConsolidation,
-  updateQuotesForWoolwineConsolidation
+  updateQuotesForWoolwineConsolidation,
+  DEFAULT_WOOLWINE_CUSTOMER
 } from '../utils/customerMergeUtils';
+import { isWoolwineVehicle } from '../utils/cadenceUtils';
 import {
   subscribeToRepairOrders,
   subscribeToUsers,
@@ -599,7 +602,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.map((ro: RepairOrder) => cleanRO3700(ro));
+          return parsed.map((ro: RepairOrder) => {
+            const cleaned = cleanRO3700(ro);
+            if (isWoolwineCustomerName(cleaned.customerName) && cleaned.customerName.trim() !== 'Woolwine CDJR') {
+              return {
+                ...cleaned,
+                customerName: 'Woolwine CDJR',
+                isTaxExempt: true,
+                taxExemptNumber: cleaned.taxExemptNumber || 'DEALER-RESALE'
+              };
+            }
+            return cleaned;
+          });
         }
       }
     } catch {
@@ -625,7 +639,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           const { consolidatedCustomers } = consolidateWoolwineCustomers(parsed);
           return consolidatedCustomers;
         }
@@ -633,7 +647,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore
     }
-    return [];
+    const { consolidatedCustomers } = consolidateWoolwineCustomers(INITIAL_CUSTOMERS);
+    return consolidatedCustomers;
   });
 
   const [isCustomerDirectoryOpen, setIsCustomerDirectoryOpen] = useState(false);
@@ -826,7 +841,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cached = localStorage.getItem(STORAGE_KEY_INTERNAL_EXTENSIONS);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasFord = parsed.some((e: InternalExtensionEntry) => e.dealership === 'WOOLWINE_FORD');
+          if (!hasFord) {
+            const fordDefaults = INITIAL_INTERNAL_EXTENSIONS.filter(e => e.dealership === 'WOOLWINE_FORD');
+            const combined = [...parsed.map((e: InternalExtensionEntry) => ({ ...e, dealership: e.dealership || 'WOOLWINE_CDJR' })), ...fordDefaults];
+            try {
+              localStorage.setItem(STORAGE_KEY_INTERNAL_EXTENSIONS, JSON.stringify(combined));
+            } catch {}
+            return combined;
+          }
+          return parsed.map((e: InternalExtensionEntry) => ({ ...e, dealership: e.dealership || 'WOOLWINE_CDJR' }));
+        }
       }
     } catch {}
     return INITIAL_INTERNAL_EXTENSIONS;
@@ -1269,11 +1295,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Real-time Firestore Cloud Subscriptions
   useEffect(() => {
+    // Automatically consolidate any legacy "Woolwine CDJR Inc" customer into "Woolwine CDJR"
+    consolidateWoolwineAccounts();
+
     // Check if user has explicitly wiped to clean slate
     const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
     if (!isWiped) {
       // Seed initial data if Firestore is currently brand new
-      seedInitialDataIfEmpty(INITIAL_USERS, INITIAL_REPAIR_ORDERS, shopName);
+      seedInitialDataIfEmpty(INITIAL_USERS, INITIAL_REPAIR_ORDERS, shopName, INITIAL_CUSTOMERS);
     }
 
     // Subscribe to real-time Repair Orders
@@ -1281,7 +1310,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevROMap = new Map<string, string>();
 
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
-      const sanitizedROs = cloudROs.map((r: RepairOrder) => cleanRO3700(r));
+      const sanitizedROs = cloudROs.map((r: RepairOrder) => {
+        const cleaned = cleanRO3700(r);
+        if (isWoolwineCustomerName(cleaned.customerName) && cleaned.customerName.trim() !== 'Woolwine CDJR') {
+          const updated = {
+            ...cleaned,
+            customerName: 'Woolwine CDJR',
+            isTaxExempt: true,
+            taxExemptNumber: cleaned.taxExemptNumber || 'DEALER-RESALE'
+          };
+          syncRepairOrder(updated);
+          return updated;
+        }
+        return cleaned;
+      });
       setRepairOrders(sanitizedROs);
       setIsCloudSynced(true);
 
@@ -3410,16 +3452,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Customer Management in the Cloud
   const saveCustomer = async (cust: Customer): Promise<boolean> => {
-    setCustomers(prev => {
-      const idx = prev.findIndex(c => c.id === cust.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = cust;
-        return next;
+    let targetCust: Customer = { ...cust };
+    const isWoolwine = isWoolwineCustomerName(targetCust.name);
+    if (isWoolwine) {
+      targetCust.name = 'Woolwine CDJR';
+      targetCust.isTaxExempt = true;
+      if (!targetCust.taxExemptNumber) {
+        targetCust.taxExemptNumber = 'DEALER-RESALE';
       }
-      return [cust, ...prev];
+    }
+
+    let secondaryIdToDelete: string | null = null;
+    let finalCustToSync: Customer = targetCust;
+
+    setCustomers(prev => {
+      if (isWoolwine) {
+        const existingWoolwine = prev.find(c => c.id !== targetCust.id && isWoolwineCustomerName(c.name));
+        if (existingWoolwine) {
+          secondaryIdToDelete = targetCust.id;
+          finalCustToSync = mergeTwoCustomers(existingWoolwine, targetCust, 'Woolwine CDJR');
+          const next = prev.filter(c => c.id !== targetCust.id).map(c => c.id === existingWoolwine.id ? finalCustToSync : c);
+          try {
+            localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(next));
+          } catch {}
+          return next;
+        }
+      }
+
+      const idx = prev.findIndex(c => c.id === targetCust.id);
+      let next: Customer[];
+      if (idx >= 0) {
+        next = [...prev];
+        next[idx] = targetCust;
+      } else {
+        next = [targetCust, ...prev];
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(next));
+      } catch {}
+      return next;
     });
-    return await syncCustomer(cust);
+
+    if (secondaryIdToDelete) {
+      await syncCustomer(finalCustToSync);
+      await deleteCustomerDoc(secondaryIdToDelete);
+      return true;
+    }
+    return await syncCustomer(targetCust);
   };
 
   const deleteCustomer = async (customerId: string): Promise<void> => {
@@ -3497,54 +3576,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const consolidateWoolwineAccounts = async (): Promise<{ merged: boolean; message: string }> => {
-    const { consolidatedCustomers, primaryCustomer, removedCustomerIds, wasConsolidated } = consolidateWoolwineCustomers(customers);
+    let currentCustomers = [...customers];
     
-    if (!wasConsolidated && (!primaryCustomer || primaryCustomer.name === 'Woolwine CDJR')) {
-      const { updatedROs, changedCount } = primaryCustomer 
-        ? updateROsForWoolwineConsolidation(repairOrders, primaryCustomer) 
-        : { updatedROs: repairOrders, changedCount: 0 };
-      if (changedCount > 0) {
+    // If no Woolwine customer exists at all, ensure standard Woolwine CDJR customer profile is initialized
+    if (!currentCustomers.some(c => isWoolwineCustomerName(c.name))) {
+      const dealershipVehicles = repairOrders
+        .filter(ro => isWoolwineVehicle(ro) && ro.vehicle)
+        .map(ro => ro.vehicle);
+      const unified: Customer = {
+        ...DEFAULT_WOOLWINE_CUSTOMER,
+        vehicles: dealershipVehicles,
+        totalVisits: Math.max(dealershipVehicles.length, 1),
+        updatedAt: new Date().toISOString()
+      };
+      currentCustomers = [unified, ...currentCustomers];
+    }
+
+    const { consolidatedCustomers, primaryCustomer, removedCustomerIds, wasConsolidated } = consolidateWoolwineCustomers(currentCustomers);
+    
+    const finalPrimary = primaryCustomer || consolidatedCustomers.find(c => isWoolwineCustomerName(c.name)) || DEFAULT_WOOLWINE_CUSTOMER;
+    
+    const { updatedROs, changedCount: roChangedCount } = updateROsForWoolwineConsolidation(repairOrders, finalPrimary);
+    const { updatedQuotes, changedCount: quoteChangedCount } = updateQuotesForWoolwineConsolidation(quotes);
+
+    const hasChanges = wasConsolidated || roChangedCount > 0 || quoteChangedCount > 0 || currentCustomers.length !== customers.length;
+
+    if (hasChanges) {
+      setCustomers(consolidatedCustomers);
+      try {
+        localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(consolidatedCustomers));
+      } catch {}
+
+      if (finalPrimary) {
+        await syncCustomer(finalPrimary);
+      }
+      for (const id of removedCustomerIds) {
+        await deleteCustomerDoc(id);
+      }
+
+      if (roChangedCount > 0) {
         setRepairOrders(updatedROs);
         updatedROs.filter(ro => ro.customerName === 'Woolwine CDJR').forEach(ro => syncRepairOrder(ro));
-        return { merged: true, message: `Consolidated ${changedCount} repair order(s) under Woolwine CDJR.` };
       }
-      return { merged: false, message: 'Woolwine CDJR is already unified as a single customer account.' };
-    }
 
-    setCustomers(consolidatedCustomers);
-    try {
-      localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(consolidatedCustomers));
-    } catch {}
+      if (quoteChangedCount > 0) {
+        setQuotes(updatedQuotes);
+        updatedQuotes.filter(q => q.customerName === 'Woolwine CDJR').forEach(q => syncStandaloneQuote(q));
+      }
 
-    if (primaryCustomer) {
-      await syncCustomer(primaryCustomer);
-    }
-    for (const id of removedCustomerIds) {
-      await deleteCustomerDoc(id);
-    }
-
-    if (primaryCustomer) {
-      setRepairOrders(prev => {
-        const { updatedROs, changedCount } = updateROsForWoolwineConsolidation(prev, primaryCustomer);
-        if (changedCount > 0) {
-          updatedROs.filter(ro => ro.customerName === 'Woolwine CDJR').forEach(ro => syncRepairOrder(ro));
-          return updatedROs;
-        }
-        return prev;
-      });
-      setQuotes(prev => {
-        const { updatedQuotes, changedCount } = updateQuotesForWoolwineConsolidation(prev);
-        if (changedCount > 0) {
-          updatedQuotes.filter(q => q.customerName === 'Woolwine CDJR').forEach(q => syncStandaloneQuote(q));
-          return updatedQuotes;
-        }
-        return prev;
-      });
+      return {
+        merged: true,
+        message: `Successfully combined Woolwine CDJR and Woolwine CDJR Inc into one customer profile ("Woolwine CDJR") with ${finalPrimary?.vehicles?.length || 0} vehicle(s) archived and 0% dealer tax exemption.`
+      };
     }
 
     return {
-      merged: true,
-      message: `Successfully combined Woolwine CDJR and Woolwine CDJR Inc into one customer profile with ${primaryCustomer?.vehicles?.length || 0} vehicle(s) archived.`
+      merged: false,
+      message: 'Woolwine CDJR is already unified as a single customer account ("Woolwine CDJR").'
     };
   };
 
@@ -6177,6 +6265,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: cleanName,
       extension: cleanExtension,
       department: cleanDept,
+      dealership: entry.dealership || 'WOOLWINE_CDJR',
       directPhone: cleanPhone || undefined,
       title: cleanTitle || undefined,
       notes: cleanNotes || undefined,
@@ -6211,6 +6300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: updates.name !== undefined ? updates.name.trim() : item.name,
           extension: updates.extension !== undefined ? updates.extension.trim() : item.extension,
           department: updates.department !== undefined ? updates.department.trim() : item.department,
+          dealership: updates.dealership !== undefined ? updates.dealership : (item.dealership || 'WOOLWINE_CDJR'),
           directPhone: updates.directPhone !== undefined ? updates.directPhone.trim() : item.directPhone,
           title: updates.title !== undefined ? updates.title.trim() : item.title,
           notes: updates.notes !== undefined ? updates.notes.trim() : item.notes,

@@ -1,4 +1,4 @@
-import { User, RepairOrder, SpecialPartNumber, ImportantNumberEntry, ManagerPasswordEntry, RecallWaitingEntry, InternalExtensionEntry } from '../types';
+import { User, RepairOrder, Customer, SpecialPartNumber, ImportantNumberEntry, ManagerPasswordEntry, RecallWaitingEntry, InternalExtensionEntry } from '../types';
 
 export const STANDARD_JOB_TITLES: string[] = [
   'Oil Bay',
@@ -52,6 +52,129 @@ export const INITIAL_USERS: User[] = [
 ];
 
 export const INITIAL_REPAIR_ORDERS: RepairOrder[] = [];
+
+export const INITIAL_CUSTOMERS: Customer[] = [
+  {
+    id: 'cust_woolwine_house_account',
+    name: 'Woolwine CDJR',
+    phone: '(662) 287-3181',
+    email: 'service@woolwinecdjr.com',
+    address: '3980 Highway 72 E, Corinth, MS 38834',
+    isTaxExempt: true,
+    taxExemptNumber: 'DEALER-RESALE',
+    notes: 'Woolwine CDJR Dealership House Account • Unified Dealership Inventory & Used Vehicle Reconditioning (Internal accounts consolidated into single profile)',
+    vehicles: [
+      {
+        year: 2024,
+        make: 'Ram',
+        model: '1500 Big Horn',
+        vin: '1C6SRFHT8RN184920',
+        mileage: 120,
+        licensePlate: 'DLR-401'
+      },
+      {
+        year: 2023,
+        make: 'Jeep',
+        model: 'Grand Cherokee L',
+        vin: '1C4RJKBG5P8629104',
+        mileage: 8450,
+        licensePlate: 'DLR-402'
+      }
+    ],
+    lastVisit: '2026-10-18T14:30:00Z',
+    totalVisits: 14,
+    createdAt: '2026-01-01T08:00:00Z',
+    updatedAt: '2026-10-18T14:30:00Z'
+  },
+  {
+    id: 'cust_rec_1',
+    name: 'Michael Henderson',
+    phone: '(555) 234-8910',
+    email: 'mhenderson@example.com',
+    address: 'Corinth, MS',
+    isTaxExempt: false,
+    notes: 'Recall 66A high-pressure fuel pump kit',
+    vehicles: [
+      {
+        year: 2021,
+        make: 'Jeep',
+        model: 'Wrangler 3.0L EcoDiesel',
+        vin: '1C4HJXDG8MW681240',
+        mileage: 48200
+      }
+    ],
+    lastVisit: '2026-09-02T14:15:00Z',
+    totalVisits: 2,
+    createdAt: '2026-08-15T10:30:00Z',
+    updatedAt: '2026-09-02T14:15:00Z'
+  },
+  {
+    id: 'cust_rec_6',
+    name: 'Thomas Vance',
+    phone: '(555) 345-6712',
+    email: 'tvance@example.com',
+    address: 'Booneville, MS',
+    isTaxExempt: false,
+    notes: 'Recall 66A fuel pump kit',
+    vehicles: [
+      {
+        year: 2021,
+        make: 'Jeep',
+        model: 'Gladiator 3.0L EcoDiesel',
+        vin: '1C4JJXR62MW719034',
+        mileage: 39500
+      }
+    ],
+    lastVisit: '2026-08-28T14:00:00Z',
+    totalVisits: 1,
+    createdAt: '2026-08-28T14:00:00Z',
+    updatedAt: '2026-08-28T14:00:00Z'
+  },
+  {
+    id: 'cust_rec_7',
+    name: 'Daniel Clark',
+    phone: '(555) 456-7890',
+    email: 'dclark@example.com',
+    address: 'Iuka, MS',
+    isTaxExempt: false,
+    notes: 'Recall 66A high-pressure fuel pump',
+    vehicles: [
+      {
+        year: 2022,
+        make: 'Jeep',
+        model: 'Wrangler EcoDiesel',
+        vin: '1C4HJXDG4NW110823',
+        mileage: 31200
+      }
+    ],
+    lastVisit: '2026-10-12T09:30:00Z',
+    totalVisits: 3,
+    createdAt: '2026-09-18T11:20:00Z',
+    updatedAt: '2026-10-12T09:30:00Z'
+  },
+  {
+    id: 'cust_rec_2',
+    name: 'Brenda Collins',
+    phone: '(555) 412-7801',
+    email: 'bcollins@example.com',
+    address: 'Ripley, MS',
+    isTaxExempt: false,
+    notes: 'Recall 04A Cummins intake heater relay',
+    vehicles: [
+      {
+        year: 2022,
+        make: 'Ram',
+        model: '2500 Cummins 6.7L',
+        vin: '3C6UR5FL8NG219455',
+        mileage: 55400
+      }
+    ],
+    lastVisit: '2026-09-05T09:15:00Z',
+    totalVisits: 2,
+    createdAt: '2026-09-05T09:15:00Z',
+    updatedAt: '2026-09-05T09:15:00Z'
+  }
+];
 
 export interface FlowStepConfig {
   key: string;
@@ -595,61 +718,70 @@ export const INITIAL_RECALL_WAITING_LIST: RecallWaitingEntry[] = [
 ];
 
 export const INITIAL_INTERNAL_EXTENSIONS: InternalExtensionEntry[] = [
+  // ==========================================
+  // WOOLWINE CDJR EXTENSIONS
+  // ==========================================
   // Service Department
   {
-    id: 'ext_1',
+    id: 'ext_cdjr_1',
     name: 'Service Manager Desk',
     extension: '201',
     department: 'Service',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Service Manager',
-    directPhone: '(555) 330-2201',
+    directPhone: '(662) 287-3181 Ext 201',
     notes: 'Direct office line & dispatch escalation',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_2',
+    id: 'ext_cdjr_2',
     name: 'Mark Reynolds',
     extension: '202',
     department: 'Service',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Lead Service Advisor',
-    directPhone: '(555) 330-2202',
+    directPhone: '(662) 287-3181 Ext 202',
     notes: 'Lane 1 - Truck & Diesel Specialist',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_3',
+    id: 'ext_cdjr_3',
     name: 'Rachel Adams',
     extension: '203',
     department: 'Service',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Service Advisor',
-    directPhone: '(555) 330-2203',
+    directPhone: '(662) 287-3181 Ext 203',
     notes: 'Lane 2 - Express & Maintenance',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_4',
+    id: 'ext_cdjr_4',
     name: 'Shop Foreman (Tech Floor)',
     extension: '210',
     department: 'Service',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Shop Foreman / Diagnostics',
     notes: 'Main shop floor desk & diagnostic lead',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_5',
+    id: 'ext_cdjr_5',
     name: 'Service BDC & Appointments',
     extension: '215',
     department: 'Service',
+    dealership: 'WOOLWINE_CDJR',
     title: 'BDC Appointment Coordinator',
-    directPhone: '(555) 330-2215',
+    directPhone: '(662) 287-3181 Ext 215',
     notes: 'Inbound customer appointments & recall checks',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_6',
+    id: 'ext_cdjr_6',
     name: 'Warranty Administrator',
     extension: '218',
     department: 'Service',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Warranty Clerk',
     notes: 'OEM claim submissions & pre-authorizations',
     createdAt: '2026-01-01T08:00:00Z'
@@ -657,49 +789,54 @@ export const INITIAL_INTERNAL_EXTENSIONS: InternalExtensionEntry[] = [
 
   // Parts Department
   {
-    id: 'ext_7',
+    id: 'ext_cdjr_7',
     name: 'Parts Front Counter',
     extension: '301',
     department: 'Parts',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Retail Counter Specialist',
-    directPhone: '(555) 330-2301',
+    directPhone: '(662) 287-3181 Ext 301',
     notes: 'Retail customers, batteries, accessories',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_8',
+    id: 'ext_cdjr_8',
     name: 'Parts Back Counter (Tech Window)',
     extension: '302',
     department: 'Parts',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Shop Parts Specialist',
     notes: 'Direct technician parts requests & RO issue window',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_9',
+    id: 'ext_cdjr_9',
     name: 'Parts Manager Desk',
     extension: '300',
     department: 'Parts',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Parts Department Director',
-    directPhone: '(555) 330-2300',
+    directPhone: '(662) 287-3181 Ext 300',
     notes: 'Vendor accounts & special purchase orders',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_10',
+    id: 'ext_cdjr_10',
     name: 'Wholesale Parts Desk',
     extension: '310',
     department: 'Parts',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Wholesale Logistics',
-    directPhone: '(555) 330-2310',
+    directPhone: '(662) 287-3181 Ext 310',
     notes: 'Body shop & independent repair facility orders',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_11',
+    id: 'ext_cdjr_11',
     name: 'Parts Shipping & Receiving',
     extension: '305',
     department: 'Parts',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Warehouse & Receiving',
     notes: 'Stock check-in, freight deliveries & VOR check-in',
     createdAt: '2026-01-01T08:00:00Z'
@@ -707,76 +844,280 @@ export const INITIAL_INTERNAL_EXTENSIONS: InternalExtensionEntry[] = [
 
   // Sales Department
   {
-    id: 'ext_12',
+    id: 'ext_cdjr_12',
     name: 'Sales Desk / Desk Manager',
     extension: '101',
     department: 'Sales',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Sales Desk Manager',
-    directPhone: '(555) 330-2101',
+    directPhone: '(662) 287-3181 Ext 101',
     notes: 'Appraisals, trade-ins, sales floor oversight',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_13',
+    id: 'ext_cdjr_13',
     name: 'Finance & Insurance (F&I Office)',
     extension: '105',
     department: 'Sales',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Finance Director',
-    directPhone: '(555) 330-2105',
+    directPhone: '(662) 287-3181 Ext 105',
     notes: 'Contracts, warranties, customer financing',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_14',
+    id: 'ext_cdjr_14',
     name: 'Internet Sales / BDC',
     extension: '110',
     department: 'Sales',
+    dealership: 'WOOLWINE_CDJR',
     title: 'BDC Director',
-    directPhone: '(555) 330-2110',
+    directPhone: '(662) 287-3181 Ext 110',
     notes: 'Web leads, phone sales inquiries',
     createdAt: '2026-01-01T08:00:00Z'
   },
 
   // Accounting & Office
   {
-    id: 'ext_15',
+    id: 'ext_cdjr_15',
     name: 'Main Cashier & Reception',
     extension: '401',
     department: 'Accounting / Office',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Service Cashier',
-    directPhone: '(555) 330-2401',
+    directPhone: '(662) 287-3181 Ext 401',
     notes: 'Customer payment processing, key release & loaner check-in',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_16',
+    id: 'ext_cdjr_16',
     name: 'Title & Registration Office',
     extension: '405',
     department: 'Accounting / Office',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Title Clerk',
     notes: 'Tag & title processing, DMV paperwork',
     createdAt: '2026-01-01T08:00:00Z'
   },
   {
-    id: 'ext_17',
+    id: 'ext_cdjr_17',
     name: 'Office Manager / Controller',
     extension: '410',
     department: 'Accounting / Office',
+    dealership: 'WOOLWINE_CDJR',
     title: 'Dealership Controller',
-    directPhone: '(555) 330-2410',
+    directPhone: '(662) 287-3181 Ext 410',
     notes: 'Payroll, accounts payable & financial records',
     createdAt: '2026-01-01T08:00:00Z'
   },
 
   // Management
   {
-    id: 'ext_18',
+    id: 'ext_cdjr_18',
     name: 'General Manager',
     extension: '100',
     department: 'Management',
+    dealership: 'WOOLWINE_CDJR',
     title: 'General Manager',
-    directPhone: '(555) 330-2100',
+    directPhone: '(662) 287-3181 Ext 100',
     notes: 'Dealership Executive Office',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // ==========================================
+  // WOOLWINE FORD EXTENSIONS
+  // ==========================================
+  // Service Department
+  {
+    id: 'ext_ford_1',
+    name: 'Ford Service Manager Desk',
+    extension: '201',
+    department: 'Service',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Ford Service Manager',
+    directPhone: '(662) 287-5501',
+    notes: 'Ford Service operations & technician dispatch',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_2',
+    name: 'Ford Service Advisor (Main Lane)',
+    extension: '202',
+    department: 'Service',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Service Advisor',
+    directPhone: '(662) 287-5502',
+    notes: 'F-150, Super Duty & Passenger Vehicle Intake',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_3',
+    name: 'Quick Lane / Express Service Desk',
+    extension: '205',
+    department: 'Service',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Quick Lane Manager',
+    directPhone: '(662) 287-5505',
+    notes: 'Oil changes, tire rotations, brake inspections',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_4',
+    name: 'Ford Shop Foreman (Power Stroke Diesel)',
+    extension: '210',
+    department: 'Service',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Senior Master Ford Tech / Foreman',
+    notes: 'Heavy line, 6.7L Power Stroke & EV certified lead',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_5',
+    name: 'Ford Service BDC & Appointments',
+    extension: '215',
+    department: 'Service',
+    dealership: 'WOOLWINE_FORD',
+    title: 'BDC Appointment Coordinator',
+    directPhone: '(662) 287-5515',
+    notes: 'Customer service scheduling & recall alerts',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_6',
+    name: 'Ford Warranty Administrator',
+    extension: '218',
+    department: 'Service',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Warranty Administrator',
+    notes: 'Ford Motor Co. warranty claims & FSA processing',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Parts Department
+  {
+    id: 'ext_ford_7',
+    name: 'Ford Parts Front Counter',
+    extension: '301',
+    department: 'Parts',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Motorcraft Parts Counter',
+    directPhone: '(662) 287-5531',
+    notes: 'Motorcraft retail parts, batteries, accessories',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_8',
+    name: 'Ford Parts Back Counter (Tech Window)',
+    extension: '302',
+    department: 'Parts',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Shop Parts Specialist',
+    notes: 'Direct technician Ford OEM parts staging',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_9',
+    name: 'Ford Parts Director / Manager',
+    extension: '300',
+    department: 'Parts',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Parts Manager',
+    directPhone: '(662) 287-5530',
+    notes: 'OEM tire ordering & dealer stock management',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_10',
+    name: 'Ford Wholesale Parts Hotline',
+    extension: '310',
+    department: 'Parts',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Wholesale Parts Specialist',
+    directPhone: '(662) 287-5535',
+    notes: 'Regional collision centers & fleets',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Sales Department
+  {
+    id: 'ext_ford_11',
+    name: 'Ford Sales Desk / Desk Manager',
+    extension: '101',
+    department: 'Sales',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Sales Desk Manager',
+    directPhone: '(662) 287-5510',
+    notes: 'Ford vehicle appraisals, trade-ins, sales floor',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_12',
+    name: 'Ford Commercial & Fleet Sales',
+    extension: '103',
+    department: 'Sales',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Commercial Vehicle Director',
+    directPhone: '(662) 287-5512',
+    notes: 'Ford Pro Transit, Super Duty chassis & fleet accounts',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_13',
+    name: 'Ford Finance & Insurance (F&I)',
+    extension: '105',
+    department: 'Sales',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Finance Manager',
+    directPhone: '(662) 287-5514',
+    notes: 'Ford Credit, Ford Protect extended service plans',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Accounting & Office
+  {
+    id: 'ext_ford_14',
+    name: 'Ford Main Cashier & Service Billing',
+    extension: '401',
+    department: 'Accounting / Office',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Cashier & Receptionist',
+    directPhone: '(662) 287-5540',
+    notes: 'Customer checkout, FordPass points redemption',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_15',
+    name: 'Ford Office Manager / Controller',
+    extension: '410',
+    department: 'Accounting / Office',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Office Manager',
+    directPhone: '(662) 287-5545',
+    notes: 'Accounting, vehicle invoicing & dealer payroll',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+
+  // Management & Body Shop
+  {
+    id: 'ext_ford_16',
+    name: 'Ford General Manager',
+    extension: '100',
+    department: 'Management',
+    dealership: 'WOOLWINE_FORD',
+    title: 'General Manager',
+    directPhone: '(662) 287-5500',
+    notes: 'Woolwine Ford Executive Office',
+    createdAt: '2026-01-01T08:00:00Z'
+  },
+  {
+    id: 'ext_ford_17',
+    name: 'Collision Center / Body Shop Estimator',
+    extension: '501',
+    department: 'Body Shop',
+    dealership: 'WOOLWINE_FORD',
+    title: 'Collision Center Manager',
+    directPhone: '(662) 287-5550',
+    notes: 'Aluminum certified body shop & insurance claims',
     createdAt: '2026-01-01T08:00:00Z'
   }
 ];

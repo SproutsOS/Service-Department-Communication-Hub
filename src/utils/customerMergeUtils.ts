@@ -17,10 +17,29 @@ export function normalizeCustomerKey(name?: string | null): string {
  * Checks if a customer name represents the Woolwine CDJR dealership house account.
  * Matches: "Woolwine CDJR", "Woolwine CDJR Inc", "Woolwine CDJR, Inc.", "Woolwine CDJR Inc.", etc.
  */
+export const DEFAULT_WOOLWINE_CUSTOMER: Customer = {
+  id: 'cust_woolwine_house_account',
+  name: 'Woolwine CDJR',
+  phone: '(662) 287-3181',
+  email: 'service@woolwinecdjr.com',
+  address: '3980 Highway 72 E, Corinth, MS 38834',
+  isTaxExempt: true,
+  taxExemptNumber: 'DEALER-RESALE',
+  notes: 'Woolwine CDJR Dealership House Account • Unified Dealership Inventory & Used Vehicle Reconditioning',
+  vehicles: [],
+  totalVisits: 1,
+  createdAt: '2026-01-01T08:00:00Z',
+  updatedAt: new Date().toISOString()
+};
+
+/**
+ * Checks if a customer name represents the Woolwine CDJR dealership house account.
+ * Matches: "Woolwine CDJR", "Woolwine CDJR Inc", "Woolwine CDJR, Inc.", "Woolwine CDJR Inc.", "Woolwine Inc", "Woolwine", etc.
+ */
 export function isWoolwineCustomerName(name?: string | null): boolean {
   if (!name) return false;
   const key = normalizeCustomerKey(name);
-  return key.includes('woolwine') && (key.includes('cdjr') || key.includes('chrysler') || key.includes('dealership'));
+  return key.includes('woolwine') || (key.includes('cdjr') && (key.includes('dealer') || key.includes('inventory') || key.includes('house') || key.includes('internal')));
 }
 
 /**
@@ -145,14 +164,16 @@ export function consolidateWoolwineCustomers(customers: Customer[]): Consolidate
     };
   }
 
-  // If only 1 record exists but its name is "Woolwine CDJR Inc", standardize its name to "Woolwine CDJR"
+  // If only 1 record exists, ensure its name is standardized to "Woolwine CDJR" and tax exempt
   if (woolwineMatches.length === 1) {
     const single = woolwineMatches[0];
-    if (single.name.trim() !== 'Woolwine CDJR') {
+    const needsStandardizing = single.name.trim() !== 'Woolwine CDJR' || !single.isTaxExempt || !single.taxExemptNumber;
+    if (needsStandardizing) {
       const updated: Customer = {
         ...single,
         name: 'Woolwine CDJR',
         isTaxExempt: true,
+        taxExemptNumber: single.taxExemptNumber || 'DEALER-RESALE',
         updatedAt: new Date().toISOString()
       };
       return {

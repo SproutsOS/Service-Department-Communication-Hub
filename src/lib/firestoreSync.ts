@@ -534,7 +534,7 @@ export async function resetAllDataToCleanSlate(cleanManager: User, shopName: str
 }
 
 // Seed initial data to Firestore if empty, unless clean slate was requested
-export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: RepairOrder[], defaultShopName: string) {
+export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: RepairOrder[], defaultShopName: string, initialCustomers?: Customer[]) {
   try {
     const settingsDoc = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
     const settingsSnap = await getDoc(settingsDoc);
@@ -570,47 +570,57 @@ export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: R
     }
 
     const custSnap = await getDocs(collection(db, CUSTOMERS_COL));
-    if (custSnap.empty && initialROs.length > 0) {
-      console.log('Populating cloud customer profiles from repair orders...');
-      const customerMap = new Map<string, Customer>();
-      initialROs.forEach(ro => {
-        const key = (ro.customerPhone || ro.customerName).trim().toLowerCase();
-        if (!key) return;
-        const existing = customerMap.get(key);
-        if (existing) {
-          if (!existing.vehicles.some(v => v.vin === ro.vehicle.vin)) {
-            existing.vehicles.push(ro.vehicle);
-          }
-          existing.totalVisits += 1;
-          if (new Date(ro.createdAt) > new Date(existing.lastVisit || '')) {
-            existing.lastVisit = ro.createdAt;
-          }
-        } else {
-          const custId = `cust_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-          customerMap.set(key, {
-            id: custId,
-            name: ro.customerName,
-            phone: ro.customerPhone || '',
-            email: '',
-            isTaxExempt: !!ro.isTaxExempt,
-            taxExemptNumber: ro.taxExemptNumber || '',
-            notes: '',
-            vehicles: [ro.vehicle],
-            lastVisit: ro.createdAt,
-            totalVisits: 1,
-            createdAt: ro.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      });
-
-      if (customerMap.size > 0) {
+    if (custSnap.empty) {
+      if (initialCustomers && initialCustomers.length > 0) {
+        console.log('Seeding initial customers to Firestore...');
         const custBatch = writeBatch(db);
-        customerMap.forEach(cust => {
+        initialCustomers.forEach(cust => {
           const docRef = doc(db, CUSTOMERS_COL, cust.id);
           custBatch.set(docRef, sanitizeForFirestore(cust));
         });
         await custBatch.commit();
+      } else if (initialROs.length > 0) {
+        console.log('Populating cloud customer profiles from repair orders...');
+        const customerMap = new Map<string, Customer>();
+        initialROs.forEach(ro => {
+          const key = (ro.customerPhone || ro.customerName).trim().toLowerCase();
+          if (!key) return;
+          const existing = customerMap.get(key);
+          if (existing) {
+            if (!existing.vehicles.some(v => v.vin === ro.vehicle.vin)) {
+              existing.vehicles.push(ro.vehicle);
+            }
+            existing.totalVisits += 1;
+            if (new Date(ro.createdAt) > new Date(existing.lastVisit || '')) {
+              existing.lastVisit = ro.createdAt;
+            }
+          } else {
+            const custId = `cust_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            customerMap.set(key, {
+              id: custId,
+              name: ro.customerName,
+              phone: ro.customerPhone || '',
+              email: '',
+              isTaxExempt: !!ro.isTaxExempt,
+              taxExemptNumber: ro.taxExemptNumber || '',
+              notes: '',
+              vehicles: [ro.vehicle],
+              lastVisit: ro.createdAt,
+              totalVisits: 1,
+              createdAt: ro.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        });
+
+        if (customerMap.size > 0) {
+          const custBatch = writeBatch(db);
+          customerMap.forEach(cust => {
+            const docRef = doc(db, CUSTOMERS_COL, cust.id);
+            custBatch.set(docRef, sanitizeForFirestore(cust));
+          });
+          await custBatch.commit();
+        }
       }
     }
 
