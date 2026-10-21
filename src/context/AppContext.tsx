@@ -239,6 +239,7 @@ interface AppContextType {
     targetUserId?: string
   ) => void;
   deleteRepairOrder: (roId: string) => boolean;
+  updateRepairOrderId: (oldRoId: string, newRoId: string) => Promise<{ success: boolean; error?: string }>;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
   updateOutMileage: (roId: string, outMileage: number | undefined, notes?: string, completeRepair?: boolean) => boolean;
   addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string) => boolean;
@@ -3855,6 +3856,107 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // Edit / Rename Repair Order Number
+  const updateRepairOrderId = useCallback(async (oldRoId: string, newRoId: string): Promise<{ success: boolean; error?: string }> => {
+    const cleanOld = (oldRoId || '').trim();
+    let cleanNew = (newRoId || '').trim();
+    if (cleanNew.startsWith('#')) {
+      cleanNew = cleanNew.slice(1).trim();
+    }
+
+    if (!cleanNew) {
+      return { success: false, error: 'Repair Order number cannot be empty.' };
+    }
+
+    if (cleanOld.toLowerCase() === cleanNew.toLowerCase()) {
+      return { success: true };
+    }
+
+    // Check if newRoId is already taken by another RO
+    const exists = repairOrders.some(
+      ro => ro.id.toLowerCase() === cleanNew.toLowerCase() && ro.id.toLowerCase() !== cleanOld.toLowerCase()
+    );
+    if (exists) {
+      return { success: false, error: `Repair Order #${cleanNew} already exists. Please choose a unique number.` };
+    }
+
+    const targetRO = repairOrders.find(ro => ro.id === cleanOld);
+    if (!targetRO) {
+      return { success: false, error: `Repair Order #${cleanOld} not found.` };
+    }
+
+    // Prepare updated RO with new ID
+    const updatedRO: RepairOrder = {
+      ...targetRO,
+      id: cleanNew,
+      quote: targetRO.quote ? { ...targetRO.quote, roId: cleanNew } : undefined,
+      parts: (targetRO.parts || []).map(p => ({ ...p, roId: cleanNew })),
+      inspection: targetRO.inspection ? { ...targetRO.inspection, roId: cleanNew } : undefined,
+      recommendations: (targetRO.recommendations || []).map(r => ({ ...r, roId: cleanNew })),
+      history: [
+        ...(targetRO.history || []),
+        {
+          id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          status: targetRO.status,
+          timestamp: new Date().toISOString(),
+          updatedBy: currentUser.id,
+          updatedByName: currentUser.name,
+          userRole: currentUser.role,
+          notes: `Repair Order number changed from #${cleanOld} to #${cleanNew} by ${currentUser.name} (${currentUser.role.replace(/_/g, ' ')})`
+        }
+      ]
+    };
+
+    // Update in-memory and localStorage for repairOrders
+    setRepairOrders(prev => {
+      const next = prev.map(ro => ro.id === cleanOld ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    // Update selectedROId so open modal stays smoothly active with the new ID
+    setSelectedROId(prev => (prev === cleanOld ? cleanNew : prev));
+    setQuoteModalROId(prev => (prev === cleanOld ? cleanNew : prev));
+    setQuotePrintROId(prev => (prev === cleanOld ? cleanNew : prev));
+    setWarrantyPrintROId(prev => (prev === cleanOld ? cleanNew : prev));
+
+    // Update standalone quotes list if linked
+    setQuotes(prev => {
+      const next = prev.map(q => q.convertedRoId === cleanOld ? { ...q, convertedRoId: cleanNew } : q);
+      try {
+        localStorage.setItem(STORAGE_KEY_STANDALONE_QUOTES, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    // Update notifications if linked
+    setNotifications(prev => {
+      const next = prev.map(n => n.roId === cleanOld ? { ...n, roId: cleanNew, roNumber: cleanNew } : n);
+      try {
+        localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    // Sync to Cloud Firestore: set new doc, delete old doc
+    try {
+      await syncRepairOrder(updatedRO);
+      await deleteRepairOrderDoc(cleanOld);
+    } catch (err) {
+      console.warn('[updateRepairOrderId] Firestore sync note:', err);
+    }
+
+    return { success: true };
+  }, [repairOrders, currentUser]);
+
   // Update core entered repair order details (Service Manager & Advisor, or Tech for Out Mileage)
   const updateRepairOrderDetails = (
     roId: string, 
@@ -5525,6 +5627,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let updatedCauses = targetRO.concernCauses ? [...targetRO.concernCauses] : undefined;
       let updatedCorrections = targetRO.concernCorrections ? [...targetRO.concernCorrections] : undefined;
       let updatedStatuses = targetRO.concernStatuses ? [...targetRO.concernStatuses] : undefined;
+      let updatedSources = targetRO.concernSources ? [...targetRO.concernSources] : updatedConcerns.map(() => 'CUSTOMER' as const);
       let updatedQuote = targetRO.quote;
 
       // Include any previously linked recommendation names
@@ -5652,12 +5755,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (existingConcernIdx >= 0) {
           updatedConcerns[existingConcernIdx] = recName;
+          if (updatedSources) updatedSources[existingConcernIdx] = 'INSPECTION';
           if (updatedCorrections) updatedCorrections[existingConcernIdx] = updatedItem.correction || updatedCorrections[existingConcernIdx] || `Perform ${recName}`;
           if (updatedCauses) updatedCauses[existingConcernIdx] = updatedItem.cause || updatedCauses[existingConcernIdx] || '';
           if (updatedTechNames && currentUser?.name) updatedTechNames[existingConcernIdx] = currentUser.name;
           if (updatedTechIds && currentUser?.id) updatedTechIds[existingConcernIdx] = currentUser.id;
         } else {
           updatedConcerns.push(recName);
+          if (updatedSources) updatedSources.push('INSPECTION');
           if (updatedPayTypes) updatedPayTypes.push('CUSTOMER_PAY');
           if (updatedTechIds) updatedTechIds.push(currentUser.id);
           if (updatedTechNames) updatedTechNames.push(currentUser.name);
@@ -5685,6 +5790,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (updatedCauses) updatedCauses = keepIndices.map(i => updatedCauses![i]);
           if (updatedCorrections) updatedCorrections = keepIndices.map(i => updatedCorrections![i]);
           if (updatedStatuses) updatedStatuses = keepIndices.map(i => updatedStatuses![i]);
+          if (updatedSources) updatedSources = keepIndices.map(i => updatedSources![i]);
         }
       }
 
@@ -5697,6 +5803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         concernCauses: updatedCauses,
         concernCorrections: updatedCorrections,
         concernStatuses: updatedStatuses,
+        concernSources: updatedSources,
         inspection: updatedSheet,
         recommendations: updatedRecommendations,
         quote: updatedQuote,
@@ -7736,6 +7843,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAllNotificationsRead,
         triggerNotification,
         deleteRepairOrder,
+        updateRepairOrderId,
         updateRepairOrderDetails,
         updateOutMileage,
         addRepairOrderConcern,

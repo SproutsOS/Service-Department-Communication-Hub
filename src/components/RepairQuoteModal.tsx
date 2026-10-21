@@ -1619,7 +1619,7 @@ export const RepairQuoteModal: React.FC = () => {
                           {/* 1. Customer Stated Complaint or Inspection Finding */}
                           <div className="space-y-0.5">
                             <span className="text-[10px] font-black text-slate-950 uppercase tracking-wider block">
-                              {roLineNum > (cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0)) ? '1. Inspection Finding:' : '1. Customer Complaint:'}
+                              {(roLineNum > (cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0)) || cleanRO.concernSources?.[roLineNum - 1] === 'INSPECTION') ? '1. Technicians Findings:' : '1. Customer Complaint:'}
                             </span>
                             <p className="font-bold text-slate-950 text-xs leading-snug">
                               {item.concernText || (roLineNum > (cleanRO.concerns?.length || (cleanRO.primaryConcern ? 1 : 0)) 

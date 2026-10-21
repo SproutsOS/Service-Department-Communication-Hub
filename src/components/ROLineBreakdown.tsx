@@ -251,6 +251,19 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
           const assignedTechName = ro.concernTechNames?.[idx] || (assignedTechId ? users.find(u => u.id === assignedTechId)?.name : ro.techName) || 'Unassigned';
           const assignedTechUser = users.find(u => u.id === assignedTechId || u.name === assignedTechName);
 
+          const isInspectionFinding = Boolean(
+            (ro.concernSources && ro.concernSources[idx] === 'INSPECTION') ||
+            (ro.recommendations || []).some(r => 
+              r.serviceName.trim().toLowerCase() === concernText.trim().toLowerCase() ||
+              (r.notes && r.notes.trim().toLowerCase().includes(concernText.trim().toLowerCase())) ||
+              (r.inspectionItemId && lineNum > 1 && concerns.length > 1 && idx === concerns.length - 1)
+            ) ||
+            (ro.inspection?.items && Object.values(ro.inspection.items).some(item => 
+              item.status === 'IMMEDIATE_ATTENTION' && 
+              (item.concern?.trim().toLowerCase() === concernText.trim().toLowerCase() || item.name.trim().toLowerCase() === concernText.trim().toLowerCase())
+            ))
+          );
+
           return (
             <div 
               key={idx}
@@ -271,6 +284,11 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                   {idx === 0 && (
                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                       Primary Concern
+                    </span>
+                  )}
+                  {isInspectionFinding && (
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 shadow-2xs">
+                      Technicians Findings
                     </span>
                   )}
                   {lineStatus === 'APPROVED' && (
@@ -416,11 +434,11 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                 </div>
               </div>
 
-              {/* 1. Customer Stated Complaint */}
+              {/* 1. Customer Stated Complaint or Technicians Findings */}
               <div className="space-y-1.5">
                 <span className="text-[15px] font-black text-black uppercase tracking-wider flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">1</span>
-                  <span>Complaint (Customer Stated Symptom):</span>
+                  <span>{isInspectionFinding ? "Technicians Findings:" : "Complaint (Customer Stated Symptom):"}</span>
                 </span>
                 <p className="text-[18px] font-bold text-black whitespace-pre-wrap leading-relaxed pl-7">
                   {concernText}

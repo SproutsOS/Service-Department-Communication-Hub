@@ -94,7 +94,8 @@ export const RODetailModal: React.FC = () => {
     deleteVehiclePhoto,
     addRepairOrderConcern,
     activeRoleView,
-    markAllPartsOrderedOnRO
+    markAllPartsOrderedOnRO,
+    updateRepairOrderId
   } = useApp();
 
   const currentRole = activeRoleView || currentUser.role;
@@ -114,6 +115,12 @@ export const RODetailModal: React.FC = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [managerActionFeedback, setManagerActionFeedback] = useState<string | null>(null);
+
+  // Edit Repair Order Number State
+  const [isEditingRoNumber, setIsEditingRoNumber] = useState(false);
+  const [editRoNumberInput, setEditRoNumberInput] = useState(selectedRO?.id || '');
+  const [isSavingRoNumber, setIsSavingRoNumber] = useState(false);
+  const [roNumberError, setRoNumberError] = useState<string | null>(null);
 
   // View mode within unified Parts & Quote Message Center: SPLIT (side-by-side) | PARTS_ONLY | MESSAGES_ONLY
   const [partsCenterViewMode, setPartsCenterViewMode] = useState<'SPLIT' | 'PARTS_ONLY' | 'MESSAGES_ONLY'>('SPLIT');
@@ -246,6 +253,9 @@ export const RODetailModal: React.FC = () => {
   // Keep manager edit state synced when selectedRO updates (unless currently editing)
   useEffect(() => {
     if (!selectedRO || isEditingDetails) return;
+    if (!isEditingRoNumber) {
+      setEditRoNumberInput(selectedRO.id || '');
+    }
     setEditCustomerName(selectedRO.customerName || '');
     setEditCustomerPhone(selectedRO.customerPhone || '');
     setEditVehicleYear(selectedRO.vehicle?.year || '');
@@ -496,6 +506,40 @@ export const RODetailModal: React.FC = () => {
     if (selectedRO) {
       const t = users.find(u => u.id === tId);
       updateConcernTech(selectedRO.id, index, tId, t?.name);
+    }
+  };
+
+  const handleSaveRoNumber = async () => {
+    if (!selectedRO) return;
+    let cleanNew = editRoNumberInput.trim().toUpperCase();
+    if (cleanNew.startsWith('#')) {
+      cleanNew = cleanNew.slice(1).trim();
+    }
+    if (!cleanNew) {
+      setRoNumberError('Repair Order number cannot be empty.');
+      return;
+    }
+    if (cleanNew === selectedRO.id) {
+      setIsEditingRoNumber(false);
+      setRoNumberError(null);
+      return;
+    }
+    setIsSavingRoNumber(true);
+    setRoNumberError(null);
+    try {
+      const result = await updateRepairOrderId(selectedRO.id, cleanNew);
+      if (result.success) {
+        setIsEditingRoNumber(false);
+        setEditRoNumberInput(cleanNew);
+        setManagerActionFeedback(`Repair Order number updated to #${cleanNew}`);
+        setTimeout(() => setManagerActionFeedback(null), 3500);
+      } else {
+        setRoNumberError(result.error || 'Failed to update RO number');
+      }
+    } catch (err: any) {
+      setRoNumberError(err?.message || 'Failed to update RO number');
+    } finally {
+      setIsSavingRoNumber(false);
     }
   };
 
@@ -936,10 +980,75 @@ export const RODetailModal: React.FC = () => {
         {/* Top Header - Dark Navy Modern Theme matching Technician & Advisor Specification */}
         <div className="p-4 sm:px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-4 shrink-0 flex-wrap relative">
           <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-            {/* Blue RO number badge */}
-            <span className="px-3.5 py-1.5 bg-blue-600 text-white rounded-lg font-black text-sm sm:text-base tracking-wider shadow-sm shrink-0">
-              #{selectedRO.id}
-            </span>
+            {/* Blue RO number badge with 1-click edit */}
+            {isEditingRoNumber ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveRoNumber();
+                }}
+                className="inline-flex items-center gap-1.5 bg-slate-800 p-1 rounded-lg border-2 border-blue-400 shadow-md shrink-0"
+              >
+                <span className="text-blue-300 font-mono font-black text-sm pl-1.5">#</span>
+                <input
+                  type="text"
+                  value={editRoNumberInput}
+                  onChange={(e) => {
+                    setEditRoNumberInput(e.target.value.toUpperCase());
+                    if (roNumberError) setRoNumberError(null);
+                  }}
+                  placeholder="RO #..."
+                  autoFocus
+                  className="w-24 sm:w-32 px-2 py-1 text-xs sm:text-sm font-mono font-black bg-slate-900 text-white border border-blue-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-300 uppercase tracking-wider"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingRoNumber}
+                  className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded font-bold text-xs cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
+                  title="Save New RO Number"
+                >
+                  {isSavingRoNumber ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">Save</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditRoNumberInput(selectedRO.id);
+                    setIsEditingRoNumber(false);
+                    setRoNumberError(null);
+                  }}
+                  className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700 cursor-pointer transition-colors"
+                  title="Cancel"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            ) : (
+              <div className="relative group inline-flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditRoNumberInput(selectedRO.id);
+                    setIsEditingRoNumber(true);
+                    setRoNumberError(null);
+                  }}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-sm sm:text-base tracking-wider shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer transition-all border border-blue-500 hover:border-blue-300 ring-1 ring-blue-400/30 group"
+                  title="Click to edit Repair Order Number (RO #)"
+                >
+                  <span>#{selectedRO.id}</span>
+                  <Edit3 className="w-3.5 h-3.5 text-blue-200 group-hover:text-white group-hover:scale-110 transition-all ml-0.5" />
+                </button>
+              </div>
+            )}
+
+            {roNumberError && (
+              <div className="w-full bg-red-900/90 border border-red-500 text-white text-xs px-3 py-1.5 rounded-lg flex items-center justify-between gap-2 mt-1">
+                <span>⚠️ {roNumberError}</span>
+                <button type="button" onClick={() => setRoNumberError(null)} className="text-red-200 hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
 
             <div>
               {/* Row 1: Customer Name and Phone */}
@@ -1546,7 +1655,42 @@ export const RODetailModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Repair Order #
+                        </label>
+                        <span className="text-[10px] text-blue-600 font-semibold font-mono">RO ID</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={editRoNumberInput}
+                          onChange={(e) => {
+                            setEditRoNumberInput(e.target.value.toUpperCase());
+                            if (roNumberError) setRoNumberError(null);
+                          }}
+                          placeholder="RO #..."
+                          className="w-full px-3 py-2 border-2 border-slate-600 rounded-lg text-xs font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-600 bg-white uppercase"
+                        />
+                        {editRoNumberInput.trim().toUpperCase() !== selectedRO.id && (
+                          <button
+                            type="button"
+                            onClick={handleSaveRoNumber}
+                            disabled={isSavingRoNumber}
+                            className="px-2.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shrink-0 flex items-center gap-1 shadow-2xs"
+                            title="Apply new RO Number"
+                          >
+                            {isSavingRoNumber ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                            <span>Update #</span>
+                          </button>
+                        )}
+                      </div>
+                      {roNumberError && (
+                        <p className="text-[11px] text-red-600 font-bold mt-1">{roNumberError}</p>
+                      )}
+                    </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700">
@@ -1812,6 +1956,7 @@ export const RODetailModal: React.FC = () => {
                         const currentCorrection = editConcernCorrections[idx] ?? (idx === 0 ? editCorrection : '');
 
                         const isInspectionFinding = Boolean(
+                          (selectedRO?.concernSources && selectedRO.concernSources[idx] === 'INSPECTION') ||
                           (selectedRO?.recommendations || []).some(r => 
                             r.serviceName.trim().toLowerCase() === c.trim().toLowerCase() ||
                             (r.notes && r.notes.trim().toLowerCase().includes(c.trim().toLowerCase())) ||
@@ -1839,7 +1984,7 @@ export const RODetailModal: React.FC = () => {
                                 {isInspectionFinding && (
                                   <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 shadow-2xs flex items-center gap-1">
                                     <ClipboardCheck className="w-3 h-3 text-amber-700" />
-                                    <span>21-Pt Inspection Finding</span>
+                                    <span>Technicians Findings</span>
                                   </span>
                                 )}
                               </div>
@@ -1956,11 +2101,11 @@ export const RODetailModal: React.FC = () => {
                               )}
                             </div>
 
-                            {/* 1. Customer Stated Complaint */}
+                            {/* 1. Customer Stated Complaint or Technician's Findings */}
                             <div className="space-y-1.5">
                               <label className="text-[16px] font-black text-black uppercase tracking-wider flex items-center gap-2">
                                 <span className="w-5 h-5 rounded-full bg-black text-white text-[11px] font-black inline-flex items-center justify-center">1</span>
-                                <span>Complaint (Customer Stated Symptom)</span>
+                                <span>{isInspectionFinding ? "Technicians Findings" : "Complaint (Customer Stated Symptom)"}</span>
                               </label>
                               <textarea
                                 rows={2}
@@ -1973,7 +2118,7 @@ export const RODetailModal: React.FC = () => {
                                   triggerManagerAutoSave({ concerns: next });
                                 }}
                                 onBlur={flushManagerAutoSave}
-                                placeholder={idx === 0 ? "Customer primary complaint / stated symptom..." : `Customer complaint for line ${idx + 1}...`}
+                                placeholder={isInspectionFinding ? "Technicians inspection findings..." : (idx === 0 ? "Customer primary complaint / stated symptom..." : `Customer complaint for line ${idx + 1}...`)}
                                 className="w-full px-3.5 py-2.5 border-2 border-slate-600 rounded-lg text-[18px] font-bold text-black focus:outline-hidden focus:ring-2 focus:ring-black focus:border-black bg-white leading-relaxed placeholder:text-slate-400 placeholder:text-sm"
                               />
                             </div>
