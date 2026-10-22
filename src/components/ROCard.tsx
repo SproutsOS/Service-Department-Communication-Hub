@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Send,
   Truck,
-  PhoneCall,
   Sparkles,
   CheckCircle,
   Camera,
@@ -95,49 +94,13 @@ export const ROCard: React.FC<ROCardProps> = ({
       id={`ro-card-${ro.id}`}
       onClick={onClick}
       className={`group relative bg-white rounded-xl border-2 transition-all duration-150 cursor-pointer hover:shadow-md hover:border-blue-600 ${
-        ro.isUrgent || ro.isWaiter || isWaitingApproval || hasPendingTechRec || (isCompleted && postRepair?.isOverdue)
+        ro.isUrgent || ro.isWaiter || isWaitingApproval || hasPendingTechRec
           ? 'border-red-600 ring-2 ring-red-400/40 shadow-xs' 
-          : isCompleted && postRepair?.isDueToday
-          ? 'border-amber-500 ring-2 ring-amber-400/40 shadow-xs'
           : 'border-slate-800 hover:border-black shadow-xs'
       } ${compact ? 'p-2' : isMainCard ? 'p-3 sm:p-3.5' : 'p-2.5 sm:p-3'} ${
         isMainCard ? 'w-full sm:min-w-[365px]' : ''
       } ${className}`}
     >
-      {/* 3-Day Post-Repair Customer Follow-Up Banner */}
-      {isCompleted && postRepair?.needsCall && (
-        <div className={`mb-2 px-2.5 py-1.5 rounded-lg text-white flex items-center justify-between text-xs font-black tracking-wide shadow-xs border ${
-          postRepair.isOverdue 
-            ? 'bg-red-600 border-red-700 animate-pulse' 
-            : 'bg-amber-500 border-amber-600'
-        }`}>
-          <div className="flex items-center gap-1.5 truncate">
-            <PhoneCall className="w-3.5 h-3.5 text-white shrink-0" />
-            <span className="truncate">
-              {postRepair.isOverdue 
-                ? `ACTION REQUIRED: 3-DAY CUSTOMER FOLLOW-UP OVERDUE (${postRepair.targetDate})` 
-                : 'ACTION REQUIRED: 3-DAY FOLLOW UP DUE TODAY'}
-            </span>
-          </div>
-          {onOpenFollowUp ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenFollowUp(ro);
-              }}
-              className="text-[10px] font-black uppercase bg-white text-slate-900 px-2 py-0.5 rounded shadow-xs hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
-            >
-              📞 Log Call
-            </button>
-          ) : (
-            <span className="text-[10px] font-black uppercase bg-white/20 px-1.5 py-0.2 rounded text-white shrink-0">
-              CHECK SATISFACTION
-            </span>
-          )}
-        </div>
-      )}
-
       {/* High-Visibility Red Communication Alert Banner at Top of Card */}
       {isWaitingApproval && (
         <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-red-600 text-white flex items-center justify-between text-xs font-black tracking-wide shadow-xs border border-red-700 animate-pulse">
@@ -162,12 +125,42 @@ export const ROCard: React.FC<ROCardProps> = ({
         </div>
       )}
 
-      {/* Top Bar: RO Number, Status Badges */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="font-bold text-sm sm:text-base text-blue-600 tracking-tight">
+      {/* Top Row: RO Number, Tech Name (to the right of RO Number), and Status Badge */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Left: RO Number + Tech Name directly to the right */}
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span className="font-bold text-sm sm:text-base text-blue-600 tracking-tight font-mono shrink-0">
             #{ro.id}
           </span>
+
+          {/* Tech Name immediately to the right of Repair Order Number */}
+          {ro.techName || (ro.concernTechNames && ro.concernTechNames.some(Boolean)) ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border-2 border-slate-400">
+              <Wrench className="w-3 h-3 text-slate-600 shrink-0" />
+              <span className="truncate max-w-[130px]">{ro.techName || ro.concernTechNames?.find(Boolean)}</span>
+              {techUser?.employeeNumber && (
+                <span className="font-mono text-[10px] font-bold px-1 py-0.2 rounded bg-slate-200 text-slate-800">
+                  #{techUser.employeeNumber}
+                </span>
+              )}
+              {(() => {
+                const uniqueLineTechs = Array.from(new Set(ro.concernTechNames?.filter(Boolean) || []));
+                if (uniqueLineTechs.length > 1) {
+                  return (
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-purple-50 text-purple-700 rounded border border-purple-200">
+                      {uniqueLineTechs.length} Techs
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium text-amber-700 bg-amber-50 border border-amber-300 italic">
+              Unassigned
+            </span>
+          )}
+
           {ro.isUrgent && (
             <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded-md border-2 border-red-500">
               <AlertTriangle className="w-3 h-3 text-red-600" /> HIGH PRIORITY
@@ -180,31 +173,8 @@ export const ROCard: React.FC<ROCardProps> = ({
           )}
         </div>
 
-        {/* Status & Cadence Badges */}
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {isCompleted && postRepair && (
-            <span 
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border-2 ${postRepair.badgeClass}`}
-              title={`3-Day Follow Up: ${postRepair.label}`}
-            >
-              <PhoneCall className="w-2.5 h-2.5" />
-              <span>{postRepair.label}</span>
-            </span>
-          )}
-          {showCadence && (
-            <span 
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border-2 ${
-                cadence.isOverdue || cadence.isDueToday 
-                  ? 'bg-red-100 text-red-900 border-red-500 font-black' 
-                  : cadence.badgeClass
-              }`}
-              title={`Customer Follow-Up: ${cadence.lastContactText} • ${cadence.nextDueText}`}
-            >
-              <PhoneCall className="w-2.5 h-2.5" />
-              <span>{cadence.label}</span>
-            </span>
-          )}
-
+        {/* Right: Dynamic Status Badge & Alerts (Call log removed) */}
+        <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
           {/* Service Advisor: Dynamic Status Badge */}
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border-2 ${statusInfo.badgeClass}`}>
             {statusInfo.label}
@@ -214,10 +184,41 @@ export const ROCard: React.FC<ROCardProps> = ({
           {hasChangeAlert && (
             <span
               id={`ro-change-bell-${ro.id}`}
-              className="inline-flex items-center justify-center p-1 rounded-full bg-red-100 text-red-600 ring-2 ring-red-500 animate-bounce shadow-xs ml-1 shrink-0"
+              className="inline-flex items-center justify-center p-1 rounded-full bg-red-100 text-red-600 ring-2 ring-red-500 animate-bounce shadow-xs shrink-0"
               title={`RO #${ro.id} has new updates: ${changeAlert?.changeSummary || 'Recent change'} - Click to review`}
             >
               <Bell className="w-3.5 h-3.5 fill-red-600 text-red-600" />
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Customer Name - Dedicated Full-Width Row directly below Repair Order Number & Tech Name */}
+      <div className="mt-1.5 pt-1 border-t border-slate-100">
+        <div className="flex items-baseline justify-between gap-2">
+          <h4 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight leading-snug break-words">
+            {(ro.customerName && ro.customerName.trim()) || (ro as any).customer || 'Customer'}
+          </h4>
+          {ro.customerPhone && (
+            <span className="text-[11px] text-slate-500 font-medium shrink-0">
+              {ro.customerPhone}
+            </span>
+          )}
+        </div>
+
+        {/* Vehicle Info */}
+        <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 flex-wrap mt-0.5">
+          <span className="font-semibold text-slate-800">
+            {ro.vehicle?.year} {ro.vehicle?.make} {ro.vehicle?.model}
+          </span>
+          {ro.vehicle?.mileage !== undefined && ro.vehicle?.mileage !== null && Number(ro.vehicle.mileage) > 0 && (
+            <span className="font-mono text-slate-500 font-normal">
+              • {Number(ro.vehicle.mileage).toLocaleString()} mi
+            </span>
+          )}
+          {ro.vehicle?.licensePlate && (
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-300">
+              Tag: {ro.vehicle.licensePlate}
             </span>
           )}
         </div>
@@ -255,24 +256,8 @@ export const ROCard: React.FC<ROCardProps> = ({
         </div>
       )}
 
-      {/* Customer & Vehicle Info */}
-      <div className="mt-2">
-        <div className="flex items-baseline justify-between gap-1">
-          <h4 className="text-sm font-bold text-slate-900 truncate">
-            {ro.customerName}
-          </h4>
-          <span className="text-xs text-slate-600 font-medium whitespace-nowrap flex items-center gap-1.5">
-            <span>{ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}</span>
-            {ro.vehicle.mileage !== undefined && ro.vehicle.mileage !== null && Number(ro.vehicle.mileage) > 0 && (
-              <span className="font-mono text-slate-500 font-normal">
-                • {Number(ro.vehicle.mileage).toLocaleString()} mi
-              </span>
-            )}
-          </span>
-        </div>
-
-        {/* Time in Shop under customer name with Promised Time to the right */}
-        <div className="mt-1.5 flex items-center justify-between gap-2 text-xs py-1 px-2 rounded-lg bg-slate-50 border-2 border-slate-700">
+      {/* Time in Shop under customer info with Promised Time to the right */}
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs py-1 px-2 rounded-lg bg-slate-50 border-2 border-slate-700">
           <div className="flex items-center gap-1 text-slate-700 font-semibold truncate">
             <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span className="text-slate-600 font-normal">Time in shop:</span>
@@ -287,6 +272,8 @@ export const ROCard: React.FC<ROCardProps> = ({
           </div>
         </div>
 
+      {/* Concerns, Cause & Correction, and Recommendations */}
+      <div className="mt-1">
         {/* Customer Stated Complaints / Concerns */}
         {(() => {
           const cardConcerns = ro.concerns && ro.concerns.length > 0 
@@ -370,9 +357,8 @@ export const ROCard: React.FC<ROCardProps> = ({
         )}
       </div>
 
-      {/* Assignment Info: When Assigned and to Which Tech */}
-      <div className="mt-1.5 pt-1.5 border-t-2 border-slate-600 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
-        
+      {/* Timestamp Info: Creation & Dispatched */}
+      <div className="mt-1.5 pt-1.5 border-t-2 border-slate-600 flex items-center justify-between gap-2 text-xs flex-wrap">
         {/* Date Repair Order was made */}
         <div className="flex items-center gap-1.5 text-slate-600">
           <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
@@ -381,37 +367,19 @@ export const ROCard: React.FC<ROCardProps> = ({
           </span>
         </div>
 
-        {/* When Assigned & Tech Name */}
-        <div className="flex items-center gap-1.5 text-slate-600">
-          <Send className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-          {ro.techName || (ro.concernTechNames && ro.concernTechNames.some(Boolean)) ? (
-            <span className="truncate text-[11px] inline-flex items-center gap-1 flex-wrap">
-              <strong className="font-medium text-slate-700">Tech:</strong> 
-              <span>{ro.techName || ro.concernTechNames?.find(Boolean)}</span>
-              {techUser?.employeeNumber && (
-                <span className="font-mono text-[11px] font-bold px-1 py-0.2 rounded bg-slate-100 text-slate-800 border-2 border-slate-600">
-                  {techUser.employeeNumber}
-                </span>
-              )}
-              {(() => {
-                const uniqueLineTechs = Array.from(new Set(ro.concernTechNames?.filter(Boolean) || []));
-                if (uniqueLineTechs.length > 1) {
-                  return (
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-purple-50 text-purple-700 rounded border border-purple-200">
-                      {uniqueLineTechs.length} Techs
-                    </span>
-                  );
-                }
-                return null;
-              })()}
-              {ro.dispatchedAt ? ` (${formatTimeOnly(ro.dispatchedAt)})` : ''}
+        {/* When Dispatched */}
+        {ro.dispatchedAt ? (
+          <div className="flex items-center gap-1.5 text-slate-600">
+            <Send className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="truncate text-[11px]">
+              <strong className="font-medium text-slate-700">Dispatched:</strong> {formatTimeOnly(ro.dispatchedAt)}
             </span>
-          ) : (
-            <span className="text-orange-600 font-medium italic text-[11px]">
-              Unassigned / Ready
-            </span>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 text-slate-400 text-[11px] italic">
+            <span>Ready for dispatch</span>
+          </div>
+        )}
       </div>
 
       {/* Parts Quoted on Estimate or Ordered and Tracked with ETA */}

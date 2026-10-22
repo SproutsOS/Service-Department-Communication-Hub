@@ -3110,6 +3110,11 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
             <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-md bg-slate-900 text-white shadow-2xs">
               #{ro.id}
             </span>
+            {(ro.techName || (ro.concernTechNames && ro.concernTechNames.some(Boolean))) && (
+              <span className="text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-md">
+                Tech: {ro.techName || ro.concernTechNames?.find(Boolean)}
+              </span>
+            )}
             <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${statusCfg.badgeClass}`}>
               {statusCfg.label}
             </span>
@@ -3135,8 +3140,8 @@ export const TechCompactCard: React.FC<TechCompactCardProps> = ({ ro, onClick })
 
         {/* Customer & Vehicle Info */}
         <div>
-          <h4 className="text-sm font-bold text-slate-900 truncate">
-            {ro.customerName}
+          <h4 className="text-sm font-extrabold text-slate-900 leading-snug break-words">
+            {(ro.customerName && ro.customerName.trim()) || (ro as any).customer || 'Customer'}
           </h4>
           <p className="text-xs text-slate-600 font-medium truncate">
             {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}

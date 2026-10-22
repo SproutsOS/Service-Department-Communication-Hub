@@ -3181,6 +3181,12 @@ export const PartsDashboard: React.FC = () => {
                             RO #{ro.id}
                           </span>
 
+                          {(ro.techName || (ro.concernTechNames && ro.concernTechNames.some(Boolean))) && (
+                            <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-md">
+                              Tech: {ro.techName || ro.concernTechNames?.find(Boolean)}
+                            </span>
+                          )}
+
                           <span className="font-bold text-sm text-slate-900">
                             {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
                           </span>
@@ -3221,7 +3227,7 @@ export const PartsDashboard: React.FC = () => {
 
                         {/* Customer & VIN */}
                         <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
-                          <span>Customer: <strong className="text-slate-900">{ro.customerName}</strong> ({ro.customerPhone})</span>
+                          <span>Customer: <strong className="text-slate-900">{(ro.customerName && ro.customerName.trim()) || (ro as any).customer || 'Customer'}</strong> {ro.customerPhone ? `(${ro.customerPhone})` : ''}</span>
                           <span>•</span>
                           <span className="inline-flex items-center gap-2 font-mono bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-300 text-slate-900">
                             <span>VIN: <strong>{ro.vehicle.vin}</strong></span>
