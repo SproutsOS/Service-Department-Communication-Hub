@@ -293,9 +293,13 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
               )}
 
               <div className="flex justify-between text-slate-300 print:text-slate-700">
-                <span>Estimated Sales Tax ({((quote.taxRate || 0.07) * 100).toFixed(1)}%):</span>
+                <span>Estimated Sales Tax {quote.isTaxExempt ? '(Exempt)' : `(${((quote.taxRate || 0.07) * 100).toFixed(1)}%)`}:</span>
                 <span className="font-mono font-bold text-white print:text-slate-900">
-                  {quote.isTaxExempt ? 'EXEMPT' : formatCurrency(quote.taxAmount)}
+                  {quote.isTaxExempt ? (
+                    <span>$0.00 (EXEMPT{quote.taxExemptNumber ? ` - #${quote.taxExemptNumber}` : ''})</span>
+                  ) : (
+                    formatCurrency(quote.taxAmount)
+                  )}
                 </span>
               </div>
 

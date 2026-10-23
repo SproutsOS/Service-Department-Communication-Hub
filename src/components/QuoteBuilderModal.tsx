@@ -99,6 +99,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
   const [lines, setLines] = useState<StandaloneQuoteLine[]>([]);
   const [defaultLaborRate, setDefaultLaborRate] = useState<number>(DEFAULT_SHOP_RATE);
   const [applyShopSupplies, setApplyShopSupplies] = useState<boolean>(true);
+  const [manualShopSupplies, setManualShopSupplies] = useState<number | null>(null);
   const [isTaxExempt, setIsTaxExempt] = useState<boolean>(false);
   const [taxExemptNumber, setTaxExemptNumber] = useState<string>('');
 
@@ -175,6 +176,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
           ]);
           setDefaultLaborRate(draft.defaultLaborRate || DEFAULT_SHOP_RATE);
           setApplyShopSupplies(draft.applyShopSupplies ?? true);
+          setManualShopSupplies(draft.manualShopSupplies !== undefined ? draft.manualShopSupplies : null);
           setIsTaxExempt(draft.isTaxExempt || false);
           setTaxExemptNumber(draft.taxExemptNumber || '');
           if (draft.savedAtTime) {
@@ -218,6 +220,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
     setLines(q.lines || []);
     setDefaultLaborRate(q.defaultLaborRate || DEFAULT_SHOP_RATE);
     setApplyShopSupplies(q.applyShopSupplies ?? true);
+    setManualShopSupplies(q.shopSuppliesFee !== undefined ? q.shopSuppliesFee : null);
     setIsTaxExempt(q.isTaxExempt || false);
     setTaxExemptNumber(q.taxExemptNumber || '');
     setActiveTab('BUILDER');
@@ -247,6 +250,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
     setQuoteStatus('DRAFT');
     setDefaultLaborRate(DEFAULT_SHOP_RATE);
     setApplyShopSupplies(true);
+    setManualShopSupplies(null);
     setIsTaxExempt(false);
     setTaxExemptNumber('');
     
@@ -302,9 +306,10 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       });
     });
 
-    // Shop supplies: 8% of labor capped at $35.00
+    // Shop supplies: manual override if entered by user, otherwise 8% of labor capped at $35.00
+    const calculatedSupplies = Math.min(35.00, Number((totalLaborCost * 0.08).toFixed(2)));
     const shopSuppliesFee = applyShopSupplies
-      ? Math.min(35.00, Number((totalLaborCost * 0.08).toFixed(2)))
+      ? (manualShopSupplies !== null ? Math.max(0, Number(manualShopSupplies)) : calculatedSupplies)
       : 0;
 
     // Tax calculation
@@ -324,13 +329,14 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       totalPartsCost: Number(totalPartsCost.toFixed(2)),
       totalWholesaleCost: Number(totalWholesaleCost.toFixed(2)),
       shopSuppliesFee,
+      calculatedSupplies,
       taxRate,
       taxAmount,
       grandTotal,
       grossProfit: Number(grossProfit.toFixed(2)),
       grossProfitMargin
     };
-  }, [lines, applyShopSupplies, isTaxExempt]);
+  }, [lines, applyShopSupplies, manualShopSupplies, isTaxExempt]);
 
   // Continuous Auto-Save Engine (Saves draft locally & syncs to AppContext / Firestore)
   useEffect(() => {
@@ -365,6 +371,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
         lines,
         defaultLaborRate,
         applyShopSupplies,
+        manualShopSupplies,
         isTaxExempt,
         taxExemptNumber,
         savedAt: new Date().toISOString(),
@@ -457,6 +464,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
     lines,
     defaultLaborRate,
     applyShopSupplies,
+    manualShopSupplies,
     isTaxExempt,
     taxExemptNumber,
     expirationDays,
@@ -964,6 +972,58 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                   </div>
                 </div>
 
+                {/* Tax Exempt Customer Option */}
+                <div className={`p-3 rounded-lg border transition-all ${
+                  isTaxExempt 
+                    ? 'bg-amber-50/70 border-amber-300 ring-1 ring-amber-300/60' 
+                    : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isTaxExempt}
+                        onChange={(e) => setIsTaxExempt(e.target.checked)}
+                        className="w-4 h-4 rounded text-amber-600 border-slate-300 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            Tax Exempt Customer
+                          </span>
+                          {isTaxExempt ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                              0% Sales Tax (Exempt)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-slate-500">
+                              Standard 7% Tax Applies
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Exempts this quote from state and local sales tax on parts and labor.
+                        </p>
+                      </div>
+                    </label>
+
+                    {isTaxExempt && (
+                      <div className="sm:w-64 flex items-center gap-2">
+                        <label className="text-[11px] font-bold text-amber-900 shrink-0 uppercase">
+                          Certificate / ID #:
+                        </label>
+                        <input
+                          type="text"
+                          value={taxExemptNumber}
+                          onChange={(e) => setTaxExemptNumber(e.target.value)}
+                          placeholder="e.g. EX-987452"
+                          className="w-full text-xs font-mono font-medium p-1.5 bg-white border border-amber-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* VIN & Vehicle Details */}
                 <div className="grid grid-cols-1 sm:grid-cols-6 gap-2.5 pt-1">
                   {/* VIN Input with instant auto-decode button */}
@@ -1374,32 +1434,78 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                   <span className="font-mono font-bold text-white">{formatCurrency(financials.totalPartsCost)}</span>
                 </div>
 
-                <div className="border-l border-slate-700 pl-4 flex items-center gap-1.5">
+                {/* Shop Supplies: Editable & Switchable */}
+                <div className="border-l border-slate-700 pl-4 flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="shopSuppliesToggle"
                     checked={applyShopSupplies}
                     onChange={(e) => setApplyShopSupplies(e.target.checked)}
-                    className="rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                    className="rounded text-purple-500 focus:ring-purple-500 cursor-pointer w-4 h-4"
+                    title="Toggle shop supplies fee on/off"
                   />
-                  <label htmlFor="shopSuppliesToggle" className="cursor-pointer">
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Shop Fee</span>
-                    <span className="font-mono font-bold text-white">{formatCurrency(financials.shopSuppliesFee)}</span>
-                  </label>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <label htmlFor="shopSuppliesToggle" className="text-[10px] text-slate-400 uppercase tracking-wider cursor-pointer">
+                        Shop Supplies
+                      </label>
+                      {manualShopSupplies !== null ? (
+                        <button
+                          type="button"
+                          onClick={() => setManualShopSupplies(null)}
+                          title="Reset to automatic calculation (8% labor, capped at $35.00)"
+                          className="text-[9px] px-1 py-0.2 text-purple-300 bg-purple-900/60 hover:bg-purple-800 rounded border border-purple-700 inline-flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <RefreshCw className="w-2.5 h-2.5" />
+                          <span>Reset Auto</span>
+                        </button>
+                      ) : (
+                        <span className="text-[9px] px-1 py-0.2 text-slate-400 bg-slate-800 rounded border border-slate-700">
+                          Auto ($35 max)
+                        </span>
+                      )}
+                    </div>
+                    {applyShopSupplies ? (
+                      <div className="w-24 mt-0.5">
+                        <PriceField
+                          value={manualShopSupplies !== null ? manualShopSupplies : financials.shopSuppliesFee}
+                          onChange={(val) => setManualShopSupplies(val)}
+                          placeholder={financials.calculatedSupplies.toFixed(2)}
+                          className="w-full text-xs font-mono font-bold p-1 bg-slate-800 focus:bg-slate-700 border border-slate-600 rounded text-white focus:ring-1 focus:ring-purple-400 text-right pr-2 pl-5"
+                          title="Click to edit shop supplies amount directly"
+                        />
+                      </div>
+                    ) : (
+                      <span className="font-mono font-bold text-slate-500 block text-xs mt-0.5">$0.00 (Off)</span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="border-l border-slate-700 pl-4 flex items-center gap-1.5">
+                {/* Tax & Tax-Exempt Status */}
+                <div className="border-l border-slate-700 pl-4 flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="taxExemptToggle"
                     checked={isTaxExempt}
                     onChange={(e) => setIsTaxExempt(e.target.checked)}
-                    className="rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                    className="rounded text-amber-500 focus:ring-amber-500 cursor-pointer w-4 h-4"
+                    title="Check to mark customer as Tax Exempt (0% sales tax)"
                   />
-                  <label htmlFor="taxExemptToggle" className="cursor-pointer">
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Tax ({isTaxExempt ? 'Exempt' : '7%'})</span>
-                    <span className="font-mono font-bold text-white">{formatCurrency(financials.taxAmount)}</span>
-                  </label>
+                  <div>
+                    <label htmlFor="taxExemptToggle" className="text-[10px] text-slate-400 uppercase tracking-wider block cursor-pointer flex items-center gap-1">
+                      <span>Tax</span>
+                      {isTaxExempt ? (
+                        <span className="text-[9px] px-1 py-0.2 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          EXEMPT
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-slate-400">7%</span>
+                      )}
+                    </label>
+                    <span className={`font-mono font-bold block text-xs ${isTaxExempt ? 'text-amber-300' : 'text-white'}`}>
+                      {formatCurrency(financials.taxAmount)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Live Dealer Margin Readout */}
