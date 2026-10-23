@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   X, 
   Plus, 
@@ -29,7 +29,8 @@ import {
   Zap,
   ExternalLink,
   Copy,
-  Receipt
+  Receipt,
+  RefreshCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { 
@@ -44,6 +45,7 @@ import { decodeVin } from '../utils/vinDecoder';
 import { formatCurrency, formatDateTime } from '../utils/formatters';
 import { QuotePrintSheet } from './QuotePrintSheet';
 import { RollToROModal } from './RollToROModal';
+import { PriceField } from './PriceField';
 
 interface QuoteBuilderModalProps {
   isOpen: boolean;
@@ -112,21 +114,86 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
   const [statusFilter, setStatusFilter] = useState<StandaloneQuoteStatus | 'ALL'>('ALL');
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
+  // Auto-Save State & Tracking
+  const STORAGE_KEY_QUOTE_DRAFT = 'applet_quote_builder_active_draft';
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string | null>(null);
+  const autoSaveTimerRef = useRef<any>(null);
+  const isInitialMountRef = useRef<boolean>(true);
+
   const triggerToast = (msg: string) => {
     setFeedbackToast(msg);
     setTimeout(() => setFeedbackToast(null), 4000);
   };
 
-  // Sync with initialQuoteId or reset form
+  // Sync with initialQuoteId or restore unsaved local draft
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      return;
+    }
+
+    isInitialMountRef.current = true;
 
     if (initialQuoteId) {
       loadQuoteIntoForm(initialQuoteId);
       setActiveTab('BUILDER');
-    } else if (!editingQuoteId && lines.length === 0) {
-      resetFormToNew();
+    } else if (!editingQuoteId) {
+      // Restore locally stored in-progress draft if available
+      try {
+        const savedDraftRaw = localStorage.getItem(STORAGE_KEY_QUOTE_DRAFT);
+        if (savedDraftRaw) {
+          const draft = JSON.parse(savedDraftRaw);
+          setEditingQuoteId(draft.editingQuoteId || null);
+          setCustomerName(draft.customerName || '');
+          setCustomerPhone(draft.customerPhone || '');
+          setCustomerEmail(draft.customerEmail || '');
+          setVin(draft.vin || '');
+          setYear(draft.year || '');
+          setMake(draft.make || '');
+          setModel(draft.model || '');
+          setEngine(draft.engine || '');
+          setMileage(draft.mileage || '');
+          setLicensePlate(draft.licensePlate || '');
+          setAdvisorId(draft.advisorId || currentUser.id);
+          setCustomerNotes(draft.customerNotes || '');
+          setInternalNotes(draft.internalNotes || '');
+          setQuoteStatus(draft.quoteStatus || 'DRAFT');
+          setLines(draft.lines && draft.lines.length > 0 ? draft.lines : [
+            {
+              id: `line_${Date.now()}_1`,
+              lineNum: 1,
+              concern: 'General Service & Diagnostic Inspection',
+              payType: 'CUSTOMER_PAY',
+              laborHours: 1.0,
+              laborRate: DEFAULT_SHOP_RATE,
+              laborSubtotal: DEFAULT_SHOP_RATE,
+              parts: []
+            }
+          ]);
+          setDefaultLaborRate(draft.defaultLaborRate || DEFAULT_SHOP_RATE);
+          setApplyShopSupplies(draft.applyShopSupplies ?? true);
+          setIsTaxExempt(draft.isTaxExempt || false);
+          setTaxExemptNumber(draft.taxExemptNumber || '');
+          if (draft.savedAtTime) {
+            setLastAutoSaveTime(draft.savedAtTime);
+            setAutoSaveStatus('saved');
+          }
+        } else if (lines.length === 0) {
+          resetFormToNew();
+        }
+      } catch {
+        resetFormToNew();
+      }
     }
+
+    const timer = setTimeout(() => {
+      isInitialMountRef.current = false;
+    }, 400);
+
+    return () => clearTimeout(timer);
   }, [isOpen, initialQuoteId]);
 
   const loadQuoteIntoForm = (quoteId: string) => {
@@ -157,6 +224,11 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
   };
 
   const resetFormToNew = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_QUOTE_DRAFT);
+    } catch {}
+    setAutoSaveStatus('idle');
+    setLastAutoSaveTime(null);
     setEditingQuoteId(null);
     setCustomerName('');
     setCustomerPhone('');
@@ -259,6 +331,137 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       grossProfitMargin
     };
   }, [lines, applyShopSupplies, isTaxExempt]);
+
+  // Continuous Auto-Save Engine (Saves draft locally & syncs to AppContext / Firestore)
+  useEffect(() => {
+    if (!isOpen || isInitialMountRef.current) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    setAutoSaveStatus('saving');
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // 1. Save full draft to localStorage
+      const draftPayload = {
+        editingQuoteId,
+        customerName,
+        customerPhone,
+        customerEmail,
+        vin,
+        year,
+        make,
+        model,
+        engine,
+        mileage,
+        licensePlate,
+        advisorId,
+        customerNotes,
+        internalNotes,
+        quoteStatus,
+        lines,
+        defaultLaborRate,
+        applyShopSupplies,
+        isTaxExempt,
+        taxExemptNumber,
+        savedAt: new Date().toISOString(),
+        savedAtTime: nowTime
+      };
+
+      try {
+        localStorage.setItem(STORAGE_KEY_QUOTE_DRAFT, JSON.stringify(draftPayload));
+      } catch {}
+
+      // 2. Synchronize to AppContext / Firestore if there is meaningful data entered
+      const hasMeaningfulData = customerName.trim().length > 0 || vin.trim().length > 0 || lines.some(l => l.concern.trim().length > 0 || (l.parts && l.parts.length > 0));
+
+      if (hasMeaningfulData) {
+        const expDate = new Date();
+        expDate.setDate(expDate.getDate() + (expirationDays || 30));
+        const advisorUser = users.find(u => u.id === advisorId);
+
+        const quotePayload: Omit<StandaloneQuote, 'id' | 'quoteNumber' | 'createdAt' | 'updatedAt'> = {
+          advisorId,
+          advisorName: advisorUser ? advisorUser.name : (currentUser.name || 'Service Advisor'),
+          customerName: customerName.trim() || 'Draft Quote',
+          customerPhone: customerPhone.trim() || '(555) 000-0000',
+          customerEmail: customerEmail.trim() || undefined,
+          vehicle: {
+            year: year || '',
+            make: make.trim() || 'Vehicle',
+            model: model.trim() || '',
+            vin: vin.trim() || undefined,
+            engine: engine.trim() || undefined,
+            mileage: mileage ? Number(mileage) : undefined,
+            licensePlate: licensePlate.trim() || undefined
+          },
+          status: quoteStatus || 'DRAFT',
+          expirationDate: expDate.toISOString(),
+          lines,
+          defaultLaborRate,
+          applyShopSupplies,
+          shopSuppliesFee: financials.shopSuppliesFee,
+          taxRate: financials.taxRate,
+          taxAmount: financials.taxAmount,
+          isTaxExempt,
+          taxExemptNumber: isTaxExempt ? taxExemptNumber : undefined,
+          totalLaborHours: financials.totalLaborHours,
+          totalLaborCost: financials.totalLaborCost,
+          totalPartsCost: financials.totalPartsCost,
+          grandTotal: financials.grandTotal,
+          customerNotes: customerNotes.trim() || undefined,
+          internalNotes: internalNotes.trim() || undefined
+        };
+
+        if (editingQuoteId) {
+          updateStandaloneQuote(editingQuoteId, quotePayload);
+        } else {
+          const created = createStandaloneQuote(quotePayload);
+          setEditingQuoteId(created.id);
+          draftPayload.editingQuoteId = created.id;
+          try {
+            localStorage.setItem(STORAGE_KEY_QUOTE_DRAFT, JSON.stringify(draftPayload));
+          } catch {}
+        }
+      }
+
+      setAutoSaveStatus('saved');
+      setLastAutoSaveTime(nowTime);
+    }, 700);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [
+    isOpen,
+    editingQuoteId,
+    customerName,
+    customerPhone,
+    customerEmail,
+    vin,
+    year,
+    make,
+    model,
+    engine,
+    mileage,
+    licensePlate,
+    advisorId,
+    customerNotes,
+    internalNotes,
+    quoteStatus,
+    lines,
+    defaultLaborRate,
+    applyShopSupplies,
+    isTaxExempt,
+    taxExemptNumber,
+    expirationDays,
+    financials
+  ]);
 
   // Add Blank Job Line
   const handleAddBlankLine = () => {
@@ -602,6 +805,19 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                     Editing: #{editingQuoteId}
                   </span>
                 )}
+                {/* Header Auto-Save Badge */}
+                {autoSaveStatus === 'saving' && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded text-[11px] font-bold animate-pulse">
+                    <RefreshCw className="w-3 h-3 animate-spin text-amber-300" />
+                    <span>Auto-saving draft...</span>
+                  </span>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                    <span>Auto-Saved {lastAutoSaveTime ? `(${lastAutoSaveTime})` : ''}</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
                 Build menu estimates, calculate parts & labor gross margins, and roll pre-approved quotes into active Repair Orders.
@@ -683,6 +899,18 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {autoSaveStatus === 'saved' && (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Auto-Saved {lastAutoSaveTime ? `(${lastAutoSaveTime})` : ''}</span>
+                      </span>
+                    )}
+                    {autoSaveStatus === 'saving' && (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
+                        <span>Auto-saving draft...</span>
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={resetFormToNew}
@@ -924,13 +1152,12 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                                 <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
                                   Hourly Shop Rate ($)
                                 </label>
-                                <input
-                                  type="number"
-                                  step="1"
-                                  min="0"
+                                <PriceField
                                   value={line.laborRate}
-                                  onChange={(e) => handleUpdateLine(lineIdx, { laborRate: parseFloat(e.target.value) || 0 })}
-                                  className="w-full text-xs font-bold p-1.5 bg-white border border-slate-300 rounded-lg text-slate-900"
+                                  onChange={(newRate) => handleUpdateLine(lineIdx, { laborRate: newRate })}
+                                  placeholder="165.00"
+                                  className="w-full pl-6 pr-2 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-purple-500"
+                                  title="Hourly Shop Rate"
                                 />
                               </div>
 
@@ -1057,62 +1284,26 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                                         {/* Price */}
                                         <div className="sm:col-span-2">
                                           <label className="sm:hidden block text-[10px] font-black text-slate-700 uppercase mb-0.5 text-right">Price</label>
-                                          <div className="relative">
-                                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-xs">$</span>
-                                            <input
-                                              type="text"
-                                              inputMode="decimal"
-                                              value={part.price !== undefined && part.price !== null ? part.price : ''}
-                                              onChange={(e) => {
-                                                const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                                const parts = raw.split('.');
-                                                const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
-                                                handleUpdatePartInLine(lineIdx, pIdx, { price: val as any });
-                                              }}
-                                              onBlur={(e) => {
-                                                const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
-                                                if (raw !== '' && !isNaN(Number(raw))) {
-                                                  handleUpdatePartInLine(lineIdx, pIdx, { price: parseFloat(parseFloat(raw).toFixed(2)) });
-                                                } else if (raw === '') {
-                                                  handleUpdatePartInLine(lineIdx, pIdx, { price: 0 });
-                                                }
-                                              }}
-                                              placeholder="0.00"
-                                              className="w-full pl-6 pr-2 py-2 text-xs font-mono font-bold bg-slate-50 focus:bg-white border-2 border-slate-300 focus:border-blue-500 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-right"
-                                              title="Unit Price - updates Total"
-                                            />
-                                          </div>
+                                          <PriceField
+                                            value={part.price}
+                                            onChange={(newPrice) => handleUpdatePartInLine(lineIdx, pIdx, { price: newPrice })}
+                                            placeholder="0.00"
+                                            className="w-full pl-6 pr-2 py-2 text-xs font-mono font-bold bg-slate-50 focus:bg-white border-2 border-slate-300 focus:border-blue-500 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-right"
+                                            title="Unit Price - updates Total"
+                                          />
                                         </div>
 
                                         {/* Total */}
                                         <div className="sm:col-span-2 flex items-center gap-1.5">
                                           <div className="flex-1 min-w-0">
                                             <label className="sm:hidden block text-[10px] font-black text-emerald-800 uppercase mb-0.5 text-right">Total</label>
-                                            <div className="relative">
-                                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-700 font-bold text-xs">$</span>
-                                              <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={part.subtotal !== undefined && part.subtotal !== null ? part.subtotal : ''}
-                                                onChange={(e) => {
-                                                  const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                                  const parts = raw.split('.');
-                                                  const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
-                                                  handleUpdatePartInLine(lineIdx, pIdx, { subtotal: val as any });
-                                                }}
-                                                onBlur={(e) => {
-                                                  const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
-                                                  if (raw !== '' && !isNaN(Number(raw))) {
-                                                    handleUpdatePartInLine(lineIdx, pIdx, { subtotal: parseFloat(parseFloat(raw).toFixed(2)) });
-                                                  } else if (raw === '') {
-                                                    handleUpdatePartInLine(lineIdx, pIdx, { subtotal: 0 });
-                                                  }
-                                                }}
-                                                placeholder="0.00"
-                                                className="w-full pl-6 pr-2 py-2 text-xs font-mono font-black bg-emerald-50 focus:bg-white border-2 border-emerald-400 focus:border-emerald-600 rounded-lg text-emerald-950 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-right shadow-2xs"
-                                                title="Total - editing recalculates Unit Price"
-                                              />
-                                            </div>
+                                            <PriceField
+                                              value={part.subtotal}
+                                              onChange={(newTotal) => handleUpdatePartInLine(lineIdx, pIdx, { subtotal: newTotal })}
+                                              placeholder="0.00"
+                                              className="w-full pl-6 pr-2 py-2 text-xs font-mono font-black bg-emerald-50 focus:bg-white border-2 border-emerald-400 focus:border-emerald-600 rounded-lg text-emerald-950 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-right shadow-2xs"
+                                              title="Total - editing recalculates Unit Price"
+                                            />
                                           </div>
                                           <button
                                             type="button"

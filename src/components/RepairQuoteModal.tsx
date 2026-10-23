@@ -31,6 +31,7 @@ import { useApp } from '../context/AppContext';
 import { RepairQuote, LaborLineItem, QuotePartItem, QuoteStatus, ConcernPayType, LineApprovalStatus } from '../types';
 import { PAY_TYPE_RATES, getPayTypeRate, cleanRO3700 } from '../utils/formatters';
 import { LinePhotoSection } from './LinePhotoSection';
+import { PriceField } from './PriceField';
 
 const COMMON_LABOR_PRESETS = [
   { name: 'Diagnostic Scan & Pinpoint Testing', hours: 1.0, notes: 'Includes scan tool live data & diagnostic tree' },
@@ -1757,29 +1758,12 @@ export const RepairQuoteModal: React.FC = () => {
                             <div className="flex items-center gap-1.5 shrink-0">
                               <label className="text-[11px] font-black text-slate-950 uppercase">Rate:</label>
                               <div className="relative w-22">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-950 font-black text-xs">$</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
+                                <PriceField
+                                  value={item.hourlyRate}
+                                  onChange={(newRate) => handleUpdateLaborItem(item.id, { hourlyRate: newRate })}
                                   placeholder="0.00"
-                                  value={item.hourlyRate === 0 || item.hourlyRate === undefined || (item.hourlyRate as any) === '' ? '' : item.hourlyRate}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    handleUpdateLaborItem(item.id, { 
-                                      hourlyRate: val === '' ? ('' as any) : Number(val) 
-                                    });
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = e.target.value.trim();
-                                    if (val !== '' && !isNaN(Number(val))) {
-                                      handleUpdateLaborItem(item.id, { 
-                                        hourlyRate: Number(Number(val).toFixed(2)) 
-                                      });
-                                    }
-                                  }}
-                                  onFocus={(e) => e.target.select()}
                                   className="w-full pl-6 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-black text-slate-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                  title="Hourly Labor Rate"
                                 />
                               </div>
                             </div>
@@ -1924,27 +1908,12 @@ export const RepairQuoteModal: React.FC = () => {
                                                 <div className="flex items-center gap-1.5">
                                                   <label className="text-xs font-black text-slate-950 uppercase">Price:</label>
                                                   <div className="relative w-32">
-                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-base">$</span>
-                                                    <input
-                                                      type="text"
-                                                      inputMode="decimal"
+                                                    <PriceField
+                                                      value={p.unitPrice}
+                                                      onChange={(newPrice) => handleUpdatePartItem(p.id, { unitPrice: newPrice })}
                                                       placeholder="0.00"
-                                                      value={p.unitPrice === 0 || p.unitPrice === undefined || (p.unitPrice as any) === '' ? '' : p.unitPrice}
-                                                      onChange={(e) => {
-                                                        const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                                        const parts = raw.split('.');
-                                                        const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
-                                                        handleUpdatePartItem(p.id, { unitPrice: val === '' ? ('' as any) : val });
-                                                      }}
-                                                      onBlur={(e) => {
-                                                        const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
-                                                        if (raw !== '' && !isNaN(Number(raw))) {
-                                                          handleUpdatePartItem(p.id, { unitPrice: Number(Number(raw).toFixed(2)) });
-                                                        } else if (raw === '') {
-                                                          handleUpdatePartItem(p.id, { unitPrice: 0 });
-                                                        }
-                                                      }}
                                                       className="w-full pl-6 pr-2 py-1.5 bg-white border-2 border-slate-400 rounded-lg text-[18px] font-black font-mono text-slate-950 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                                      title="Unit Price - updates Total"
                                                     />
                                                   </div>
                                                 </div>
@@ -1964,26 +1933,10 @@ export const RepairQuoteModal: React.FC = () => {
                                               <span className="text-[10px] text-slate-600 block uppercase font-black">Total</span>
                                               {canManageParts ? (
                                                 <div className="relative">
-                                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-emerald-700 font-bold text-xs">$</span>
-                                                  <input
-                                                    type="text"
-                                                    inputMode="decimal"
+                                                  <PriceField
+                                                    value={p.subtotal}
+                                                    onChange={(newSubtotal) => handleUpdatePartItem(p.id, { subtotal: newSubtotal })}
                                                     placeholder="0.00"
-                                                    value={p.subtotal === 0 || p.subtotal === undefined || (p.subtotal as any) === '' ? '' : p.subtotal}
-                                                    onChange={(e) => {
-                                                      const raw = e.target.value.replace(/[^0-9.]/g, '');
-                                                      const parts = raw.split('.');
-                                                      const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
-                                                      handleUpdatePartItem(p.id, { subtotal: val === '' ? ('' as any) : val });
-                                                    }}
-                                                    onBlur={(e) => {
-                                                      const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
-                                                      if (raw !== '' && !isNaN(Number(raw))) {
-                                                        handleUpdatePartItem(p.id, { subtotal: Number(Number(raw).toFixed(2)) });
-                                                      } else if (raw === '') {
-                                                        handleUpdatePartItem(p.id, { subtotal: 0 });
-                                                      }
-                                                    }}
                                                     className="w-full pl-5 pr-2 py-1.5 bg-emerald-50 border-2 border-emerald-400 rounded-lg text-xs font-black font-mono text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none text-right shadow-2xs"
                                                     title="Total amount - editing recalculates Unit Price"
                                                   />
