@@ -776,9 +776,20 @@ export const RepairQuoteModal: React.FC = () => {
     setPartsItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       const updated = { ...item, ...updates };
-      const qty = Number(updated.quantity) || 0;
-      const price = Number(updated.unitPrice) || 0;
-      updated.subtotal = Number((qty * price).toFixed(2));
+      const qty = Number(updated.quantity) || 1;
+      let price = Number(updated.unitPrice) || 0;
+      let subtotal = Number(updated.subtotal) || 0;
+
+      if (updates.subtotal !== undefined && updates.unitPrice === undefined) {
+        subtotal = Number(updates.subtotal) || 0;
+        price = qty > 0 ? Number((subtotal / qty).toFixed(2)) : subtotal;
+        updated.unitPrice = price;
+      } else if (updates.unitPrice !== undefined && updates.subtotal === undefined) {
+        subtotal = Number((qty * price).toFixed(2));
+      } else if (updates.quantity !== undefined && updates.subtotal === undefined) {
+        subtotal = Number((qty * price).toFixed(2));
+      }
+      updated.subtotal = subtotal;
       return updated;
     }));
   };
@@ -1949,11 +1960,39 @@ export const RepairQuoteModal: React.FC = () => {
                                               </div>
                                             )}
 
-                                            <div className="text-right min-w-[80px]">
-                                              <span className="text-[10px] text-slate-600 block uppercase font-black">Subtotal</span>
-                                              <span className={`text-[18px] font-black font-mono ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-950 bg-emerald-100 px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block'}`}>
-                                                ${(Number(p.subtotal) || 0).toFixed(2)}
-                                              </span>
+                                            <div className="text-right w-28 shrink-0">
+                                              <span className="text-[10px] text-slate-600 block uppercase font-black">Total</span>
+                                              {canManageParts ? (
+                                                <div className="relative">
+                                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-emerald-700 font-bold text-xs">$</span>
+                                                  <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    placeholder="0.00"
+                                                    value={p.subtotal === 0 || p.subtotal === undefined || (p.subtotal as any) === '' ? '' : p.subtotal}
+                                                    onChange={(e) => {
+                                                      const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                                      const parts = raw.split('.');
+                                                      const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                                      handleUpdatePartItem(p.id, { subtotal: val === '' ? ('' as any) : val });
+                                                    }}
+                                                    onBlur={(e) => {
+                                                      const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                                      if (raw !== '' && !isNaN(Number(raw))) {
+                                                        handleUpdatePartItem(p.id, { subtotal: Number(Number(raw).toFixed(2)) });
+                                                      } else if (raw === '') {
+                                                        handleUpdatePartItem(p.id, { subtotal: 0 });
+                                                      }
+                                                    }}
+                                                    className="w-full pl-5 pr-2 py-1.5 bg-emerald-50 border-2 border-emerald-400 rounded-lg text-xs font-black font-mono text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none text-right shadow-2xs"
+                                                    title="Total amount - editing recalculates Unit Price"
+                                                  />
+                                                </div>
+                                              ) : (
+                                                <span className={`text-[18px] font-black font-mono ${isPartDeclined ? 'line-through text-slate-400' : 'text-emerald-950 bg-emerald-100 px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block'}`}>
+                                                  ${(Number(p.subtotal) || 0).toFixed(2)}
+                                                </span>
+                                              )}
                                             </div>
 
                                             {/* Decline / Approve Toggle (Advisor or Manager recording customer decision) */}
@@ -2312,12 +2351,40 @@ export const RepairQuoteModal: React.FC = () => {
                           </span>
                         )}
 
-                        {/* Line Subtotal */}
-                        <div className="text-right w-24 shrink-0">
-                          <span className="text-[10px] text-slate-950 block uppercase font-black">Subtotal</span>
-                          <span className="text-sm font-black text-slate-950 font-mono">
-                            ${(part.subtotal || 0).toFixed(2)}
-                          </span>
+                        {/* Line Total */}
+                        <div className="text-right w-28 shrink-0">
+                          <label className="text-[10px] text-slate-950 block uppercase font-black">Total:</label>
+                          {canManageParts ? (
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-emerald-700 font-bold text-xs">$</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={part.subtotal === 0 || part.subtotal === undefined || (part.subtotal as any) === '' ? '' : part.subtotal}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                  const parts = raw.split('.');
+                                  const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                  handleUpdatePartItem(part.id, { subtotal: val === '' ? ('' as any) : val });
+                                }}
+                                onBlur={(e) => {
+                                  const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                  if (raw !== '' && !isNaN(Number(raw))) {
+                                    handleUpdatePartItem(part.id, { subtotal: Number(Number(raw).toFixed(2)) });
+                                  } else if (raw === '') {
+                                    handleUpdatePartItem(part.id, { subtotal: 0 });
+                                  }
+                                }}
+                                className="w-full pl-5 pr-2 py-1.5 bg-emerald-50 border border-emerald-400 rounded-lg text-xs font-black font-mono text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none text-right shadow-2xs"
+                                title="Total amount - editing recalculates Unit Price"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-sm font-black text-slate-950 font-mono">
+                              ${(part.subtotal || 0).toFixed(2)}
+                            </span>
+                          )}
                         </div>
 
                         {/* Remove Button (Manager and Parts Counter only) */}

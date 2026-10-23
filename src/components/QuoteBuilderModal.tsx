@@ -221,8 +221,11 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
         const pQty = Number(part.quantity) || 1;
         const pPrice = Number(part.price) || 0;
         const pCost = Number(part.cost) || 0;
+        const pSubtotal = part.subtotal !== undefined && part.subtotal !== null && !isNaN(Number(part.subtotal))
+          ? Number(part.subtotal)
+          : pPrice * pQty;
         
-        totalPartsCost += pPrice * pQty;
+        totalPartsCost += pSubtotal;
         totalWholesaleCost += pCost * pQty;
       });
     });
@@ -350,7 +353,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       const newPart: StandaloneQuotePart = {
         id: `prt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         partNumber: '',
-        description: 'New Replacement Component',
+        description: '',
         quantity: 1,
         cost: 0,
         price: 0,
@@ -366,7 +369,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
     });
   };
 
-  // Update Part in Line
+  // Update Part in Line (supports direct entry of Part Number, Name, Qty, Price, or Total)
   const handleUpdatePartInLine = (lineIdx: number, partIdx: number, updates: Partial<StandaloneQuotePart>) => {
     setLines(prev => {
       const next = [...prev];
@@ -377,9 +380,25 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       const targetPart = curParts[partIdx];
       if (!targetPart) return prev;
 
-      const qty = updates.quantity !== undefined ? Math.max(1, Number(updates.quantity)) : targetPart.quantity;
-      const price = updates.price !== undefined ? Number(updates.price) : targetPart.price;
-      const subtotal = Number((qty * price).toFixed(2));
+      const qty = updates.quantity !== undefined ? Math.max(1, Number(updates.quantity) || 1) : (targetPart.quantity || 1);
+      let price = updates.price !== undefined ? (updates.price as any) : targetPart.price;
+      let subtotal = updates.subtotal !== undefined ? (updates.subtotal as any) : targetPart.subtotal;
+
+      // Bidirectional calculation between Price and Total
+      if (updates.subtotal !== undefined && updates.price === undefined) {
+        // User typed in the Total
+        const numSubtotal = Number(updates.subtotal) || 0;
+        price = qty > 0 ? Number((numSubtotal / qty).toFixed(2)) : numSubtotal;
+        subtotal = updates.subtotal;
+      } else if (updates.price !== undefined && updates.subtotal === undefined) {
+        // User typed in the Price
+        const numPrice = Number(updates.price) || 0;
+        subtotal = Number((qty * numPrice).toFixed(2));
+      } else if (updates.quantity !== undefined && updates.subtotal === undefined) {
+        // User changed quantity
+        const numPrice = Number(targetPart.price) || 0;
+        subtotal = Number((qty * numPrice).toFixed(2));
+      }
 
       curParts[partIdx] = {
         ...targetPart,
@@ -953,95 +972,97 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                             </div>
 
                             {/* Parts for this Line */}
-                            <div className="space-y-2 pt-1">
+                            <div className="space-y-2 pt-2 border-t border-slate-200">
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                                  <Package className="w-3.5 h-3.5 text-blue-600" />
+                                <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                  <Package className="w-4 h-4 text-blue-600" />
                                   <span>Required Parts on Line {line.lineNum || lineIdx + 1} ({(line.parts || []).length})</span>
                                 </span>
 
                                 <button
                                   type="button"
                                   onClick={() => handleAddPartToLine(lineIdx)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 cursor-pointer transition-colors"
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg shadow-2xs cursor-pointer transition-all"
                                 >
-                                  <Plus className="w-3 h-3 text-blue-600" />
-                                  <span>+ Add Part Item</span>
+                                  <Plus className="w-3.5 h-3.5 text-white stroke-[3]" />
+                                  <span>+ Add Part</span>
                                 </button>
                               </div>
 
                               {(line.parts || []).length === 0 ? (
-                                <div className="p-2.5 text-center bg-slate-50 rounded-lg border border-slate-200 text-slate-400 text-xs italic">
-                                  No parts required for this line (Labor only)
+                                <div className="p-3.5 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-medium">
+                                  No parts added yet. Click <strong>+ Add Part</strong> to enter Part Number, Name, Qty, Price and Total.
                                 </div>
                               ) : (
                                 <div className="space-y-2">
-                                  {line.parts.map((part, pIdx) => {
-                                    const pCost = Number(part.cost) || 0;
-                                    const pPrice = Number(part.price) || 0;
-                                    const pProfit = pPrice - pCost;
-                                    const pMargin = pPrice > 0 ? ((pProfit / pPrice) * 100).toFixed(0) : '0';
+                                  {/* Table Column Headers */}
+                                  <div className="hidden sm:grid grid-cols-12 gap-2 px-3 py-1.5 bg-slate-200/90 rounded-lg text-[11px] font-black uppercase tracking-wider text-slate-700 items-center">
+                                    <div className="col-span-3">Part Number</div>
+                                    <div className="col-span-4">Name</div>
+                                    <div className="col-span-1 text-center">Qty</div>
+                                    <div className="col-span-2 text-right">Price</div>
+                                    <div className="col-span-2 text-right">Total</div>
+                                  </div>
 
+                                  {line.parts.map((part, pIdx) => {
                                     return (
                                       <div
                                         key={part.id || pIdx}
-                                        className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+                                        className="p-2.5 bg-white hover:bg-slate-50/80 rounded-xl border-2 border-slate-300 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center transition-all shadow-2xs"
                                       >
-                                        {/* Part # */}
-                                        <div className="sm:col-span-2">
+                                        {/* Part Number */}
+                                        <div className="sm:col-span-3">
+                                          <label className="sm:hidden block text-[10px] font-black text-slate-700 uppercase mb-0.5">Part Number</label>
                                           <input
                                             type="text"
                                             value={part.partNumber || ''}
                                             onChange={(e) => handleUpdatePartInLine(lineIdx, pIdx, { partNumber: e.target.value.toUpperCase() })}
-                                            placeholder="Part #"
-                                            className="w-full text-xs font-mono font-bold p-1.5 bg-white border border-slate-300 rounded-md text-slate-900"
+                                            placeholder="Part Number"
+                                            className="w-full text-xs font-mono font-bold p-2 bg-slate-50 focus:bg-white border-2 border-slate-300 focus:border-blue-500 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                                           />
                                         </div>
 
-                                        {/* Description */}
+                                        {/* Name */}
                                         <div className="sm:col-span-4">
+                                          <label className="sm:hidden block text-[10px] font-black text-slate-700 uppercase mb-0.5">Name</label>
                                           <input
                                             type="text"
-                                            value={part.description}
+                                            value={part.description || ''}
                                             onChange={(e) => handleUpdatePartInLine(lineIdx, pIdx, { description: e.target.value })}
-                                            placeholder="Part Description"
-                                            className="w-full text-xs font-medium p-1.5 bg-white border border-slate-300 rounded-md text-slate-900"
+                                            placeholder="Part Name"
+                                            className="w-full text-xs font-bold p-2 bg-slate-50 focus:bg-white border-2 border-slate-300 focus:border-blue-500 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                                           />
                                         </div>
 
                                         {/* Qty */}
                                         <div className="sm:col-span-1">
+                                          <label className="sm:hidden block text-[10px] font-black text-slate-700 uppercase mb-0.5 text-center">Qty</label>
                                           <input
                                             type="number"
                                             min="1"
-                                            value={part.quantity}
-                                            onChange={(e) => handleUpdatePartInLine(lineIdx, pIdx, { quantity: parseInt(e.target.value) || 1 })}
-                                            placeholder="Qty"
-                                            className="w-full text-xs font-bold text-center p-1.5 bg-white border border-slate-300 rounded-md text-slate-900"
+                                            value={part.quantity === 0 || (part.quantity as any) === '' ? '' : part.quantity}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              handleUpdatePartInLine(lineIdx, pIdx, { quantity: val === '' ? ('' as any) : parseInt(val) || 1 });
+                                            }}
+                                            onBlur={(e) => {
+                                              const val = parseInt(e.target.value) || 1;
+                                              handleUpdatePartInLine(lineIdx, pIdx, { quantity: Math.max(1, val) });
+                                            }}
+                                            placeholder="1"
+                                            className="w-full text-xs font-black font-mono text-center p-2 bg-slate-50 focus:bg-white border-2 border-slate-300 focus:border-blue-500 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                                           />
                                         </div>
 
-                                        {/* Cost */}
-                                        <div className="sm:col-span-1">
-                                          <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={part.cost !== undefined ? part.cost : ''}
-                                            onChange={(e) => handleUpdatePartInLine(lineIdx, pIdx, { cost: parseFloat(e.target.value) || 0 })}
-                                            placeholder="Cost"
-                                            className="w-full text-xs font-mono p-1.5 bg-white border border-slate-300 rounded-md text-slate-600"
-                                            title="Wholesale dealer unit cost"
-                                          />
-                                        </div>
-
-                                        {/* Sell Price */}
+                                        {/* Price */}
                                         <div className="sm:col-span-2">
+                                          <label className="sm:hidden block text-[10px] font-black text-slate-700 uppercase mb-0.5 text-right">Price</label>
                                           <div className="relative">
+                                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-xs">$</span>
                                             <input
                                               type="text"
                                               inputMode="decimal"
-                                              value={part.price !== undefined ? part.price : ''}
+                                              value={part.price !== undefined && part.price !== null ? part.price : ''}
                                               onChange={(e) => {
                                                 const raw = e.target.value.replace(/[^0-9.]/g, '');
                                                 const parts = raw.split('.');
@@ -1056,32 +1077,50 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                                                   handleUpdatePartInLine(lineIdx, pIdx, { price: 0 });
                                                 }
                                               }}
-                                              placeholder="Sell"
-                                              className="w-full text-xs font-mono font-bold p-1.5 bg-white border border-emerald-300 rounded-md text-emerald-900 focus:ring-2 focus:ring-emerald-500"
-                                              title="Customer retail unit price"
+                                              placeholder="0.00"
+                                              className="w-full pl-6 pr-2 py-2 text-xs font-mono font-bold bg-slate-50 focus:bg-white border-2 border-slate-300 focus:border-blue-500 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-right"
+                                              title="Unit Price - updates Total"
                                             />
-                                            {pCost > 0 && pPrice > 0 && (
-                                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded">
-                                                {pMargin}% GP
-                                              </span>
-                                            )}
                                           </div>
                                         </div>
 
-                                        {/* Part Subtotal */}
-                                        <div className="sm:col-span-1 font-mono font-bold text-slate-900 text-right">
-                                          {formatCurrency(part.subtotal)}
-                                        </div>
-
-                                        {/* Delete Part Button */}
-                                        <div className="sm:col-span-1 text-right">
+                                        {/* Total */}
+                                        <div className="sm:col-span-2 flex items-center gap-1.5">
+                                          <div className="flex-1 min-w-0">
+                                            <label className="sm:hidden block text-[10px] font-black text-emerald-800 uppercase mb-0.5 text-right">Total</label>
+                                            <div className="relative">
+                                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-700 font-bold text-xs">$</span>
+                                              <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={part.subtotal !== undefined && part.subtotal !== null ? part.subtotal : ''}
+                                                onChange={(e) => {
+                                                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                                  const parts = raw.split('.');
+                                                  const val = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw;
+                                                  handleUpdatePartInLine(lineIdx, pIdx, { subtotal: val as any });
+                                                }}
+                                                onBlur={(e) => {
+                                                  const raw = String(e.target.value || '').replace(/[^0-9.]/g, '').trim();
+                                                  if (raw !== '' && !isNaN(Number(raw))) {
+                                                    handleUpdatePartInLine(lineIdx, pIdx, { subtotal: parseFloat(parseFloat(raw).toFixed(2)) });
+                                                  } else if (raw === '') {
+                                                    handleUpdatePartInLine(lineIdx, pIdx, { subtotal: 0 });
+                                                  }
+                                                }}
+                                                placeholder="0.00"
+                                                className="w-full pl-6 pr-2 py-2 text-xs font-mono font-black bg-emerald-50 focus:bg-white border-2 border-emerald-400 focus:border-emerald-600 rounded-lg text-emerald-950 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-right shadow-2xs"
+                                                title="Total - editing recalculates Unit Price"
+                                              />
+                                            </div>
+                                          </div>
                                           <button
                                             type="button"
                                             onClick={() => handleDeletePartFromLine(lineIdx, pIdx)}
-                                            className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
-                                            title="Remove part"
+                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0 mt-auto sm:mt-0"
+                                            title="Remove part item"
                                           >
-                                            <Trash2 className="w-3.5 h-3.5" />
+                                            <Trash2 className="w-4 h-4" />
                                           </button>
                                         </div>
                                       </div>
