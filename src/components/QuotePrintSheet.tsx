@@ -302,7 +302,7 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
               <div className="pt-2 border-t border-slate-700 print:border-slate-300 flex justify-between items-baseline">
                 <div>
                   <span className="text-xs font-black uppercase tracking-wider block text-blue-300 print:text-blue-900">
-                    Total Estimated Investment
+                    Total Estimate
                   </span>
                   <span className="text-[10px] text-slate-400 print:text-slate-600">Parts, Labor & Fees Included</span>
                 </div>

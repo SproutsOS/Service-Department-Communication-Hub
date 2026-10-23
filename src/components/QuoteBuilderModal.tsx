@@ -302,9 +302,9 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       });
     });
 
-    // Shop supplies: 8% of labor capped at $45.00
+    // Shop supplies: 8% of labor capped at $35.00
     const shopSuppliesFee = applyShopSupplies
-      ? Math.min(45.00, Number((totalLaborCost * 0.08).toFixed(2)))
+      ? Math.min(35.00, Number((totalLaborCost * 0.08).toFixed(2)))
       : 0;
 
     // Tax calculation
