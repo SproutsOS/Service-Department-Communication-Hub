@@ -43,6 +43,7 @@ import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { ManagerPartsOnOrderModal } from './ManagerPartsOnOrderModal';
 import { TechWorkloadModal } from './TechWorkloadModal';
+import { DailyPartsTrackerBoard } from './DailyPartsTrackerBoard';
 import { getContactCadenceStatus, isEligibleForCadence, isWoolwineVehicle } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
@@ -333,12 +334,16 @@ export const ManagerDashboard: React.FC = () => {
 
           <button
             id="open-parts-on-order-report-mgr"
-            onClick={() => setIsPartsOnOrderModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 bg-orange-600 hover:bg-orange-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
-            title="Open Service Manager Master Parts on Order & ETA Control Report"
+            onClick={() => setViewSection(viewSection === 'PARTS_TRACKER' ? 'FLOOR' : 'PARTS_TRACKER')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer ${
+              viewSection === 'PARTS_TRACKER'
+                ? 'bg-blue-600 text-white border-2 border-blue-300 ring-2 ring-blue-400/40'
+                : 'bg-orange-600 hover:bg-orange-700 text-white'
+            }`}
+            title="Open Master Daily Parts Pipeline & Status Tracker"
           >
-            <Package className="w-4 h-4 text-orange-200" />
-            <span>Parts on Order Report</span>
+            <Truck className="w-4 h-4 text-orange-200" />
+            <span>Daily Parts Tracker</span>
             {totalPartsOnOrderCount > 0 && (
               <span className="bg-orange-950 text-orange-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-orange-400">
                 {totalPartsOnOrderCount}
@@ -679,7 +684,9 @@ export const ManagerDashboard: React.FC = () => {
         </div>
       )}
 
-      {viewSection === 'CALL_SHEET' ? (
+      {viewSection === 'PARTS_TRACKER' ? (
+        <DailyPartsTrackerBoard onOpenRO={(ro) => setSelectedRO(ro)} />
+      ) : viewSection === 'CALL_SHEET' ? (
         <CustomerCallSheetWidget 
           onSelectRO={setSelectedRO}
           onOpenFollowUpModal={setSelectedFollowUpRO}

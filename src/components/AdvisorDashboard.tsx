@@ -18,7 +18,8 @@ import {
   ListFilter, 
   CalendarCheck,
   ChevronRight,
-  Receipt
+  Receipt,
+  Truck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -27,6 +28,7 @@ import { ROStatus, RepairOrder } from '../types';
 import { normalizeROStatus } from '../data/mockData';
 import { CustomerCallSheetWidget } from './CustomerCallSheetWidget';
 import { CustomerFollowUpModal } from './CustomerFollowUpModal';
+import { DailyPartsTrackerBoard } from './DailyPartsTrackerBoard';
 import { getContactCadenceStatus, isEligibleForCadence, isROCompleted, getPostRepairFollowUpStatus, isWoolwineVehicle } from '../utils/cadenceUtils';
 import { sortROsNumerically, matchesROSearch } from '../utils/formatters';
 
@@ -43,7 +45,7 @@ export const AdvisorDashboard: React.FC = () => {
     quotes 
   } = useApp();
   
-  const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET'>('BOARD');
+  const [viewMode, setViewMode] = useState<'BOARD' | 'CALL_SHEET' | 'PARTS_TRACKER'>('BOARD');
   const [displayMode, setDisplayMode] = useState<'CARD' | 'LINE'>('CARD');
   const [activeTab, setActiveTab] = useState<ROStatus | 'ALL' | 'CALLS_DUE' | 'COMPLETED'>('ALL');
   const [completedSubFilter, setCompletedSubFilter] = useState<'ALL' | 'DUE' | 'DONE'>('ALL');
@@ -119,6 +121,19 @@ export const AdvisorDashboard: React.FC = () => {
       return a.advisorId === advisorScope;
     });
   }, [appointments, todayStr, advisorScope, currentUser.id]);
+
+  const totalActivePartsOnOrder = useMemo(() => {
+    let count = 0;
+    repairOrders.forEach(ro => {
+      if (ro.status === 'CLOSED' || ro.isArchived) return;
+      (ro.parts || []).forEach(p => {
+        if (p.status !== 'DECLINED' && p.status !== 'CANCELLED' && p.status !== 'RECEIVED' && p.status !== 'IN_STOCK' && p.status !== 'ISSUED_TO_TECH') {
+          count++;
+        }
+      });
+    });
+    return count;
+  }, [repairOrders]);
 
   const waitingDiagnosisCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'WAITING_DIAGNOSTICS').length;
   const inDiagCount = currentScopeActiveROs.filter(r => normalizeROStatus(r.status) === 'IN_DIAG').length;
@@ -311,6 +326,24 @@ export const AdvisorDashboard: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => setViewMode('PARTS_TRACKER')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'PARTS_TRACKER'
+                  ? 'bg-white text-blue-700 shadow-2xs border border-slate-300'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Daily Parts Pipeline: Update and receive ordered parts day-by-day"
+            >
+              <Truck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Daily Parts Tracker</span>
+              {totalActivePartsOnOrder > 0 && (
+                <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {totalActivePartsOnOrder}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => setViewMode('CALL_SHEET')}
               className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                 viewMode === 'CALL_SHEET'
@@ -437,8 +470,10 @@ export const AdvisorDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Render either Call Sheet or RO Board */}
-      {viewMode === 'CALL_SHEET' ? (
+      {/* Render Daily Parts Tracker, Call Sheet, or RO Board */}
+      {viewMode === 'PARTS_TRACKER' ? (
+        <DailyPartsTrackerBoard onOpenRO={(ro) => setSelectedRO(ro)} />
+      ) : viewMode === 'CALL_SHEET' ? (
         <div className="space-y-3">
           <CustomerCallSheetWidget 
             onSelectRO={setSelectedRO}

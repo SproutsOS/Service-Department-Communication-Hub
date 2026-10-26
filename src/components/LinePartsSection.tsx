@@ -28,11 +28,9 @@ export const LinePartsSection: React.FC<LinePartsSectionProps> = ({
   const parts = getLineParts(ro, lineNum);
   const totalPartsCost = parts.reduce((sum, p) => sum + p.subtotal, 0);
 
-  // Only Service Manager and Parts Counter can add or edit parts on lines (Service Advisors cannot add or edit parts)
-  const isAdvisor = currentUser.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR';
-  const isManager = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
-  const isPartsSpec = currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST';
-  const canEditParts = allowAddPart && (isManager || isPartsSpec) && !isAdvisor;
+  // Service Advisors, Managers, and Parts Specialists can add and edit parts on lines
+  const isSales = currentUser.role === 'SALES' || activeRoleView === 'SALES';
+  const canEditParts = allowAddPart && !isSales;
 
   const handleOpenEdit = (part: IntegratedLinePart) => {
     const rawPart = (ro.parts || []).find(p => p.id === part.id) || {

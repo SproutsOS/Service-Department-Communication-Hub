@@ -62,6 +62,7 @@ import { decodeVin } from '../utils/vinDecoder';
 import { DynamicROWorkflow } from './DynamicROWorkflow';
 import { EditPartModal } from './EditPartModal';
 import { ROStickyNoteBanner, AddStickyNoteButton } from './ROStickyNoteBadge';
+import { ROQuotePartsTracker } from './ROQuotePartsTracker';
 
 export const RODetailModal: React.FC = () => {
   const { 
@@ -129,6 +130,7 @@ export const RODetailModal: React.FC = () => {
   // Edit Part Modal State
   const [editingPartItem, setEditingPartItem] = useState<PartItem | null>(null);
   const [isAddPartModalOpen, setIsAddPartModalOpen] = useState(false);
+  const [addPartLineNumber, setAddPartLineNumber] = useState<number>(1);
 
   // Editable fields initialized from selectedRO
   const [editCustomerName, setEditCustomerName] = useState(selectedRO?.customerName || '');
@@ -643,15 +645,15 @@ export const RODetailModal: React.FC = () => {
       if (selectedROModalTab) {
         setActiveTab(selectedROModalTab);
         setSelectedROModalTab(null);
-      } else if (currentUser.role === 'PARTS_SPECIALIST' || activeRoleView === 'PARTS_SPECIALIST') {
-        setActiveTab('PARTS');
-      } else {
+      } else if (isTechScreen) {
         setActiveTab('DETAILS');
+      } else {
+        setActiveTab('QUOTE_PARTS');
       }
     }
-  }, [selectedRO?.id, selectedROModalTab, currentUser.role, activeRoleView, setSelectedROModalTab]);
+  }, [selectedRO?.id, selectedROModalTab, currentUser.role, activeRoleView, isTechScreen, setSelectedROModalTab]);
 
-  const [activeTab, setActiveTab] = useState<'DETAILS' | 'LINES' | 'PHOTOS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('DETAILS');
+  const [activeTab, setActiveTab] = useState<'QUOTE_PARTS' | 'DETAILS' | 'LINES' | 'PHOTOS' | 'CHAT' | 'PARTS' | 'HISTORY' | 'CONTACTS' | 'WARRANTY'>('QUOTE_PARTS');
 
   useEffect(() => {
     if (selectedROModalTab) {
@@ -1377,6 +1379,29 @@ export const RODetailModal: React.FC = () => {
         )}
 
         <div className="flex flex-wrap items-center border-b border-slate-200 px-3 sm:px-6 py-2.5 bg-slate-50 gap-2 overflow-x-auto shrink-0 shadow-2xs">
+          {/* Quote & Parts Pipeline Tab (Primary Working View) */}
+          <button
+            id="ro-tab-quote-parts"
+            type="button"
+            onClick={() => setActiveTab('QUOTE_PARTS')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer border shadow-xs shrink-0 ${
+              activeTab === 'QUOTE_PARTS'
+                ? 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 border-amber-600 shadow-md ring-2 ring-amber-400/40'
+                : 'bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-800 border-slate-300 shadow-2xs'
+            }`}
+            title="Quoted Services, Parts Ordering & Daily Status Pipeline"
+          >
+            <Receipt className={`w-3.5 h-3.5 ${activeTab === 'QUOTE_PARTS' ? 'text-slate-950' : 'text-amber-600'}`} />
+            <span>Quote & Parts Tracker</span>
+            {(selectedRO.parts?.length || 0) > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                activeTab === 'QUOTE_PARTS' ? 'bg-amber-700 text-amber-100' : 'bg-amber-100 text-amber-900 border border-amber-300'
+              }`}>
+                {selectedRO.parts?.length} Parts
+              </span>
+            )}
+          </button>
+
           <button
             id="ro-tab-details"
             type="button"
@@ -1614,6 +1639,22 @@ export const RODetailModal: React.FC = () => {
               roId={selectedRO.id} 
               stickyNote={selectedRO.stickyNote} 
               allowAdd={false}
+            />
+          )}
+
+          {/* TAB 0: QUOTE & WORKING ORDER PARTS TRACKER */}
+          {activeTab === 'QUOTE_PARTS' && (
+            <ROQuotePartsTracker
+              ro={selectedRO}
+              onOpenQuoteModal={openQuoteModal}
+              onOpenPrintModal={openQuotePrintModal}
+              onOpenEditPart={(part, lineNum) => {
+                setEditingPartItem(part);
+              }}
+              onAddNewPart={(lineNum) => {
+                setAddPartLineNumber(lineNum);
+                setIsAddPartModalOpen(true);
+              }}
             />
           )}
 
@@ -3527,6 +3568,7 @@ export const RODetailModal: React.FC = () => {
             isOpen={true}
             onClose={() => setIsAddPartModalOpen(false)}
             roId={selectedRO.id}
+            initialLineNumber={addPartLineNumber}
             onSuccess={(msg) => {
               setManagerActionFeedback(msg);
               setTimeout(() => setManagerActionFeedback(null), 4000);

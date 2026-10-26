@@ -222,6 +222,28 @@ export const ROCard: React.FC<ROCardProps> = ({
             </span>
           )}
         </div>
+
+        {/* Quoted Estimate & Parts Progress Strip */}
+        {ro.quote && Number(ro.quote.grandTotal) > 0 && (
+          <div className="mt-1.5 flex items-center justify-between gap-2 px-2.5 py-1 rounded-lg bg-purple-50/90 border border-purple-200 text-xs">
+            <div className="flex items-center gap-1.5 font-bold text-purple-950">
+              <span className="text-purple-700 font-black">Estimate:</span>
+              <span className="font-mono text-xs sm:text-sm font-black text-purple-900">
+                ${Number(ro.quote.grandTotal).toFixed(2)}
+              </span>
+              {ro.isTaxExempt && (
+                <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-1.5 py-0.2 rounded">
+                  0% Tax
+                </span>
+              )}
+            </div>
+            {ro.parts.length > 0 && (
+              <span className="text-[11px] font-bold text-slate-700 font-mono">
+                {ro.parts.filter(p => p.status === 'RECEIVED' || p.status === 'IN_STOCK' || p.status === 'ISSUED_TO_TECH').length}/{ro.parts.length} Parts Ready
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Diagnostic Phase Highlight: Waiting vs Active Diagnosis */}
@@ -542,7 +564,7 @@ export const ROCard: React.FC<ROCardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {isManager && (
+          {(isManager || currentUser?.role === 'SERVICE_ADVISOR' || activeRoleView === 'SERVICE_ADVISOR') && (
             <button
               type="button"
               onClick={(e) => {
@@ -550,7 +572,7 @@ export const ROCard: React.FC<ROCardProps> = ({
                 setSelectedRO(ro, 'PARTS');
               }}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 text-[11px] font-black border border-amber-600 shadow-2xs transition-all cursor-pointer"
-              title="Service Manager: Direct parts entry on this ticket (no tech request needed)"
+              title="Add a part directly to this quote / working order"
             >
               <Plus className="w-3 h-3 text-slate-950 stroke-[3]" />
               <span>+ Part</span>

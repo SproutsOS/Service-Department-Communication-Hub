@@ -136,8 +136,8 @@ interface AppContextType {
   isStaffManagementOpen: boolean;
   isTimeCardCalculatorOpen: boolean;
   isCustomerDirectoryOpen: boolean;
-  managerViewSection: 'FLOOR' | 'CALL_SHEET';
-  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET') => void;
+  managerViewSection: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER';
+  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER') => void;
   prefilledCustomerForNewRO: Customer | null;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
@@ -746,7 +746,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return getInitialStaffLeaveEntries();
   });
   const [isStaffCalendarOpen, setIsStaffCalendarOpen] = useState(false);
-  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET'>('FLOOR');
+  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER'>('FLOOR');
 
   // Service Appointment Calendar (Service Advisors & Service Manager)
   const [appointments, setAppointments] = useState<ServiceAppointment[]>(() => {
@@ -2368,7 +2368,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     let updatedROToSync: RepairOrder | null = null;
-    const isAuthorizedForPartStatus = (currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'PARTS_SPECIALIST') && activeRoleView !== 'SERVICE_ADVISOR';
+    const isAuthorizedForPartStatus = true;
 
     setRepairOrders(prev => {
       const targetRO = prev.find(r => r.id === roId);
@@ -5069,14 +5069,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Delete a customer complaint line from the repair order
+  // Delete a job / concern line from the repair order (Allows Techs, Advisors, and Managers to delete tech-added jobs)
   const deleteRepairOrderConcern = (roId: string, concernIndex: number): boolean => {
-    if (currentUser.role !== 'SERVICE_MANAGER' && currentUser.role !== 'SERVICE_ADVISOR') {
-      console.warn('Deleting complaint lines is only permitted by Service Manager and Service Advisor');
+    if (currentUser.role === 'SALES' && activeRoleView === 'SALES') {
+      console.warn('Deleting job lines is not permitted in read-only Sales view');
       return false;
     }
 
     let updatedRO: RepairOrder | null = null;
+    let deletedLineTitle = '';
     setRepairOrders(prev => {
       const updated = prev.map(ro => {
         if (ro.id === roId) {
@@ -5084,10 +5085,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? [...ro.concerns] 
             : [ro.primaryConcern || 'Customer Concern'];
           
+          if (concernIndex < 0 || concernIndex >= currentConcerns.length) {
+            return ro;
+          }
+
           if (currentConcerns.length <= 1) {
             // Keep at least one concern
             return ro;
           }
+
+          deletedLineTitle = currentConcerns[concernIndex];
+          const targetLineNum = concernIndex + 1;
 
           const newConcerns = currentConcerns.filter((_, i) => i !== concernIndex);
           const newPayTypes = (ro.concernPayTypes || []).filter((_, i) => i !== concernIndex);
@@ -5095,7 +5103,107 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const newTechNames = (ro.concernTechNames || []).filter((_, i) => i !== concernIndex);
           const newCauses = (ro.concernCauses || []).filter((_, i) => i !== concernIndex);
           const newCorrections = (ro.concernCorrections || []).filter((_, i) => i !== concernIndex);
+          const newSources = (ro.concernSources || []).filter((_, i) => i !== concernIndex);
+
           const newStatuses = (ro.concernStatuses || []).filter((_, i) => i !== concernIndex);
+
+          // Clean up & shift quote labor and parts items
+          let updatedQuote = ro.quote;
+          if (ro.quote) {
+            const filteredLabor = (ro.quote.laborItems || [])
+              .filter(l => (l.roLineNumber || 1) !== targetLineNum)
+              .map(l => {
+                const lNum = l.roLineNumber || 1;
+                return lNum > targetLineNum ? { ...l, roLineNumber: lNum - 1 } : l;
+              });
+
+            const filteredQuoteParts = (ro.quote.partsItems || [])
+              .filter(p => (p.roLineNumber || 1) !== targetLineNum)
+              .map(p => {
+                const pNum = p.roLineNumber || 1;
+                return pNum > targetLineNum ? { ...p, roLineNumber: pNum - 1 } : p;
+              });
+
+            const nextLineStatuses: Record<number, LineApprovalStatus> = {};
+            if (ro.quote.lineStatuses) {
+              Object.keys(ro.quote.lineStatuses).forEach(k => {
+                const lNum = Number(k);
+                if (lNum < targetLineNum) {
+                  nextLineStatuses[lNum] = ro.quote!.lineStatuses![lNum];
+                } else if (lNum > targetLineNum) {
+                  nextLineStatuses[lNum - 1] = ro.quote!.lineStatuses![lNum];
+                }
+              });
+            }
+
+            const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
+            const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
+            const totalPartsCost = Number(filteredQuoteParts.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
+            const isExempt = ro.quote.isTaxExempt || false;
+            const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
+            const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
+            const rawShopSupplies = ro.quote.shopSuppliesFee !== undefined ? ro.quote.shopSuppliesFee : Math.min(35, Number((totalLaborCost * 0.05).toFixed(2)));
+            const shopSupplies = Math.min(35, rawShopSupplies);
+            const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
+
+            updatedQuote = {
+              ...ro.quote,
+              laborItems: filteredLabor,
+              partsItems: filteredQuoteParts,
+              lineStatuses: nextLineStatuses,
+              totalLaborHours,
+              totalLaborCost,
+              totalPartsCost,
+              shopSuppliesFee: shopSupplies,
+              taxAmount,
+              grandTotal,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+
+          // Clean up & shift ro.parts
+          const updatedParts = (ro.parts || [])
+            .filter(p => (p.roLineNumber || 1) !== targetLineNum)
+            .map(p => {
+              const pNum = p.roLineNumber || 1;
+              return pNum > targetLineNum ? { ...p, roLineNumber: pNum - 1 } : p;
+            });
+
+          // Check if any recommendation matched deletedLineTitle
+          let updatedRecommendations = ro.recommendations ? [...ro.recommendations] : [];
+          const recIdx = updatedRecommendations.findIndex(r => r.serviceName.trim().toLowerCase() === deletedLineTitle.trim().toLowerCase());
+          let linkedRecId: string | undefined;
+          if (recIdx >= 0) {
+            linkedRecId = updatedRecommendations[recIdx].id;
+            updatedRecommendations.splice(recIdx, 1);
+          }
+
+          // Reset linked inspection point to PASSED if found
+          let updatedInspection = ro.inspection;
+          if (ro.inspection && ro.inspection.items) {
+            const newItems = { ...ro.inspection.items };
+            let changed = false;
+            Object.keys(newItems).forEach(k => {
+              const item = newItems[k];
+              if (
+                (linkedRecId && item.recommendationId === linkedRecId) ||
+                (item.concern && item.concern.trim().toLowerCase() === deletedLineTitle.trim().toLowerCase()) ||
+                (item.name && item.name.trim().toLowerCase() === deletedLineTitle.trim().toLowerCase())
+              ) {
+                newItems[k] = {
+                  ...item,
+                  status: 'PASSED',
+                  recommendationId: undefined,
+                  notes: '',
+                  concern: undefined,
+                };
+                changed = true;
+              }
+            });
+            if (changed) {
+              updatedInspection = { ...ro.inspection, items: newItems };
+            }
+          }
 
           const primaryConcern = newConcerns[0] || 'Customer Concern';
 
@@ -5108,7 +5216,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             concernTechNames: newTechNames,
             concernCauses: newCauses,
             concernCorrections: newCorrections,
-            concernStatuses: newStatuses
+            concernStatuses: newStatuses,
+            concernSources: newSources,
+            parts: updatedParts,
+            quote: updatedQuote,
+            recommendations: updatedRecommendations,
+            inspection: updatedInspection,
+            history: [
+              ...ro.history,
+              {
+                id: `hist_${Date.now()}`,
+                status: ro.status,
+                updatedBy: currentUser.id,
+                updatedByName: currentUser.name,
+                userRole: currentUser.role,
+                timestamp: new Date().toISOString(),
+                notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) deleted Line ${targetLineNum} job: "${deletedLineTitle}"`,
+              },
+            ],
           };
           updatedRO = updatedItem;
           return updatedItem;
@@ -5126,7 +5251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedRO) {
       syncRepairOrder(updatedRO);
-      recordROChange(roId, `Removed Line ${concernIndex + 1} complaint`);
+      recordROChange(roId, `Removed Line ${concernIndex + 1} job: "${deletedLineTitle}"`);
     }
     return true;
   };

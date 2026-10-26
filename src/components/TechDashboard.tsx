@@ -277,7 +277,8 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
     deletePartItem,
     updatePartItem,
     updateRecommendedService,
-    deleteRecommendedService
+    deleteRecommendedService,
+    deleteRepairOrderConcern
   } = useApp();
 
   const canSelectPayType = currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR';
@@ -1036,6 +1037,24 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         />
                         <span className="text-xs font-black text-slate-600 pr-0.5">hrs</span>
                       </div>
+
+                      {/* Delete Line Button for tech-added lines / extra concerns */}
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete Line ${idx + 1} (${concernText})? This will remove this job and any associated labor/parts.`)) {
+                              deleteRepairOrderConcern(ro.id, idx);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 rounded-full text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                          title={`Delete Line ${idx + 1}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>Delete Job</span>
+                        </button>
+                      )}
 
                       {/* Request Parts directly to the right of hours entry box */}
                       {onRequestParts && (
@@ -1826,18 +1845,20 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         <span className="text-xs font-black text-slate-600 pr-0.5">hrs</span>
                       </div>
 
-                      {/* Remove Line Button directly to the right of hours */}
+                      {/* Delete Tech Added Job Button */}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteRecommendedService(ro.id, rec.id);
+                          if (window.confirm(`Delete Tech Added Job Line ${globalLineNum} ("${rec.serviceName}")? This will remove this job and reset the inspection finding.`)) {
+                            deleteRecommendedService(ro.id, rec.id);
+                          }
                         }}
                         className="px-3.5 py-1.5 rounded-full text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                        title={`Remove Line ${globalLineNum}`}
+                        title={`Delete Line ${globalLineNum} Tech Added Job`}
                       >
                         <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                        <span>Remove Line</span>
+                        <span>Delete Job</span>
                       </button>
 
                       {/* Request Parts for this line */}
