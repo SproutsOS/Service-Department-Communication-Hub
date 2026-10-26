@@ -40,7 +40,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
 import { ROStatus, RepairOrder, ConcernPayType, WarrantyOperationType } from '../types';
-import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField, sortROsNumerically, matchesROSearch } from '../utils/formatters';
+import { formatDateTime, formatEtaBadge, calculateDispatchedDuration, formatDurationSince, getDiagnosticStatusDetails, formatTimeOnly, parseLineIndexedField, sortROsNumerically, matchesROSearch, isTechAddedConcernLine } from '../utils/formatters';
 import { ROCard } from './ROCard';
 import { TechRecommendationsSection } from './TechRecommendationsSection';
 import { LinePartsSection } from './LinePartsSection';
@@ -660,7 +660,8 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
       newLinePayType, 
       undefined, 
       undefined, 
-      parsedHours ? Number(parsedHours) : undefined
+      parsedHours ? Number(parsedHours) : undefined,
+      'TECH'
     );
 
     if (added) {
@@ -1038,18 +1039,18 @@ const TechCauseCorrectionSection: React.FC<TechCauseCorrectionSectionProps> = ({
                         <span className="text-xs font-black text-slate-600 pr-0.5">hrs</span>
                       </div>
 
-                      {/* Delete Line Button for tech-added lines / extra concerns */}
-                      {idx > 0 && (
+                      {/* Delete Line Button ONLY for tech-added jobs / inspection findings (Customer concerns cannot be deleted) */}
+                      {isTechAddedConcernLine(ro, idx) && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`Delete Line ${idx + 1} (${concernText})? This will remove this job and any associated labor/parts.`)) {
+                            if (window.confirm(`Delete Tech Added Job Line ${idx + 1} (${concernText})? This will remove this job and any associated labor/parts.`)) {
                               deleteRepairOrderConcern(ro.id, idx);
                             }
                           }}
                           className="px-3.5 py-1.5 rounded-full text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                          title={`Delete Line ${idx + 1}`}
+                          title={`Delete Line ${idx + 1} Tech Added Job`}
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                           <span>Delete Job</span>

@@ -2515,7 +2515,7 @@ export const RODetailModal: React.FC = () => {
                   updateConcernPayType(selectedRO.id, idx, payType);
                 }}
                 onAddConcern={(text, payType, techId, techName) => {
-                  addRepairOrderConcern(selectedRO.id, text, payType, techId, techName);
+                  addRepairOrderConcern(selectedRO.id, text, payType, techId, techName, undefined, 'CUSTOMER');
                 }}
                 onOpenQuote={openQuoteModal}
               />

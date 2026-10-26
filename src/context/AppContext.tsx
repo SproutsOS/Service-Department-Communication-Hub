@@ -51,7 +51,7 @@ import { DEFAULT_INSPECTION_CHECKLIST } from '../data/defaultInspectionChecklist
 import { getInitialStaffLeaveEntries } from '../data/defaultStaffLeave';
 import { getInitialServiceAppointments } from '../data/defaultAppointments';
 import { calculateNextContactDate, formatContactType } from '../utils/cadenceUtils';
-import { cleanRO3700, PAY_TYPE_RATES } from '../utils/formatters';
+import { cleanRO3700, PAY_TYPE_RATES, isTechAddedConcernLine } from '../utils/formatters';
 import { 
   INITIAL_USERS, 
   INITIAL_REPAIR_ORDERS, 
@@ -242,7 +242,7 @@ interface AppContextType {
   updateRepairOrderId: (oldRoId: string, newRoId: string) => Promise<{ success: boolean; error?: string }>;
   updateRepairOrderDetails: (roId: string, updates: Partial<RepairOrder>, options?: { isAutoSave?: boolean }) => boolean;
   updateOutMileage: (roId: string, outMileage: number | undefined, notes?: string, completeRepair?: boolean) => boolean;
-  addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string) => boolean;
+  addRepairOrderConcern: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string, source?: 'CUSTOMER' | 'INSPECTION' | 'TECH') => boolean;
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: { isAutoSave?: boolean; notify?: boolean; concernCauses?: string[]; concernCorrections?: string[] }) => boolean;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => boolean;
   updateConcernTech: (roId: string, concernIndex: number, techId: string, techName?: string) => boolean;
@@ -4574,7 +4574,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     payType: ConcernPayType = 'CUSTOMER_PAY', 
     techId?: string, 
     techName?: string,
-    initialLaborHours?: number | string
+    initialLaborHours?: number | string,
+    source?: 'CUSTOMER' | 'INSPECTION' | 'TECH'
   ): boolean => {
     const cleanConcern = concernText.trim();
     if (!cleanConcern) return false;
@@ -4593,14 +4594,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const currentTechNames = ro.concernTechNames && ro.concernTechNames.length >= currentConcerns.length
             ? [...ro.concernTechNames]
             : currentConcerns.map((_, i) => ro.concernTechNames?.[i] || ro.techName);
+          const currentSources: ('CUSTOMER' | 'INSPECTION' | 'TECH')[] = ro.concernSources && ro.concernSources.length >= currentConcerns.length
+            ? [...ro.concernSources]
+            : currentConcerns.map((_, i) => ro.concernSources?.[i] || 'CUSTOMER');
 
           const finalTechId = techId || (currentUser.role === 'TECHNICIAN' ? currentUser.id : ro.techId);
           const finalTechName = techName || (techId ? users.find(u => u.id === techId)?.name : (currentUser.role === 'TECHNICIAN' ? currentUser.name : ro.techName));
+          const lineOrigin: 'CUSTOMER' | 'INSPECTION' | 'TECH' = source || (currentUser.role === 'TECHNICIAN' ? 'TECH' : 'CUSTOMER');
 
           currentConcerns.push(cleanConcern);
           currentPayTypes.push(payType);
           currentTechIds.push(finalTechId);
           currentTechNames.push(finalTechName);
+          currentSources.push(lineOrigin);
 
           const historyItem = {
             id: `hist_${Date.now()}`,
@@ -5086,6 +5092,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : [ro.primaryConcern || 'Customer Concern'];
           
           if (concernIndex < 0 || concernIndex >= currentConcerns.length) {
+            return ro;
+          }
+
+          // Strict restriction: ONLY jobs added by technicians (or MPI inspection findings) can be deleted.
+          // Customer concerns / advisor intake concerns CANNOT be deleted.
+          if (!isTechAddedConcernLine(ro, concernIndex)) {
+            console.warn(`Customer concerns cannot be deleted: Line ${concernIndex + 1}`);
             return ro;
           }
 

@@ -17,6 +17,7 @@ import {
   ExternalLink, 
   Save, 
   Check, 
+  X,
   Sparkles,
   ChevronDown,
   Layers,
@@ -27,7 +28,7 @@ import {
 } from 'lucide-react';
 import { RepairOrder, PartItem, PartStatus, LineApprovalStatus } from '../types';
 import { useApp } from '../context/AppContext';
-import { formatCurrency, formatDateTime } from '../utils/formatters';
+import { formatCurrency, formatDateTime, isTechAddedConcernLine } from '../utils/formatters';
 
 interface ROQuotePartsTrackerProps {
   ro: RepairOrder;
@@ -68,33 +69,109 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     markAllPartsOrderedOnRO, 
     toggleCustomerTaxExempt,
     deleteRepairOrderConcern,
+    addMultiplePartOrders,
     currentUser,
     activeRoleView
   } = useApp();
 
-  // Inline quick editing for a specific part (ETA, tracking, bin notes)
+  // Inline quick editing for a specific existing part (Part #, Description, Qty, Price, ETA, tracking, vendor, notes)
   const [editingPartId, setEditingPartId] = useState<string | null>(null);
+  const [inlinePartNumber, setInlinePartNumber] = useState<string>('');
+  const [inlineDescription, setInlineDescription] = useState<string>('');
+  const [inlineQty, setInlineQty] = useState<number>(1);
+  const [inlinePrice, setInlinePrice] = useState<string>('0.00');
   const [inlineEta, setInlineEta] = useState<string>('');
   const [inlineTracking, setInlineTracking] = useState<string>('');
   const [inlineNotes, setInlineNotes] = useState<string>('');
   const [inlineVendor, setInlineVendor] = useState<string>('');
+  const [focusField, setFocusField] = useState<'partNumber' | 'price' | 'vendor' | null>(null);
 
-  const handleStartInlineEdit = (part: PartItem) => {
+  // Inline adding new part directly to a line
+  const [inlineAddingLineNum, setInlineAddingLineNum] = useState<number | null>(null);
+  const [newLinePartNumber, setNewLinePartNumber] = useState<string>('');
+  const [newLineDescription, setNewLineDescription] = useState<string>('');
+  const [newLineQty, setNewLineQty] = useState<number>(1);
+  const [newLinePrice, setNewLinePrice] = useState<string>('0.00');
+  const [newLineVendor, setNewLineVendor] = useState<string>('Shop Inventory / Supplier');
+  const [newLineEta, setNewLineEta] = useState<string>('Pending Parts Counter');
+
+  const handleStartInlineEdit = (part: PartItem, fieldToFocus: 'partNumber' | 'price' | 'vendor' = 'partNumber') => {
     setEditingPartId(part.id);
+    setInlinePartNumber(part.partNumber && part.partNumber !== 'TBD' ? part.partNumber : '');
+    setInlineDescription(part.description || part.name || '');
+    setInlineQty(part.quantity || 1);
+    const pPrice = Number(part.price) || 0;
+    setInlinePrice(pPrice > 0 ? pPrice.toFixed(2) : '0.00');
     setInlineEta(part.estimatedArrival || '');
     setInlineTracking(part.trackingNumber || '');
     setInlineNotes(part.notes || '');
-    setInlineVendor(part.vendor || 'STELLANTIS');
+    setInlineVendor(part.vendor || 'Shop Inventory / Supplier');
+    setFocusField(fieldToFocus);
+    setInlineAddingLineNum(null);
+  };
+
+  const handleCancelInlineEdit = () => {
+    setEditingPartId(null);
+    setFocusField(null);
   };
 
   const handleSaveInlineEdit = (partId: string) => {
+    const rawPriceClean = inlinePrice ? String(inlinePrice).replace(/[^0-9.]/g, '') : '';
+    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
+      ? Number(Number(rawPriceClean).toFixed(2)) 
+      : 0;
+    const finalPartNumber = inlinePartNumber.trim().toUpperCase() || 'TBD';
+    const finalDescription = inlineDescription.trim() || 'Part Item';
+
     updatePartItem(ro.id, partId, {
+      partNumber: finalPartNumber,
+      description: finalDescription,
+      quantity: Math.max(1, Number(inlineQty) || 1),
+      price: parsedPrice,
       estimatedArrival: inlineEta.trim() || undefined,
       trackingNumber: inlineTracking.trim() || undefined,
       notes: inlineNotes.trim() || undefined,
       vendor: inlineVendor.trim() || undefined,
     });
     setEditingPartId(null);
+    setFocusField(null);
+  };
+
+  const handleStartInlineAdd = (lineNum: number) => {
+    setInlineAddingLineNum(lineNum);
+    setNewLinePartNumber('');
+    setNewLineDescription('');
+    setNewLineQty(1);
+    setNewLinePrice('0.00');
+    setNewLineVendor('Shop Inventory / Supplier');
+    setNewLineEta('Pending Parts Counter');
+    setEditingPartId(null);
+  };
+
+  const handleCancelInlineAdd = () => {
+    setInlineAddingLineNum(null);
+  };
+
+  const handleSaveInlineAdd = (lineNum: number) => {
+    const rawPriceClean = newLinePrice ? String(newLinePrice).replace(/[^0-9.]/g, '') : '';
+    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
+      ? Number(Number(rawPriceClean).toFixed(2)) 
+      : 0;
+
+    addMultiplePartOrders(ro.id, [{
+      partNumber: newLinePartNumber.trim().toUpperCase() || 'TBD',
+      description: newLineDescription.trim() || 'Part Item',
+      quantity: Math.max(1, Number(newLineQty) || 1),
+      price: parsedPrice,
+      vendor: newLineVendor.trim() || 'Shop Inventory / Supplier',
+      estimatedArrival: newLineEta.trim() || 'Pending Parts Counter',
+      status: 'REQUESTED',
+      requestType: 'QUOTE_ONLY',
+      roLineNumber: lineNum,
+      notes: `For Line ${lineNum}`
+    }]);
+
+    setInlineAddingLineNum(null);
   };
 
   const handleQuickStatusChange = (partId: string, newStatus: PartStatus) => {
@@ -377,7 +454,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => onAddNewPart(1)}
+            onClick={() => handleStartInlineAdd(1)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -431,24 +508,25 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onAddNewPart(lineNum)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer"
+                    onClick={() => handleStartInlineAdd(lineNum)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
                     title={`Add part directly to Line ${lineNum}`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Part</span>
+                    <span>+ Add Part</span>
                   </button>
 
-                  {cIdx > 0 && (
+                  {/* Delete Job ONLY for tech-added jobs / inspection findings (Customer concerns cannot be deleted) */}
+                  {isTechAddedConcernLine(ro, cIdx) && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Delete Line ${lineNum} (${concernText})? This will remove this job and its parts/labor.`)) {
+                        if (window.confirm(`Delete Tech Added Job Line ${lineNum} (${concernText})? This will remove this job and its parts/labor.`)) {
                           deleteRepairOrderConcern(ro.id, cIdx);
                         }
                       }}
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
-                      title={`Delete Line ${lineNum} Job`}
+                      title={`Delete Line ${lineNum} Tech Added Job`}
                     >
                       <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                       <span>Delete Job</span>
@@ -459,10 +537,18 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
 
               {/* Parts Table for this Line */}
               <div className="p-4 space-y-3">
-                {lineParts.length === 0 ? (
-                  <div className="py-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 space-y-1">
+                {lineParts.length === 0 && inlineAddingLineNum !== lineNum ? (
+                  <div className="py-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 space-y-2">
                     <p className="font-semibold text-slate-700">No parts assigned to Line {lineNum} yet</p>
-                    <p>Click <strong>"+ Add Part"</strong> to quote a part number, price, and track order status day-by-day.</p>
+                    <p>Click <strong>"+ Add Part"</strong> to enter the part number and price directly on this screen.</p>
+                    <button
+                      type="button"
+                      onClick={() => handleStartInlineAdd(lineNum)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Add Part Now</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -480,6 +566,151 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
+                        {/* New Part Inline Entry Row */}
+                        {inlineAddingLineNum === lineNum && (
+                          <tr className="bg-blue-50/70 border-2 border-blue-400 animate-in fade-in">
+                            <td className="py-2.5 px-3 align-top min-w-[180px]">
+                              <div className="space-y-1.5">
+                                <div>
+                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part #</span>
+                                  <input
+                                    type="text"
+                                    value={newLinePartNumber}
+                                    onChange={(e) => setNewLinePartNumber(e.target.value.toUpperCase())}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
+                                      if (e.key === 'Escape') handleCancelInlineAdd();
+                                    }}
+                                    placeholder="e.g. 68088686AA or TBD"
+                                    className="w-full text-xs font-mono font-black text-slate-950 p-1.5 bg-white border-2 border-blue-600 rounded-md focus:outline-none shadow-2xs"
+                                    autoFocus
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Description / Name</span>
+                                  <input
+                                    type="text"
+                                    value={newLineDescription}
+                                    onChange={(e) => setNewLineDescription(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
+                                      if (e.key === 'Escape') handleCancelInlineAdd();
+                                    }}
+                                    placeholder="Part description"
+                                    className="w-full text-xs font-medium text-slate-900 p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2 text-center align-top">
+                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block sm:hidden">Qty</span>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={newLineQty}
+                                onChange={(e) => setNewLineQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
+                                  if (e.key === 'Escape') handleCancelInlineAdd();
+                                }}
+                                className="w-14 text-xs font-black text-center p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-600 focus:outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-2 text-right align-top min-w-[110px]">
+                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block sm:hidden">Price</span>
+                              <div className="relative inline-block w-full">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs">$</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={newLinePrice}
+                                  onFocus={() => {
+                                    if (newLinePrice === '0' || newLinePrice === '0.00' || newLinePrice === '$0.00' || newLinePrice === '0.0') {
+                                      setNewLinePrice('');
+                                    }
+                                  }}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/[^0-9.]/g, '');
+                                    setNewLinePrice(val);
+                                  }}
+                                  onBlur={() => {
+                                    if (!newLinePrice || newLinePrice === '.' || isNaN(Number(newLinePrice))) {
+                                      setNewLinePrice('0.00');
+                                    } else {
+                                      setNewLinePrice(Number(newLinePrice).toFixed(2));
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
+                                    if (e.key === 'Escape') handleCancelInlineAdd();
+                                  }}
+                                  placeholder="0.00"
+                                  className="w-full pl-5 pr-2 py-1.5 text-xs text-right font-mono font-black text-slate-950 bg-white border-2 border-emerald-500 rounded-md focus:outline-none shadow-2xs"
+                                  title="Enter price with 2 decimal places"
+                                />
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right align-top font-mono font-black text-slate-900 min-w-[90px]">
+                              <div className="pt-2 text-sm font-black font-mono text-emerald-700">
+                                ${((Number(newLineQty) || 1) * (Number(newLinePrice) || 0)).toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 align-top min-w-[130px]">
+                              <input
+                                type="text"
+                                value={newLineVendor}
+                                onChange={(e) => setNewLineVendor(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
+                                  if (e.key === 'Escape') handleCancelInlineAdd();
+                                }}
+                                placeholder="Supplier / Vendor"
+                                className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-medium focus:border-blue-600 focus:outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 align-top min-w-[180px]">
+                              <input
+                                type="text"
+                                value={newLineEta}
+                                onChange={(e) => setNewLineEta(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
+                                  if (e.key === 'Escape') handleCancelInlineAdd();
+                                }}
+                                placeholder="ETA (e.g. Tomorrow 10am)"
+                                className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-600 focus:outline-none"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 align-top">
+                              <span className="text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg inline-block shadow-2xs">
+                                🟧 Needs Order
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center align-top">
+                              <div className="flex items-center justify-center gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveInlineAdd(lineNum)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+                                  title="Save new part"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelInlineAdd}
+                                  className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-2xs cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
                         {lineParts.map(part => {
                           const statusConf = PART_STATUS_CONFIG[part.status] || PART_STATUS_CONFIG.ORDERED;
                           const StatusIcon = statusConf.icon;
@@ -489,78 +720,219 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                           const isReceived = part.status === 'RECEIVED' || part.status === 'ISSUED_TO_TECH' || part.status === 'IN_STOCK';
 
                           return (
-                            <tr key={part.id} className={`hover:bg-slate-50/70 transition-colors ${isReceived ? 'bg-emerald-50/30' : ''}`}>
+                            <tr key={part.id} className={`hover:bg-slate-50/70 transition-colors ${isInline ? 'bg-amber-50/40' : isReceived ? 'bg-emerald-50/30' : ''}`}>
                               {/* Part Number & Name */}
-                              <td className="py-3 px-3">
-                                <div className="font-mono font-bold text-slate-900 text-xs">
-                                  {part.partNumber || 'OEM-PART'}
-                                </div>
-                                <div className="text-slate-700 font-medium text-xs">
-                                  {part.description || part.name}
-                                </div>
+                              <td className="py-2.5 px-3 align-top min-w-[180px]">
+                                {isInline ? (
+                                  <div className="space-y-1.5">
+                                    <div>
+                                      <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part #</span>
+                                      <input
+                                        type="text"
+                                        value={inlinePartNumber}
+                                        onChange={(e) => setInlinePartNumber(e.target.value.toUpperCase())}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                          if (e.key === 'Escape') handleCancelInlineEdit();
+                                        }}
+                                        placeholder="e.g. 68088686AA or TBD"
+                                        className="w-full text-xs font-mono font-black text-slate-950 p-1.5 bg-white border-2 border-blue-500 rounded-md focus:outline-none shadow-2xs"
+                                        autoFocus={focusField === 'partNumber'}
+                                      />
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Description / Name</span>
+                                      <input
+                                        type="text"
+                                        value={inlineDescription}
+                                        onChange={(e) => setInlineDescription(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                          if (e.key === 'Escape') handleCancelInlineEdit();
+                                        }}
+                                        placeholder="Part name or description"
+                                        className="w-full text-xs font-medium text-slate-900 p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div 
+                                    onClick={() => handleStartInlineEdit(part, 'partNumber')}
+                                    className="cursor-pointer group py-1 rounded hover:bg-blue-50/60 transition-colors px-1 -mx-1"
+                                    title="Click to put in Part # and Price inline"
+                                  >
+                                    <div className="font-mono font-bold text-slate-900 text-xs flex items-center gap-1.5 group-hover:text-blue-700">
+                                      <span>{part.partNumber || 'TBD'}</span>
+                                      <span className="text-[10px] text-blue-600 font-sans font-normal opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                        <Edit3 className="w-2.5 h-2.5" /> Edit
+                                      </span>
+                                    </div>
+                                    <div className="text-slate-700 font-medium text-xs">
+                                      {part.description || part.name || 'Part Item'}
+                                    </div>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Qty */}
-                              <td className="py-3 px-2 text-center font-bold text-slate-800">
-                                {part.quantity || 1}
+                              <td className="py-2.5 px-2 text-center align-top">
+                                {isInline ? (
+                                  <>
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block sm:hidden">Qty</span>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      value={inlineQty}
+                                      onChange={(e) => setInlineQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                      }}
+                                      className="w-14 text-xs font-black text-center p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
+                                    />
+                                  </>
+                                ) : (
+                                  <span 
+                                    onClick={() => handleStartInlineEdit(part, 'partNumber')}
+                                    className="font-bold text-slate-800 cursor-pointer hover:text-blue-700 py-1 inline-block"
+                                    title="Click to edit Qty"
+                                  >
+                                    {part.quantity || 1}
+                                  </span>
+                                )}
                               </td>
 
                               {/* Unit Price */}
-                              <td className="py-3 px-2 text-right font-mono text-slate-700">
-                                {formatCurrency(partPrice)}
+                              <td className="py-2.5 px-2 text-right align-top min-w-[110px]">
+                                {isInline ? (
+                                  <>
+                                    <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider block sm:hidden">Price</span>
+                                    <div className="relative inline-block w-full">
+                                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs">$</span>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={inlinePrice}
+                                        onFocus={() => {
+                                          if (inlinePrice === '0' || inlinePrice === '0.00' || inlinePrice === '$0.00' || inlinePrice === '0.0') {
+                                            setInlinePrice('');
+                                          }
+                                        }}
+                                        onChange={(e) => {
+                                          const val = e.target.value.replace(/[^0-9.]/g, '');
+                                          setInlinePrice(val);
+                                        }}
+                                        onBlur={() => {
+                                          if (!inlinePrice || inlinePrice === '.' || isNaN(Number(inlinePrice))) {
+                                            setInlinePrice('0.00');
+                                          } else {
+                                            setInlinePrice(Number(inlinePrice).toFixed(2));
+                                          }
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                          if (e.key === 'Escape') handleCancelInlineEdit();
+                                        }}
+                                        placeholder="0.00"
+                                        className="w-full pl-5 pr-2 py-1.5 text-xs text-right font-mono font-black text-slate-950 bg-white border-2 border-emerald-500 rounded-md focus:outline-none shadow-2xs"
+                                        autoFocus={focusField === 'price'}
+                                        title="Enter unit price in dollars and cents (e.g. 10.00)"
+                                      />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div 
+                                    onClick={() => handleStartInlineEdit(part, 'price')}
+                                    className="font-mono font-bold text-slate-700 cursor-pointer group hover:bg-emerald-50/60 transition-colors py-1 px-1 -mx-1 rounded"
+                                    title="Click to put in Price directly"
+                                  >
+                                    <div className="flex items-center justify-end gap-1.5 group-hover:text-emerald-700 font-black">
+                                      <span>{formatCurrency(partPrice)}</span>
+                                      <span className="text-[10px] text-emerald-600 font-sans font-normal opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                        <Edit3 className="w-2.5 h-2.5" />
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Total */}
-                              <td className="py-3 px-2.5 text-right font-mono font-black text-slate-900">
-                                {formatCurrency(partTotal)}
+                              <td className="py-2.5 px-2.5 text-right align-top font-mono font-black text-slate-900 min-w-[90px]">
+                                {isInline ? (
+                                  <div className="pt-2 text-sm font-black font-mono text-emerald-700">
+                                    ${((Number(inlineQty) || 1) * (Number(inlinePrice) || 0)).toFixed(2)}
+                                  </div>
+                                ) : (
+                                  <div className="py-1">
+                                    {formatCurrency(partTotal)}
+                                  </div>
+                                )}
                               </td>
 
                               {/* Vendor */}
-                              <td className="py-3 px-3">
+                              <td className="py-2.5 px-3 align-top min-w-[130px]">
                                 {isInline ? (
                                   <input
                                     type="text"
                                     value={inlineVendor}
                                     onChange={(e) => setInlineVendor(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                      if (e.key === 'Escape') handleCancelInlineEdit();
+                                    }}
                                     placeholder="e.g. MOPAR / AutoZone"
-                                    className="w-28 text-xs p-1 bg-white border border-slate-300 rounded font-medium"
+                                    className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md font-medium text-slate-900 focus:border-blue-500 focus:outline-none"
+                                    autoFocus={focusField === 'vendor'}
                                   />
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 font-bold text-slate-700">
+                                  <span className="inline-flex items-center gap-1 font-bold text-slate-700 py-1">
                                     <Building2 className="w-3 h-3 text-slate-400" />
-                                    <span>{part.vendor || 'STELLANTIS'}</span>
+                                    <span>{part.vendor || 'Shop Inventory / Supplier'}</span>
                                   </span>
                                 )}
                               </td>
 
                               {/* Tracking & ETA */}
-                              <td className="py-3 px-3">
+                              <td className="py-2.5 px-3 align-top min-w-[180px]">
                                 {isInline ? (
                                   <div className="space-y-1">
                                     <input
                                       type="text"
                                       value={inlineEta}
                                       onChange={(e) => setInlineEta(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                      }}
                                       placeholder="ETA: e.g. Tomorrow 10am"
-                                      className="w-full text-xs p-1 bg-white border border-slate-300 rounded"
+                                      className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
                                     />
                                     <input
                                       type="text"
                                       value={inlineTracking}
                                       onChange={(e) => setInlineTracking(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                      }}
                                       placeholder="Tracking # / PO #"
-                                      className="w-full text-xs p-1 bg-white border border-slate-300 rounded font-mono"
+                                      className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md font-mono focus:border-blue-500 focus:outline-none"
                                     />
                                     <input
                                       type="text"
                                       value={inlineNotes}
                                       onChange={(e) => setInlineNotes(e.target.value)}
-                                      placeholder="Staging Shelf / Bin #"
-                                      className="w-full text-xs p-1 bg-white border border-slate-300 rounded"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                      }}
+                                      placeholder="Notes / Staging Bin"
+                                      className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
                                     />
                                   </div>
                                 ) : (
-                                  <div className="space-y-0.5">
+                                  <div className="space-y-0.5 py-1">
                                     <div className="font-bold text-slate-800 flex items-center gap-1">
                                       <Clock className="w-3 h-3 text-slate-400" />
                                       <span>{part.estimatedArrival || 'ETA Pending'}</span>
@@ -582,8 +954,8 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               </td>
 
                               {/* Status Dropdown Pill (Click to update day by day!) */}
-                              <td className="py-3 px-3">
-                                <div className="relative inline-block w-44">
+                              <td className="py-2.5 px-3 align-top">
+                                <div className="relative inline-block w-44 pt-0.5">
                                   <select
                                     value={part.status}
                                     onChange={(e) => handleQuickStatusChange(part.id, e.target.value as PartStatus)}
@@ -606,24 +978,35 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               </td>
 
                               {/* Actions */}
-                              <td className="py-3 px-2 text-center">
-                                <div className="flex items-center justify-center gap-1">
+                              <td className="py-2.5 px-2 text-center align-top">
+                                <div className="flex items-center justify-center gap-1.5 pt-1">
                                   {isInline ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveInlineEdit(part.id)}
-                                      className="p-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
-                                      title="Save tracking & ETA notes"
-                                    >
-                                      <Save className="w-3.5 h-3.5" />
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveInlineEdit(part.id)}
+                                        className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+                                        title="Save Part #, Price, Qty, and Tracking"
+                                      >
+                                        <Save className="w-3.5 h-3.5" />
+                                        <span>Save</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleCancelInlineEdit}
+                                        className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-2xs cursor-pointer"
+                                        title="Cancel"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
                                   ) : (
                                     <>
                                       {!isReceived && (
                                         <button
                                           type="button"
                                           onClick={() => handleMarkReceived(part.id)}
-                                          className="p-1 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 shadow-2xs cursor-pointer"
+                                          className="p-1.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 shadow-2xs cursor-pointer"
                                           title="Mark Received / Arrived today"
                                         >
                                           <Check className="w-3.5 h-3.5 text-emerald-700" />
@@ -631,16 +1014,16 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                       )}
                                       <button
                                         type="button"
-                                        onClick={() => handleStartInlineEdit(part)}
-                                        className="p-1 rounded-md hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-                                        title="Quick-edit ETA, tracking #, and bin notes"
+                                        onClick={() => handleStartInlineEdit(part, 'partNumber')}
+                                        className="p-1.5 rounded-md hover:bg-blue-100 text-slate-700 hover:text-blue-700 transition-colors cursor-pointer border border-transparent hover:border-blue-300"
+                                        title="Edit Part #, Price, Qty, and Tracking inline"
                                       >
                                         <Edit3 className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => deletePartItem(ro.id, part.id)}
-                                        className="p-1 rounded-md hover:bg-red-100 text-red-600 transition-colors cursor-pointer"
+                                        className="p-1.5 rounded-md hover:bg-red-100 text-red-600 transition-colors cursor-pointer"
                                         title="Remove part from quote"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />

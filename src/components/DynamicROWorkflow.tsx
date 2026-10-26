@@ -71,7 +71,7 @@ interface DynamicROWorkflowProps {
   updateTechCauseAndCorrection: (roId: string, cause: string, correction: string, options?: any) => void;
   updateConcernPayType: (roId: string, concernIndex: number, payType: ConcernPayType) => void;
   updateConcernTech: (roId: string, concernIndex: number, techId?: string, techName?: string) => void;
-  addRepairOrderConcern?: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string) => boolean;
+  addRepairOrderConcern?: (roId: string, concernText: string, payType?: ConcernPayType, techId?: string, techName?: string, initialLaborHours?: number | string, source?: 'CUSTOMER' | 'INSPECTION' | 'TECH') => boolean;
   isTechScreen?: boolean;
 }
 
@@ -664,7 +664,9 @@ export const DynamicROWorkflow: React.FC<DynamicROWorkflowProps> = ({
                             newConcernText.trim(), 
                             newConcernPayType, 
                             chosenTech?.id, 
-                            chosenTech?.name
+                            chosenTech?.name,
+                            undefined,
+                            'CUSTOMER'
                           );
                         }
                         setNewConcernText('');

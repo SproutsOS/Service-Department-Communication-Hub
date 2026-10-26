@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { RepairOrder, User as AppUser, ConcernPayType, LineApprovalStatus } from '../types';
 import { useApp } from '../context/AppContext';
-import { cleanRO3700 } from '../utils/formatters';
+import { cleanRO3700, isTechAddedConcernLine } from '../utils/formatters';
 import { LinePartsSection } from './LinePartsSection';
 import { LinePhotoSection } from './LinePhotoSection';
 
@@ -433,17 +433,17 @@ export const ROLineBreakdown: React.FC<ROLineBreakdownProps> = ({
                     </button>
                   </div>
 
-                  {/* Delete Tech Added Job / Extra Line */}
-                  {(idx > 0 || isInspectionFinding) && (
+                  {/* Delete Tech Added Job ONLY (Customer concerns can never be deleted) */}
+                  {isTechAddedConcernLine(ro, idx) && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Delete Job Line ${lineNum} (${concernText})? This will remove this job and any associated labor/parts.`)) {
+                        if (window.confirm(`Delete Tech Added Job Line ${lineNum} (${concernText})? This will remove this job and any associated labor/parts.`)) {
                           deleteRepairOrderConcern(ro.id, idx);
                         }
                       }}
                       className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 hover:text-rose-900 border border-rose-300 rounded-lg shadow-2xs transition-colors cursor-pointer"
-                      title={`Delete Line ${lineNum} Job`}
+                      title={`Delete Line ${lineNum} Tech Added Job`}
                     >
                       <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                       <span>Delete Job</span>

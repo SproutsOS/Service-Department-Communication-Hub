@@ -705,3 +705,50 @@ export function matchesROSearch(
   return false;
 }
 
+/**
+ * Determines whether a specific concern line was added by a technician
+ * (or generated from MPI inspection findings / tech recommendations).
+ * Returns FALSE for all original customer complaints / advisor intake concerns.
+ * Only lines that return TRUE are eligible to be deleted.
+ */
+export function isTechAddedConcernLine(ro: RepairOrder | null | undefined, concernIndex: number): boolean {
+  if (!ro) return false;
+  const concerns = ro.concerns && ro.concerns.length > 0 
+    ? ro.concerns 
+    : (ro.primaryConcern ? [ro.primaryConcern] : []);
+  
+  if (concernIndex < 0 || concernIndex >= concerns.length) return false;
+
+  // Explicit customer concern check: Customer concerns can NEVER be deleted
+  if (ro.concernSources?.[concernIndex] === 'CUSTOMER') {
+    return false;
+  }
+
+  // Explicit tech addition or inspection finding source
+  if (ro.concernSources?.[concernIndex] === 'TECH' || ro.concernSources?.[concernIndex] === 'INSPECTION') {
+    return true;
+  }
+
+  const concernText = concerns[concernIndex] || '';
+
+  // Check if it matches a technician recommendation
+  if (ro.recommendations && ro.recommendations.some(r => 
+    r.serviceName.trim().toLowerCase() === concernText.trim().toLowerCase() ||
+    (r.notes && r.notes.trim().toLowerCase().includes(concernText.trim().toLowerCase()))
+  )) {
+    return true;
+  }
+
+  // Check if it matches an inspection finding item
+  if (ro.inspection?.items && Object.values(ro.inspection.items).some(item => 
+    (item.status === 'IMMEDIATE_ATTENTION' || item.status === 'FUTURE_ATTENTION') &&
+    ((item.concern && item.concern.trim().toLowerCase() === concernText.trim().toLowerCase()) ||
+     (item.name && item.name.trim().toLowerCase() === concernText.trim().toLowerCase()))
+  )) {
+    return true;
+  }
+
+  // If not explicitly tech/inspection, default to false (customer concern cannot be deleted)
+  return false;
+}
+

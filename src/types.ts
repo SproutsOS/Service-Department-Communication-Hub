@@ -193,7 +193,7 @@ export interface RepairOrder {
   concernCauses?: string[]; // Line-by-line diagnostic findings (Line 1, Line 2, etc.)
   concernCorrections?: string[]; // Line-by-line repair corrections (Line 1, Line 2, etc.)
   concernStatuses?: LineApprovalStatus[]; // Line-by-line customer approval status (Line 1, Line 2, etc.)
-  concernSources?: ('CUSTOMER' | 'INSPECTION')[]; // Line origin: Customer stated complaint or 21-point inspection finding
+  concernSources?: ('CUSTOMER' | 'INSPECTION' | 'TECH')[]; // Line origin: Customer stated complaint, 21-point inspection finding, or Tech added job
   parts: PartItem[];
   messages: Message[];
   recommendations?: RecommendedService[]; // Tech additional requested items (air filter, tires, cabin air, scheduled maint, etc.)
