@@ -5095,10 +5095,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Delete a job / concern line from the repair order (Allows Techs, Advisors, and Managers to delete tech-added jobs)
+  // Delete a job / concern line from the repair order (Strictly restricted to the Service Manager - no one else)
   const deleteRepairOrderConcern = (roId: string, concernIndex: number): boolean => {
-    if (currentUser.role === 'SALES' && activeRoleView === 'SALES') {
-      console.warn('Deleting job lines is not permitted in read-only Sales view');
+    const isServiceManager = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
+    if (!isServiceManager) {
+      console.warn('Permission Denied: Deleting jobs from repair orders is strictly restricted to the Service Manager.');
       return false;
     }
 
@@ -5115,15 +5116,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return ro;
           }
 
-          // Strict restriction: ONLY jobs added by technicians (or MPI inspection findings) can be deleted.
-          // Customer concerns / advisor intake concerns CANNOT be deleted.
-          if (!isTechAddedConcernLine(ro, concernIndex)) {
-            console.warn(`Customer concerns cannot be deleted: Line ${concernIndex + 1}`);
-            return ro;
-          }
-
           if (currentConcerns.length <= 1) {
-            // Keep at least one concern
+            // Keep at least one concern on the repair order
+            console.warn(`Cannot delete the only concern on RO #${roId}. At least one job must remain.`);
             return ro;
           }
 
@@ -5523,8 +5518,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   };
 
-  // Delete a recommended service from RO
+  // Delete a recommended service from RO (Strictly restricted to the Service Manager - no one else)
   const deleteRecommendedService = (roId: string, recId: string): boolean => {
+    const isServiceManager = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
+    if (!isServiceManager) {
+      console.warn('Permission Denied: Deleting recommended services / jobs is strictly restricted to the Service Manager.');
+      return false;
+    }
+
     let syncedRO: RepairOrder | null = null;
 
     setRepairOrders(prev => {
