@@ -2481,9 +2481,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
         const totalLaborCost = mergedQuote.totalLaborCost || 0;
-        const supplies = mergedQuote.shopSuppliesFee || 0;
-        const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+        const supplies = Math.min(35.00, Number(mergedQuote.shopSuppliesFee) || 0);
+        const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
+        const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
         const taxableAmount = totalLaborCost + totalPartsCost;
+        // Sales tax is never capped at $35; only shop supplies is capped at $35
         const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
         const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
@@ -2491,6 +2493,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...mergedQuote,
           partsItems: nextPartsItems,
           totalPartsCost,
+          shopSuppliesFee: supplies,
+          isTaxExempt: isExempt,
+          taxRate,
           taxAmount,
           grandTotal,
         };
@@ -2968,9 +2973,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const totalPartsCost = Number(nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
       const totalLaborCost = Number((mergedQuote.totalLaborCost || 0).toFixed(2));
-      const supplies = Number((mergedQuote.shopSuppliesFee || 0).toFixed(2));
-      const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+      const supplies = Math.min(35.00, Number((mergedQuote.shopSuppliesFee || 0).toFixed(2)));
+      const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
+      const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
       const taxableAmount = totalLaborCost + totalPartsCost;
+      // Sales tax is never capped at $35; only shop supplies is capped at $35
       const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
       const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
@@ -2978,6 +2985,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...mergedQuote,
         partsItems: nextPartsItems,
         totalPartsCost,
+        shopSuppliesFee: supplies,
+        isTaxExempt: isExempt,
+        taxRate,
         taxAmount,
         grandTotal,
         updatedAt: new Date().toISOString(),
@@ -3018,9 +3028,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextPartsItems = mergedQuote.partsItems.filter(qp => qp.sourcePartId !== partId);
       const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
       const totalLaborCost = mergedQuote.totalLaborCost || 0;
-      const supplies = mergedQuote.shopSuppliesFee || 0;
-      const taxRate = mergedQuote.isTaxExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+      const supplies = Math.min(35.00, Number(mergedQuote.shopSuppliesFee) || 0);
+      const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
+      const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
       const taxableAmount = totalLaborCost + totalPartsCost;
+      // Sales tax is never capped at $35; only shop supplies is capped at $35
       const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
       const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
@@ -3028,6 +3040,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...mergedQuote,
         partsItems: nextPartsItems,
         totalPartsCost,
+        shopSuppliesFee: supplies,
+        isTaxExempt: isExempt,
+        taxRate,
         taxAmount,
         grandTotal,
       };
@@ -4241,11 +4256,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const q = targetRO.quote;
       const curLaborCost = Number((q.totalLaborCost || 0).toFixed(2));
       const curPartsCost = Number((q.totalPartsCost || 0).toFixed(2));
-      const curShopSupplies = Number((q.shopSuppliesFee || 0).toFixed(2));
+      const curShopSupplies = Math.min(35.00, Number((q.shopSuppliesFee || 0).toFixed(2)));
       
-      const newTaxRate = nextIsTaxExempt ? 0 : 0.07;
+      const newTaxRate = nextIsTaxExempt ? 0 : (q.taxRate && q.taxRate > 0 ? q.taxRate : 0.07);
       const taxableAmount = curLaborCost + curPartsCost;
-      const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * 0.07).toFixed(2));
+      // Sales tax is never capped at $35; only shop supplies is capped at $35
+      const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * newTaxRate).toFixed(2));
       const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
 
       updatedQuote = {
@@ -4693,11 +4709,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             const totalLaborHours = Number(mirroredItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
             const totalLaborCost = Number(mirroredItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
-            const isExempt = ro.isTaxExempt || false;
+            const isExempt = Boolean(ro.isTaxExempt);
             const taxRate = isExempt ? 0 : 0.07;
             const fivePercent = totalLaborCost * 0.05;
+            // Shop supplies is capped at $35.00
             const calcSupplies = Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : 25).toFixed(2));
-            const grandTotal = Number((totalLaborCost + calcSupplies).toFixed(2));
+            const taxableAmount = totalLaborCost;
+            // Sales tax is never capped at $35; only shop supplies is capped at $35
+            const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
+            const grandTotal = Number((totalLaborCost + calcSupplies + taxAmount).toFixed(2));
 
             nextQuote = {
               id: `quote_${Date.now()}`,
@@ -4712,7 +4732,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               shopSuppliesFee: calcSupplies,
               isTaxExempt: isExempt,
               taxRate,
-              taxAmount: 0,
+              taxAmount,
               grandTotal,
               defaultLaborRate: lineRate,
               payType,
@@ -5152,8 +5172,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
             const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
             const totalPartsCost = Number(filteredQuoteParts.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
-            const isExempt = ro.quote.isTaxExempt || false;
+            const isExempt = Boolean(ro.isTaxExempt || ro.quote.isTaxExempt);
             const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
+            // Sales tax is never capped at $35; only shop supplies is capped at $35
             const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
             const rawShopSupplies = ro.quote.shopSuppliesFee !== undefined ? ro.quote.shopSuppliesFee : Math.min(35, Number((totalLaborCost * 0.05).toFixed(2)));
             const shopSupplies = Math.min(35, rawShopSupplies);
@@ -5803,10 +5824,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const totalLaborHours = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
             const totalLaborCost = Number(filteredLabor.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
             const totalPartsCost = Number(targetRO.quote.totalPartsCost || 0);
-            const isExempt = targetRO.quote.isTaxExempt || false;
+            const isExempt = Boolean(targetRO.isTaxExempt || targetRO.quote.isTaxExempt);
             const taxRate = isExempt ? 0 : (targetRO.quote.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
+            // Sales tax is never capped at $35; only shop supplies is capped at $35
             const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
-            const shopSupplies = targetRO.quote.shopSuppliesFee || 0;
+            const shopSupplies = Math.min(35.00, Number(targetRO.quote.shopSuppliesFee) || 0);
             const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
 
             updatedQuote = {
@@ -6592,9 +6614,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date().toISOString();
     const nextStatus: QuoteStatus = submitToAdvisor ? 'SUBMITTED' : (quote.status || 'DRAFT');
     
-    const isExempt = targetRO.isTaxExempt || quote.isTaxExempt;
+    const isExempt = Boolean(targetRO.isTaxExempt || quote.isTaxExempt);
     const finalTaxRate = isExempt ? 0 : (quote.taxRate !== undefined ? quote.taxRate : 0.07);
     const taxableAmount = (Number(quote.totalLaborCost) || 0) + (Number(quote.totalPartsCost) || 0);
+    // Sales tax is never capped at $35; only shop supplies is capped at $35
     const finalTaxAmount = isExempt ? 0 : Number((taxableAmount * finalTaxRate).toFixed(2));
     
     // Automatically charge Shop Supplies unless explicitly unchecked (applyShopSupplies === false)
@@ -6877,10 +6900,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const totalLaborHours = Number(updatedLaborItems.reduce((acc, l) => acc + (Number(l.laborHours) || 0), 0).toFixed(1));
     const totalLaborCost = Number(updatedLaborItems.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0).toFixed(2));
     const totalPartsCost = targetRO.quote?.totalPartsCost || 0;
-    const shopSuppliesFee = targetRO.quote?.shopSuppliesFee || 0;
-    const isExempt = targetRO.isTaxExempt || targetRO.quote?.isTaxExempt;
+    const shopSuppliesFee = Math.min(35.00, Number(targetRO.quote?.shopSuppliesFee) || 0);
+    const isExempt = Boolean(targetRO.isTaxExempt || targetRO.quote?.isTaxExempt);
     const taxRate = isExempt ? 0 : (targetRO.quote?.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
     const taxableAmount = totalLaborCost + totalPartsCost;
+    // Sales tax is never capped at $35; only shop supplies is capped at $35
     const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
     const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 

@@ -221,13 +221,14 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   // Shop Supplies (capped at $35.00)
   const applySupplies = quote?.applyShopSupplies ?? true;
   const shopSuppliesFee = applySupplies 
-    ? (quote?.shopSuppliesFee !== undefined ? quote.shopSuppliesFee : Math.min(35.00, Number((totalLaborCost * 0.08).toFixed(2))))
+    ? (quote?.shopSuppliesFee !== undefined ? Math.min(35.00, Number(quote.shopSuppliesFee)) : Math.min(35.00, Number((totalLaborCost * 0.08).toFixed(2))))
     : 0;
 
-  // Tax & Exemption
+  // Tax & Exemption - Taxes have NO cap, only Shop Supplies is capped at $35.00
   const isTaxExempt = Boolean(ro.isTaxExempt || quote?.isTaxExempt);
   const taxRate = isTaxExempt ? 0 : (quote?.taxRate ?? 0.07);
   const taxableAmount = totalLaborCost + totalPartsCost;
+  // Sales tax is never capped at $35; only shop supplies is capped at $35
   const taxAmount = isTaxExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
   const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
