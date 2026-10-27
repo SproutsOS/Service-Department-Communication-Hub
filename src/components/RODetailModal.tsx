@@ -1392,7 +1392,7 @@ export const RODetailModal: React.FC = () => {
             title="Quoted Services, Parts Ordering & Daily Status Pipeline"
           >
             <Receipt className={`w-3.5 h-3.5 ${activeTab === 'QUOTE_PARTS' ? 'text-slate-950' : 'text-amber-600'}`} />
-            <span>Quote & Parts Tracker</span>
+            <span>Quote & Working Order</span>
             {(selectedRO.parts?.length || 0) > 0 && (
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
                 activeTab === 'QUOTE_PARTS' ? 'bg-amber-700 text-amber-100' : 'bg-amber-100 text-amber-900 border border-amber-300'

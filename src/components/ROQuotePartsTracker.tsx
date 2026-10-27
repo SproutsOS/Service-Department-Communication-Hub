@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Package, 
   Truck, 
@@ -11,24 +11,25 @@ import {
   Trash2, 
   Printer, 
   Receipt, 
-  DollarSign, 
-  Calendar, 
-  MapPin, 
-  ExternalLink, 
   Save, 
   Check, 
   X,
-  Sparkles,
-  ChevronDown,
   Layers,
-  ArrowRight,
   ShieldCheck,
   Building2,
-  Tag
+  User as UserIcon,
+  Wrench,
+  FileText,
+  HelpCircle,
+  CheckSquare,
+  Car,
+  Calendar,
+  Phone,
+  Hash
 } from 'lucide-react';
-import { RepairOrder, PartItem, PartStatus, LineApprovalStatus } from '../types';
+import { RepairOrder, PartItem, PartStatus, ConcernPayType } from '../types';
 import { useApp } from '../context/AppContext';
-import { formatCurrency, formatDateTime, isTechAddedConcernLine } from '../utils/formatters';
+import { formatCurrency, PAY_TYPE_RATES } from '../utils/formatters';
 
 interface ROQuotePartsTrackerProps {
   ro: RepairOrder;
@@ -59,8 +60,6 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   ro,
   onOpenQuoteModal,
   onOpenPrintModal,
-  onOpenEditPart,
-  onAddNewPart,
 }) => {
   const { 
     updatePartStatus, 
@@ -70,11 +69,22 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     toggleCustomerTaxExempt,
     deleteRepairOrderConcern,
     addMultiplePartOrders,
+    addRepairOrderConcern,
+    updateRepairOrderConcernText,
+    updateTechCauseAndCorrection,
+    updateConcernPayType,
+    updateConcernTech,
+    updateLineLaborHours,
+    updateRepairOrderDetails,
+    users,
     currentUser,
     activeRoleView
   } = useApp();
 
-  // Inline quick editing for a specific existing part (Part #, Description, Qty, Price, ETA, tracking, vendor, notes)
+  const isServiceManager = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
+  const technicians = users.filter(u => u.role === 'TECHNICIAN');
+
+  // Inline quick editing for an existing part
   const [editingPartId, setEditingPartId] = useState<string | null>(null);
   const [inlinePartNumber, setInlinePartNumber] = useState<string>('');
   const [inlineDescription, setInlineDescription] = useState<string>('');
@@ -94,6 +104,63 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   const [newLinePrice, setNewLinePrice] = useState<string>('0.00');
   const [newLineVendor, setNewLineVendor] = useState<string>('Shop Inventory / Supplier');
   const [newLineEta, setNewLineEta] = useState<string>('Pending Parts Counter');
+
+  // Three C's local state per line index
+  const [localCauses, setLocalCauses] = useState<Record<number, string>>({});
+  const [localCorrections, setLocalCorrections] = useState<Record<number, string>>({});
+  const [saveStatus, setSaveStatus] = useState<Record<string, 'saved' | 'saving'>>({});
+  const debounceTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Inline editing of Concern description
+  const [editingConcernIdx, setEditingConcernIdx] = useState<number | null>(null);
+  const [concernInputText, setConcernInputText] = useState<string>('');
+
+  // Add New Job Line Modal / Card
+  const [isAddingJob, setIsAddingJob] = useState<boolean>(false);
+  const [newJobConcern, setNewJobConcern] = useState<string>('');
+  const [newJobPayType, setNewJobPayType] = useState<ConcernPayType>('CUSTOMER_PAY');
+  const [newJobTechId, setNewJobTechId] = useState<string>(ro.techId || '');
+  const [newJobHours, setNewJobHours] = useState<string>('1.0');
+  const [newJobCause, setNewJobCause] = useState<string>('');
+  const [newJobCorrection, setNewJobCorrection] = useState<string>('');
+
+  // Quick edit Customer & Vehicle details
+  const [isEditingRODetails, setIsEditingRODetails] = useState<boolean>(false);
+  const [editCustName, setEditCustName] = useState<string>(ro.customerName || '');
+  const [editCustPhone, setEditCustPhone] = useState<string>(ro.customerPhone || '');
+  const [editVehYear, setEditVehYear] = useState<string | number>(ro.vehicle.year || '');
+  const [editVehMake, setEditVehMake] = useState<string>(ro.vehicle.make || '');
+  const [editVehModel, setEditVehModel] = useState<string>(ro.vehicle.model || '');
+  const [editVehVin, setEditVehVin] = useState<string>(ro.vehicle.vin || '');
+  const [editVehMileage, setEditVehMileage] = useState<string | number>(ro.vehicle.mileage || '');
+  const [editPromisedTime, setEditPromisedTime] = useState<string>(ro.promisedTime || '');
+
+  // Keep local causes and corrections synchronized when RO updates
+  useEffect(() => {
+    const concernsCount = Math.max(ro.concerns?.length || 1, 1);
+    const initialCauses: Record<number, string> = {};
+    const initialCorrections: Record<number, string> = {};
+
+    for (let i = 0; i < concernsCount; i++) {
+      initialCauses[i] = ro.concernCauses?.[i] ?? (i === 0 ? ro.cause : '') ?? '';
+      initialCorrections[i] = ro.concernCorrections?.[i] ?? (i === 0 ? ro.correction : '') ?? '';
+    }
+
+    setLocalCauses(initialCauses);
+    setLocalCorrections(initialCorrections);
+  }, [ro.id, ro.concerns, ro.concernCauses, ro.concernCorrections, ro.cause, ro.correction]);
+
+  // Keep customer/vehicle edit state synced
+  useEffect(() => {
+    setEditCustName(ro.customerName || '');
+    setEditCustPhone(ro.customerPhone || '');
+    setEditVehYear(ro.vehicle.year || '');
+    setEditVehMake(ro.vehicle.make || '');
+    setEditVehModel(ro.vehicle.model || '');
+    setEditVehVin(ro.vehicle.vin || '');
+    setEditVehMileage(ro.vehicle.mileage || '');
+    setEditPromisedTime(ro.promisedTime || '');
+  }, [ro]);
 
   const handleStartInlineEdit = (part: PartItem, fieldToFocus: 'partNumber' | 'price' | 'vendor' = 'partNumber') => {
     setEditingPartId(part.id);
@@ -178,14 +245,15 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     const targetPart = (ro.parts || []).find(p => p.id === partId);
     let defaultEta = targetPart?.estimatedArrival;
     if (newStatus === 'RECEIVED' || newStatus === 'IN_STOCK') {
-      defaultEta = 'Arrived / Staged';
-    } else if (newStatus === 'ORDERED' && (!defaultEta || defaultEta.toLowerCase().includes('pending'))) {
-      defaultEta = 'Expected in 1-3 Days';
-    } else if (newStatus === 'IN_TRANSIT' && (!defaultEta || defaultEta.toLowerCase().includes('pending'))) {
-      defaultEta = 'In Transit';
-    } else if (newStatus === 'BACKORDERED') {
-      defaultEta = 'Supplier Backorder';
+      defaultEta = 'Arrived & Staged';
+    } else if (newStatus === 'DAILY_ORDER') {
+      defaultEta = 'Today 2:00 PM';
+    } else if (newStatus === 'SPECIAL_ORDER_1_5_DAYS') {
+      defaultEta = '1-5 Business Days';
+    } else if (newStatus === 'VOR_UPGRADE') {
+      defaultEta = 'Tomorrow Morning (VOR)';
     }
+
     updatePartStatus(ro.id, partId, newStatus, defaultEta);
   };
 
@@ -194,12 +262,134 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   };
 
   const handleMarkAllReceived = () => {
-    const partsToReceive = (ro.parts || []).filter(
-      p => p.status !== 'RECEIVED' && p.status !== 'ISSUED_TO_TECH' && p.status !== 'DECLINED' && p.status !== 'CANCELLED'
+    const partsToReceive = (ro.parts || []).filter(p => 
+      p.status === 'ORDERED' || 
+      p.status === 'DAILY_ORDER' || 
+      p.status === 'SPECIAL_ORDER' || 
+      p.status === 'SPECIAL_ORDER_1_5_DAYS' || 
+      p.status === 'VOR_UPGRADE' || 
+      p.status === 'IN_TRANSIT'
     );
     partsToReceive.forEach(p => {
       updatePartStatus(ro.id, p.id, 'RECEIVED', 'Arrived & Staged in Bay');
     });
+  };
+
+  // Three C's Auto-Save Handler for Line Cause & Correction
+  const triggerThreeCsAutoSave = (lineIdx: number, newCause?: string, newCorrection?: string) => {
+    const concernsCount = Math.max(ro.concerns?.length || 1, 1);
+    const updatedCauses = Array.from({ length: concernsCount }, (_, i) => 
+      i === lineIdx ? (newCause !== undefined ? newCause : (localCauses[i] || '')) : (localCauses[i] || '')
+    );
+    const updatedCorrections = Array.from({ length: concernsCount }, (_, i) => 
+      i === lineIdx ? (newCorrection !== undefined ? newCorrection : (localCorrections[i] || '')) : (localCorrections[i] || '')
+    );
+
+    const key = `line_${lineIdx}`;
+    setSaveStatus(prev => ({ ...prev, [key]: 'saving' }));
+
+    if (debounceTimersRef.current[key]) {
+      clearTimeout(debounceTimersRef.current[key]);
+    }
+
+    debounceTimersRef.current[key] = setTimeout(() => {
+      updateTechCauseAndCorrection(
+        ro.id, 
+        updatedCauses[0] || '', 
+        updatedCorrections[0] || '', 
+        {
+          isAutoSave: true,
+          concernCauses: updatedCauses,
+          concernCorrections: updatedCorrections
+        }
+      );
+      setSaveStatus(prev => ({ ...prev, [key]: 'saved' }));
+      setTimeout(() => {
+        setSaveStatus(prev => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }, 2000);
+    }, 600);
+  };
+
+  // Handle Labor Hours update for a line
+  const handleLaborHoursChange = (lineIdx: number, val: string) => {
+    const cleanNum = Math.max(0, parseFloat(val) || 0);
+    updateLineLaborHours(ro.id, lineIdx, cleanNum);
+  };
+
+  // Handle Concern text save
+  const handleSaveConcernText = (lineIdx: number) => {
+    if (concernInputText.trim()) {
+      updateRepairOrderConcernText(ro.id, lineIdx, concernInputText.trim());
+    }
+    setEditingConcernIdx(null);
+  };
+
+  // Handle Add Job Line Submit
+  const handleAddNewJobSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newJobConcern.trim()) return;
+
+    const assignedTech = technicians.find(t => t.id === newJobTechId);
+    const hoursNum = Math.max(0, parseFloat(newJobHours) || 1.0);
+
+    addRepairOrderConcern(
+      ro.id,
+      newJobConcern.trim(),
+      newJobPayType,
+      newJobTechId || undefined,
+      assignedTech?.name,
+      hoursNum,
+      'CUSTOMER'
+    );
+
+    // If Cause or Correction were entered during creation, update them immediately
+    if (newJobCause.trim() || newJobCorrection.trim()) {
+      setTimeout(() => {
+        const nextIdx = (ro.concerns?.length || 1);
+        const causes = [...(ro.concernCauses || [])];
+        const corrections = [...(ro.concernCorrections || [])];
+        while (causes.length <= nextIdx) causes.push('');
+        while (corrections.length <= nextIdx) corrections.push('');
+        causes[nextIdx] = newJobCause.trim();
+        corrections[nextIdx] = newJobCorrection.trim();
+
+        updateTechCauseAndCorrection(ro.id, causes[0] || '', corrections[0] || '', {
+          isAutoSave: true,
+          concernCauses: causes,
+          concernCorrections: corrections
+        });
+      }, 150);
+    }
+
+    // Reset state & close
+    setNewJobConcern('');
+    setNewJobHours('1.0');
+    setNewJobCause('');
+    setNewJobCorrection('');
+    setIsAddingJob(false);
+  };
+
+  // Handle Save Quick Edit Customer / Vehicle details
+  const handleSaveRODetails = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateRepairOrderDetails(ro.id, {
+      customerName: editCustName.trim(),
+      customerPhone: editCustPhone.trim(),
+      promisedTime: editPromisedTime,
+      vehicle: {
+        ...ro.vehicle,
+        year: Number(editVehYear) || ro.vehicle.year,
+        make: editVehMake.trim(),
+        model: editVehModel.trim(),
+        vin: editVehVin.trim().toUpperCase(),
+        mileage: Number(editVehMileage) || ro.vehicle.mileage || 0,
+      }
+    });
+    setIsEditingRODetails(false);
   };
 
   // Group concerns / job lines
@@ -212,7 +402,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   const totalLaborHours = quote?.totalLaborHours || (quote?.laborItems?.reduce((sum, l) => sum + (l.laborHours || 0), 0) || 0);
   const totalLaborCost = quote?.totalLaborCost || (quote?.laborItems?.reduce((sum, l) => sum + (l.subtotal || 0), 0) || 0);
   
-  // Total parts cost from RO parts or quote parts
+  // Total parts cost from RO parts
   const allParts = ro.parts || [];
   const totalPartsCost = allParts
     .filter(p => p.status !== 'DECLINED' && p.status !== 'CANCELLED')
@@ -228,7 +418,6 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   const isTaxExempt = Boolean(ro.isTaxExempt || quote?.isTaxExempt);
   const taxRate = isTaxExempt ? 0 : (quote?.taxRate ?? 0.07);
   const taxableAmount = totalLaborCost + totalPartsCost;
-  // Sales tax is never capped at $35; only shop supplies is capped at $35
   const taxAmount = isTaxExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
   const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
@@ -239,15 +428,14 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   const inTransitCount = activeParts.filter(p => p.status === 'IN_TRANSIT').length;
   const needsOrderCount = activeParts.filter(p => p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY').length;
   const backorderedCount = activeParts.filter(p => p.status === 'BACKORDERED').length;
-
   const allPartsReady = activeParts.length > 0 && receivedCount === activeParts.length;
 
   return (
     <div className="space-y-6">
-      {/* 1. Header Banner & Quick Progress Tracker */}
+      {/* 1. Header Banner: Unified Quote & Working Order Master Overview */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-800 text-white p-5 rounded-2xl shadow-md border border-slate-700">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-black uppercase tracking-wider">
                 Quote & Working Order #{ro.id}
@@ -260,46 +448,60 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                 </span>
               ) : (
                 <span className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 font-medium text-xs border border-slate-700">
-                  Standard 7% Tax
+                  Standard 7% Tax (Uncapped)
                 </span>
               )}
               {allPartsReady ? (
                 <span className="px-2.5 py-1 rounded-md bg-emerald-500 text-white font-black text-xs flex items-center gap-1 shadow-xs">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>All Parts Staged & Ready!</span>
+                  <span>All Parts Staged & Ready</span>
                 </span>
               ) : activeParts.length > 0 ? (
                 <span className="px-2.5 py-1 rounded-md bg-blue-900/80 text-blue-200 border border-blue-500/50 text-xs font-bold flex items-center gap-1">
                   <Truck className="w-3.5 h-3.5 text-blue-400" />
-                  <span>{receivedCount} of {activeParts.length} Parts Received</span>
+                  <span>{receivedCount} of {activeParts.length} Parts Staged</span>
                 </span>
-              ) : (
-                <span className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 text-xs">
-                  No parts ordered yet
-                </span>
-              )}
+              ) : null}
             </div>
 
-            <div className="flex items-baseline gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap pt-1">
               <h2 className="text-xl font-black text-white">
                 {ro.customerName}
               </h2>
-              <span className="text-xs text-slate-300 font-mono">
+              <span className="text-xs text-slate-300 font-mono flex items-center gap-1">
+                <Phone className="w-3 h-3 text-slate-400" />
                 {ro.customerPhone}
               </span>
-              <span className="text-xs text-slate-400">
-                • {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
+              <span className="text-xs text-slate-400 flex items-center gap-1">
+                <Car className="w-3 h-3 text-slate-400" />
+                {ro.vehicle.year} {ro.vehicle.make} {ro.vehicle.model}
               </span>
               {ro.vehicle.vin && (
-                <span className="text-[11px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
+                <span className="text-[11px] font-mono text-slate-300 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700">
                   VIN: {ro.vehicle.vin}
                 </span>
               )}
+              {ro.vehicle.mileage !== undefined && (
+                <span className="text-[11px] text-slate-300 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700">
+                  Miles: {ro.vehicle.mileage.toLocaleString()}
+                </span>
+              )}
+
+              {/* Quick Edit Details Button */}
+              <button
+                type="button"
+                onClick={() => setIsEditingRODetails(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-600 text-[11px] font-bold cursor-pointer transition-colors"
+                title="Edit Customer, Vehicle, Mileage, and Promised Time directly"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Edit Order Details</span>
+              </button>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <button
               type="button"
               onClick={() => onOpenPrintModal(ro.id)}
@@ -313,18 +515,18 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
             <button
               type="button"
               onClick={() => onOpenQuoteModal(ro.id)}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-bold text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
-              title="Open full interactive Quote Builder for labor and parts"
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Open full interactive Quote Pricing Sheet"
             >
               <Receipt className="w-4 h-4 text-white" />
-              <span>Edit Quote Pricing</span>
+              <span>Full Pricing Matrix</span>
             </button>
 
             {needsOrderCount > 0 && (
               <button
                 type="button"
                 onClick={() => markAllPartsOrderedOnRO(ro.id)}
-                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 font-black text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Mark all pending parts as ordered"
               >
                 <Truck className="w-4 h-4 text-slate-950" />
@@ -336,7 +538,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
               <button
                 type="button"
                 onClick={handleMarkAllReceived}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Mark all transit/ordered parts as received"
               >
                 <CheckCircle2 className="w-4 h-4 text-white" />
@@ -371,7 +573,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
         </div>
       </div>
 
-      {/* 2. Quoted Financial Metrics Strip */}
+      {/* 2. Quoted Financial Metrics Strip with Real-Time Totaling */}
       <div className="bg-white rounded-xl border-2 border-slate-800 p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         <div className="flex items-center gap-5 flex-wrap text-xs">
           <div>
@@ -409,7 +611,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                   EXEMPT
                 </span>
               ) : (
-                <span className="text-[9px] text-slate-500">7%</span>
+                <span className="text-[9px] text-slate-500">7% Uncapped</span>
               )}
             </span>
             <span className={`text-base font-black font-mono ${isTaxExempt ? 'text-amber-700' : 'text-slate-900'}`}>
@@ -444,31 +646,174 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
         </div>
       </div>
 
-      {/* 3. Job Lines & Daily Parts Tracking Tables */}
+      {/* 3. Job Operations Pipeline: The Three C's (Concern, Cause, Correction) & Inline Parts */}
       <div className="space-y-6">
         <div className="flex items-center justify-between pb-2 border-b border-slate-200">
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-purple-600" />
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-              Quoted Service Operations & Daily Parts Pipeline ({concerns.length} Lines)
+              Working Order Operations & Parts ({concerns.length} {concerns.length === 1 ? 'Line' : 'Lines'})
             </h3>
           </div>
+
+          {/* Service Manager & Staff: Add New Job / Operation */}
           <button
             type="button"
-            onClick={() => handleStartInlineAdd(1)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
+            onClick={() => setIsAddingJob(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer transition-colors"
+            title="Add a new job line / customer concern to this repair order"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Part to Job</span>
+            <Plus className="w-4 h-4" />
+            <span>+ Add New Job Line</span>
           </button>
         </div>
 
+        {/* Add New Job Card */}
+        {isAddingJob && (
+          <form onSubmit={handleAddNewJobSubmit} className="bg-blue-50/70 p-5 rounded-2xl border-2 border-blue-400 shadow-md space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black inline-flex items-center justify-center">
+                  +
+                </span>
+                <h4 className="text-sm font-black text-blue-950 uppercase tracking-wider">
+                  Add New Job Line (Line {concerns.length + 1})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddingJob(false)}
+                className="text-slate-500 hover:text-slate-800 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-black text-slate-800 mb-1 uppercase tracking-wider">
+                  Concern / Job Title *
+                </label>
+                <input
+                  type="text"
+                  value={newJobConcern}
+                  onChange={(e) => setNewJobConcern(e.target.value)}
+                  placeholder="e.g. Front Brake Pad & Rotor Replacement or Oil Leak Inspection"
+                  className="w-full text-xs font-bold p-2.5 bg-white border-2 border-blue-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Pay Type
+                  </label>
+                  <select
+                    value={newJobPayType}
+                    onChange={(e) => setNewJobPayType(e.target.value as ConcernPayType)}
+                    className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  >
+                    <option value="CUSTOMER_PAY">Customer Pay ($165.00/hr)</option>
+                    <option value="WARRANTY">Warranty ($121.78/hr)</option>
+                    <option value="INTERNAL">Internal ($135.00/hr)</option>
+                    <option value="EXTENDED_WARRANTY">Extended Warranty ($165.00/hr)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Labor Hours
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={newJobHours}
+                    onChange={(e) => setNewJobHours(e.target.value)}
+                    className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Assigned Tech
+                  </label>
+                  <select
+                    value={newJobTechId}
+                    onChange={(e) => setNewJobTechId(e.target.value)}
+                    className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  >
+                    <option value="">Unassigned</option>
+                    {technicians.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Initial Cause (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newJobCause}
+                    onChange={(e) => setNewJobCause(e.target.value)}
+                    placeholder="Root cause found upon diagnosis..."
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Initial Correction (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newJobCorrection}
+                    onChange={(e) => setNewJobCorrection(e.target.value)}
+                    placeholder="Repair work proposed / completed..."
+                    className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingJob(false)}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-lg shadow-sm cursor-pointer"
+                >
+                  Create Job Line
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Lines Rendering */}
         {concerns.map((concernText, cIdx) => {
           const lineNum = cIdx + 1;
           const lineLaborItem = quote?.laborItems?.find(l => (l.roLineNumber || 1) === lineNum);
-          const lineLaborHours = lineLaborItem?.laborHours || (cIdx === 0 && quote?.totalLaborHours ? quote.totalLaborHours : 1.0);
-          const lineLaborRate = lineLaborItem?.hourlyRate || (quote?.defaultLaborRate || 165.00);
-          const lineLaborSubtotal = lineLaborItem?.subtotal || Number((lineLaborHours * lineLaborRate).toFixed(2));
+          const lineLaborHours = lineLaborItem?.laborHours !== undefined 
+            ? lineLaborItem.laborHours 
+            : (cIdx === 0 && quote?.totalLaborHours ? quote.totalLaborHours : 1.0);
+          
+          const linePayType: ConcernPayType = (ro.concernPayTypes && ro.concernPayTypes[cIdx]) || lineLaborItem?.payType || 'CUSTOMER_PAY';
+          const lineLaborRate = PAY_TYPE_RATES[linePayType] || lineLaborItem?.hourlyRate || (quote?.defaultLaborRate || 165.00);
+          const lineLaborSubtotal = Number((lineLaborHours * lineLaborRate).toFixed(2));
+
+          const lineTechId = (ro.concernTechIds && ro.concernTechIds[cIdx]) || ro.techId;
+          const assignedTech = technicians.find(t => t.id === lineTechId);
 
           // Filter parts for this specific line
           const lineParts = allParts.filter(p => {
@@ -481,71 +826,252 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
             .reduce((sum, p) => sum + ((p.quantity || 1) * (Number(p.price) || 0)), 0);
 
           const lineTotal = lineLaborSubtotal + linePartsSubtotal;
+          const isSavingLine = saveStatus[`line_${cIdx}`] === 'saving';
+          const isSavedLine = saveStatus[`line_${cIdx}`] === 'saved';
 
           return (
-            <div key={lineNum} className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden">
-              {/* Line Header */}
-              <div className="bg-slate-100 p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-black inline-flex items-center justify-center shrink-0">
-                      {lineNum}
-                    </span>
-                    <h4 className="text-sm font-black text-slate-900">
-                      {concernText}
-                    </h4>
-                  </div>
-                  <div className="text-xs text-slate-600 pl-8 flex items-center gap-3">
-                    <span>Labor: <strong>{lineLaborHours}h</strong> @ ${lineLaborRate.toFixed(2)}/hr ({formatCurrency(lineLaborSubtotal)})</span>
-                    <span>•</span>
-                    <span>Parts: <strong>{lineParts.length}</strong> ({formatCurrency(linePartsSubtotal)})</span>
-                  </div>
-                </div>
+            <div key={lineNum} className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden space-y-0">
+              {/* Line Header: Line #, Concern title, Labor Hours, Pay Type, Assigned Tech, Line Subtotal, and Delete */}
+              <div className="bg-slate-100 p-4 border-b border-slate-300">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  {/* Concern Title / Editor */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="w-7 h-7 rounded-lg bg-slate-900 text-white text-xs font-black inline-flex items-center justify-center shrink-0 shadow-2xs">
+                        {lineNum}
+                      </span>
 
-                <div className="flex items-center gap-3 self-end sm:self-center">
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold">Line Total</span>
-                    <span className="text-base font-black font-mono text-slate-900">{formatCurrency(lineTotal)}</span>
+                      {editingConcernIdx === cIdx ? (
+                        <div className="flex items-center gap-1.5 flex-1 max-w-xl">
+                          <input
+                            type="text"
+                            value={concernInputText}
+                            onChange={(e) => setConcernInputText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveConcernText(cIdx);
+                              if (e.key === 'Escape') setEditingConcernIdx(null);
+                            }}
+                            className="w-full text-sm font-black p-1.5 bg-white border-2 border-blue-600 rounded-md text-slate-950 focus:outline-none shadow-2xs"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveConcernText(cIdx)}
+                            className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md cursor-pointer"
+                            title="Save Concern Title"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingConcernIdx(null)}
+                            className="p-1.5 bg-slate-300 hover:bg-slate-400 text-slate-800 rounded-md cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 group flex-wrap">
+                          <h4 className="text-base font-black text-slate-950">
+                            {concernText}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConcernInputText(concernText);
+                              setEditingConcernIdx(cIdx);
+                            }}
+                            className="text-slate-400 hover:text-blue-600 p-1 opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Edit Concern / Job Title"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleStartInlineAdd(lineNum)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
-                    title={`Add part directly to Line ${lineNum}`}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ Add Part</span>
-                  </button>
 
-                  {/* Delete Job ONLY for tech-added jobs / inspection findings (Customer concerns cannot be deleted) */}
-                  {isTechAddedConcernLine(ro, cIdx) && (
+                  {/* Inline Labor, Pay Type, Tech, Total & Delete Controls */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Labor Hours Input */}
+                    <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs">
+                      <span className="text-[10px] font-black uppercase text-slate-500">Labor:</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={lineLaborHours}
+                        onChange={(e) => handleLaborHoursChange(cIdx, e.target.value)}
+                        className="w-14 text-xs font-mono font-black text-center text-slate-900 border-b border-slate-400 focus:border-blue-600 focus:outline-none bg-transparent"
+                        title="Edit Labor Hours"
+                      />
+                      <span className="text-xs font-bold text-slate-600">hrs</span>
+                    </div>
+
+                    {/* Pay Type Selector */}
+                    <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-2xs">
+                      <span className="text-[10px] font-black uppercase text-slate-500 hidden sm:inline">Pay:</span>
+                      <select
+                        value={linePayType}
+                        onChange={(e) => updateConcernPayType(ro.id, cIdx, e.target.value as ConcernPayType)}
+                        className="text-xs font-bold text-slate-900 bg-transparent focus:outline-none cursor-pointer"
+                        title="Change Pay Type"
+                      >
+                        <option value="CUSTOMER_PAY">CP ($165/hr)</option>
+                        <option value="WARRANTY">Warr ($121.78/hr)</option>
+                        <option value="INTERNAL">Int ($135/hr)</option>
+                        <option value="EXTENDED_WARRANTY">Ext Warr ($165/hr)</option>
+                      </select>
+                    </div>
+
+                    {/* Assigned Technician Selector */}
+                    <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-2xs">
+                      <Wrench className="w-3 h-3 text-slate-400" />
+                      <select
+                        value={lineTechId || ''}
+                        onChange={(e) => updateConcernTech(ro.id, cIdx, e.target.value)}
+                        className="text-xs font-bold text-slate-900 bg-transparent focus:outline-none cursor-pointer max-w-[120px]"
+                        title="Assign Technician to Line"
+                      >
+                        <option value="">No Tech</option>
+                        {technicians.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Line Total */}
+                    <div className="bg-slate-900 text-white px-3 py-1 rounded-lg text-right shadow-2xs">
+                      <span className="text-[9px] text-slate-300 uppercase tracking-wider block font-bold">Line Total</span>
+                      <span className="text-xs font-black font-mono">{formatCurrency(lineTotal)}</span>
+                    </div>
+
+                    {/* + Add Part Button */}
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm(`Delete Tech Added Job Line ${lineNum} (${concernText})? This will remove this job and its parts/labor.`)) {
-                          deleteRepairOrderConcern(ro.id, cIdx);
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
-                      title={`Delete Line ${lineNum} Tech Added Job`}
+                      onClick={() => handleStartInlineAdd(lineNum)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+                      title={`Add part directly to Line ${lineNum}`}
                     >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Delete Job</span>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Add Part</span>
                     </button>
-                  )}
+
+                    {/* Service Manager Delete Job Authority */}
+                    {isServiceManager && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete Line ${lineNum} (${concernText})? This will remove this job and its parts/labor from the quote.`)) {
+                            deleteRepairOrderConcern(ro.id, cIdx);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+                        title={`Delete Line ${lineNum} Job (Service Manager Only)`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Delete Job</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* The Three C's Section: Cause & Correction Direct Editing */}
+              <div className="p-4 bg-slate-50/70 border-b border-slate-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      The Three C's (Line {lineNum})
+                    </span>
+                  </div>
+
+                  {/* Auto-Save Indicator */}
+                  {isSavingLine ? (
+                    <span className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
+                      <Clock className="w-3 h-3 animate-spin" /> Auto-saving...
+                    </span>
+                  ) : isSavedLine ? (
+                    <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Auto-saved
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* CAUSE Input */}
+                  <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1">
+                        <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>2. CAUSE (Diagnostic Findings / Root Cause)</span>
+                      </label>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={localCauses[cIdx] ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setLocalCauses(prev => ({ ...prev, [cIdx]: val }));
+                        triggerThreeCsAutoSave(cIdx, val, undefined);
+                      }}
+                      placeholder="e.g. Front pads worn down to 2mm metal-to-metal; rotor surface heat-checked..."
+                      className="w-full text-xs p-2 rounded-lg border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium text-slate-900 resize-y min-h-[50px]"
+                    />
+                  </div>
+
+                  {/* CORRECTION Input */}
+                  <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1">
+                        <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>3. CORRECTION (Repair Procedure / Work Performed)</span>
+                      </label>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={localCorrections[cIdx] ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setLocalCorrections(prev => ({ ...prev, [cIdx]: val }));
+                        triggerThreeCsAutoSave(cIdx, undefined, val);
+                      }}
+                      placeholder="e.g. Replaced front brake pads and rotors; road test verified noise eliminated..."
+                      className="w-full text-xs p-2 rounded-lg border border-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none font-medium text-slate-900 resize-y min-h-[50px]"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Parts Table for this Line */}
               <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-slate-600" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Parts For Line {lineNum} ({lineParts.length} {lineParts.length === 1 ? 'part' : 'parts'})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartInlineAdd(lineNum)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Part</span>
+                  </button>
+                </div>
+
                 {lineParts.length === 0 && inlineAddingLineNum !== lineNum ? (
-                  <div className="py-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 space-y-2">
+                  <div className="py-5 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 space-y-1.5">
                     <p className="font-semibold text-slate-700">No parts assigned to Line {lineNum} yet</p>
-                    <p>Click <strong>"+ Add Part"</strong> to enter the part number and price directly on this screen.</p>
+                    <p className="text-[11px]">Click <strong>"+ Add Part"</strong> to enter the Part Number, Description, Qty, and Price directly on this screen.</p>
                     <button
                       type="button"
                       onClick={() => handleStartInlineAdd(lineNum)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors mt-1"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>+ Add Part Now</span>
@@ -555,7 +1081,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                           <th className="py-2.5 px-3">Part # & Description</th>
                           <th className="py-2.5 px-2 text-center">Qty</th>
                           <th className="py-2.5 px-2 text-right">Price</th>
@@ -570,10 +1096,10 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                         {/* New Part Inline Entry Row */}
                         {inlineAddingLineNum === lineNum && (
                           <tr className="bg-blue-50/70 border-2 border-blue-400 animate-in fade-in">
-                            <td className="py-2.5 px-3 align-top min-w-[180px]">
+                            <td className="py-2.5 px-3 align-top min-w-[200px]">
                               <div className="space-y-1.5">
                                 <div>
-                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part #</span>
+                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part # *</span>
                                   <input
                                     type="text"
                                     value={newLinePartNumber}
@@ -588,7 +1114,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                   />
                                 </div>
                                 <div>
-                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Description / Name</span>
+                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Description / Name *</span>
                                   <input
                                     type="text"
                                     value={newLineDescription}
@@ -597,14 +1123,14 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                       if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                       if (e.key === 'Escape') handleCancelInlineAdd();
                                     }}
-                                    placeholder="Part description"
+                                    placeholder="e.g. Brake Flush Fluid"
                                     className="w-full text-xs font-medium text-slate-900 p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-600 focus:outline-none"
                                   />
                                 </div>
                               </div>
                             </td>
                             <td className="py-2.5 px-2 text-center align-top">
-                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block sm:hidden">Qty</span>
+                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Qty</span>
                               <input
                                 type="number"
                                 min="1"
@@ -619,7 +1145,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               />
                             </td>
                             <td className="py-2.5 px-2 text-right align-top min-w-[110px]">
-                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block sm:hidden">Price</span>
+                              <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider block">Unit Price ($)</span>
                               <div className="relative inline-block w-full">
                                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs">$</span>
                                 <input
@@ -627,37 +1153,30 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                   inputMode="decimal"
                                   value={newLinePrice}
                                   onFocus={() => {
-                                    if (newLinePrice === '0' || newLinePrice === '0.00' || newLinePrice === '$0.00' || newLinePrice === '0.0') {
-                                      setNewLinePrice('');
-                                    }
+                                    if (newLinePrice === '0' || newLinePrice === '0.00') setNewLinePrice('');
                                   }}
-                                  onChange={(e) => {
-                                    const val = e.target.value.replace(/[^0-9.]/g, '');
-                                    setNewLinePrice(val);
-                                  }}
+                                  onChange={(e) => setNewLinePrice(e.target.value.replace(/[^0-9.]/g, ''))}
                                   onBlur={() => {
-                                    if (!newLinePrice || newLinePrice === '.' || isNaN(Number(newLinePrice))) {
-                                      setNewLinePrice('0.00');
-                                    } else {
-                                      setNewLinePrice(Number(newLinePrice).toFixed(2));
-                                    }
+                                    if (!newLinePrice || isNaN(Number(newLinePrice))) setNewLinePrice('0.00');
+                                    else setNewLinePrice(Number(newLinePrice).toFixed(2));
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                     if (e.key === 'Escape') handleCancelInlineAdd();
                                   }}
                                   placeholder="0.00"
-                                  className="w-full pl-5 pr-2 py-1.5 text-xs text-right font-mono font-black text-slate-950 bg-white border-2 border-emerald-500 rounded-md focus:outline-none shadow-2xs"
-                                  title="Enter price with 2 decimal places"
+                                  className="w-full pl-5 pr-2 py-1.5 text-xs text-right font-mono font-black text-slate-950 bg-white border-2 border-emerald-600 rounded-md focus:outline-none shadow-2xs"
                                 />
                               </div>
                             </td>
                             <td className="py-2.5 px-2.5 text-right align-top font-mono font-black text-slate-900 min-w-[90px]">
-                              <div className="pt-2 text-sm font-black font-mono text-emerald-700">
+                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Total</span>
+                              <div className="pt-1.5 text-sm font-black font-mono text-emerald-700">
                                 ${((Number(newLineQty) || 1) * (Number(newLinePrice) || 0)).toFixed(2)}
                               </div>
                             </td>
                             <td className="py-2.5 px-3 align-top min-w-[130px]">
+                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Supplier</span>
                               <input
                                 type="text"
                                 value={newLineVendor}
@@ -671,6 +1190,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               />
                             </td>
                             <td className="py-2.5 px-3 align-top min-w-[180px]">
+                              <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">ETA</span>
                               <input
                                 type="text"
                                 value={newLineEta}
@@ -684,12 +1204,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               />
                             </td>
                             <td className="py-2.5 px-3 align-top">
-                              <span className="text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg inline-block shadow-2xs">
-                                🟧 Needs Order
+                              <span className="text-xs font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg inline-block shadow-2xs mt-4">
+                                Needs Order
                               </span>
                             </td>
                             <td className="py-2.5 px-2 text-center align-top">
-                              <div className="flex items-center justify-center gap-1.5 pt-1">
+                              <div className="flex items-center justify-center gap-1.5 pt-4">
                                 <button
                                   type="button"
                                   onClick={() => handleSaveInlineAdd(lineNum)}
@@ -723,7 +1243,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                           return (
                             <tr key={part.id} className={`hover:bg-slate-50/70 transition-colors ${isInline ? 'bg-amber-50/40' : isReceived ? 'bg-emerald-50/30' : ''}`}>
                               {/* Part Number & Name */}
-                              <td className="py-2.5 px-3 align-top min-w-[180px]">
+                              <td className="py-2.5 px-3 align-top min-w-[200px]">
                                 {isInline ? (
                                   <div className="space-y-1.5">
                                     <div>
@@ -779,7 +1299,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               <td className="py-2.5 px-2 text-center align-top">
                                 {isInline ? (
                                   <>
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block sm:hidden">Qty</span>
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Qty</span>
                                     <input
                                       type="number"
                                       min="1"
@@ -808,7 +1328,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               <td className="py-2.5 px-2 text-right align-top min-w-[110px]">
                                 {isInline ? (
                                   <>
-                                    <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider block sm:hidden">Price</span>
+                                    <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider block">Price ($)</span>
                                     <div className="relative inline-block w-full">
                                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xs">$</span>
                                       <input
@@ -838,7 +1358,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                         placeholder="0.00"
                                         className="w-full pl-5 pr-2 py-1.5 text-xs text-right font-mono font-black text-slate-950 bg-white border-2 border-emerald-500 rounded-md focus:outline-none shadow-2xs"
                                         autoFocus={focusField === 'price'}
-                                        title="Enter unit price in dollars and cents (e.g. 10.00)"
+                                        title="Enter unit price in dollars and cents"
                                       />
                                     </div>
                                   </>
@@ -861,7 +1381,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               {/* Total */}
                               <td className="py-2.5 px-2.5 text-right align-top font-mono font-black text-slate-900 min-w-[90px]">
                                 {isInline ? (
-                                  <div className="pt-2 text-sm font-black font-mono text-emerald-700">
+                                  <div className="pt-4 text-sm font-black font-mono text-emerald-700">
                                     ${((Number(inlineQty) || 1) * (Number(inlinePrice) || 0)).toFixed(2)}
                                   </div>
                                 ) : (
@@ -874,18 +1394,21 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               {/* Vendor */}
                               <td className="py-2.5 px-3 align-top min-w-[130px]">
                                 {isInline ? (
-                                  <input
-                                    type="text"
-                                    value={inlineVendor}
-                                    onChange={(e) => setInlineVendor(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveInlineEdit(part.id);
-                                      if (e.key === 'Escape') handleCancelInlineEdit();
-                                    }}
-                                    placeholder="e.g. MOPAR / AutoZone"
-                                    className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md font-medium text-slate-900 focus:border-blue-500 focus:outline-none"
-                                    autoFocus={focusField === 'vendor'}
-                                  />
+                                  <>
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Supplier</span>
+                                    <input
+                                      type="text"
+                                      value={inlineVendor}
+                                      onChange={(e) => setInlineVendor(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveInlineEdit(part.id);
+                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                      }}
+                                      placeholder="e.g. MOPAR / AutoZone"
+                                      className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md font-medium text-slate-900 focus:border-blue-500 focus:outline-none"
+                                      autoFocus={focusField === 'vendor'}
+                                    />
+                                  </>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 font-bold text-slate-700 py-1">
                                     <Building2 className="w-3 h-3 text-slate-400" />
@@ -928,53 +1451,59 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                         if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                         if (e.key === 'Escape') handleCancelInlineEdit();
                                       }}
-                                      placeholder="Notes / Staging Bin"
+                                      placeholder="Bin / Notes"
                                       className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
                                     />
                                   </div>
                                 ) : (
-                                  <div className="space-y-0.5 py-1">
+                                  <div 
+                                    onClick={() => handleStartInlineEdit(part, 'vendor')}
+                                    className="space-y-0.5 cursor-pointer py-1"
+                                    title="Click to edit tracking & ETA"
+                                  >
                                     <div className="font-bold text-slate-800 flex items-center gap-1">
                                       <Clock className="w-3 h-3 text-slate-400" />
-                                      <span>{part.estimatedArrival || 'ETA Pending'}</span>
+                                      <span>{part.estimatedArrival || 'Pending ETA'}</span>
                                     </div>
                                     {part.trackingNumber && (
-                                      <div className="text-[11px] font-mono text-blue-700 flex items-center gap-1 font-bold">
+                                      <div className="text-[11px] font-mono text-blue-700 font-bold flex items-center gap-1">
                                         <Truck className="w-3 h-3 text-blue-500" />
                                         <span>#{part.trackingNumber}</span>
                                       </div>
                                     )}
-                                    {part.notes && (
-                                      <div className="text-[11px] text-slate-500 flex items-center gap-1 italic">
-                                        <MapPin className="w-3 h-3 text-emerald-600" />
-                                        <span>{part.notes}</span>
+                                    {part.notes && !part.notes.startsWith('For Line') && (
+                                      <div className="text-[11px] text-slate-500 italic">
+                                        {part.notes}
                                       </div>
                                     )}
                                   </div>
                                 )}
                               </td>
 
-                              {/* Status Dropdown Pill (Click to update day by day!) */}
-                              <td className="py-2.5 px-3 align-top">
-                                <div className="relative inline-block w-44 pt-0.5">
+                              {/* Part Status Dropdown */}
+                              <td className="py-2.5 px-3 align-top min-w-[160px]">
+                                <div className="relative inline-block w-full">
                                   <select
                                     value={part.status}
                                     onChange={(e) => handleQuickStatusChange(part.id, e.target.value as PartStatus)}
-                                    className={`w-full text-xs font-bold py-1.5 px-2.5 rounded-lg border shadow-2xs cursor-pointer appearance-none ${statusConf.bg} ${statusConf.text} ${statusConf.border} focus:ring-2 focus:ring-blue-500 pr-7`}
-                                    title="Click to update part status day by day"
+                                    className={`w-full text-xs font-bold px-2.5 py-1.5 rounded-lg border appearance-none cursor-pointer pr-7 shadow-2xs ${statusConf.bg} ${statusConf.text} ${statusConf.border}`}
+                                    title="Click to update parts logistics status"
                                   >
                                     <option value="REQUESTED">🟧 Needs Order</option>
-                                    <option value="QUOTE_ONLY">📋 Quote Only</option>
-                                    <option value="ORDERED">🟦 Ordered</option>
-                                    <option value="SPECIAL_ORDER_1_5_DAYS">🚚 Special Order (1-5 Days)</option>
-                                    <option value="IN_TRANSIT">🟪 In Transit</option>
-                                    <option value="RECEIVED">🟩 Received & Staged</option>
-                                    <option value="IN_STOCK">📦 In Stock</option>
-                                    <option value="BACKORDERED">🟥 Backordered</option>
-                                    <option value="DECLINED">⚪ Declined</option>
-                                    <option value="CANCELLED">⚪ Cancelled</option>
+                                    <option value="DAILY_ORDER">🚚 Daily Order (Today 2pm)</option>
+                                    <option value="SPECIAL_ORDER_1_5_DAYS">📦 Special Order (1-5 Days)</option>
+                                    <option value="ORDERED">📦 General Ordered</option>
+                                    <option value="VOR_UPGRADE">🚨 VOR Urgent Delivery</option>
+                                    <option value="IN_TRANSIT">🛫 In Transit</option>
+                                    <option value="RECEIVED">✅ Arrived & Staged</option>
+                                    <option value="IN_STOCK">🏢 In Stock / In Bay</option>
+                                    <option value="ISSUED_TO_TECH">🔧 Issued to Tech</option>
+                                    <option value="BACKORDERED">⚠️ Backordered</option>
+                                    <option value="DECLINED">🛑 Declined by Customer</option>
                                   </select>
-                                  <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">
+                                    ▼
+                                  </span>
                                 </div>
                               </td>
 
@@ -1045,6 +1574,148 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
           );
         })}
       </div>
+
+      {/* Quick Edit Customer & Vehicle Details Modal */}
+      {isEditingRODetails && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleSaveRODetails}
+            className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border-2 border-slate-700 space-y-4 animate-in fade-in"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <Car className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-black text-slate-900">
+                  Quick Edit Order Details (RO #{ro.id})
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingRODetails(false)}
+                className="text-slate-500 hover:text-slate-800 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="block font-black text-slate-800 mb-1">
+                  Customer Name *
+                </label>
+                <input
+                  type="text"
+                  value={editCustName}
+                  onChange={(e) => setEditCustName(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 mb-1">
+                  Customer Phone *
+                </label>
+                <input
+                  type="text"
+                  value={editCustPhone}
+                  onChange={(e) => setEditCustPhone(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 mb-1">
+                  Vehicle Year
+                </label>
+                <input
+                  type="number"
+                  value={editVehYear}
+                  onChange={(e) => setEditVehYear(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 mb-1">
+                  Vehicle Make
+                </label>
+                <input
+                  type="text"
+                  value={editVehMake}
+                  onChange={(e) => setEditVehMake(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 mb-1">
+                  Vehicle Model
+                </label>
+                <input
+                  type="text"
+                  value={editVehModel}
+                  onChange={(e) => setEditVehModel(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-black text-slate-800 mb-1">
+                  Odometer Mileage
+                </label>
+                <input
+                  type="number"
+                  value={editVehMileage}
+                  onChange={(e) => setEditVehMileage(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block font-black text-slate-800 mb-1">
+                  Vehicle Identification Number (VIN)
+                </label>
+                <input
+                  type="text"
+                  value={editVehVin}
+                  onChange={(e) => setEditVehVin(e.target.value.toUpperCase())}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold uppercase"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block font-black text-slate-800 mb-1">
+                  Customer Promised Delivery Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editPromisedTime ? new Date(editPromisedTime).toISOString().slice(0, 16) : ''}
+                  onChange={(e) => setEditPromisedTime(e.target.value ? new Date(e.target.value).toISOString() : '')}
+                  className="w-full p-2 border border-slate-300 rounded-lg font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsEditingRODetails(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-lg shadow-sm cursor-pointer"
+              >
+                Save Details
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

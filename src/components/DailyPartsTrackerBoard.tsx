@@ -36,6 +36,10 @@ export const DailyPartsTrackerBoard: React.FC<DailyPartsTrackerBoardProps> = ({ 
   const [vendorFilter, setVendorFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
+  const [inlinePartNumber, setInlinePartNumber] = useState<string>('');
+  const [inlineDescription, setInlineDescription] = useState<string>('');
+  const [inlineQty, setInlineQty] = useState<number>(1);
+  const [inlinePrice, setInlinePrice] = useState<string>('0.00');
   const [inlineEta, setInlineEta] = useState<string>('');
   const [inlineTracking, setInlineTracking] = useState<string>('');
   const [inlineNotes, setInlineNotes] = useState<string>('');
@@ -161,13 +165,31 @@ export const DailyPartsTrackerBoard: React.FC<DailyPartsTrackerBoardProps> = ({ 
 
   const handleStartInline = (key: string, part: PartItem) => {
     setEditingPartKey(key);
+    setInlinePartNumber(part.partNumber && part.partNumber !== 'TBD' ? part.partNumber : '');
+    setInlineDescription(part.description || part.name || '');
+    setInlineQty(part.quantity || 1);
+    const pPrice = Number(part.price) || 0;
+    setInlinePrice(pPrice > 0 ? pPrice.toFixed(2) : '0.00');
     setInlineEta(part.estimatedArrival || '');
     setInlineTracking(part.trackingNumber || '');
     setInlineNotes(part.notes || '');
   };
 
+  const handleCancelInline = () => {
+    setEditingPartKey(null);
+  };
+
   const handleSaveInline = (roId: string, partId: string) => {
+    const rawPriceClean = inlinePrice ? String(inlinePrice).replace(/[^0-9.]/g, '') : '';
+    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
+      ? Number(Number(rawPriceClean).toFixed(2)) 
+      : 0;
+
     updatePartItem(roId, partId, {
+      partNumber: inlinePartNumber.trim().toUpperCase() || 'TBD',
+      description: inlineDescription.trim() || 'Part Item',
+      quantity: Math.max(1, Number(inlineQty) || 1),
+      price: parsedPrice,
       estimatedArrival: inlineEta.trim() || undefined,
       trackingNumber: inlineTracking.trim() || undefined,
       notes: inlineNotes.trim() || undefined,
@@ -360,23 +382,67 @@ export const DailyPartsTrackerBoard: React.FC<DailyPartsTrackerBoardProps> = ({ 
                       </td>
 
                       {/* Part Details */}
-                      <td className="py-3 px-3">
-                        <div className="font-mono font-black text-slate-900 text-xs">
-                          {part.partNumber || 'OEM-PART'}
-                        </div>
-                        <div className="text-slate-700 font-medium text-xs">
-                          {part.description || part.name}
-                        </div>
+                      <td className="py-3 px-3 min-w-[160px]">
+                        {isInline ? (
+                          <div className="space-y-1">
+                            <input
+                              type="text"
+                              value={inlinePartNumber}
+                              onChange={(e) => setInlinePartNumber(e.target.value.toUpperCase())}
+                              placeholder="Part #"
+                              className="w-full text-xs font-mono font-black p-1 bg-white border border-blue-500 rounded uppercase"
+                            />
+                            <input
+                              type="text"
+                              value={inlineDescription}
+                              onChange={(e) => setInlineDescription(e.target.value)}
+                              placeholder="Part description"
+                              className="w-full text-xs p-1 bg-white border border-slate-300 rounded font-medium"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="font-mono font-black text-slate-900 text-xs">
+                              {part.partNumber || 'OEM-PART'}
+                            </div>
+                            <div className="text-slate-700 font-medium text-xs">
+                              {part.description || part.name}
+                            </div>
+                          </>
+                        )}
                       </td>
 
                       {/* Qty */}
                       <td className="py-3 px-2 text-center font-bold text-slate-800">
-                        {part.quantity || 1}
+                        {isInline ? (
+                          <input
+                            type="number"
+                            min="1"
+                            value={inlineQty}
+                            onChange={(e) => setInlineQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className="w-12 text-xs font-black text-center p-1 bg-white border border-slate-300 rounded"
+                          />
+                        ) : (
+                          part.quantity || 1
+                        )}
                       </td>
 
                       {/* Price */}
-                      <td className="py-3 px-2.5 text-right font-mono font-bold text-slate-900">
-                        {formatCurrency(price)}
+                      <td className="py-3 px-2.5 text-right font-mono font-bold text-slate-900 min-w-[95px]">
+                        {isInline ? (
+                          <div className="relative inline-block w-full">
+                            <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                            <input
+                              type="text"
+                              value={inlinePrice}
+                              onChange={(e) => setInlinePrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                              placeholder="0.00"
+                              className="w-full pl-4 pr-1 py-1 text-xs text-right font-mono font-black bg-white border border-emerald-500 rounded"
+                            />
+                          </div>
+                        ) : (
+                          formatCurrency(price)
+                        )}
                       </td>
 
                       {/* Supplier */}
@@ -412,13 +478,22 @@ export const DailyPartsTrackerBoard: React.FC<DailyPartsTrackerBoardProps> = ({ 
                               placeholder="Shelf / Bin #"
                               className="w-full text-xs p-1 bg-white border border-slate-300 rounded"
                             />
-                            <button
-                              type="button"
-                              onClick={() => handleSaveInline(ro.id, part.id)}
-                              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold cursor-pointer"
-                            >
-                              Save
-                            </button>
+                            <div className="flex items-center gap-1 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveInline(ro.id, part.id)}
+                                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelInline}
+                                className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-0.5">
