@@ -176,9 +176,9 @@ export const QuotePrintModal: React.FC = () => {
   const shopSuppliesFee = quote?.applyShopSupplies ? Math.min(35.00, Number(quote?.shopSuppliesFee) || 25.00) : 0;
   const isTaxExempt = Boolean(cleanRO.isTaxExempt || quote?.isTaxExempt);
   const taxRatePercent = isTaxExempt ? 0 : (Number((quote as any)?.taxRatePercent) || (quote?.taxRate !== undefined ? Number((quote.taxRate * 100).toFixed(2)) : 7.0));
-  const taxableAmount = totalLaborCost + totalPartsCost;
+  const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
   // Sales tax is never capped at $35; only shop supplies is capped at $35
-  const taxAmount = isTaxExempt ? 0 : (quote?.taxAmount !== undefined && quote.taxAmount > 0 ? Number(quote.taxAmount) : Number((taxableAmount * (taxRatePercent / 100)).toFixed(2)));
+  const taxAmount = isTaxExempt ? 0 : Number((taxableAmount * (taxRatePercent / 100)).toFixed(2));
   const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
   const handleCopySummary = () => {

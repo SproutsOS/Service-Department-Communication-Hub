@@ -313,7 +313,7 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
       : 0;
 
     // Tax calculation
-    const taxableAmount = totalLaborCost + totalPartsCost;
+    const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
     const taxRate = isTaxExempt ? 0 : DEFAULT_TAX_RATE;
     const taxAmount = isTaxExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
     const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));

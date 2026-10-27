@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Package, 
   Truck, 
@@ -404,8 +404,34 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   const totalLaborHours = quote?.totalLaborHours || (quote?.laborItems?.reduce((sum, l) => sum + (l.laborHours || 0), 0) || 0);
   const totalLaborCost = quote?.totalLaborCost || (quote?.laborItems?.reduce((sum, l) => sum + (l.subtotal || 0), 0) || 0);
   
-  // Total parts cost from RO parts
-  const allParts = ro.parts || [];
+  // Total parts cost from RO parts merged with quote parts items
+  const allParts: PartItem[] = useMemo(() => {
+    const list: PartItem[] = [...(ro.parts || [])];
+    const seenIds = new Set(list.map(p => p.id));
+    if (ro.quote?.partsItems) {
+      ro.quote.partsItems.forEach(qp => {
+        if (!seenIds.has(qp.id) && (!qp.sourcePartId || !seenIds.has(qp.sourcePartId))) {
+          seenIds.add(qp.id);
+          list.push({
+            id: qp.id,
+            roId: ro.id,
+            partNumber: qp.partNumber || 'TBD',
+            description: qp.description || 'Part Item',
+            quantity: qp.quantity || 1,
+            price: qp.unitPrice || 0,
+            status: qp.status === 'DECLINED' ? 'DECLINED' : 'REQUESTED',
+            requestType: 'QUOTE_ONLY',
+            vendor: 'Shop Inventory / Supplier',
+            estimatedArrival: 'Pending Parts Counter',
+            roLineNumber: qp.roLineNumber || 1,
+            notes: `For Line ${qp.roLineNumber || 1}`
+          });
+        }
+      });
+    }
+    return list;
+  }, [ro.parts, ro.quote?.partsItems, ro.id]);
+
   const totalPartsCost = allParts
     .filter(p => p.status !== 'DECLINED' && p.status !== 'CANCELLED')
     .reduce((sum, p) => sum + ((p.quantity || 1) * (Number(p.price) || 0)), 0);
@@ -416,10 +442,10 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     ? (quote?.shopSuppliesFee !== undefined ? Math.min(35.00, Number(quote.shopSuppliesFee)) : Math.min(35.00, Number((totalLaborCost * 0.08).toFixed(2))))
     : 0;
 
-  // Tax & Exemption - Taxes have NO cap, only Shop Supplies is capped at $35.00
+  // Tax & Exemption - Taxes have NO cap, charged on Labor + Parts + Shop Supplies
   const isTaxExempt = Boolean(ro.isTaxExempt || quote?.isTaxExempt);
   const taxRate = isTaxExempt ? 0 : (quote?.taxRate ?? 0.07);
-  const taxableAmount = totalLaborCost + totalPartsCost;
+  const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
   const taxAmount = isTaxExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
   const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 

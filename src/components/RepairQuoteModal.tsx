@@ -216,7 +216,7 @@ export const RepairQuoteModal: React.FC = () => {
     const fivePercent = curLaborCost * 0.05;
     const curShopSupplies = !curApplySupplies ? 0 : Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : Math.min(curSuppliesFee, 35)).toFixed(2));
     const curPartsCost = Number(curParts.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0).toFixed(2));
-    const curTaxableAmount = curLaborCost + curPartsCost;
+    const curTaxableAmount = curLaborCost + curPartsCost + curShopSupplies;
     const curTax = curIsExempt ? 0 : Number((curTaxableAmount * ((curTaxPercent || 0) / 100)).toFixed(2));
     const curGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + curTax).toFixed(2));
 
@@ -622,10 +622,10 @@ export const RepairQuoteModal: React.FC = () => {
   const estimatedTaxAmount = useMemo(() => {
     if (isTaxExempt) return 0;
     const rate = (taxRatePercent || 0) / 100;
-    // Sales tax applied to parts and labor
-    const taxableAmount = (totalLaborCost || 0) + (totalPartsCost || 0);
+    // Sales tax applied to labor, parts, and shop supplies
+    const taxableAmount = (totalLaborCost || 0) + (totalPartsCost || 0) + (calculatedShopSupplies || 0);
     return Number((taxableAmount * rate).toFixed(2));
-  }, [totalLaborCost, totalPartsCost, taxRatePercent, isTaxExempt]);
+  }, [totalLaborCost, totalPartsCost, calculatedShopSupplies, taxRatePercent, isTaxExempt]);
 
   const grandTotal = useMemo(() => {
     return Number(((totalLaborCost || 0) + (totalPartsCost || 0) + (calculatedShopSupplies || 0) + (estimatedTaxAmount || 0)).toFixed(2));

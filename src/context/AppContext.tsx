@@ -2484,8 +2484,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const supplies = Math.min(35.00, Number(mergedQuote.shopSuppliesFee) || 0);
         const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
         const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-        const taxableAmount = totalLaborCost + totalPartsCost;
-        // Sales tax is never capped at $35; only shop supplies is capped at $35
+        // Sales tax applies to labor, parts, and shop supplies; only shop supplies is capped at $35
+        const taxableAmount = totalLaborCost + totalPartsCost + supplies;
         const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
         const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
@@ -2504,9 +2504,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updatedRO: RepairOrder = {
         ...targetRO,
         status: newROStatus,
-        parts: [...targetRO.parts, ...newParts],
+        parts: [...(targetRO.parts || []), ...newParts],
         quote: mergedQuote,
-        history: [...targetRO.history, ...newHistoryEntries],
+        history: [...(targetRO.history || []), ...newHistoryEntries],
       };
 
       updatedROToSync = updatedRO;
@@ -2831,231 +2831,255 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     partId: string,
     updates: Partial<PartItem>
   ) => {
-    const targetRO = repairOrders.find(r => r.id === roId);
-    if (!targetRO) return;
-
+    let updatedROToSync: RepairOrder | null = null;
     let partDesc = '';
-    const updatedParts = targetRO.parts.map(p => {
-      if (p.id !== partId) return p;
-      partDesc = updates.description || p.description;
-      let parsedPrice = p.price;
-      if (updates.price !== undefined) {
-        const clean = typeof updates.price === 'number' ? updates.price : String(updates.price ?? '').replace(/[^0-9.-]/g, '');
-        if (clean !== '' && !isNaN(Number(clean))) {
-          parsedPrice = Number(Number(clean).toFixed(2));
-        } else if (clean === '' || clean === null) {
-          parsedPrice = undefined;
+
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
+
+      const updatedParts = (targetRO.parts || []).map(p => {
+        if (p.id !== partId) return p;
+        partDesc = updates.description || p.description;
+        let parsedPrice = p.price;
+        if (updates.price !== undefined) {
+          const clean = typeof updates.price === 'number' ? updates.price : String(updates.price ?? '').replace(/[^0-9.-]/g, '');
+          if (clean !== '' && !isNaN(Number(clean))) {
+            parsedPrice = Number(Number(clean).toFixed(2));
+          } else if (clean === '' || clean === null) {
+            parsedPrice = undefined;
+          }
         }
-      }
-      return {
-        ...p,
-        ...updates,
-        price: parsedPrice,
-      };
-    });
-
-    // Check if parts are all received / issued
-    const allReceived = updatedParts.length > 0 && updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
-    const hasPendingUnorderedParts = updatedParts.some(p => p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY' || p.status === 'NEEDED' || p.requestType === 'QUOTE_ONLY');
-    const allOrderedOrReceived = updatedParts.length > 0 && !hasPendingUnorderedParts && updatedParts.every(p => 
-      ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'].includes(p.status)
-    );
-
-    let nextROStatus = targetRO.status;
-    if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
-      nextROStatus = (updates.status === 'ISSUED_TO_TECH') ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
-    } else if (allOrderedOrReceived && updates.status && ['DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'ORDERED', 'VOR_UPGRADE'].includes(updates.status)) {
-      if (targetRO.status === 'WAITING_PARTS' || targetRO.status === 'BEING_DIAGNOSED') {
-        nextROStatus = 'PARTS_ORDERED';
-      }
-    }
-
-    // Sync quote: Ensure quote exists and is updated with part pricing for estimate
-    let mergedQuote = targetRO.quote;
-    if (!mergedQuote) {
-      const concernsList = (targetRO.concerns && targetRO.concerns.length > 0)
-        ? targetRO.concerns
-        : [targetRO.primaryConcern || 'General Diagnostic & Service'];
-      const defaultPay = targetRO.concernPayTypes?.[0] || 'CUSTOMER_PAY';
-      const hourlyRate = PAY_TYPE_RATES[defaultPay] || 165.00;
-      
-      const laborItems: LaborLineItem[] = concernsList.map((concern, idx) => ({
-        id: `labor_${Date.now()}_ro_${idx}`,
-        description: targetRO.correction ? `Concern: ${concern} — Correction: ${targetRO.correction}` : `Concern: ${concern}`,
-        laborHours: 0,
-        hourlyRate,
-        subtotal: 0,
-        payType: targetRO.concernPayTypes?.[idx] || defaultPay,
-        roLineNumber: idx + 1,
-        concernText: concern,
-        correctionText: targetRO.correction || '',
-        addedByAdvisor: false,
-      }));
-
-      mergedQuote = {
-        id: `quote_${Date.now()}`,
-        roId: targetRO.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        initiatedByTechId: currentUser.id,
-        initiatedByTechName: currentUser.name,
-        status: 'DRAFT',
-        payType: defaultPay,
-        laborItems,
-        partsItems: [],
-        defaultLaborRate: hourlyRate,
-        shopSuppliesFee: 0,
-        taxRate: targetRO.isTaxExempt ? 0 : 0.07,
-        taxAmount: 0,
-        totalLaborHours: 0,
-        totalLaborCost: 0,
-        totalPartsCost: 0,
-        grandTotal: 0,
-        techNotes: targetRO.correction ? `Correction: ${targetRO.correction}` : undefined,
-      };
-    }
-
-    if (mergedQuote) {
-      const existingQuoteParts = mergedQuote.partsItems || [];
-      let nextPartsItems = [...existingQuoteParts];
-      const targetPart = targetRO.parts.find(p => p.id === partId);
-      const effectiveLineNumber = updates.roLineNumber || targetPart?.roLineNumber;
-      const cleanUpdatesPn = updates.partNumber && updates.partNumber !== 'TBD' ? updates.partNumber.trim().toUpperCase() : '';
-      const cleanTargetPn = targetPart?.partNumber && targetPart.partNumber !== 'TBD' ? targetPart.partNumber.trim().toUpperCase() : '';
-
-      const matchIdx = existingQuoteParts.findIndex(qp => {
-        if (qp.sourcePartId && qp.sourcePartId === partId) return true;
-        if (qp.id === partId || qp.id === `qpart_${partId}`) return true;
-        if (cleanUpdatesPn && qp.partNumber && qp.partNumber.trim().toUpperCase() === cleanUpdatesPn) return true;
-        if (cleanTargetPn && qp.partNumber && qp.partNumber.trim().toUpperCase() === cleanTargetPn) return true;
-        if (partDesc && qp.description && qp.description.trim().toLowerCase() === partDesc.trim().toLowerCase()) return true;
-        return false;
+        return {
+          ...p,
+          ...updates,
+          price: parsedPrice,
+        };
       });
 
-      let partPrice: number | undefined = undefined;
-      if (updates.price !== undefined) {
-        const clean = typeof updates.price === 'number' ? updates.price : String(updates.price ?? '').replace(/[^0-9.-]/g, '');
-        if (clean !== '' && !isNaN(Number(clean))) {
-          partPrice = Number(Number(clean).toFixed(2));
+      // Check if parts are all received / issued
+      const allReceived = updatedParts.length > 0 && updatedParts.every(p => p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH');
+      const hasPendingUnorderedParts = updatedParts.some(p => p.status === 'REQUESTED' || p.status === 'QUOTE_ONLY' || p.status === 'NEEDED' || p.requestType === 'QUOTE_ONLY');
+      const allOrderedOrReceived = updatedParts.length > 0 && !hasPendingUnorderedParts && updatedParts.every(p => 
+        ['ORDERED', 'DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'VOR_UPGRADE', 'IN_TRANSIT', 'RECEIVED', 'ISSUED_TO_TECH', 'IN_STOCK', 'DECLINED', 'CANCELLED'].includes(p.status)
+      );
+
+      let nextROStatus = targetRO.status;
+      if (allReceived && (targetRO.status === 'PARTS_ORDERED' || targetRO.status === 'WAITING_PARTS')) {
+        nextROStatus = (updates.status === 'ISSUED_TO_TECH') ? 'REPAIR_IN_PROGRESS' : 'PARTS_IN_TO_TECH';
+      } else if (allOrderedOrReceived && updates.status && ['DAILY_ORDER', 'LOCAL_PURCHASE', 'SPECIAL_ORDER', 'SPECIAL_ORDER_1_5_DAYS', 'ORDERED', 'VOR_UPGRADE'].includes(updates.status)) {
+        if (targetRO.status === 'WAITING_PARTS' || targetRO.status === 'BEING_DIAGNOSED') {
+          nextROStatus = 'PARTS_ORDERED';
         }
       }
 
-      if (matchIdx >= 0) {
-        const cur = nextPartsItems[matchIdx];
-        const newUnitPrice = partPrice !== undefined ? partPrice : (cur.unitPrice || 0);
-        const newQty = updates.quantity !== undefined 
-          ? Math.max(1, Number(updates.quantity) || 1) 
-          : (targetPart?.quantity || cur.quantity || 1);
-        nextPartsItems[matchIdx] = {
-          ...cur,
-          description: updates.description || cur.description,
-          partNumber: updates.partNumber || cur.partNumber,
-          quantity: newQty,
-          unitPrice: newUnitPrice,
-          subtotal: Number((newQty * (Number(newUnitPrice) || 0)).toFixed(2)),
-          sourcePartId: partId,
-          roLineNumber: effectiveLineNumber || cur.roLineNumber,
+      // Sync quote: Ensure quote exists and is updated with part pricing for estimate
+      let mergedQuote = targetRO.quote;
+      if (!mergedQuote) {
+        const concernsList = (targetRO.concerns && targetRO.concerns.length > 0)
+          ? targetRO.concerns
+          : [targetRO.primaryConcern || 'General Diagnostic & Service'];
+        const defaultPay = targetRO.concernPayTypes?.[0] || 'CUSTOMER_PAY';
+        const hourlyRate = PAY_TYPE_RATES[defaultPay] || 165.00;
+        
+        const laborItems: LaborLineItem[] = concernsList.map((concern, idx) => ({
+          id: `labor_${Date.now()}_ro_${idx}`,
+          description: targetRO.correction ? `Concern: ${concern} — Correction: ${targetRO.correction}` : `Concern: ${concern}`,
+          laborHours: 0,
+          hourlyRate,
+          subtotal: 0,
+          payType: targetRO.concernPayTypes?.[idx] || defaultPay,
+          roLineNumber: idx + 1,
+          concernText: concern,
+          correctionText: targetRO.correction || '',
+          addedByAdvisor: false,
+        }));
+
+        mergedQuote = {
+          id: `quote_${Date.now()}`,
+          roId: targetRO.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          initiatedByTechId: currentUser.id,
+          initiatedByTechName: currentUser.name,
+          status: 'DRAFT',
+          payType: defaultPay,
+          laborItems,
+          partsItems: [],
+          defaultLaborRate: hourlyRate,
+          shopSuppliesFee: 0,
+          taxRate: targetRO.isTaxExempt ? 0 : 0.07,
+          taxAmount: 0,
+          totalLaborHours: 0,
+          totalLaborCost: 0,
+          totalPartsCost: 0,
+          grandTotal: 0,
+          techNotes: targetRO.correction ? `Correction: ${targetRO.correction}` : undefined,
         };
-      } else if (partDesc || updates.partNumber) {
-        const newPartQty = updates.quantity !== undefined 
-          ? Math.max(1, Number(updates.quantity) || 1) 
-          : (targetPart?.quantity || 1);
-        nextPartsItems.push({
-          id: `qpart_${Date.now()}_${partId}`,
-          description: partDesc || `Part ${updates.partNumber || ''}`,
-          partNumber: updates.partNumber || '',
-          quantity: newPartQty,
-          unitPrice: (partPrice !== undefined) ? partPrice : ('' as any),
-          subtotal: Number((newPartQty * (partPrice || 0)).toFixed(2)),
-          sourcePartId: partId,
-          roLineNumber: effectiveLineNumber,
-        });
       }
-      const totalPartsCost = Number(nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
-      const totalLaborCost = Number((mergedQuote.totalLaborCost || 0).toFixed(2));
-      const supplies = Math.min(35.00, Number((mergedQuote.shopSuppliesFee || 0).toFixed(2)));
-      const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
-      const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-      const taxableAmount = totalLaborCost + totalPartsCost;
-      // Sales tax is never capped at $35; only shop supplies is capped at $35
-      const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
-      const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
 
-      mergedQuote = {
-        ...mergedQuote,
-        partsItems: nextPartsItems,
-        totalPartsCost,
-        shopSuppliesFee: supplies,
-        isTaxExempt: isExempt,
-        taxRate,
-        taxAmount,
-        grandTotal,
-        updatedAt: new Date().toISOString(),
+      if (mergedQuote) {
+        const existingQuoteParts = mergedQuote.partsItems || [];
+        let nextPartsItems = [...existingQuoteParts];
+        const targetPart = (targetRO.parts || []).find(p => p.id === partId);
+        const effectiveLineNumber = updates.roLineNumber || targetPart?.roLineNumber;
+        const cleanUpdatesPn = updates.partNumber && updates.partNumber !== 'TBD' ? updates.partNumber.trim().toUpperCase() : '';
+        const cleanTargetPn = targetPart?.partNumber && targetPart.partNumber !== 'TBD' ? targetPart.partNumber.trim().toUpperCase() : '';
+
+        const matchIdx = existingQuoteParts.findIndex(qp => {
+          if (qp.sourcePartId && qp.sourcePartId === partId) return true;
+          if (qp.id === partId || qp.id === `qpart_${partId}`) return true;
+          if (cleanUpdatesPn && qp.partNumber && qp.partNumber.trim().toUpperCase() === cleanUpdatesPn) return true;
+          if (cleanTargetPn && qp.partNumber && qp.partNumber.trim().toUpperCase() === cleanTargetPn) return true;
+          if (partDesc && qp.description && qp.description.trim().toLowerCase() === partDesc.trim().toLowerCase()) return true;
+          return false;
+        });
+
+        let partPrice: number | undefined = undefined;
+        if (updates.price !== undefined) {
+          const clean = typeof updates.price === 'number' ? updates.price : String(updates.price ?? '').replace(/[^0-9.-]/g, '');
+          if (clean !== '' && !isNaN(Number(clean))) {
+            partPrice = Number(Number(clean).toFixed(2));
+          }
+        }
+
+        if (matchIdx >= 0) {
+          const cur = nextPartsItems[matchIdx];
+          const newUnitPrice = partPrice !== undefined ? partPrice : (cur.unitPrice || 0);
+          const newQty = updates.quantity !== undefined 
+            ? Math.max(1, Number(updates.quantity) || 1) 
+            : (targetPart?.quantity || cur.quantity || 1);
+          nextPartsItems[matchIdx] = {
+            ...cur,
+            description: updates.description || cur.description,
+            partNumber: updates.partNumber || cur.partNumber,
+            quantity: newQty,
+            unitPrice: newUnitPrice,
+            subtotal: Number((newQty * (Number(newUnitPrice) || 0)).toFixed(2)),
+            sourcePartId: partId,
+            roLineNumber: effectiveLineNumber || cur.roLineNumber,
+          };
+        } else if (partDesc || updates.partNumber) {
+          const newPartQty = updates.quantity !== undefined 
+            ? Math.max(1, Number(updates.quantity) || 1) 
+            : (targetPart?.quantity || 1);
+          nextPartsItems.push({
+            id: `qpart_${Date.now()}_${partId}`,
+            description: partDesc || `Part ${updates.partNumber || ''}`,
+            partNumber: updates.partNumber || '',
+            quantity: newPartQty,
+            unitPrice: (partPrice !== undefined) ? partPrice : ('' as any),
+            subtotal: Number((newPartQty * (partPrice || 0)).toFixed(2)),
+            sourcePartId: partId,
+            roLineNumber: effectiveLineNumber,
+          });
+        }
+        const totalPartsCost = Number(nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
+        const totalLaborCost = Number((mergedQuote.totalLaborCost || 0).toFixed(2));
+        const supplies = Math.min(35.00, Number((mergedQuote.shopSuppliesFee || 0).toFixed(2)));
+        const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
+        const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+        // Sales tax applies to labor, parts, and shop supplies; only shop supplies is capped at $35
+        const taxableAmount = totalLaborCost + totalPartsCost + supplies;
+        const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
+        const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+
+        mergedQuote = {
+          ...mergedQuote,
+          partsItems: nextPartsItems,
+          totalPartsCost,
+          shopSuppliesFee: supplies,
+          isTaxExempt: isExempt,
+          taxRate,
+          taxAmount,
+          grandTotal,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        status: nextROStatus,
+        parts: updatedParts,
+        quote: mergedQuote,
+        history: [
+          ...(targetRO.history || []),
+          {
+            id: `hist_${Date.now()}`,
+            status: nextROStatus,
+            updatedBy: currentUser.id,
+            updatedByName: currentUser.name,
+            userRole: currentUser.role,
+            timestamp: new Date().toISOString(),
+            notes: `[Parts Dept] Updated part #${updates.partNumber || ''} (${partDesc}). Status: ${(updates.status || 'UPDATED').replace(/_/g, ' ')}`,
+          },
+        ],
       };
+
+      updatedROToSync = updatedRO;
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (updatedROToSync) {
+      syncRepairOrder(updatedROToSync);
     }
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      status: nextROStatus,
-      parts: updatedParts,
-      quote: mergedQuote,
-      history: [
-        ...targetRO.history,
-        {
-          id: `hist_${Date.now()}`,
-          status: nextROStatus,
-          updatedBy: currentUser.id,
-          updatedByName: currentUser.name,
-          userRole: currentUser.role,
-          timestamp: new Date().toISOString(),
-          notes: `[Parts Dept] Updated part #${updates.partNumber || ''} (${partDesc}). Status: ${(updates.status || 'UPDATED').replace(/_/g, ' ')}`,
-        },
-      ],
-    };
-
-    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
-    syncRepairOrder(updatedRO);
   };
 
   // Delete Part Item
   const deletePartItem = (roId: string, partId: string) => {
-    const targetRO = repairOrders.find(r => r.id === roId);
-    if (!targetRO) return;
+    let updatedROToSync: RepairOrder | null = null;
 
-    const remainingParts = targetRO.parts.filter(p => p.id !== partId);
-    let mergedQuote = targetRO.quote;
-    if (mergedQuote && mergedQuote.partsItems) {
-      const nextPartsItems = mergedQuote.partsItems.filter(qp => qp.sourcePartId !== partId);
-      const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
-      const totalLaborCost = mergedQuote.totalLaborCost || 0;
-      const supplies = Math.min(35.00, Number(mergedQuote.shopSuppliesFee) || 0);
-      const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
-      const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
-      const taxableAmount = totalLaborCost + totalPartsCost;
-      // Sales tax is never capped at $35; only shop supplies is capped at $35
-      const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
-      const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+    setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
 
-      mergedQuote = {
-        ...mergedQuote,
-        partsItems: nextPartsItems,
-        totalPartsCost,
-        shopSuppliesFee: supplies,
-        isTaxExempt: isExempt,
-        taxRate,
-        taxAmount,
-        grandTotal,
+      const remainingParts = (targetRO.parts || []).filter(p => p.id !== partId);
+      let mergedQuote = targetRO.quote;
+      if (mergedQuote && mergedQuote.partsItems) {
+        const nextPartsItems = mergedQuote.partsItems.filter(qp => qp.sourcePartId !== partId && qp.id !== partId);
+        const totalPartsCost = nextPartsItems.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
+        const totalLaborCost = mergedQuote.totalLaborCost || 0;
+        const supplies = Math.min(35.00, Number(mergedQuote.shopSuppliesFee) || 0);
+        const isExempt = Boolean(targetRO.isTaxExempt || mergedQuote.isTaxExempt);
+        const taxRate = isExempt ? 0 : (mergedQuote.taxRate ?? 0.07);
+        // Sales tax applies to labor, parts, and shop supplies; only shop supplies is capped at $35
+        const taxableAmount = totalLaborCost + totalPartsCost + supplies;
+        const taxAmount = Number((taxableAmount * taxRate).toFixed(2));
+        const grandTotal = Number((totalLaborCost + totalPartsCost + supplies + taxAmount).toFixed(2));
+
+        mergedQuote = {
+          ...mergedQuote,
+          partsItems: nextPartsItems,
+          totalPartsCost,
+          shopSuppliesFee: supplies,
+          isTaxExempt: isExempt,
+          taxRate,
+          taxAmount,
+          grandTotal,
+        };
+      }
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        parts: remainingParts,
+        quote: mergedQuote,
       };
+
+      updatedROToSync = updatedRO;
+      const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
+      try {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (updatedROToSync) {
+      syncRepairOrder(updatedROToSync);
     }
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      parts: remainingParts,
-      quote: mergedQuote,
-    };
-
-    setRepairOrders(prev => prev.map(ro => ro.id === roId ? updatedRO : ro));
-    syncRepairOrder(updatedRO);
   };
 
   // Create new repair order
@@ -4006,10 +4030,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const q = ro.quote;
             const curLaborCost = Number((q.totalLaborCost || 0).toFixed(2));
             const curPartsCost = Number((q.totalPartsCost || 0).toFixed(2));
-            const curShopSupplies = Number((q.shopSuppliesFee || 0).toFixed(2));
+            const curShopSupplies = Math.min(35.00, Number((q.shopSuppliesFee || 0).toFixed(2)));
             const newTaxRate = nextIsTaxExempt ? 0 : 0.07;
-            const taxableAmount = curLaborCost + curPartsCost;
-            const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * 0.07).toFixed(2));
+            const taxableAmount = curLaborCost + curPartsCost + curShopSupplies;
+            const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * newTaxRate).toFixed(2));
             const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
             updatedQuote = {
               ...q,
@@ -4108,8 +4132,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   const totalPartsCost = Number(cleanedQuote.totalPartsCost || 0);
                   const isExempt = cleanedQuote.isTaxExempt || false;
                   const taxRate = isExempt ? 0 : (cleanedQuote.taxRate !== undefined ? cleanedQuote.taxRate : 0.07);
-                  const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
-                  const shopSupplies = cleanedQuote.shopSuppliesFee || 0;
+                  const shopSupplies = Math.min(35, cleanedQuote.shopSuppliesFee || 0);
+                  const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost + shopSupplies) * taxRate).toFixed(2));
                   const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
 
                   cleanedQuote = {
@@ -4259,7 +4283,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const curShopSupplies = Math.min(35.00, Number((q.shopSuppliesFee || 0).toFixed(2)));
       
       const newTaxRate = nextIsTaxExempt ? 0 : (q.taxRate && q.taxRate > 0 ? q.taxRate : 0.07);
-      const taxableAmount = curLaborCost + curPartsCost;
+      const taxableAmount = curLaborCost + curPartsCost + curShopSupplies;
       // Sales tax is never capped at $35; only shop supplies is capped at $35
       const newTaxAmount = nextIsTaxExempt ? 0 : Number((taxableAmount * newTaxRate).toFixed(2));
       const newGrandTotal = Number((curLaborCost + curPartsCost + curShopSupplies + newTaxAmount).toFixed(2));
@@ -4496,68 +4520,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     correction: string,
     options?: { isAutoSave?: boolean; notify?: boolean; concernCauses?: string[]; concernCorrections?: string[] }
   ): boolean => {
-    const targetRO = repairOrders.find(r => r.id === roId);
-    if (!targetRO) return false;
-
+    let syncedRO: RepairOrder | null = null;
     const isAutoSave = options?.isAutoSave ?? false;
-    // CRITICAL: When auto-saving while typing, do NOT strip trailing whitespace/spaces,
-    // so pressing the spacebar does not snap the cursor back to the end of the previous word!
-    const effectiveCause = isAutoSave ? cause : cause.trim();
-    const effectiveCorrection = isAutoSave ? correction : correction.trim();
-
-    const effectiveConcernCauses = options?.concernCauses;
-    const effectiveConcernCorrections = options?.concernCorrections;
-
-    const causesChanged = effectiveConcernCauses !== undefined && 
-      JSON.stringify(effectiveConcernCauses) !== JSON.stringify(targetRO.concernCauses || []);
-    const correctionsChanged = effectiveConcernCorrections !== undefined && 
-      JSON.stringify(effectiveConcernCorrections) !== JSON.stringify(targetRO.concernCorrections || []);
-
-    // If nothing changed, return true without doing redundant work
-    if (
-      targetRO.cause === effectiveCause && 
-      targetRO.correction === effectiveCorrection &&
-      !causesChanged &&
-      !correctionsChanged
-    ) {
-      return true;
-    }
-
     const shouldNotify = options?.notify ?? (!isAutoSave);
 
-    const now = new Date().toISOString();
-    const lastHist = targetRO.history[targetRO.history.length - 1];
-    const isRecentSame = lastHist && 
-      lastHist.updatedBy === currentUser.id && 
-      lastHist.notes.includes('Cause & Correction') &&
-      (Date.now() - new Date(lastHist.timestamp).getTime() < 120000);
-
-    const newHistoryItem = {
-      id: `hist_${Date.now()}`,
-      status: targetRO.status,
-      updatedBy: currentUser.id,
-      updatedByName: currentUser.name,
-      userRole: currentUser.role,
-      timestamp: now,
-      notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) ${isAutoSave ? 'auto-saved' : 'updated'} Cause & Correction documentation`,
-    };
-
-    const newHistory = isAutoSave && isRecentSame
-      ? targetRO.history
-      : [...targetRO.history, newHistoryItem];
-
-    const updatedRO: RepairOrder = {
-      ...targetRO,
-      cause: effectiveCause,
-      correction: effectiveCorrection,
-      concernCauses: effectiveConcernCauses !== undefined ? effectiveConcernCauses : targetRO.concernCauses,
-      concernCorrections: effectiveConcernCorrections !== undefined ? effectiveConcernCorrections : targetRO.concernCorrections,
-      // For backwards compatibility, sync diagnosticNotes if empty
-      diagnosticNotes: effectiveCause || targetRO.diagnosticNotes,
-      history: newHistory
-    };
-
     setRepairOrders(prev => {
+      const targetRO = prev.find(r => r.id === roId);
+      if (!targetRO) return prev;
+
+      // CRITICAL: When auto-saving while typing, do NOT strip trailing whitespace/spaces,
+      // so pressing the spacebar does not snap the cursor back to the end of the previous word!
+      const effectiveCause = isAutoSave ? cause : cause.trim();
+      const effectiveCorrection = isAutoSave ? correction : correction.trim();
+
+      const effectiveConcernCauses = options?.concernCauses;
+      const effectiveConcernCorrections = options?.concernCorrections;
+
+      const causesChanged = effectiveConcernCauses !== undefined && 
+        JSON.stringify(effectiveConcernCauses) !== JSON.stringify(targetRO.concernCauses || []);
+      const correctionsChanged = effectiveConcernCorrections !== undefined && 
+        JSON.stringify(effectiveConcernCorrections) !== JSON.stringify(targetRO.concernCorrections || []);
+
+      // If nothing changed, return prev without doing redundant work
+      if (
+        targetRO.cause === effectiveCause && 
+        targetRO.correction === effectiveCorrection &&
+        !causesChanged &&
+        !correctionsChanged
+      ) {
+        return prev;
+      }
+
+      const now = new Date().toISOString();
+      const lastHist = targetRO.history?.[targetRO.history.length - 1];
+      const isRecentSame = lastHist && 
+        lastHist.updatedBy === currentUser.id && 
+        lastHist.notes?.includes('Cause & Correction') &&
+        (Date.now() - new Date(lastHist.timestamp).getTime() < 120000);
+
+      const newHistoryItem = {
+        id: `hist_${Date.now()}`,
+        status: targetRO.status,
+        updatedBy: currentUser.id,
+        updatedByName: currentUser.name,
+        userRole: currentUser.role,
+        timestamp: now,
+        notes: `${currentUser.name} (${currentUser.role.replace(/_/g, ' ')}) ${isAutoSave ? 'auto-saved' : 'updated'} Cause & Correction documentation`,
+      };
+
+      const newHistory = isAutoSave && isRecentSame
+        ? (targetRO.history || [])
+        : [...(targetRO.history || []), newHistoryItem];
+
+      const updatedRO: RepairOrder = {
+        ...targetRO,
+        cause: effectiveCause,
+        correction: effectiveCorrection,
+        concernCauses: effectiveConcernCauses !== undefined ? effectiveConcernCauses : targetRO.concernCauses,
+        concernCorrections: effectiveConcernCorrections !== undefined ? effectiveConcernCorrections : targetRO.concernCorrections,
+        // For backwards compatibility, sync diagnosticNotes if empty
+        diagnosticNotes: effectiveCause || targetRO.diagnosticNotes,
+        history: newHistory,
+        updatedAt: now,
+      };
+
+      syncedRO = updatedRO;
       const updated = prev.map(ro => ro.id === roId ? updatedRO : ro);
       try {
         localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(updated));
@@ -4567,19 +4594,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    syncRepairOrder(updatedRO);
+    if (syncedRO) {
+      syncRepairOrder(syncedRO);
 
-    // Notify team if requested or manual save
-    if (shouldNotify) {
-      triggerNotification(
-        updatedRO,
-        `Cause & Correction Updated`,
-        `${currentUser.name} documented Cause & Correction on RO #${targetRO.id}`,
-        false,
-        'STATUS_CHANGE'
-      );
+      // Notify team if requested or manual save
+      if (shouldNotify) {
+        triggerNotification(
+          syncedRO,
+          `Cause & Correction Updated`,
+          `${currentUser.name} documented Cause & Correction on RO #${roId}`,
+          false,
+          'STATUS_CHANGE'
+        );
+      }
     }
-
     return true;
   };
 
@@ -4672,7 +4700,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               : 0;
             const isExempt = ro.isTaxExempt || ro.quote.isTaxExempt;
             const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
-            const taxableAmount = totalLaborCost + totalPartsCost;
+            const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
             const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
             const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
@@ -4714,7 +4742,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const fivePercent = totalLaborCost * 0.05;
             // Shop supplies is capped at $35.00
             const calcSupplies = Number((fivePercent > 0 ? Math.min(Math.max(fivePercent, 15), 35) : 25).toFixed(2));
-            const taxableAmount = totalLaborCost;
+            const taxableAmount = totalLaborCost + calcSupplies;
             // Sales tax is never capped at $35; only shop supplies is capped at $35
             const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
             const grandTotal = Number((totalLaborCost + calcSupplies + taxAmount).toFixed(2));
@@ -5169,10 +5197,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const totalPartsCost = Number(filteredQuoteParts.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0).toFixed(2));
             const isExempt = Boolean(ro.isTaxExempt || ro.quote.isTaxExempt);
             const taxRate = isExempt ? 0 : (ro.quote.taxRate !== undefined ? ro.quote.taxRate : 0.07);
-            // Sales tax is never capped at $35; only shop supplies is capped at $35
-            const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
             const rawShopSupplies = ro.quote.shopSuppliesFee !== undefined ? ro.quote.shopSuppliesFee : Math.min(35, Number((totalLaborCost * 0.05).toFixed(2)));
             const shopSupplies = Math.min(35, rawShopSupplies);
+            const taxableAmount = totalLaborCost + totalPartsCost + shopSupplies;
+            // Sales tax is never capped at $35; only shop supplies is capped at $35
+            const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
             const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
 
             updatedQuote = {
@@ -5473,8 +5502,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const totalPartsCost = Number(updatedQuote.totalPartsCost || 0);
         const isExempt = updatedQuote.isTaxExempt || false;
         const taxRate = isExempt ? 0 : (updatedQuote.taxRate !== undefined ? updatedQuote.taxRate : 0.07);
-        const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
         const shopSupplies = updatedQuote.shopSuppliesFee || 0;
+        const taxableAmount = totalLaborCost + totalPartsCost + shopSupplies;
+        const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
         const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
 
         updatedQuote = {
@@ -5605,8 +5635,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const totalPartsCost = Number(targetRO.quote.totalPartsCost || 0);
           const isExempt = targetRO.quote.isTaxExempt || false;
           const taxRate = isExempt ? 0 : (targetRO.quote.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
-          const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
           const shopSupplies = targetRO.quote.shopSuppliesFee || 0;
+          const taxableAmount = totalLaborCost + totalPartsCost + shopSupplies;
+          const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
           const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
 
           updatedQuote = {
@@ -5827,9 +5858,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const totalPartsCost = Number(targetRO.quote.totalPartsCost || 0);
             const isExempt = Boolean(targetRO.isTaxExempt || targetRO.quote.isTaxExempt);
             const taxRate = isExempt ? 0 : (targetRO.quote.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
-            // Sales tax is never capped at $35; only shop supplies is capped at $35
-            const taxAmount = isExempt ? 0 : Number(((totalLaborCost + totalPartsCost) * taxRate).toFixed(2));
             const shopSupplies = Math.min(35.00, Number(targetRO.quote.shopSuppliesFee) || 0);
+            const taxableAmount = totalLaborCost + totalPartsCost + shopSupplies;
+            // Sales tax is never capped at $35; only shop supplies is capped at $35
+            const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
             const grandTotal = Number((totalLaborCost + totalPartsCost + shopSupplies + taxAmount).toFixed(2));
 
             updatedQuote = {
@@ -6617,9 +6649,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const isExempt = Boolean(targetRO.isTaxExempt || quote.isTaxExempt);
     const finalTaxRate = isExempt ? 0 : (quote.taxRate !== undefined ? quote.taxRate : 0.07);
-    const taxableAmount = (Number(quote.totalLaborCost) || 0) + (Number(quote.totalPartsCost) || 0);
-    // Sales tax is never capped at $35; only shop supplies is capped at $35
-    const finalTaxAmount = isExempt ? 0 : Number((taxableAmount * finalTaxRate).toFixed(2));
     
     // Automatically charge Shop Supplies unless explicitly unchecked (applyShopSupplies === false)
     const shouldApplySupplies = quote.applyShopSupplies !== false;
@@ -6632,6 +6661,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         finalSupplies = Number((labor > 0 ? Math.min(Math.max(labor * 0.05, 15), 35) : 25).toFixed(2));
       }
     }
+    const taxableAmount = (Number(quote.totalLaborCost) || 0) + (Number(quote.totalPartsCost) || 0) + finalSupplies;
+    // Sales tax is never capped at $35; only shop supplies is capped at $35
+    const finalTaxAmount = isExempt ? 0 : Number((taxableAmount * finalTaxRate).toFixed(2));
     const finalGrandTotal = Number(((quote.totalLaborCost || 0) + (quote.totalPartsCost || 0) + finalSupplies + finalTaxAmount).toFixed(2));
 
     // Calculate approved vs declined totals if lines have been reviewed
@@ -6904,7 +6936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const shopSuppliesFee = Math.min(35.00, Number(targetRO.quote?.shopSuppliesFee) || 0);
     const isExempt = Boolean(targetRO.isTaxExempt || targetRO.quote?.isTaxExempt);
     const taxRate = isExempt ? 0 : (targetRO.quote?.taxRate !== undefined ? targetRO.quote.taxRate : 0.07);
-    const taxableAmount = totalLaborCost + totalPartsCost;
+    const taxableAmount = totalLaborCost + totalPartsCost + shopSuppliesFee;
     // Sales tax is never capped at $35; only shop supplies is capped at $35
     const taxAmount = isExempt ? 0 : Number((taxableAmount * taxRate).toFixed(2));
     const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
