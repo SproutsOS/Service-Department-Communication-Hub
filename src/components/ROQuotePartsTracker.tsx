@@ -30,6 +30,7 @@ import {
 import { RepairOrder, PartItem, PartStatus, ConcernPayType } from '../types';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, PAY_TYPE_RATES } from '../utils/formatters';
+import { TicketFlowStepper } from './TicketFlowStepper';
 
 interface ROQuotePartsTrackerProps {
   ro: RepairOrder;
@@ -62,6 +63,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   onOpenPrintModal,
 }) => {
   const { 
+    updateROStatus,
     updatePartStatus, 
     updatePartItem, 
     deletePartItem, 
@@ -573,7 +575,16 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
         </div>
       </div>
 
-      {/* 2. Quoted Financial Metrics Strip with Real-Time Totaling */}
+      {/* 2. Ticket Workflow Pipeline Stepper (In Diag, In Repair, Closed, etc.) */}
+      <TicketFlowStepper
+        ro={ro}
+        onUpdateStatus={(newStatus, notes, isUrgent) => {
+          updateROStatus(ro.id, newStatus, notes, isUrgent);
+        }}
+        canEdit={true}
+      />
+
+      {/* 3. Quoted Financial Metrics Strip with Real-Time Totaling */}
       <div className="bg-white rounded-xl border-2 border-slate-800 p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         <div className="flex items-center gap-5 flex-wrap text-xs">
           <div>
