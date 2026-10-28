@@ -34,12 +34,23 @@ export const DEFAULT_WOOLWINE_CUSTOMER: Customer = {
 
 /**
  * Checks if a customer name represents the Woolwine CDJR dealership house account.
- * Matches: "Woolwine CDJR", "Woolwine CDJR Inc", "Woolwine CDJR, Inc.", "Woolwine CDJR Inc.", "Woolwine Inc", "Woolwine", etc.
+ * Matches: "Woolwine CDJR", "Woolwine CDJR Inc", "Woolwine CDJR, Inc.", etc.
+ * Explicitly EXCLUDES other dealership entities such as "Woolwine Autoplex", "Woolwine Ford", etc.
  */
 export function isWoolwineCustomerName(name?: string | null): boolean {
   if (!name) return false;
   const key = normalizeCustomerKey(name);
-  return key.includes('woolwine') || (key.includes('cdjr') && (key.includes('dealer') || key.includes('inventory') || key.includes('house') || key.includes('internal')));
+  // Exclude distinct dealership entities such as Woolwine Autoplex, Woolwine Ford, etc.
+  if (key.includes('autoplex') || key.includes('ford') || key.includes('chevrolet') || key.includes('chevy')) {
+    return false;
+  }
+  // Matches "Woolwine CDJR", "Woolwine CDJR Inc", "Woolwine CDJR, Inc.", "Woolwine Chrysler Dodge Jeep Ram"
+  return (
+    key === 'woolwine cdjr' ||
+    key.startsWith('woolwine cdjr') ||
+    (key.includes('woolwine') && (key.includes('cdjr') || key.includes('chrysler') || key.includes('dodge') || key.includes('jeep') || key.includes('ram'))) ||
+    (key.includes('cdjr') && (key.includes('dealer') || key.includes('inventory') || key.includes('house') || key.includes('internal')))
+  );
 }
 
 /**

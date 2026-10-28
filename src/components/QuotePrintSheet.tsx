@@ -219,6 +219,7 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
                               <tr>
                                 <th className="py-1 px-2.5">Part #</th>
                                 <th className="py-1 px-2.5">Description</th>
+                                <th className="py-1 px-2.5">ETA / Availability</th>
                                 <th className="py-1 px-2 text-center">Qty</th>
                                 <th className="py-1 px-2 text-right">Price</th>
                                 <th className="py-1 px-2.5 text-right">Total</th>
@@ -232,6 +233,9 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
                                   </td>
                                   <td className="py-1 px-2.5 font-medium text-slate-800">
                                     {part.description}
+                                  </td>
+                                  <td className="py-1 px-2.5 font-mono text-[10px] font-semibold text-slate-700">
+                                    {part.estimatedArrival || 'In Stock / Scheduled'}
                                   </td>
                                   <td className="py-1 px-2 text-center font-bold text-slate-700">
                                     {part.quantity}

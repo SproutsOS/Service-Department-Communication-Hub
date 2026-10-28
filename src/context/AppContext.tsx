@@ -605,12 +605,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(parsed)) {
           return parsed.map((ro: RepairOrder) => {
             const cleaned = cleanRO3700(ro);
-            if (isWoolwineCustomerName(cleaned.customerName) && cleaned.customerName.trim() !== 'Woolwine CDJR') {
+            if ((cleaned.id === '37460' || cleaned.id === 'RO-37460' || cleaned.id.includes('37460')) && cleaned.customerName === 'Woolwine CDJR') {
               return {
                 ...cleaned,
-                customerName: 'Woolwine CDJR',
-                isTaxExempt: true,
-                taxExemptNumber: cleaned.taxExemptNumber || 'DEALER-RESALE'
+                customerName: 'Woolwine Autoplex'
               };
             }
             return cleaned;
@@ -1311,20 +1309,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevROMap = new Map<string, string>();
 
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
+      let ro37460NeedsSync: RepairOrder | null = null;
       const sanitizedROs = cloudROs.map((r: RepairOrder) => {
         const cleaned = cleanRO3700(r);
-        if (isWoolwineCustomerName(cleaned.customerName) && cleaned.customerName.trim() !== 'Woolwine CDJR') {
+        if ((cleaned.id === '37460' || cleaned.id === 'RO-37460' || cleaned.id.includes('37460')) && cleaned.customerName === 'Woolwine CDJR') {
           const updated = {
             ...cleaned,
-            customerName: 'Woolwine CDJR',
-            isTaxExempt: true,
-            taxExemptNumber: cleaned.taxExemptNumber || 'DEALER-RESALE'
+            customerName: 'Woolwine Autoplex',
+            updatedAt: new Date().toISOString()
           };
-          syncRepairOrder(updated);
+          ro37460NeedsSync = updated;
           return updated;
         }
         return cleaned;
       });
+      if (ro37460NeedsSync) {
+        syncRepairOrder(ro37460NeedsSync);
+      }
       setRepairOrders(sanitizedROs);
       setIsCloudSynced(true);
 

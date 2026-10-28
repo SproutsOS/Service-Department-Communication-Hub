@@ -181,6 +181,108 @@ export const QuotePrintModal: React.FC = () => {
   const taxAmount = isTaxExempt ? 0 : Number((taxableAmount * (taxRatePercent / 100)).toFixed(2));
   const grandTotal = Number((totalLaborCost + totalPartsCost + shopSuppliesFee + taxAmount).toFixed(2));
 
+  // Helper to extract line parts with ETA
+  const getLineEffectiveParts = useCallback((lineNum: number) => {
+    const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
+    const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
+
+    const seenPartIds = new Set<string>();
+    const result: Array<{
+      id: string;
+      partNumber: string;
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      subtotal: number;
+      status: string;
+      roLineNumber: number;
+      estimatedArrival: string;
+    }> = [];
+
+    // 1. Process quote parts
+    lParts.forEach(qp => {
+      seenPartIds.add(qp.id);
+      if (qp.sourcePartId) seenPartIds.add(qp.sourcePartId);
+      const matchedRO = lROParts.find(rp => 
+        rp.id === qp.sourcePartId || 
+        rp.id === qp.id || 
+        (qp.partNumber && qp.partNumber !== 'TBD' && rp.partNumber && rp.partNumber.trim().toUpperCase() === qp.partNumber.trim().toUpperCase()) ||
+        (qp.description && rp.description && rp.description.trim().toLowerCase() === qp.description.trim().toLowerCase())
+      );
+      
+      let eta = (qp as any).estimatedArrival || matchedRO?.estimatedArrival;
+      if (!eta || eta === 'Pending Parts Counter') {
+        const status = matchedRO?.status || qp.status;
+        if (status === 'RECEIVED' || status === 'IN_STOCK' || status === 'ISSUED_TO_TECH') {
+          eta = 'In Stock / Arrived';
+        } else if (status === 'DAILY_ORDER') {
+          eta = 'Today 2:00 PM';
+        } else if (status === 'SPECIAL_ORDER_1_5_DAYS') {
+          eta = '1-5 Business Days';
+        } else if (status === 'VOR_UPGRADE') {
+          eta = 'Tomorrow Morning (VOR)';
+        } else if (status === 'ORDERED' || status === 'IN_TRANSIT') {
+          eta = 'Ordered (In Transit)';
+        } else if (status === 'BACKORDERED') {
+          eta = 'Backordered';
+        } else {
+          eta = matchedRO?.estimatedArrival || 'Pending Parts Counter';
+        }
+      }
+
+      result.push({
+        id: qp.id,
+        partNumber: qp.partNumber || 'TBD',
+        description: qp.description || 'Part Item',
+        quantity: qp.quantity || 1,
+        unitPrice: Number(qp.unitPrice) || 0,
+        subtotal: Number(qp.subtotal) || ((Number(qp.unitPrice) || 0) * (qp.quantity || 1)),
+        status: qp.status || 'PENDING',
+        roLineNumber: lineNum,
+        estimatedArrival: eta,
+      });
+    });
+
+    // 2. Add RO parts not already covered in quote parts
+    lROParts.forEach(rp => {
+      if (!seenPartIds.has(rp.id)) {
+        seenPartIds.add(rp.id);
+        let eta = rp.estimatedArrival;
+        if (!eta || eta === 'Pending Parts Counter') {
+          if (rp.status === 'RECEIVED' || rp.status === 'IN_STOCK' || rp.status === 'ISSUED_TO_TECH') {
+            eta = 'In Stock / Arrived';
+          } else if (rp.status === 'DAILY_ORDER') {
+            eta = 'Today 2:00 PM';
+          } else if (rp.status === 'SPECIAL_ORDER_1_5_DAYS') {
+            eta = '1-5 Business Days';
+          } else if (rp.status === 'VOR_UPGRADE') {
+            eta = 'Tomorrow Morning (VOR)';
+          } else if (rp.status === 'ORDERED' || rp.status === 'IN_TRANSIT') {
+            eta = 'Ordered (In Transit)';
+          } else if (rp.status === 'BACKORDERED') {
+            eta = 'Backordered';
+          } else {
+            eta = 'Pending Parts Counter';
+          }
+        }
+
+        result.push({
+          id: rp.id,
+          partNumber: rp.partNumber || 'TBD',
+          description: rp.description || 'Part Item',
+          quantity: rp.quantity || 1,
+          unitPrice: Number(rp.price) || 0,
+          subtotal: (Number(rp.price) || 0) * (rp.quantity || 1),
+          status: rp.status || 'PENDING',
+          roLineNumber: lineNum,
+          estimatedArrival: eta,
+        });
+      }
+    });
+
+    return result;
+  }, [partsItems, cleanRO.parts]);
+
   const handleCopySummary = () => {
     const lines: string[] = [
       `======================================================`,
@@ -203,7 +305,7 @@ export const QuotePrintModal: React.FC = () => {
     unifiedLines.forEach((line) => {
       const lNum = line.lineNum;
       const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lNum);
-      const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lNum);
+      const lParts = getLineEffectiveParts(lNum);
       const lLaborTotal = lLabor.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
       const lPartsTotal = lParts.reduce((acc, p) => acc + (Number(p.subtotal) || 0), 0);
 
@@ -217,7 +319,7 @@ export const QuotePrintModal: React.FC = () => {
       }
       if (lParts.length > 0) {
         lParts.forEach(pi => {
-          lines.push(`  Part: ${pi.partNumber} ${pi.description} (Qty: ${pi.quantity}) @ $${pi.unitPrice}/ea = $${(Number(pi.subtotal) || 0).toFixed(2)}`);
+          lines.push(`  Part: ${pi.partNumber} - ${pi.description} (Qty: ${pi.quantity}) [ETA: ${pi.estimatedArrival}] @ $${pi.unitPrice.toFixed(2)}/ea = $${(Number(pi.subtotal) || 0).toFixed(2)}`);
         });
       }
       lines.push(`  Line ${lNum} Subtotal: $${(lLaborTotal + lPartsTotal).toFixed(2)}`);
@@ -502,18 +604,7 @@ export const QuotePrintModal: React.FC = () => {
                   const lineNum = line.lineNum;
                   const payType: string = line.payType || 'CUSTOMER_PAY';
                   const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
-                  const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
-                  const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
-                  const effectiveParts = lParts.length > 0 ? lParts : lROParts.map(p => ({
-                    id: p.id,
-                    partNumber: p.partNumber,
-                    description: p.description,
-                    quantity: p.quantity,
-                    unitPrice: p.price,
-                    subtotal: (Number(p.price) || 0) * (Number(p.quantity) || 1),
-                    status: 'PENDING' as const,
-                    roLineNumber: lineNum
-                  }));
+                  const effectiveParts = getLineEffectiveParts(lineNum);
 
                   const lineLaborCost = lLabor.reduce((acc, i) => acc + (Number(i.subtotal) || ((Number(i.laborHours) || 0) * (Number(i.hourlyRate) || 165))), 0);
                   const linePartsCost = effectiveParts.reduce((acc, p) => acc + (Number(p.subtotal) || ((Number(p.unitPrice) || 0) * (Number(p.quantity) || 1))), 0);
@@ -609,11 +700,12 @@ export const QuotePrintModal: React.FC = () => {
                             <table className="w-full text-[11px] border border-slate-200 rounded overflow-hidden">
                               <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-left">
                                 <tr>
-                                  <th className="p-1.5 w-28">Part #</th>
+                                  <th className="p-1.5 w-24">Part #</th>
                                   <th className="p-1.5">Description</th>
-                                  <th className="p-1.5 text-center w-16">Qty</th>
-                                  <th className="p-1.5 text-right w-24">Unit Price</th>
-                                  <th className="p-1.5 text-right w-24">Subtotal</th>
+                                  <th className="p-1.5 w-36">ETA / Availability</th>
+                                  <th className="p-1.5 text-center w-14">Qty</th>
+                                  <th className="p-1.5 text-right w-20">Unit Price</th>
+                                  <th className="p-1.5 text-right w-20">Subtotal</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 bg-white">
@@ -625,6 +717,12 @@ export const QuotePrintModal: React.FC = () => {
                                       <td className="p-1.5 font-medium text-slate-800">
                                         <span className={isPartDeclined ? 'line-through text-slate-500' : ''}>{part.description}</span>
                                         {isPartDeclined && <span className="ml-1.5 text-[10px] font-black text-rose-700 uppercase font-sans">[Declined by Customer]</span>}
+                                      </td>
+                                      <td className="p-1.5">
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-300">
+                                          <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+                                          <span className="truncate">{part.estimatedArrival || 'Pending Parts Counter'}</span>
+                                        </span>
                                       </td>
                                       <td className="p-1.5 text-center font-mono font-bold">{part.quantity}</td>
                                       <td className="p-1.5 text-right font-mono text-slate-600">${(Number(part.unitPrice) || 0).toFixed(2)}</td>
@@ -832,18 +930,7 @@ export const QuotePrintModal: React.FC = () => {
               const lineNum = line.lineNum;
               const payType: string = line.payType || 'CUSTOMER_PAY';
               const lLabor = laborItems.filter(item => (item.roLineNumber || 1) === lineNum);
-              const lParts = partsItems.filter(p => (p.roLineNumber || 1) === lineNum);
-              const lROParts = (cleanRO.parts || []).filter(p => (p.roLineNumber || 1) === lineNum);
-              const effectiveParts = lParts.length > 0 ? lParts : lROParts.map(p => ({
-                id: p.id,
-                partNumber: p.partNumber,
-                description: p.description,
-                quantity: p.quantity,
-                unitPrice: p.price,
-                subtotal: (Number(p.price) || 0) * (Number(p.quantity) || 1),
-                status: 'PENDING' as const,
-                roLineNumber: lineNum
-              }));
+              const effectiveParts = getLineEffectiveParts(lineNum);
 
               const lineLaborCost = lLabor.reduce((acc, i) => acc + (Number(i.subtotal) || ((Number(i.laborHours) || 0) * (Number(i.hourlyRate) || 165))), 0);
               const linePartsCost = effectiveParts.reduce((acc, p) => acc + (Number(p.subtotal) || ((Number(p.unitPrice) || 0) * (Number(p.quantity) || 1))), 0);
@@ -882,14 +969,34 @@ export const QuotePrintModal: React.FC = () => {
                   )}
 
                   {effectiveParts.length > 0 && (
-                    <div className="text-[11px]">
-                      <div className="font-bold underline mb-0.5">Parts:</div>
-                      {effectiveParts.map((pi, piIdx) => (
-                        <div key={piIdx} className="flex justify-between pl-2">
-                          <span>{pi.partNumber} - {pi.description} (Qty: {pi.quantity} @ ${pi.unitPrice || 0}/ea)</span>
-                          <span className="font-mono font-bold">${(Number(pi.subtotal) || 0).toFixed(2)}</span>
-                        </div>
-                      ))}
+                    <div className="text-[11px] space-y-1">
+                      <div className="font-bold underline mb-0.5">Parts & Materials:</div>
+                      <table className="w-full text-left text-[11px] border border-black border-collapse">
+                        <thead className="bg-gray-100 border-b border-black">
+                          <tr>
+                            <th className="p-1 font-bold">Part #</th>
+                            <th className="p-1 font-bold">Description</th>
+                            <th className="p-1 font-bold">ETA / Availability</th>
+                            <th className="p-1 text-center font-bold">Qty</th>
+                            <th className="p-1 text-right font-bold">Unit Price</th>
+                            <th className="p-1 text-right font-bold">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-300">
+                          {effectiveParts.map((pi, piIdx) => (
+                            <tr key={piIdx}>
+                              <td className="p-1 font-mono font-bold">{pi.partNumber}</td>
+                              <td className="p-1">{pi.description}</td>
+                              <td className="p-1 font-mono text-[10px] font-bold">
+                                {pi.estimatedArrival || 'Pending Parts Counter'}
+                              </td>
+                              <td className="p-1 text-center font-mono">{pi.quantity}</td>
+                              <td className="p-1 text-right font-mono">${(Number(pi.unitPrice) || 0).toFixed(2)}</td>
+                              <td className="p-1 text-right font-mono font-bold">${(Number(pi.subtotal) || 0).toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
