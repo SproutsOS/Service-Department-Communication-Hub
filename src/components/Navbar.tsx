@@ -47,8 +47,6 @@ export const Navbar: React.FC = () => {
     lockWorkstation,
     staffLeaveEntries,
     setIsStaffCalendarOpen,
-    appointments,
-    setIsAppointmentCalendarOpen,
     roChangeAlertsList,
     unreadROChangesCount,
     clearROChangeAlert,
@@ -82,9 +80,6 @@ export const Navbar: React.FC = () => {
     return (staffLeaveEntries || []).filter(e => todayStr >= e.startDate && todayStr <= e.endDate).length;
   }, [staffLeaveEntries, todayStr]);
 
-  const todayAppointmentsCount = useMemo(() => {
-    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.status !== 'CANCELLED').length;
-  }, [appointments, todayStr]);
 
   const [showROChangesMenu, setShowROChangesMenu] = useState(false);
   const roChangesRef = useRef<HTMLDivElement>(null);
@@ -525,39 +520,22 @@ export const Navbar: React.FC = () => {
           )}
         </button>
 
-        {/* Appointments Calendar Button (Advisors & Service Manager) */}
+        {/* Quote Builder Button (Advisors & Service Manager) */}
         {(currentUser.role === 'SERVICE_MANAGER' || currentUser.role === 'SERVICE_ADVISOR') && (
-          <>
-            <button
-              id="navbar-quote-builder-btn"
-              onClick={() => openQuoteBuilder()}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-amber-950/70 hover:bg-amber-900 text-amber-200 hover:text-white border border-amber-700/80 shadow-xs"
-              title="Pre-RO Quote & Estimate Builder (Build menu estimates & roll into Repair Orders)"
-            >
-              <Receipt className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">Quote Builder</span>
-              {quotes.length > 0 && (
-                <span className="bg-amber-600 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                  {quotes.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              id="navbar-appointment-calendar-btn"
-              onClick={() => setIsAppointmentCalendarOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-purple-900/60 hover:bg-purple-800 text-purple-200 hover:text-white border border-purple-700 shadow-xs"
-              title="Service Appointment Calendar (Customer Check-Ins, Waiters, Loaners)"
-            >
-              <CalendarCheck className="w-4 h-4 text-purple-300" />
-              <span className="hidden sm:inline">Appointments</span>
-              {todayAppointmentsCount > 0 && (
-                <span className="bg-purple-700 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                  {todayAppointmentsCount}
-                </span>
-              )}
-            </button>
-          </>
+          <button
+            id="navbar-quote-builder-btn"
+            onClick={() => openQuoteBuilder()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-amber-950/70 hover:bg-amber-900 text-amber-200 hover:text-white border border-amber-700/80 shadow-xs"
+            title="Pre-RO Quote & Estimate Builder (Build menu estimates & roll into Repair Orders)"
+          >
+            <Receipt className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">Quote Builder</span>
+            {quotes.length > 0 && (
+              <span className="bg-amber-600 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {quotes.length}
+              </span>
+            )}
+          </button>
         )}
 
         {/* Staff Directory Button (Service Manager Only) */}
@@ -597,6 +575,19 @@ export const Navbar: React.FC = () => {
             </span>
           )}
         </button>
+
+        {/* Restore Tickets Quick Action if list is empty */}
+        {repairOrders.length === 0 && (
+          <button
+            id="navbar-restore-ros-btn"
+            onClick={() => resetToDemoData()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black transition-all cursor-pointer text-xs shadow-md animate-pulse"
+            title="Reload repair orders and restore RO-37460"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Restore Tickets (RO 37460)</span>
+          </button>
+        )}
 
         {/* Active User Badge */}
         <div className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/70 text-xs">

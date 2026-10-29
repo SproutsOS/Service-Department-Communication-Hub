@@ -14,6 +14,7 @@ import {
   Save, 
   Check, 
   X,
+  RefreshCw,
   Layers,
   ShieldCheck,
   Building2,
@@ -58,11 +59,12 @@ const PART_STATUS_CONFIG: Record<string, { label: string; bg: string; text: stri
 };
 
 export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
-  ro,
+  ro: propRO,
   onOpenQuoteModal,
   onOpenPrintModal,
 }) => {
   const { 
+    repairOrders,
     updateROStatus,
     updatePartStatus, 
     updatePartItem, 
@@ -82,6 +84,11 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     currentUser,
     activeRoleView
   } = useApp();
+
+  // Always bind to latest live repair order from state
+  const ro = useMemo(() => {
+    return repairOrders.find(r => r.id === propRO.id) || propRO;
+  }, [repairOrders, propRO]);
 
   const isServiceManager = currentUser.role === 'SERVICE_MANAGER' || activeRoleView === 'SERVICE_MANAGER';
   const technicians = users.filter(u => u.role === 'TECHNICIAN');
@@ -106,6 +113,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
   const [newLinePrice, setNewLinePrice] = useState<string>('0.00');
   const [newLineVendor, setNewLineVendor] = useState<string>('Shop Inventory / Supplier');
   const [newLineEta, setNewLineEta] = useState<string>('Pending Parts Counter');
+
+  // Auto-save state and debounce refs for Parts
+  const activeNewPartIdRef = useRef<string | null>(null);
+  const newPartDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const editPartDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [partAutoSaveStatus, setPartAutoSaveStatus] = useState<Record<string, 'saving' | 'saved'>>({});
 
   // Three C's local state per line index
   const [localCauses, setLocalCauses] = useState<Record<number, string>>({});
@@ -164,7 +177,88 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     setEditPromisedTime(ro.promisedTime || '');
   }, [ro]);
 
+  // --- Auto-Save Handlers for Existing Parts Inline Edit ---
+  const autoSaveInlineEdit = (
+    partId: string,
+    overrides?: Partial<{ partNumber: string; description: string; qty: number; price: string; vendor: string; eta: string; tracking: string; notes: string }>
+  ) => {
+    const curPn = overrides?.partNumber !== undefined ? overrides.partNumber : inlinePartNumber;
+    const curDesc = overrides?.description !== undefined ? overrides.description : inlineDescription;
+    const curQty = overrides?.qty !== undefined ? overrides.qty : inlineQty;
+    const curPriceStr = overrides?.price !== undefined ? overrides.price : inlinePrice;
+    const curVendor = overrides?.vendor !== undefined ? overrides.vendor : inlineVendor;
+    const curEta = overrides?.eta !== undefined ? overrides.eta : inlineEta;
+    const curTracking = overrides?.tracking !== undefined ? overrides.tracking : inlineTracking;
+    const curNotes = overrides?.notes !== undefined ? overrides.notes : inlineNotes;
+
+    const rawPriceClean = curPriceStr ? String(curPriceStr).replace(/[^0-9.]/g, '') : '';
+    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
+      ? Number(Number(rawPriceClean).toFixed(2)) 
+      : 0;
+
+    const finalPartNumber = curPn.trim().toUpperCase() || 'TBD';
+    const finalDescription = curDesc.trim() || 'Part Item';
+
+    const saveKey = `part_${partId}`;
+    setPartAutoSaveStatus(prev => ({ ...prev, [saveKey]: 'saving' }));
+
+    updatePartItem(ro.id, partId, {
+      partNumber: finalPartNumber,
+      description: finalDescription,
+      quantity: Math.max(1, Number(curQty) || 1),
+      price: parsedPrice,
+      estimatedArrival: curEta.trim() || undefined,
+      trackingNumber: curTracking.trim() || undefined,
+      notes: curNotes.trim() || undefined,
+      vendor: curVendor.trim() || undefined,
+    });
+
+    setPartAutoSaveStatus(prev => ({ ...prev, [saveKey]: 'saved' }));
+    setTimeout(() => {
+      setPartAutoSaveStatus(prev => {
+        const next = { ...prev };
+        delete next[saveKey];
+        return next;
+      });
+    }, 2500);
+  };
+
+  const scheduleEditPartAutoSave = (
+    partId: string,
+    overrides?: Partial<{ partNumber: string; description: string; qty: number; price: string; vendor: string; eta: string; tracking: string; notes: string }>
+  ) => {
+    const saveKey = `part_${partId}`;
+    setPartAutoSaveStatus(prev => ({ ...prev, [saveKey]: 'saving' }));
+    if (editPartDebounceRef.current) {
+      clearTimeout(editPartDebounceRef.current);
+    }
+    editPartDebounceRef.current = setTimeout(() => {
+      autoSaveInlineEdit(partId, overrides);
+    }, 500);
+  };
+
+  const flushSaveInlineEdit = (partId?: string) => {
+    if (editPartDebounceRef.current) {
+      clearTimeout(editPartDebounceRef.current);
+      editPartDebounceRef.current = null;
+    }
+    const targetId = partId ?? editingPartId;
+    if (targetId) {
+      autoSaveInlineEdit(targetId);
+    }
+  };
+
   const handleStartInlineEdit = (part: PartItem, fieldToFocus: 'partNumber' | 'price' | 'vendor' = 'partNumber') => {
+    // Flush any pending inline add on a line before starting edit
+    if (inlineAddingLineNum !== null) {
+      flushSaveInlineAdd(inlineAddingLineNum);
+      activeNewPartIdRef.current = null;
+      setInlineAddingLineNum(null);
+    }
+    if (editingPartId && editingPartId !== part.id) {
+      flushSaveInlineEdit(editingPartId);
+    }
+
     setEditingPartId(part.id);
     setInlinePartNumber(part.partNumber && part.partNumber !== 'TBD' ? part.partNumber : '');
     setInlineDescription(part.description || part.name || '');
@@ -176,37 +270,127 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     setInlineNotes(part.notes || '');
     setInlineVendor(part.vendor || 'Shop Inventory / Supplier');
     setFocusField(fieldToFocus);
-    setInlineAddingLineNum(null);
   };
 
   const handleCancelInlineEdit = () => {
+    if (editPartDebounceRef.current) {
+      clearTimeout(editPartDebounceRef.current);
+      editPartDebounceRef.current = null;
+    }
     setEditingPartId(null);
     setFocusField(null);
   };
 
   const handleSaveInlineEdit = (partId: string) => {
-    const rawPriceClean = inlinePrice ? String(inlinePrice).replace(/[^0-9.]/g, '') : '';
-    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
-      ? Number(Number(rawPriceClean).toFixed(2)) 
-      : 0;
-    const finalPartNumber = inlinePartNumber.trim().toUpperCase() || 'TBD';
-    const finalDescription = inlineDescription.trim() || 'Part Item';
-
-    updatePartItem(ro.id, partId, {
-      partNumber: finalPartNumber,
-      description: finalDescription,
-      quantity: Math.max(1, Number(inlineQty) || 1),
-      price: parsedPrice,
-      estimatedArrival: inlineEta.trim() || undefined,
-      trackingNumber: inlineTracking.trim() || undefined,
-      notes: inlineNotes.trim() || undefined,
-      vendor: inlineVendor.trim() || undefined,
-    });
+    flushSaveInlineEdit(partId);
     setEditingPartId(null);
     setFocusField(null);
   };
 
+  // --- Auto-Save Handlers for Adding New Parts ---
+  const autoSaveInlineAdd = (
+    lineNum: number, 
+    overrides?: Partial<{ partNumber: string; description: string; qty: number; price: string; vendor: string; eta: string }>
+  ) => {
+    const curPn = overrides?.partNumber !== undefined ? overrides.partNumber : newLinePartNumber;
+    const curDesc = overrides?.description !== undefined ? overrides.description : newLineDescription;
+    const curQty = overrides?.qty !== undefined ? overrides.qty : newLineQty;
+    const curPriceStr = overrides?.price !== undefined ? overrides.price : newLinePrice;
+    const curVendor = overrides?.vendor !== undefined ? overrides.vendor : newLineVendor;
+    const curEta = overrides?.eta !== undefined ? overrides.eta : newLineEta;
+
+    const rawPriceClean = curPriceStr ? String(curPriceStr).replace(/[^0-9.]/g, '') : '';
+    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
+      ? Number(Number(rawPriceClean).toFixed(2)) 
+      : 0;
+
+    const trimmedPn = curPn.trim();
+    const trimmedDesc = curDesc.trim();
+
+    // Only auto-save if user entered a part number, description, or price
+    if (!trimmedPn && !trimmedDesc && parsedPrice === 0) {
+      return;
+    }
+
+    const finalPartNumber = trimmedPn.toUpperCase() || 'TBD';
+    const finalDescription = trimmedDesc || 'Part Item';
+
+    const saveKey = `new_line_${lineNum}`;
+    setPartAutoSaveStatus(prev => ({ ...prev, [saveKey]: 'saving' }));
+
+    if (!activeNewPartIdRef.current) {
+      const generatedId = `prt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      activeNewPartIdRef.current = generatedId;
+      addMultiplePartOrders(ro.id, [{
+        id: generatedId,
+        partNumber: finalPartNumber,
+        description: finalDescription,
+        quantity: Math.max(1, Number(curQty) || 1),
+        price: parsedPrice,
+        vendor: curVendor.trim() || 'Shop Inventory / Supplier',
+        estimatedArrival: curEta.trim() || 'Pending Parts Counter',
+        status: 'REQUESTED',
+        requestType: 'QUOTE_ONLY',
+        roLineNumber: lineNum,
+        notes: `For Line ${lineNum}`
+      } as any]);
+    } else {
+      updatePartItem(ro.id, activeNewPartIdRef.current, {
+        partNumber: finalPartNumber,
+        description: finalDescription,
+        quantity: Math.max(1, Number(curQty) || 1),
+        price: parsedPrice,
+        vendor: curVendor.trim() || 'Shop Inventory / Supplier',
+        estimatedArrival: curEta.trim() || 'Pending Parts Counter',
+        roLineNumber: lineNum,
+      });
+    }
+
+    setPartAutoSaveStatus(prev => ({ ...prev, [saveKey]: 'saved' }));
+    setTimeout(() => {
+      setPartAutoSaveStatus(prev => {
+        const next = { ...prev };
+        delete next[saveKey];
+        return next;
+      });
+    }, 2500);
+  };
+
+  const scheduleNewPartAutoSave = (
+    lineNum: number, 
+    overrides?: Partial<{ partNumber: string; description: string; qty: number; price: string; vendor: string; eta: string }>
+  ) => {
+    const saveKey = `new_line_${lineNum}`;
+    setPartAutoSaveStatus(prev => ({ ...prev, [saveKey]: 'saving' }));
+    if (newPartDebounceRef.current) {
+      clearTimeout(newPartDebounceRef.current);
+    }
+    newPartDebounceRef.current = setTimeout(() => {
+      autoSaveInlineAdd(lineNum, overrides);
+    }, 500);
+  };
+
+  const flushSaveInlineAdd = (lineNum?: number) => {
+    if (newPartDebounceRef.current) {
+      clearTimeout(newPartDebounceRef.current);
+      newPartDebounceRef.current = null;
+    }
+    const targetLine = lineNum ?? inlineAddingLineNum;
+    if (targetLine !== null && targetLine !== undefined) {
+      autoSaveInlineAdd(targetLine);
+    }
+  };
+
   const handleStartInlineAdd = (lineNum: number) => {
+    // If another line was open, auto-save and flush its part immediately so nothing is ever lost!
+    if (inlineAddingLineNum !== null && inlineAddingLineNum !== lineNum) {
+      flushSaveInlineAdd(inlineAddingLineNum);
+    }
+    if (editingPartId) {
+      flushSaveInlineEdit();
+      setEditingPartId(null);
+    }
+    activeNewPartIdRef.current = null;
     setInlineAddingLineNum(lineNum);
     setNewLinePartNumber('');
     setNewLineDescription('');
@@ -214,32 +398,23 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
     setNewLinePrice('0.00');
     setNewLineVendor('Shop Inventory / Supplier');
     setNewLineEta('Pending Parts Counter');
-    setEditingPartId(null);
   };
 
   const handleCancelInlineAdd = () => {
+    if (newPartDebounceRef.current) {
+      clearTimeout(newPartDebounceRef.current);
+      newPartDebounceRef.current = null;
+    }
+    if (activeNewPartIdRef.current) {
+      deletePartItem(ro.id, activeNewPartIdRef.current);
+      activeNewPartIdRef.current = null;
+    }
     setInlineAddingLineNum(null);
   };
 
   const handleSaveInlineAdd = (lineNum: number) => {
-    const rawPriceClean = newLinePrice ? String(newLinePrice).replace(/[^0-9.]/g, '') : '';
-    const parsedPrice = rawPriceClean !== '' && !isNaN(Number(rawPriceClean)) 
-      ? Number(Number(rawPriceClean).toFixed(2)) 
-      : 0;
-
-    addMultiplePartOrders(ro.id, [{
-      partNumber: newLinePartNumber.trim().toUpperCase() || 'TBD',
-      description: newLineDescription.trim() || 'Part Item',
-      quantity: Math.max(1, Number(newLineQty) || 1),
-      price: parsedPrice,
-      vendor: newLineVendor.trim() || 'Shop Inventory / Supplier',
-      estimatedArrival: newLineEta.trim() || 'Pending Parts Counter',
-      status: 'REQUESTED',
-      requestType: 'QUOTE_ONLY',
-      roLineNumber: lineNum,
-      notes: `For Line ${lineNum}`
-    }]);
-
+    flushSaveInlineAdd(lineNum);
+    activeNewPartIdRef.current = null;
     setInlineAddingLineNum(null);
   };
 
@@ -1090,6 +1265,9 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                     <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
                       Parts For Line {lineNum} ({lineParts.length} {lineParts.length === 1 ? 'part' : 'parts'})
                     </span>
+                    <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1" title="Parts typed into this ticket automatically save in real-time">
+                      <Check className="w-2.5 h-2.5 text-emerald-600" /> Auto-Save Active
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -1136,11 +1314,23 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                             <td className="py-2.5 px-3 align-top min-w-[200px]">
                               <div className="space-y-1.5">
                                 <div>
-                                  <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part # *</span>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part # *</span>
+                                    {partAutoSaveStatus[`new_line_${lineNum}`] === 'saved' && (
+                                      <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-0.5">
+                                        <Check className="w-2.5 h-2.5 text-emerald-600" /> Auto-saved
+                                      </span>
+                                    )}
+                                  </div>
                                   <input
                                     type="text"
                                     value={newLinePartNumber}
-                                    onChange={(e) => setNewLinePartNumber(e.target.value.toUpperCase())}
+                                    onChange={(e) => {
+                                      const val = e.target.value.toUpperCase();
+                                      setNewLinePartNumber(val);
+                                      scheduleNewPartAutoSave(lineNum, { partNumber: val });
+                                    }}
+                                    onBlur={() => flushSaveInlineAdd(lineNum)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                       if (e.key === 'Escape') handleCancelInlineAdd();
@@ -1155,7 +1345,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                   <input
                                     type="text"
                                     value={newLineDescription}
-                                    onChange={(e) => setNewLineDescription(e.target.value)}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setNewLineDescription(val);
+                                      scheduleNewPartAutoSave(lineNum, { description: val });
+                                    }}
+                                    onBlur={() => flushSaveInlineAdd(lineNum)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                       if (e.key === 'Escape') handleCancelInlineAdd();
@@ -1173,7 +1368,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                 min="1"
                                 step="1"
                                 value={newLineQty}
-                                onChange={(e) => setNewLineQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                onChange={(e) => {
+                                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                  setNewLineQty(val);
+                                  scheduleNewPartAutoSave(lineNum, { qty: val });
+                                }}
+                                onBlur={() => flushSaveInlineAdd(lineNum)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                   if (e.key === 'Escape') handleCancelInlineAdd();
@@ -1192,10 +1392,15 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                   onFocus={() => {
                                     if (newLinePrice === '0' || newLinePrice === '0.00') setNewLinePrice('');
                                   }}
-                                  onChange={(e) => setNewLinePrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/[^0-9.]/g, '');
+                                    setNewLinePrice(val);
+                                    scheduleNewPartAutoSave(lineNum, { price: val });
+                                  }}
                                   onBlur={() => {
                                     if (!newLinePrice || isNaN(Number(newLinePrice))) setNewLinePrice('0.00');
                                     else setNewLinePrice(Number(newLinePrice).toFixed(2));
+                                    flushSaveInlineAdd(lineNum);
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
@@ -1217,7 +1422,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               <input
                                 type="text"
                                 value={newLineVendor}
-                                onChange={(e) => setNewLineVendor(e.target.value)}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setNewLineVendor(val);
+                                  scheduleNewPartAutoSave(lineNum, { vendor: val });
+                                }}
+                                onBlur={() => flushSaveInlineAdd(lineNum)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                   if (e.key === 'Escape') handleCancelInlineAdd();
@@ -1231,7 +1441,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               <input
                                 type="text"
                                 value={newLineEta}
-                                onChange={(e) => setNewLineEta(e.target.value)}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setNewLineEta(val);
+                                  scheduleNewPartAutoSave(lineNum, { eta: val });
+                                }}
+                                onBlur={() => flushSaveInlineAdd(lineNum)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleSaveInlineAdd(lineNum);
                                   if (e.key === 'Escape') handleCancelInlineAdd();
@@ -1246,24 +1461,37 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                               </span>
                             </td>
                             <td className="py-2.5 px-2 text-center align-top">
-                              <div className="flex items-center justify-center gap-1.5 pt-4">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveInlineAdd(lineNum)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
-                                  title="Save new part"
-                                >
-                                  <Save className="w-3.5 h-3.5" />
-                                  <span>Save</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleCancelInlineAdd}
-                                  className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-2xs cursor-pointer"
-                                  title="Cancel"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                              <div className="flex flex-col items-center justify-center gap-1.5 pt-2">
+                                {partAutoSaveStatus[`new_line_${lineNum}`] === 'saving' ? (
+                                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-600" />
+                                    <span>Saving...</span>
+                                  </span>
+                                ) : (partAutoSaveStatus[`new_line_${lineNum}`] === 'saved' || activeNewPartIdRef.current) ? (
+                                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in">
+                                    <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                    <span>Auto-Saved</span>
+                                  </span>
+                                ) : null}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineAdd(lineNum)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+                                    title="Finish and close part row"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Done</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelInlineAdd}
+                                    className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-2xs cursor-pointer"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             </td>
                           </tr>
@@ -1284,11 +1512,23 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                 {isInline ? (
                                   <div className="space-y-1.5">
                                     <div>
-                                      <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part #</span>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider block">Part #</span>
+                                        {partAutoSaveStatus[`part_${part.id}`] === 'saved' && (
+                                          <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-0.5">
+                                            <Check className="w-2.5 h-2.5 text-emerald-600" /> Auto-saved
+                                          </span>
+                                        )}
+                                      </div>
                                       <input
                                         type="text"
                                         value={inlinePartNumber}
-                                        onChange={(e) => setInlinePartNumber(e.target.value.toUpperCase())}
+                                        onChange={(e) => {
+                                          const val = e.target.value.toUpperCase();
+                                          setInlinePartNumber(val);
+                                          scheduleEditPartAutoSave(part.id, { partNumber: val });
+                                        }}
+                                        onBlur={() => flushSaveInlineEdit(part.id)}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                           if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1303,7 +1543,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                       <input
                                         type="text"
                                         value={inlineDescription}
-                                        onChange={(e) => setInlineDescription(e.target.value)}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setInlineDescription(val);
+                                          scheduleEditPartAutoSave(part.id, { description: val });
+                                        }}
+                                        onBlur={() => flushSaveInlineEdit(part.id)}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                           if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1342,7 +1587,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                       min="1"
                                       step="1"
                                       value={inlineQty}
-                                      onChange={(e) => setInlineQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                      onChange={(e) => {
+                                        const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                        setInlineQty(val);
+                                        scheduleEditPartAutoSave(part.id, { qty: val });
+                                      }}
+                                      onBlur={() => flushSaveInlineEdit(part.id)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                         if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1380,6 +1630,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                         onChange={(e) => {
                                           const val = e.target.value.replace(/[^0-9.]/g, '');
                                           setInlinePrice(val);
+                                          scheduleEditPartAutoSave(part.id, { price: val });
                                         }}
                                         onBlur={() => {
                                           if (!inlinePrice || inlinePrice === '.' || isNaN(Number(inlinePrice))) {
@@ -1387,6 +1638,7 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                           } else {
                                             setInlinePrice(Number(inlinePrice).toFixed(2));
                                           }
+                                          flushSaveInlineEdit(part.id);
                                         }}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') handleSaveInlineEdit(part.id);
@@ -1436,7 +1688,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                     <input
                                       type="text"
                                       value={inlineVendor}
-                                      onChange={(e) => setInlineVendor(e.target.value)}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setInlineVendor(val);
+                                        scheduleEditPartAutoSave(part.id, { vendor: val });
+                                      }}
+                                      onBlur={() => flushSaveInlineEdit(part.id)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                         if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1461,7 +1718,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                     <input
                                       type="text"
                                       value={inlineEta}
-                                      onChange={(e) => setInlineEta(e.target.value)}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setInlineEta(val);
+                                        scheduleEditPartAutoSave(part.id, { eta: val });
+                                      }}
+                                      onBlur={() => flushSaveInlineEdit(part.id)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                         if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1472,7 +1734,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                     <input
                                       type="text"
                                       value={inlineTracking}
-                                      onChange={(e) => setInlineTracking(e.target.value)}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setInlineTracking(val);
+                                        scheduleEditPartAutoSave(part.id, { tracking: val });
+                                      }}
+                                      onBlur={() => flushSaveInlineEdit(part.id)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                         if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1483,7 +1750,12 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
                                     <input
                                       type="text"
                                       value={inlineNotes}
-                                      onChange={(e) => setInlineNotes(e.target.value)}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setInlineNotes(val);
+                                        scheduleEditPartAutoSave(part.id, { notes: val });
+                                      }}
+                                      onBlur={() => flushSaveInlineEdit(part.id)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleSaveInlineEdit(part.id);
                                         if (e.key === 'Escape') handleCancelInlineEdit();
@@ -1546,26 +1818,39 @@ export const ROQuotePartsTracker: React.FC<ROQuotePartsTrackerProps> = ({
 
                               {/* Actions */}
                               <td className="py-2.5 px-2 text-center align-top">
-                                <div className="flex items-center justify-center gap-1.5 pt-1">
+                                <div className="flex flex-col items-center justify-center gap-1.5 pt-1">
                                   {isInline ? (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveInlineEdit(part.id)}
-                                        className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
-                                        title="Save Part #, Price, Qty, and Tracking"
-                                      >
-                                        <Save className="w-3.5 h-3.5" />
-                                        <span>Save</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={handleCancelInlineEdit}
-                                        className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-2xs cursor-pointer"
-                                        title="Cancel"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
+                                      {partAutoSaveStatus[`part_${part.id}`] === 'saving' ? (
+                                        <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                                          <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-600" />
+                                          <span>Saving...</span>
+                                        </span>
+                                      ) : partAutoSaveStatus[`part_${part.id}`] === 'saved' ? (
+                                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in">
+                                          <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                          <span>Auto-Saved</span>
+                                        </span>
+                                      ) : null}
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveInlineEdit(part.id)}
+                                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+                                          title="Done editing part"
+                                        >
+                                          <Check className="w-3.5 h-3.5" />
+                                          <span>Done</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={handleCancelInlineEdit}
+                                          className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-2xs cursor-pointer"
+                                          title="Cancel"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </>
                                   ) : (
                                     <>

@@ -464,6 +464,7 @@ interface AppContextType {
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
+const STORAGE_KEY_ROS_BACKUP = 'precision_auto_service_ros_backup_v1';
 const STORAGE_KEY_USER = 'precision_auto_active_user_v6_clean';
 const STORAGE_KEY_USERS = 'precision_auto_users_v6_clean';
 const STORAGE_KEY_NOTIFS = 'precision_auto_notifs_v6_clean';
@@ -592,18 +593,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_USERS[0];
   });
 
-  // Repair orders state - defaults to empty if a wipe was performed or if no saved data
+  // Repair orders state - resilient dual-cache with fallback to INITIAL_REPAIR_ORDERS
   const [repairOrders, setRepairOrders] = useState<RepairOrder[]>(() => {
     try {
-      const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
-      if (isWiped) {
-        return [];
-      }
       const saved = localStorage.getItem(STORAGE_KEY_ROS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map((ro: RepairOrder) => {
+            const cleaned = cleanRO3700(ro);
+            if ((cleaned.id === '37460' || cleaned.id === 'RO-37460' || cleaned.id.includes('37460')) && cleaned.customerName === 'Woolwine CDJR') {
+              return {
+                ...cleaned,
+                customerName: 'Woolwine Autoplex'
+              };
+            }
+            return cleaned;
+          });
+        }
+      }
+      const backup = localStorage.getItem(STORAGE_KEY_ROS_BACKUP);
+      if (backup) {
+        const parsedBackup = JSON.parse(backup);
+        if (Array.isArray(parsedBackup) && parsedBackup.length > 0) {
+          return parsedBackup.map((ro: RepairOrder) => {
             const cleaned = cleanRO3700(ro);
             if ((cleaned.id === '37460' || cleaned.id === 'RO-37460' || cleaned.id.includes('37460')) && cleaned.customerName === 'Woolwine CDJR') {
               return {
@@ -1267,10 +1280,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return 'default';
   });
 
-  // Sync to local storage
+  // Sync to local storage - only persist when non-empty to prevent accidental blank-outs
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(repairOrders));
+      if (repairOrders && repairOrders.length > 0) {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(repairOrders));
+        localStorage.setItem(STORAGE_KEY_ROS_BACKUP, JSON.stringify(repairOrders));
+      }
     } catch {
       // ignore
     }
@@ -1309,6 +1325,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevROMap = new Map<string, string>();
 
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
+      // If cloud is empty or subscription returned 0 docs due to quota/offline, NEVER wipe local tickets!
+      if (!cloudROs || cloudROs.length === 0) {
+        setRepairOrders(prev => {
+          if (prev && prev.length > 0) {
+            return prev;
+          }
+          try {
+            const backup = localStorage.getItem(STORAGE_KEY_ROS_BACKUP) || localStorage.getItem(STORAGE_KEY_ROS);
+            if (backup) {
+              const parsed = JSON.parse(backup);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed;
+              }
+            }
+          } catch {}
+          return INITIAL_REPAIR_ORDERS;
+        });
+        return;
+      }
+
       let ro37460NeedsSync: RepairOrder | null = null;
       const sanitizedROs = cloudROs.map((r: RepairOrder) => {
         const cleaned = cleanRO3700(r);
@@ -1328,6 +1364,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setRepairOrders(sanitizedROs);
       setIsCloudSynced(true);
+      try {
+        if (sanitizedROs.length > 0) {
+          localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(sanitizedROs));
+          localStorage.setItem(STORAGE_KEY_ROS_BACKUP, JSON.stringify(sanitizedROs));
+        }
+      } catch {}
 
       if (isInitialROLoad) {
         cloudROs.forEach(r => {
@@ -2393,7 +2435,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           quantity: Math.max(1, Number(part.quantity) || 1),
           price: itemPrice,
           status: effectivePartStatus,
-          id: `prt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+          id: (part as any).id || `prt_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
           roId,
           orderedAt: part.orderedAt || new Date().toISOString(),
         };
@@ -2516,6 +2558,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedROToSync) {
       syncRepairOrder(updatedROToSync);
+      if (selectedRO && selectedRO.id === roId) {
+        setSelectedRO(updatedROToSync);
+      }
       const firstPart = partsToAdd[0];
       triggerNotification(
         updatedROToSync,
@@ -2604,6 +2649,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedROToSync) {
       syncRepairOrder(updatedROToSync);
+      if (selectedRO && selectedRO.id === roId) {
+        setSelectedRO(updatedROToSync);
+      }
       try {
         const saved = localStorage.getItem(STORAGE_KEY_ROS);
         if (saved) {
@@ -3027,6 +3075,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedROToSync) {
       syncRepairOrder(updatedROToSync);
+      if (selectedRO && selectedRO.id === roId) {
+        setSelectedRO(updatedROToSync);
+      }
     }
   };
 
@@ -3080,6 +3131,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (updatedROToSync) {
       syncRepairOrder(updatedROToSync);
+      if (selectedRO && selectedRO.id === roId) {
+        setSelectedRO(updatedROToSync);
+      }
     }
   };
 
@@ -4597,6 +4651,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (syncedRO) {
       syncRepairOrder(syncedRO);
+      if (selectedRO && selectedRO.id === roId) {
+        setSelectedRO(syncedRO);
+      }
 
       // Notify team if requested or manual save
       if (shouldNotify) {

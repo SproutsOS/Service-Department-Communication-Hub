@@ -32,7 +32,8 @@ import {
   Phone,
   KeyRound,
   ShieldAlert,
-  PhoneForwarded
+  PhoneForwarded,
+  RefreshCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -55,8 +56,6 @@ export const ManagerDashboard: React.FC = () => {
     startDiagnosis, 
     staffLeaveEntries,
     setIsStaffCalendarOpen,
-    appointments,
-    setIsAppointmentCalendarOpen,
     managerViewSection: viewSection,
     setManagerViewSection: setViewSection,
     openQuoteBuilder,
@@ -76,6 +75,7 @@ export const ManagerDashboard: React.FC = () => {
     openRecallWaitingModal,
     internalExtensions,
     openInternalExtensionModal,
+    resetToDemoData,
   } = useApp();
 
   const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);
@@ -113,10 +113,6 @@ export const ManagerDashboard: React.FC = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }, []);
-
-  const todayAppointmentsCount = useMemo(() => {
-    return (appointments || []).filter(a => a.appointmentDate === todayStr && a.status !== 'CANCELLED').length;
-  }, [appointments, todayStr]);
 
   // Today's absences (Leave early, out sick, vacation, etc.)
   const todayAbsences = useMemo(() => {
@@ -437,21 +433,6 @@ export const ManagerDashboard: React.FC = () => {
             {quotes.length > 0 && (
               <span className="bg-amber-950 text-amber-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400">
                 {quotes.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            id="open-appointment-calendar-mgr"
-            onClick={() => setIsAppointmentCalendarOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
-            title="Open Service Appointment Calendar"
-          >
-            <CalendarCheck className="w-4 h-4 text-purple-200" />
-            <span>Appointment Calendar</span>
-            {todayAppointmentsCount > 0 && (
-              <span className="bg-purple-900 text-purple-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-purple-400">
-                {todayAppointmentsCount} Today
               </span>
             )}
           </button>
@@ -1081,8 +1062,24 @@ export const ManagerDashboard: React.FC = () => {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredROs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                      No repair orders match your filter criteria.
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                      <div className="flex flex-col items-center justify-center gap-2.5">
+                        <p className="text-base font-semibold text-slate-700">No repair orders match your criteria.</p>
+                        {repairOrders.length === 0 ? (
+                          <div className="flex flex-col items-center gap-2 mt-1">
+                            <p className="text-sm text-slate-500 max-w-md">Your active repair orders list is currently empty. Click below to load your active dealership tickets including RO-37460 (Woolwine Autoplex).</p>
+                            <button
+                              onClick={() => resetToDemoData()}
+                              className="mt-1 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Restore Repair Orders & RO 37460
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">Try adjusting your status filter, search query, or technician filters above.</p>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -1257,16 +1254,36 @@ export const ManagerDashboard: React.FC = () => {
           </div>
         ) : (
           /* Display: Cards Grid View (Main RO Cards ~1/2" wider) */
-          <div className="p-3.5 sm:p-4.5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-4.5">
-            {filteredROs.map(ro => (
-              <ROCard 
-                key={ro.id} 
-                ro={ro} 
-                onClick={() => setSelectedRO(ro)} 
-                isMainCard={true}
-              />
-            ))}
-          </div>
+          filteredROs.length === 0 ? (
+            <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2.5">
+              <p className="text-base font-semibold text-slate-700">No repair orders match your criteria.</p>
+              {repairOrders.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 mt-1">
+                  <p className="text-sm text-slate-500 max-w-md">Your active repair orders list is currently empty. Click below to load your active dealership tickets including RO-37460 (Woolwine Autoplex).</p>
+                  <button
+                    onClick={() => resetToDemoData()}
+                    className="mt-1 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Restore Repair Orders & RO 37460
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">Try adjusting your status filter, search query, or technician filters above.</p>
+              )}
+            </div>
+          ) : (
+            <div className="p-3.5 sm:p-4.5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-4.5">
+              {filteredROs.map(ro => (
+                <ROCard 
+                  key={ro.id} 
+                  ro={ro} 
+                  onClick={() => setSelectedRO(ro)} 
+                  isMainCard={true}
+                />
+              ))}
+            </div>
+          )
         )}
 
       </div>
