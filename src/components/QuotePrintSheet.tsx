@@ -5,6 +5,9 @@ import { Printer, X, ShieldCheck, Phone, Mail, Car, User, Calendar, FileText, Ch
 import { useApp } from '../context/AppContext';
 import { printIsolatedDocument } from '../utils/printUtils';
 
+const DEALERSHIP_ADDRESS = '2100 Highway 49, Seminary, MS 39479';
+const DEALERSHIP_PHONE = '601-765-2066';
+
 interface QuotePrintSheetProps {
   quote: StandaloneQuote;
   onClose: () => void;
@@ -90,12 +93,9 @@ export const QuotePrintSheet: React.FC<QuotePrintSheetProps> = ({
                   {dealershipTitle}
                 </h1>
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                Authorized Certified Automotive Service & Parts Department
-              </p>
-              <div className="text-[11px] text-slate-600 mt-2 space-y-0.5">
-                <p>100 Dealership Way, Service Drive Entrance</p>
-                <p>Service Direct: (555) 321-7890 • Parts Counter: (555) 321-7892</p>
+              <div className="text-[11px] text-slate-600 mt-1.5 space-y-0.5">
+                <p>{DEALERSHIP_ADDRESS}</p>
+                <p>Phone: <strong>{DEALERSHIP_PHONE}</strong></p>
               </div>
             </div>
 

@@ -23,7 +23,7 @@ import { ConcernPayType } from '../types';
 import { formatMilitaryDate, formatMilitaryDateTime, cleanRO3700 } from '../utils/formatters';
 import { printIsolatedDocument, downloadPrintableDocument } from '../utils/printUtils';
 
-const DEALERSHIP_ADDRESS = '2100 HWY 49, SEMINARY, MS 39479';
+const DEALERSHIP_ADDRESS = '2100 Highway 49, Seminary, MS 39479';
 const DEALERSHIP_PHONE = '601-765-2066';
 
 export const QuotePrintModal: React.FC = () => {

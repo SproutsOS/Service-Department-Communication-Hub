@@ -827,9 +827,11 @@ export const QuoteBuilderModal: React.FC<QuoteBuilderModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Build menu estimates, calculate parts & labor gross margins, and roll pre-approved quotes into active Repair Orders.
-              </p>
+              <div className="flex items-center gap-2 text-xs text-slate-300 mt-0.5 flex-wrap">
+                <span className="text-purple-200 font-semibold">2100 Highway 49, Seminary, MS 39479</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-purple-200 font-semibold">Phone: 601-765-2066</span>
+              </div>
             </div>
           </div>
 
