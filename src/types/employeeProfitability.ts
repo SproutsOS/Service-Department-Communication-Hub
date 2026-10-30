@@ -8,10 +8,12 @@ export interface EmployeeProfitabilityRow {
   actualHours: number; // Clocked attendance hours (e.g., 40.0)
   flaggedHours: number; // Flat-rate / billable hours produced (e.g., 52.5)
   payRate: number; // $/hr for Hourly/Flat-rate, or Weekly Fixed $ for Salary
+  laborSales: number; // Direct user input: Labor Sales in dollars (e.g. 5200.00)
+  grossProfit: number; // Direct user input: Gross Profit in dollars (e.g. 3850.00)
+  manualNetProfit?: number; // Optional user override for Net Profit in dollars
   overtimeMultiplier?: number; // Overtime rate for hourly over 40 hrs (default 1.5, or 1.0 for straight time)
-  billedLaborRate?: number; // Retail / effective customer billed rate (e.g., 150.00)
-  manualLaborSales?: number | null; // Optional manual override for total labor sales produced
-  partsSales?: number; // Optional parts sales generated (e.g. for Advisors)
+  billedLaborRate?: number; // Kept optional for legacy saved data compatibility
+  partsSales?: number; // Optional parts sales generated
   partsCost?: number; // Optional parts cost
   burdenType?: 'PERCENT' | 'FIXED'; // Burden/overhead: percentage of wage or fixed dollar amount
   burdenValue?: number; // e.g., 10 (for 10% taxes/benefits) or 150 (for $150 stall overhead)
@@ -21,13 +23,13 @@ export interface EmployeeProfitabilityRow {
 export interface ComputedEmployeeRow extends EmployeeProfitabilityRow {
   efficiencyPct: number; // (flaggedHours / actualHours) * 100
   totalPay: number; // Calculated payroll cost
-  laborRevenue: number; // Revenue from labor
-  totalRevenue: number; // Labor + Parts revenue
-  grossProfit: number; // totalRevenue - totalPay
-  grossProfitPct: number; // (grossProfit / totalRevenue) * 100
+  laborRevenue: number; // Same as laborSales
+  totalRevenue: number; // Labor sales + parts sales
+  grossProfit: number; // User entered gross profit (or auto-calc if blank)
+  grossProfitPct: number; // (grossProfit / laborSales) * 100
   calculatedBurden: number; // Burden/overhead cost in dollars
-  netProfit: number; // grossProfit - calculatedBurden
-  netProfitPct: number; // (netProfit / totalRevenue) * 100
+  netProfit: number; // Net profit in dollars (manual override or grossProfit - burden)
+  netProfitPct: number; // (netProfit / laborSales) * 100
   effectiveCostPerHour: number; // totalPay / actualHours
   effectiveRevenuePerHour: number; // totalRevenue / actualHours
 }
@@ -36,7 +38,7 @@ export interface ProfitabilityWeek {
   id: string;
   weekEndingDate: string; // YYYY-MM-DD
   weekLabel: string; // e.g. "Week Ending Oct 30, 2026"
-  defaultBilledRate: number; // Default $/hr for this week (e.g., 150.00)
+  defaultBilledRate?: number; // Optional legacy field
   defaultBurdenPct: number; // Default % overhead allocation (e.g., 10.0%)
   rows: EmployeeProfitabilityRow[];
   notes?: string;

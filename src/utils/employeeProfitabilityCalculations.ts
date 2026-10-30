@@ -7,19 +7,26 @@ import {
 } from '../types/employeeProfitability';
 
 /**
- * Computes individual employee row figures given pay type and rates
+ * Computes individual employee row figures given pay type and user-entered sales & profit
  */
 export function computeEmployeeRow(
   row: EmployeeProfitabilityRow, 
-  defaultBilledRate: number = 150,
-  defaultBurdenPct: number = 10
+  arg2?: number,
+  arg3?: number
 ): ComputedEmployeeRow {
   const actualHours = Number(row.actualHours) || 0;
   const flaggedHours = Number(row.flaggedHours) || 0;
   const payRate = Number(row.payRate) || 0;
-  const billedLaborRate = Number(row.billedLaborRate ?? defaultBilledRate) || defaultBilledRate;
   const overtimeMult = Number(row.overtimeMultiplier ?? 1.5) || 1.5;
   const partsSales = Number(row.partsSales) || 0;
+
+  // Determine burden %
+  let defaultBurdenPct = 10;
+  if (typeof arg3 === 'number') {
+    defaultBurdenPct = arg3;
+  } else if (typeof arg2 === 'number') {
+    defaultBurdenPct = arg2 <= 50 ? arg2 : 10;
+  }
 
   // 1. Efficiency Percentage = (Flagged Hours / Actual Hours) * 100
   const efficiencyPct = actualHours > 0 ? (flaggedHours / actualHours) * 100 : 0;
@@ -43,17 +50,27 @@ export function computeEmployeeRow(
     totalPay = payRate;
   }
 
-  // 3. Labor Revenue: Manual override or (Flagged Hours * Billed Labor Rate)
-  const laborRevenue = (row.manualLaborSales !== null && row.manualLaborSales !== undefined && !isNaN(Number(row.manualLaborSales)))
-    ? Number(row.manualLaborSales)
-    : flaggedHours * billedLaborRate;
+  // 3. Labor Sales: Direct user input (with fallback if opening older saved data)
+  let laborSales = Number(row.laborSales);
+  if (isNaN(laborSales) || row.laborSales === undefined || row.laborSales === null) {
+    if (row.billedLaborRate && flaggedHours > 0) {
+      laborSales = flaggedHours * row.billedLaborRate;
+    } else {
+      laborSales = 0;
+    }
+  }
 
-  // Total Revenue generated
-  const totalRevenue = laborRevenue + partsSales;
+  const laborRevenue = laborSales;
+  const totalRevenue = laborSales + partsSales;
 
-  // 4. Gross Profit = Revenue - Total Pay
-  const grossProfit = totalRevenue - totalPay;
-  const grossProfitPct = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+  // 4. Gross Profit ($): Direct user input (or fallback to laborSales - totalPay if unentered)
+  let grossProfit = Number(row.grossProfit);
+  if (isNaN(grossProfit) || row.grossProfit === undefined || row.grossProfit === null) {
+    grossProfit = laborSales > 0 ? Math.max(0, laborSales - totalPay) : 0;
+  }
+
+  // Gross Profit % = (Gross Profit / Labor Sales) * 100
+  const grossProfitPct = laborSales > 0 ? (grossProfit / laborSales) * 100 : 0;
 
   // 5. Burden / Overhead Cost:
   // Fixed $ or Percentage of Pay (defaults to defaultBurdenPct)
@@ -63,9 +80,15 @@ export function computeEmployeeRow(
     ? burdenVal 
     : (totalPay * (burdenVal / 100));
 
-  // 6. Net Profit = Gross Profit - Burden
-  const netProfit = grossProfit - calculatedBurden;
-  const netProfitPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  // 6. Net Profit ($): Manual override if entered, or Gross Profit - calculatedBurden
+  let netProfit: number;
+  if (row.manualNetProfit !== undefined && row.manualNetProfit !== null && !isNaN(Number(row.manualNetProfit))) {
+    netProfit = Number(row.manualNetProfit);
+  } else {
+    netProfit = grossProfit - calculatedBurden;
+  }
+
+  const netProfitPct = laborSales > 0 ? (netProfit / laborSales) * 100 : 0;
 
   // Effective cost and revenue per attendance hour
   const effectiveCostPerHour = actualHours > 0 ? totalPay / actualHours : 0;
@@ -76,12 +99,12 @@ export function computeEmployeeRow(
     actualHours,
     flaggedHours,
     payRate,
-    billedLaborRate,
+    laborSales,
+    grossProfit,
     efficiencyPct,
     totalPay,
     laborRevenue,
     totalRevenue,
-    grossProfit,
     grossProfitPct,
     calculatedBurden,
     netProfit,
@@ -96,7 +119,7 @@ export function computeEmployeeRow(
  */
 export function computeWeekSummary(week: ProfitabilityWeek): WeekSummaryTotals {
   const computedRows = (week.rows || []).map(r => 
-    computeEmployeeRow(r, week.defaultBilledRate, week.defaultBurdenPct)
+    computeEmployeeRow(r, week.defaultBurdenPct)
   );
 
   let totalActualHours = 0;
@@ -251,7 +274,7 @@ export function computeEmployeeRunningTotals(weeks: ProfitabilityWeek[]): Employ
 
   weeks.forEach(w => {
     w.rows.forEach(r => {
-      const computed = computeEmployeeRow(r, w.defaultBilledRate, w.defaultBurdenPct);
+      const computed = computeEmployeeRow(r, w.defaultBurdenPct);
       const key = (computed.name || 'Unnamed').trim().toLowerCase();
       if (!key) return;
 
@@ -311,7 +334,7 @@ export function computeEmployeeRunningTotals(weeks: ProfitabilityWeek[]): Employ
  * Generates downloadable CSV content of a weekly sheet or comparison table
  */
 export function exportWeekToCSV(week: ProfitabilityWeek): string {
-  const computedRows = week.rows.map(r => computeEmployeeRow(r, week.defaultBilledRate, week.defaultBurdenPct));
+  const computedRows = week.rows.map(r => computeEmployeeRow(r, week.defaultBurdenPct));
   const summary = computeWeekSummary(week);
 
   const headers = [
@@ -323,8 +346,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     'Efficiency %',
     'Rate of Pay ($)',
     'Total Pay ($)',
-    'Billed Labor Rate ($/hr)',
-    'Total Labor Sales ($)',
+    'Labor Sales ($)',
     'Gross Profit ($)',
     'Gross Profit %',
     'Burden & Overhead ($)',
@@ -336,7 +358,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
 
   const lines: string[] = [];
   lines.push(`"Employee Profitability Ledger - ${week.weekLabel}"`);
-  lines.push(`"Week Ending: ${week.weekEndingDate} | Default Billed Rate: $${week.defaultBilledRate.toFixed(2)}/hr | Overhead Burden: ${week.defaultBurdenPct}%"`);
+  lines.push(`"Week Ending: ${week.weekEndingDate} | Overhead Burden: ${week.defaultBurdenPct}%"`);
   lines.push('');
   lines.push(headers.map(h => `"${h}"`).join(','));
 
@@ -350,8 +372,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
       `${r.efficiencyPct.toFixed(1)}%`,
       `$${r.payRate.toFixed(2)}`,
       `$${r.totalPay.toFixed(2)}`,
-      `$${r.billedLaborRate.toFixed(2)}`,
-      `$${r.totalRevenue.toFixed(2)}`,
+      `$${r.laborSales.toFixed(2)}`,
       `$${r.grossProfit.toFixed(2)}`,
       `${r.grossProfitPct.toFixed(1)}%`,
       `$${r.calculatedBurden.toFixed(2)}`,
@@ -373,7 +394,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     `"${summary.overallEfficiencyPct.toFixed(1)}%"`,
     '""',
     `"$${summary.totalPayroll.toFixed(2)}"`,
-    '""',
     `"$${summary.totalRevenue.toFixed(2)}"`,
     `"$${summary.totalGrossProfit.toFixed(2)}"`,
     `"${summary.overallGrossProfitPct.toFixed(1)}%"`,
@@ -396,7 +416,6 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     id: 'week_2026_10_24',
     weekEndingDate: '2026-10-24',
     weekLabel: 'Week Ending Oct 24, 2026',
-    defaultBilledRate: 150.00,
     defaultBurdenPct: 10.0,
     createdAt: '2026-10-24T18:00:00Z',
     updatedAt: '2026-10-24T18:00:00Z',
@@ -410,8 +429,9 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         payType: 'FLAT_RATE',
         actualHours: 40.0,
         flaggedHours: 52.5,
-        payRate: 36.00, // $36.00 / flagged hr
-        billedLaborRate: 150.00,
+        payRate: 36.00, // $36.00 / flagged hr (Pay = $1,890.00)
+        laborSales: 7875.00,
+        grossProfit: 5985.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Top flat-rate producer, diesel diagnostics & recall jobs',
@@ -423,8 +443,9 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         payType: 'FLAT_RATE',
         actualHours: 40.0,
         flaggedHours: 46.0,
-        payRate: 30.00, // $30.00 / flagged hr
-        billedLaborRate: 150.00,
+        payRate: 30.00, // $30.00 / flagged hr (Pay = $1,380.00)
+        laborSales: 6900.00,
+        grossProfit: 5520.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Transmission replacements, front brakes & suspensions',
@@ -436,8 +457,9 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         payType: 'FLAT_RATE',
         actualHours: 40.0,
         flaggedHours: 39.0,
-        payRate: 26.00, // $26.00 / flagged hr
-        billedLaborRate: 150.00,
+        payRate: 26.00, // $26.00 / flagged hr (Pay = $1,014.00)
+        laborSales: 5850.00,
+        grossProfit: 4836.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Brakes, steering linkage & cooling systems',
@@ -447,11 +469,12 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         name: 'Tyler Watson',
         role: 'Lube / Express Tech',
         payType: 'HOURLY',
-        actualHours: 42.0, // 40 reg + 2 OT
+        actualHours: 42.0, // 40 reg + 2 OT (Pay = $817.00)
         flaggedHours: 34.0,
-        payRate: 19.00, // $19.00 / hr
+        payRate: 19.00,
         overtimeMultiplier: 1.5,
-        billedLaborRate: 120.00,
+        laborSales: 4080.00,
+        grossProfit: 3263.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Express oil changes, tire rotations & multi-point inspections',
@@ -464,7 +487,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         actualHours: 45.0,
         flaggedHours: 60.0,
         payRate: 1350.00, // $1,350.00 / week salary base
-        billedLaborRate: 150.00,
+        laborSales: 9000.00,
+        grossProfit: 7650.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Service desk drive management & customer follow-up cadence',
@@ -477,7 +501,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         actualHours: 42.0,
         flaggedHours: 48.0,
         payRate: 1100.00, // $1,100.00 / week salary base
-        billedLaborRate: 150.00,
+        laborSales: 7200.00,
+        grossProfit: 6100.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Recall appointment scheduling & internal recon tickets',
@@ -488,7 +513,6 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     id: 'week_2026_10_31',
     weekEndingDate: '2026-10-31',
     weekLabel: 'Week Ending Oct 31, 2026',
-    defaultBilledRate: 150.00,
     defaultBurdenPct: 10.0,
     createdAt: '2026-10-31T18:00:00Z',
     updatedAt: '2026-10-31T18:00:00Z',
@@ -501,9 +525,10 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         role: 'Master Diagnostic Tech',
         payType: 'FLAT_RATE',
         actualHours: 40.0,
-        flaggedHours: 58.0, // Produced 58 flagged hrs
+        flaggedHours: 58.0, // Produced 58 flagged hrs (Pay = $2,088.00)
         payRate: 36.00,
-        billedLaborRate: 150.00,
+        laborSales: 8700.00,
+        grossProfit: 6612.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Completed 2 EcoDiesel high-pressure pumps & wiring diagnosis',
@@ -514,9 +539,10 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         role: 'A-Level Tech',
         payType: 'FLAT_RATE',
         actualHours: 40.0,
-        flaggedHours: 49.5,
+        flaggedHours: 49.5, // Produced 49.5 hrs (Pay = $1,485.00)
         payRate: 30.00,
-        billedLaborRate: 150.00,
+        laborSales: 7425.00,
+        grossProfit: 5940.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Completed warranty engine tear-down and intake heater relay updates',
@@ -527,9 +553,10 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         role: 'B-Level Technician',
         payType: 'FLAT_RATE',
         actualHours: 38.0,
-        flaggedHours: 42.0,
+        flaggedHours: 42.0, // Produced 42 hrs (Pay = $1,092.00)
         payRate: 26.00,
-        billedLaborRate: 150.00,
+        laborSales: 6300.00,
+        grossProfit: 5208.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Finished brake jobs & 30k interval services',
@@ -541,9 +568,10 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         payType: 'HOURLY',
         actualHours: 40.0,
         flaggedHours: 36.0,
-        payRate: 19.00,
+        payRate: 19.00, // Pay = $760.00
         overtimeMultiplier: 1.5,
-        billedLaborRate: 120.00,
+        laborSales: 4320.00,
+        grossProfit: 3560.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Express oil changes & battery replacements',
@@ -556,7 +584,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         actualHours: 45.0,
         flaggedHours: 65.0,
         payRate: 1350.00,
-        billedLaborRate: 150.00,
+        laborSales: 9750.00,
+        grossProfit: 8400.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Record tire and brake upsell volume',
@@ -569,7 +598,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
         actualHours: 43.0,
         flaggedHours: 52.0,
         payRate: 1100.00,
-        billedLaborRate: 150.00,
+        laborSales: 7800.00,
+        grossProfit: 6700.00,
         burdenType: 'PERCENT',
         burdenValue: 10.0,
         notes: 'Customer follow-up cadence calls completed on schedule',

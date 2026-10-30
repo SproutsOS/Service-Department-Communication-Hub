@@ -48,7 +48,7 @@ import {
 import { formatCurrency } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
 
-const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v2';
+const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v3';
 
 interface EmployeeProfitabilityLedgerProps {
   onBackToDashboard?: () => void;
@@ -62,11 +62,33 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Load weeks from isolated persistent storage, with fallback to default realistic template weeks
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_PROFITABILITY_WEEKS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedV3 = localStorage.getItem('dealership_employee_profitability_weeks_v3');
+      if (savedV3) {
+        const parsed = JSON.parse(savedV3);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
+        }
+      }
+      const savedV2 = localStorage.getItem('dealership_employee_profitability_weeks_v2');
+      if (savedV2) {
+        const parsed = JSON.parse(savedV2);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((w: ProfitabilityWeek) => ({
+            ...w,
+            rows: (w.rows || []).map((r: any) => {
+              const flagged = Number(r.flaggedHours) || 0;
+              const pay = Number(r.payRate) || 0;
+              const billed = Number(r.billedLaborRate) || 150;
+              const laborSales = Number(r.laborSales) || (flagged > 0 ? flagged * billed : 0);
+              const computedPay = r.payType === 'FLAT_RATE' ? flagged * pay : pay;
+              const grossProfit = Number(r.grossProfit) || Math.max(0, laborSales - computedPay);
+              return {
+                ...r,
+                laborSales,
+                grossProfit,
+              };
+            })
+          }));
         }
       }
     } catch {
@@ -131,7 +153,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   const computedRows = useMemo(() => {
     if (!activeWeek) return [];
     const list = activeWeek.rows.map(r => 
-      computeEmployeeRow(r, activeWeek.defaultBilledRate, activeWeek.defaultBurdenPct)
+      computeEmployeeRow(r, activeWeek.defaultBurdenPct)
     );
 
     let filtered = list;
@@ -184,7 +206,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       actualHours: 40.0,
       flaggedHours: 40.0,
       payRate: 30.00,
-      billedLaborRate: activeWeek.defaultBilledRate || 150.00,
+      laborSales: 0.00,
+      grossProfit: 0.00,
       burdenType: 'PERCENT',
       burdenValue: activeWeek.defaultBurdenPct || 10.0,
       notes: ''
@@ -261,6 +284,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
         id: `emp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         actualHours: 40.0,
         flaggedHours: 0.0, // Clear flagged hours so user enters fresh production
+        laborSales: 0.0, // Clear sales for fresh week
+        grossProfit: 0.0, // Clear gross profit for fresh week
       }));
     } else {
       newRows = [
@@ -272,7 +297,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
           actualHours: 40.0,
           flaggedHours: 0.0,
           payRate: 36.00,
-          billedLaborRate: 150.00,
+          laborSales: 0.00,
+          grossProfit: 0.00,
           burdenType: 'PERCENT',
           burdenValue: 10.0,
         }
@@ -283,7 +309,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       id: newWeekId,
       weekEndingDate: formattedDate,
       weekLabel: newWeekLabel,
-      defaultBilledRate: activeWeek?.defaultBilledRate || 150.00,
       defaultBurdenPct: activeWeek?.defaultBurdenPct || 10.0,
       rows: newRows,
       createdAt: new Date().toISOString(),
@@ -355,7 +380,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
         actualHours: 40.0,
         flaggedHours: inferredPayType === 'FLAT_RATE' ? 40.0 : 0.0,
         payRate,
-        billedLaborRate: activeWeek.defaultBilledRate || 150.00,
+        laborSales: 0.00,
+        grossProfit: 0.00,
         burdenType: 'PERCENT',
         burdenValue: activeWeek.defaultBurdenPct || 10.0,
         notes: `Imported from roster (${u.role.replace('_', ' ')})`
@@ -577,22 +603,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 )}
               </div>
 
-              {/* Right: Global Billed Rate, Overhead % & Export */}
+              {/* Right: Overhead Burden % & Export */}
               <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-                  <label className="text-[11px] font-black text-slate-600 uppercase">Default Billed Rate:</label>
-                  <div className="flex items-center gap-0.5">
-                    <span className="text-xs text-slate-500 font-bold">$</span>
-                    <input
-                      type="number"
-                      step="5"
-                      value={activeWeek.defaultBilledRate}
-                      onChange={(e) => handleUpdateWeekMeta({ defaultBilledRate: Number(e.target.value) || 0 })}
-                      className="w-16 px-1.5 py-0.5 text-xs font-mono font-bold bg-white border border-slate-300 rounded text-right focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                    />
-                    <span className="text-[10px] text-slate-400 font-semibold">/hr</span>
-                  </div>
-                </div>
 
                 <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
                   <label className="text-[11px] font-black text-slate-600 uppercase">Overhead Burden:</label>
@@ -813,12 +825,11 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                           <ArrowUpDown className="w-3 h-3 text-slate-400" />
                         </div>
                       </th>
-                      <th className="py-2.5 px-3 text-right">Billed Rate</th>
                       <th 
                         className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
-                        onClick={() => handleSortClick('totalRevenue')}
+                        onClick={() => handleSortClick('laborSales')}
                       >
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1 text-emerald-300">
                           <span>Labor Sales ($)</span>
                           <ArrowUpDown className="w-3 h-3 text-slate-400" />
                         </div>
@@ -827,7 +838,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
                         onClick={() => handleSortClick('grossProfit')}
                       >
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1 text-emerald-300">
                           <span>Gross Profit ($)</span>
                           <ArrowUpDown className="w-3 h-3 text-slate-400" />
                         </div>
@@ -867,7 +878,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <tbody className="divide-y divide-slate-200">
                     {computedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={17} className="py-12 text-center text-slate-500">
+                        <td colSpan={16} className="py-12 text-center text-slate-500">
                           <p className="font-semibold text-sm">No employees listed in this sheet.</p>
                           <p className="text-xs text-slate-400 mt-1">Click "+ Add Employee Row" or "Sync Names from Staff" above.</p>
                         </td>
@@ -988,30 +999,42 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               {formatCurrency(r.totalPay)}
                             </td>
 
-                            {/* Billed Labor Rate */}
-                            <td className="py-1.5 px-2 text-right min-w-[90px]">
-                              <div className="flex items-center justify-end gap-0.5">
-                                <span className="text-slate-400 text-xs">$</span>
+                            {/* Labor Sales ($ Direct Input) */}
+                            <td className="py-1.5 px-2 text-right min-w-[125px]">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-slate-400 text-xs font-semibold">$</span>
                                 <input
                                   type="number"
-                                  step="5"
-                                  value={r.billedLaborRate}
-                                  onChange={(e) => handleUpdateRow(r.id, { billedLaborRate: Number(e.target.value) || 0 })}
-                                  className="w-16 px-1.5 py-1 text-right font-mono font-medium bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-700 focus:outline-hidden"
+                                  step="10"
+                                  value={r.laborSales ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : Number(e.target.value);
+                                    handleUpdateRow(r.id, { laborSales: val });
+                                  }}
+                                  placeholder="0.00"
+                                  className="w-24 px-2 py-1 text-right font-mono font-bold bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                                 />
                               </div>
                             </td>
 
-                            {/* Total Labor Revenue ($ Computed) */}
-                            <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900 text-xs min-w-[100px]">
-                              {formatCurrency(r.totalRevenue)}
-                            </td>
-
-                            {/* Gross Profit ($ Computed) */}
-                            <td className={`py-1.5 px-3 text-right font-mono font-extrabold text-xs min-w-[105px] ${
-                              r.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600'
-                            }`}>
-                              {formatCurrency(r.grossProfit)}
+                            {/* Gross Profit ($ Direct Input) */}
+                            <td className="py-1.5 px-2 text-right min-w-[125px]">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-slate-400 text-xs font-semibold">$</span>
+                                <input
+                                  type="number"
+                                  step="10"
+                                  value={r.grossProfit ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : Number(e.target.value);
+                                    handleUpdateRow(r.id, { grossProfit: val });
+                                  }}
+                                  placeholder="0.00"
+                                  className={`w-24 px-2 py-1 text-right font-mono font-black bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded focus:outline-hidden ${
+                                    r.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600'
+                                  }`}
+                                />
+                              </div>
                             </td>
 
                             {/* Gross Profit % (Computed) */}
@@ -1091,7 +1114,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         <td className="py-3 px-3 text-right text-rose-300 font-black">
                           {formatCurrency(activeWeekSummary.totalPayroll)}
                         </td>
-                        <td className="py-3 px-3 text-right text-slate-400">--</td>
                         <td className="py-3 px-3 text-right text-white font-black">
                           {formatCurrency(activeWeekSummary.totalRevenue)}
                         </td>
@@ -1591,7 +1613,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               </div>
               <div className="text-right text-xs">
                 <div>Printed: {new Date().toLocaleDateString()}</div>
-                <div className="font-bold text-slate-800">Default Billed Rate: ${activeWeek.defaultBilledRate.toFixed(2)}/hr</div>
+                <div className="font-bold text-slate-800">Overhead Burden: {activeWeek.defaultBurdenPct}%</div>
               </div>
             </div>
 
@@ -1627,14 +1649,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <th className="p-2 text-right">Efficiency %</th>
                   <th className="p-2 text-right">Rate</th>
                   <th className="p-2 text-right">Total Pay</th>
-                  <th className="p-2 text-right">Labor Revenue</th>
+                  <th className="p-2 text-right">Labor Sales</th>
                   <th className="p-2 text-right">Gross Profit</th>
                   <th className="p-2 text-right">Net Profit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {activeWeek.rows.map(r => {
-                  const comp = computeEmployeeRow(r, activeWeek.defaultBilledRate, activeWeek.defaultBurdenPct);
+                  const comp = computeEmployeeRow(r, activeWeek.defaultBurdenPct);
                   return (
                     <tr key={r.id}>
                       <td className="p-2 font-bold">{comp.name}</td>
