@@ -31,6 +31,7 @@ import { ManagerPasswordsModal } from './components/ManagerPasswordsModal';
 import { RecallWaitingModal } from './components/RecallWaitingModal';
 import { InternalExtensionModal } from './components/InternalExtensionModal';
 import { EmployeeProfitabilityLedger } from './components/EmployeeProfitabilityLedger';
+import { ProfitLedgerPasswordModal } from './components/ProfitLedgerPasswordModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useBrowserTabNotification } from './utils/useBrowserTabNotification';
 import { 
@@ -93,6 +94,8 @@ const MainContent: React.FC = () => {
     notifications,
     isEmployeeProfitabilityOpen,
     setIsEmployeeProfitabilityOpen,
+    requestOpenProfitLedger,
+    setIsProfitLedgerUnlocked,
   } = useApp();
   
   // Dynamic red dot notification on the browser tab title & favicon when chat messages are received
@@ -461,7 +464,7 @@ const MainContent: React.FC = () => {
                     </span>
                   </button>
 
-                  {/* 9. Employee Profitability & Labor Ledger (Independent Spreadsheet) */}
+                  {/* 9. Employee Profitability & Labor Ledger (Independent Spreadsheet - Password Protected) */}
                   <button
                     id="sidebar-employee-profitability-btn"
                     onClick={() => {
@@ -469,21 +472,21 @@ const MainContent: React.FC = () => {
                       setIsTimeCardCalculatorOpen(false);
                       setIsAppointmentCalendarOpen(false);
                       setIsStaffCalendarOpen(false);
-                      setIsEmployeeProfitabilityOpen(true);
+                      requestOpenProfitLedger();
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
                       isEmployeeProfitabilityOpen && !isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen
                         ? 'bg-emerald-600 text-white shadow-xs font-semibold'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
-                    title="Labor & Profitability Ledger (Independent Spreadsheet for Actual Hours, Flagged Hours, Salary/Flat Rate/Hourly Pay, Gross Profit, and Net Profit)"
+                    title="Labor & Profitability Ledger (Password Protected - Independent Spreadsheet for Actual Hours, Flagged Hours, Salary/Flat Rate/Hourly Pay, Gross Profit, and Net Profit)"
                   >
                     <div className="flex items-center gap-3">
                       <FileSpreadsheet className="w-4 h-4 shrink-0 text-emerald-400" />
                       <span className="text-sm font-medium">Profit Ledger</span>
                     </div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700/50 uppercase tracking-wider">
-                      Spreadsheet
+                      Protected
                     </span>
                   </button>
                 </div>
@@ -858,14 +861,20 @@ const MainContent: React.FC = () => {
                 <div>
                   <div className="mb-4">
                     <button
-                      onClick={() => setIsEmployeeProfitabilityOpen(false)}
+                      onClick={() => {
+                        setIsEmployeeProfitabilityOpen(false);
+                        setIsProfitLedgerUnlocked(false);
+                      }}
                       className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors shadow-xs cursor-pointer"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                       <span>Back to Dashboard</span>
                     </button>
                   </div>
-                  <EmployeeProfitabilityLedger onBackToDashboard={() => setIsEmployeeProfitabilityOpen(false)} />
+                  <EmployeeProfitabilityLedger onBackToDashboard={() => {
+                    setIsEmployeeProfitabilityOpen(false);
+                    setIsProfitLedgerUnlocked(false);
+                  }} />
                 </div>
               ) : (
                 <div className="p-8 bg-white rounded-2xl border border-red-200 text-center max-w-lg mx-auto shadow-sm my-auto">
@@ -1037,6 +1046,7 @@ const MainContent: React.FC = () => {
       <SpecialPartsModal />
       <ImportantNumbersModal />
       <ManagerPasswordsModal />
+      <ProfitLedgerPasswordModal />
       <RecallWaitingModal />
       <InternalExtensionModal />
       <ErrorBoundary fallbackTitle="Quote Builder Error">

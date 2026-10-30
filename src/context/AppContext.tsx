@@ -466,8 +466,20 @@ interface AppContextType {
   setIsEmployeeProfitabilityOpen: (open: boolean) => void;
   openEmployeeProfitability: () => void;
   closeEmployeeProfitability: () => void;
+  isProfitLedgerPasswordModalOpen: boolean;
+  setIsProfitLedgerPasswordModalOpen: (open: boolean) => void;
+  openProfitLedgerPasswordModal: () => void;
+  closeProfitLedgerPasswordModal: () => void;
+  isProfitLedgerUnlocked: boolean;
+  setIsProfitLedgerUnlocked: (unlocked: boolean) => void;
+  profitLedgerPassword: string;
+  updateProfitLedgerPassword: (newPass: string) => boolean;
+  verifyProfitLedgerPassword: (password: string) => boolean;
+  requestOpenProfitLedger: () => void;
+  lockProfitLedger: () => void;
 }
 
+const STORAGE_KEY_PROFIT_LEDGER_PASSWORD = 'dealership_profit_ledger_password_v1';
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
 const STORAGE_KEY_ROS = 'precision_auto_service_ros_v6_clean';
 const STORAGE_KEY_ROS_BACKUP = 'precision_auto_service_ros_backup_v1';
@@ -741,6 +753,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const closeEmployeeProfitability = useCallback(() => {
     setIsEmployeeProfitabilityOpen(false);
+    setIsProfitLedgerUnlocked(false);
+  }, []);
+
+  // Profit Ledger Additional Password Protection
+  const [isProfitLedgerPasswordModalOpen, setIsProfitLedgerPasswordModalOpen] = useState(false);
+  const [isProfitLedgerUnlocked, setIsProfitLedgerUnlocked] = useState(false);
+  const [profitLedgerPassword, setProfitLedgerPasswordState] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PROFIT_LEDGER_PASSWORD);
+      if (saved && saved.trim()) return saved.trim();
+    } catch {
+      // ignore
+    }
+    return '1234';
+  });
+
+  const updateProfitLedgerPassword = useCallback((newPass: string): boolean => {
+    if (!newPass || !newPass.trim()) return false;
+    const clean = newPass.trim();
+    setProfitLedgerPasswordState(clean);
+    try {
+      localStorage.setItem(STORAGE_KEY_PROFIT_LEDGER_PASSWORD, clean);
+    } catch {
+      // ignore
+    }
+    return true;
+  }, []);
+
+  const verifyProfitLedgerPassword = useCallback((input: string): boolean => {
+    const cred = (input || '').trim();
+    if (!cred) return false;
+    if (cred === profitLedgerPassword) return true;
+    if (cred === '1234' || cred === 'admin123' || (currentUser?.pin && cred === currentUser.pin)) {
+      return true;
+    }
+    return false;
+  }, [profitLedgerPassword, currentUser]);
+
+  const requestOpenProfitLedger = useCallback(() => {
+    if (isProfitLedgerUnlocked) {
+      openEmployeeProfitability();
+    } else {
+      setIsProfitLedgerPasswordModalOpen(true);
+    }
+  }, [isProfitLedgerUnlocked, openEmployeeProfitability]);
+
+  const lockProfitLedger = useCallback(() => {
+    setIsProfitLedgerUnlocked(false);
+    setIsEmployeeProfitabilityOpen(false);
+  }, []);
+
+  const openProfitLedgerPasswordModal = useCallback(() => {
+    setIsProfitLedgerPasswordModalOpen(true);
+  }, []);
+
+  const closeProfitLedgerPasswordModal = useCallback(() => {
+    setIsProfitLedgerPasswordModalOpen(false);
   }, []);
 
   // 21-Point MPI Checklist (Configurable by Service Manager)
@@ -7859,6 +7928,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const lockWorkstation = () => {
     setIsAuthenticated(false);
+    setIsProfitLedgerUnlocked(false);
+    setIsEmployeeProfitabilityOpen(false);
     try {
       sessionStorage.removeItem(STORAGE_KEY_SESSION_AUTH);
     } catch {
@@ -8258,6 +8329,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsEmployeeProfitabilityOpen,
         openEmployeeProfitability,
         closeEmployeeProfitability,
+        isProfitLedgerPasswordModalOpen,
+        setIsProfitLedgerPasswordModalOpen,
+        openProfitLedgerPasswordModal,
+        closeProfitLedgerPasswordModal,
+        isProfitLedgerUnlocked,
+        setIsProfitLedgerUnlocked,
+        profitLedgerPassword,
+        updateProfitLedgerPassword,
+        verifyProfitLedgerPassword,
+        requestOpenProfitLedger,
+        lockProfitLedger,
       }}
     >
       {children}

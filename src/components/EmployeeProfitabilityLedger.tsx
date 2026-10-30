@@ -57,7 +57,7 @@ interface EmployeeProfitabilityLedgerProps {
 export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerProps> = ({ 
   onBackToDashboard 
 }) => {
-  const { users } = useApp();
+  const { users, lockProfitLedger, openProfitLedgerPasswordModal } = useApp();
 
   // Load weeks from isolated persistent storage, with fallback to default realistic template weeks
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
@@ -526,16 +526,44 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               </button>
             </div>
 
-            {/* Back Button */}
-            {onBackToDashboard && (
+            {/* Header Controls: Lock, Password Settings, and Back */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onBackToDashboard}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                onClick={() => {
+                  lockProfitLedger();
+                  if (onBackToDashboard) onBackToDashboard();
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                title="Lock Profit Ledger immediately"
               >
-                ← Back
+                <Lock className="w-3.5 h-3.5 text-red-400" />
+                <span>Lock</span>
               </button>
-            )}
+
+              <button
+                type="button"
+                onClick={openProfitLedgerPasswordModal}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer flex items-center gap-1.5"
+                title="Change Profit Ledger Password"
+              >
+                <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Password</span>
+              </button>
+
+              {onBackToDashboard && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    lockProfitLedger();
+                    onBackToDashboard();
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                >
+                  ← Back
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
