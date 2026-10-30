@@ -339,7 +339,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
 
   const headers = [
     'Employee Name',
-    'Role / Title',
     'Pay Type',
     'Actual Clock Hours',
     'Flagged / Billed Hours',
@@ -365,7 +364,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
   computedRows.forEach(r => {
     const rowData = [
       r.name,
-      r.role,
       r.payType,
       r.actualHours.toFixed(1),
       r.flaggedHours.toFixed(1),

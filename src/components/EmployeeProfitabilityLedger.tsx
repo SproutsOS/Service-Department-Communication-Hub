@@ -786,7 +786,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                           <ArrowUpDown className="w-3 h-3 text-slate-400" />
                         </div>
                       </th>
-                      <th className="py-2.5 px-3">Role / Title</th>
                       <th className="py-2.5 px-3">Pay Type</th>
                       <th 
                         className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
@@ -878,7 +877,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <tbody className="divide-y divide-slate-200">
                     {computedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={16} className="py-12 text-center text-slate-500">
+                        <td colSpan={15} className="py-12 text-center text-slate-500">
                           <p className="font-semibold text-sm">No employees listed in this sheet.</p>
                           <p className="text-xs text-slate-400 mt-1">Click "+ Add Employee Row" or "Sync Names from Staff" above.</p>
                         </td>
@@ -900,24 +899,13 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                             </td>
 
                             {/* Employee Name */}
-                            <td className="py-1.5 px-2 font-bold text-slate-900 min-w-[140px]">
+                            <td className="py-1.5 px-2 font-bold text-slate-900 min-w-[160px]">
                               <input
                                 type="text"
                                 value={r.name}
                                 onChange={(e) => handleUpdateRow(r.id, { name: e.target.value })}
                                 className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded font-bold text-slate-900 focus:outline-hidden"
                                 placeholder="Employee Name"
-                              />
-                            </td>
-
-                            {/* Role / Title */}
-                            <td className="py-1.5 px-2 text-slate-600 min-w-[130px]">
-                              <input
-                                type="text"
-                                value={r.role}
-                                onChange={(e) => handleUpdateRow(r.id, { role: e.target.value })}
-                                className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-xs text-slate-600 focus:outline-hidden"
-                                placeholder="e.g. Master Tech"
                               />
                             </td>
 
@@ -1099,7 +1087,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         <td className="py-3 px-3 uppercase text-[11px] font-black">
                           WEEK TOTALS ({computedRows.length})
                         </td>
-                        <td className="py-3 px-3 text-slate-400">--</td>
                         <td className="py-3 px-3 text-slate-400">--</td>
                         <td className="py-3 px-3 text-right text-white">
                           {activeWeekSummary.totalActualHours.toFixed(1)}h
@@ -1525,7 +1512,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <thead>
                     <tr className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-800 whitespace-nowrap">
                       <th className="py-2.5 px-3">Employee Name</th>
-                      <th className="py-2.5 px-3">Role</th>
                       <th className="py-2.5 px-3">Pay Type</th>
                       <th className="py-2.5 px-3 text-center">Weeks Logged</th>
                       <th className="py-2.5 px-3 text-right">Total Actual Hrs</th>
@@ -1545,9 +1531,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                       <tr key={emp.employeeName} className="hover:bg-slate-50 transition-colors whitespace-nowrap">
                         <td className="py-3 px-3 font-bold text-slate-900">
                           {emp.employeeName}
-                        </td>
-                        <td className="py-3 px-3 text-slate-600">
-                          {emp.role}
                         </td>
                         <td className="py-3 px-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1642,7 +1625,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               <thead className="bg-slate-100 font-bold text-[10px] uppercase">
                 <tr>
                   <th className="p-2">Employee</th>
-                  <th className="p-2">Role</th>
                   <th className="p-2">Pay Type</th>
                   <th className="p-2 text-right">Actual Hrs</th>
                   <th className="p-2 text-right">Flagged Hrs</th>
@@ -1660,7 +1642,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   return (
                     <tr key={r.id}>
                       <td className="p-2 font-bold">{comp.name}</td>
-                      <td className="p-2">{comp.role}</td>
                       <td className="p-2">{comp.payType}</td>
                       <td className="p-2 text-right font-mono">{comp.actualHours.toFixed(1)}</td>
                       <td className="p-2 text-right font-mono font-bold">{comp.flaggedHours.toFixed(1)}</td>
