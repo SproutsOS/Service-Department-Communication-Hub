@@ -460,6 +460,12 @@ interface AppContextType {
   setIsInternalExtensionModalOpen: (open: boolean) => void;
   openInternalExtensionModal: () => void;
   closeInternalExtensionModal: () => void;
+
+  // Employee Profitability & Labor Hours Ledger (Completely Standalone Spreadsheet)
+  isEmployeeProfitabilityOpen: boolean;
+  setIsEmployeeProfitabilityOpen: (open: boolean) => void;
+  openEmployeeProfitability: () => void;
+  closeEmployeeProfitability: () => void;
 }
 
 const STORAGE_KEY_RO_CHANGES = 'advisor_ro_change_alerts_v1';
@@ -722,7 +728,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
   const [isTimeCardCalculatorOpen, setIsTimeCardCalculatorOpen] = useState(false);
+  const [isEmployeeProfitabilityOpen, setIsEmployeeProfitabilityOpen] = useState(false);
   const [isChatBoxOpen, setIsChatBoxOpen] = useState(false);
+
+  const openEmployeeProfitability = useCallback(() => {
+    setIsEmployeeProfitabilityOpen(true);
+    setIsStaffManagementOpen(false);
+    setIsTimeCardCalculatorOpen(false);
+    setIsStaffCalendarOpen(false);
+    setIsAppointmentCalendarOpen(false);
+  }, []);
+
+  const closeEmployeeProfitability = useCallback(() => {
+    setIsEmployeeProfitabilityOpen(false);
+  }, []);
 
   // 21-Point MPI Checklist (Configurable by Service Manager)
   const [inspectionChecklist, setInspectionChecklist] = useState<InspectionChecklistItem[]>(() => {
@@ -8235,6 +8254,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsInternalExtensionModalOpen,
         openInternalExtensionModal,
         closeInternalExtensionModal,
+        isEmployeeProfitabilityOpen,
+        setIsEmployeeProfitabilityOpen,
+        openEmployeeProfitability,
+        closeEmployeeProfitability,
       }}
     >
       {children}

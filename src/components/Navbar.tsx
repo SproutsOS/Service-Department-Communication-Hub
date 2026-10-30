@@ -22,7 +22,8 @@ import {
   Archive,
   Package,
   MessageSquare,
-  PhoneForwarded
+  PhoneForwarded,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRelativeTime } from '../utils/formatters';
@@ -62,6 +63,7 @@ export const Navbar: React.FC = () => {
     unreadShopCount,
     internalExtensions,
     openInternalExtensionModal,
+    openEmployeeProfitability,
   } = useApp();
 
   const archivedCount = useMemo(() => {
@@ -548,6 +550,19 @@ export const Navbar: React.FC = () => {
           >
             <Users className="w-3.5 h-3.5 text-blue-400" />
             <span className="hidden md:inline">Staff ({users.length})</span>
+          </button>
+        )}
+
+        {/* Employee Profitability & Labor Ledger (Service Manager Only) */}
+        {currentUser.role === 'SERVICE_MANAGER' && (
+          <button
+            id="navbar-profitability-ledger-btn"
+            onClick={() => openEmployeeProfitability()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer bg-emerald-950/70 hover:bg-emerald-900 text-emerald-200 hover:text-white border border-emerald-700/80 shadow-xs"
+            title="Employee Labor Hours & Profitability Ledger (Independent Spreadsheet for Actual Hours, Flagged Hours, Salary/Flat Rate/Hourly pay, and Profit Margins)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span className="hidden lg:inline">Profit Ledger</span>
           </button>
         )}
 

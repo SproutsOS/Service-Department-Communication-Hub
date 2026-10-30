@@ -30,6 +30,7 @@ import { ImportantNumbersModal } from './components/ImportantNumbersModal';
 import { ManagerPasswordsModal } from './components/ManagerPasswordsModal';
 import { RecallWaitingModal } from './components/RecallWaitingModal';
 import { InternalExtensionModal } from './components/InternalExtensionModal';
+import { EmployeeProfitabilityLedger } from './components/EmployeeProfitabilityLedger';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useBrowserTabNotification } from './utils/useBrowserTabNotification';
 import { 
@@ -51,7 +52,8 @@ import {
   CalendarCheck,
   PhoneCall,
   PlusCircle,
-  Receipt
+  Receipt,
+  FileSpreadsheet
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -89,6 +91,8 @@ const MainContent: React.FC = () => {
     activeQuoteBuilderId,
     openQuoteBuilder,
     notifications,
+    isEmployeeProfitabilityOpen,
+    setIsEmployeeProfitabilityOpen,
   } = useApp();
   
   // Dynamic red dot notification on the browser tab title & favicon when chat messages are received
@@ -110,17 +114,18 @@ const MainContent: React.FC = () => {
     return Math.max(approvedRosNeedingParts, unreadPartsNotifs);
   }, [repairOrders, notifications]);
 
-  // Auto-close staff management, calendar, & time card calculator if a non-manager is active
+  // Auto-close staff management, calendar, time card calculator, & profit ledger if a non-manager is active
   React.useEffect(() => {
     if (!isManager) {
       if (isStaffManagementOpen) setIsStaffManagementOpen(false);
       if (isTimeCardCalculatorOpen) setIsTimeCardCalculatorOpen(false);
       if (isStaffCalendarOpen) setIsStaffCalendarOpen(false);
+      if (isEmployeeProfitabilityOpen) setIsEmployeeProfitabilityOpen(false);
     }
     if (!isManager && currentUser.role !== 'SERVICE_ADVISOR') {
       if (isAppointmentCalendarOpen) setIsAppointmentCalendarOpen(false);
     }
-  }, [isManager, currentUser.role, isStaffManagementOpen, isTimeCardCalculatorOpen, isStaffCalendarOpen, isAppointmentCalendarOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen, setIsStaffCalendarOpen, setIsAppointmentCalendarOpen]);
+  }, [isManager, currentUser.role, isStaffManagementOpen, isTimeCardCalculatorOpen, isStaffCalendarOpen, isAppointmentCalendarOpen, isEmployeeProfitabilityOpen, setIsStaffManagementOpen, setIsTimeCardCalculatorOpen, setIsStaffCalendarOpen, setIsAppointmentCalendarOpen, setIsEmployeeProfitabilityOpen]);
 
   const todayStr = React.useMemo(() => {
     const d = new Date();
@@ -167,6 +172,7 @@ const MainContent: React.FC = () => {
     }
     setIsStaffManagementOpen(false);
     setIsTimeCardCalculatorOpen(false);
+    setIsEmployeeProfitabilityOpen(false);
     setActiveRoleView(role);
   };
 
@@ -285,11 +291,12 @@ const MainContent: React.FC = () => {
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
                       setIsAppointmentCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
                       setActiveRoleView('SERVICE_MANAGER');
                       setManagerViewSection('FLOOR');
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer ${
-                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'FLOOR'
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && !isEmployeeProfitabilityOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'FLOOR'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -307,11 +314,12 @@ const MainContent: React.FC = () => {
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
                       setIsAppointmentCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
                       setActiveRoleView('SERVICE_MANAGER');
                       setManagerViewSection('CALL_SHEET');
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'CALL_SHEET'
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && !isEmployeeProfitabilityOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'CALL_SHEET'
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -328,10 +336,11 @@ const MainContent: React.FC = () => {
                       setIsStaffManagementOpen(false);
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
                       setIsAppointmentCalendarOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isAppointmentCalendarOpen && !isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen
+                      isAppointmentCalendarOpen && !isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen && !isEmployeeProfitabilityOpen
                         ? 'bg-purple-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -366,10 +375,11 @@ const MainContent: React.FC = () => {
                       setIsTimeCardCalculatorOpen(false);
                       setIsStaffCalendarOpen(false);
                       setIsAppointmentCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
                       setIsStaffManagementOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen
+                      isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && !isEmployeeProfitabilityOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -390,10 +400,11 @@ const MainContent: React.FC = () => {
                       setIsStaffManagementOpen(false);
                       setIsStaffCalendarOpen(false);
                       setIsAppointmentCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
                       setIsTimeCardCalculatorOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen
+                      isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen && !isEmployeeProfitabilityOpen
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -415,10 +426,11 @@ const MainContent: React.FC = () => {
                       setIsStaffManagementOpen(false);
                       setIsTimeCardCalculatorOpen(false);
                       setIsAppointmentCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
                       setIsStaffCalendarOpen(true);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
-                      isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen
+                      isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen && !isEmployeeProfitabilityOpen
                         ? 'bg-purple-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
@@ -446,6 +458,32 @@ const MainContent: React.FC = () => {
                     </div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-700/50 uppercase tracking-wider">
                       {quotes.length > 0 ? `${quotes.length} Quotes` : 'Estimator'}
+                    </span>
+                  </button>
+
+                  {/* 9. Employee Profitability & Labor Ledger (Independent Spreadsheet) */}
+                  <button
+                    id="sidebar-employee-profitability-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsAppointmentCalendarOpen(false);
+                      setIsStaffCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(true);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      isEmployeeProfitabilityOpen && !isStaffCalendarOpen && !isTimeCardCalculatorOpen && !isStaffManagementOpen && !isAppointmentCalendarOpen
+                        ? 'bg-emerald-600 text-white shadow-xs font-semibold'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Labor & Profitability Ledger (Independent Spreadsheet for Actual Hours, Flagged Hours, Salary/Flat Rate/Hourly Pay, Gross Profit, and Net Profit)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileSpreadsheet className="w-4 h-4 shrink-0 text-emerald-400" />
+                      <span className="text-sm font-medium">Profit Ledger</span>
+                    </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700/50 uppercase tracking-wider">
+                      Spreadsheet
                     </span>
                   </button>
                 </div>
@@ -809,6 +847,35 @@ const MainContent: React.FC = () => {
                   </p>
                   <button
                     onClick={() => setIsAppointmentCalendarOpen(false)}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
+                  >
+                    Return to My Workspace
+                  </button>
+                </div>
+              )
+            ) : isEmployeeProfitabilityOpen ? (
+              isManager ? (
+                <div>
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setIsEmployeeProfitabilityOpen(false)}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Dashboard</span>
+                    </button>
+                  </div>
+                  <EmployeeProfitabilityLedger onBackToDashboard={() => setIsEmployeeProfitabilityOpen(false)} />
+                </div>
+              ) : (
+                <div className="p-8 bg-white rounded-2xl border border-red-200 text-center max-w-lg mx-auto shadow-sm my-auto">
+                  <ShieldAlert className="w-12 h-12 text-red-600 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-slate-900">Restricted Space</h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    The Employee Profitability & Labor Hours Ledger is restricted to the Service Manager. Your account ({currentUser.name}) is authorized for the {currentUser.title || currentUser.role} space only.
+                  </p>
+                  <button
+                    onClick={() => setIsEmployeeProfitabilityOpen(false)}
                     className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer"
                   >
                     Return to My Workspace
