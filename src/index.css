@@ -33,6 +33,20 @@ textarea.border-red-500 {
 }
 
 /* 
+ * Remove up and down arrows (spinners) on all number input boxes
+ */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+/* 
  * Official Clean Print Stylesheet for Dealership Records:
  * 1. Warranty Repair & Labor Time Records (#printable-warranty-document)
  * 2. Repair Estimates & Quotes (#printable-quote-document)
