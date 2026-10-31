@@ -42,7 +42,6 @@ export const Navbar: React.FC = () => {
     customers,
     setIsCustomerDirectoryOpen,
     resetAllDataToCleanSlateHandler,
-    resetToDemoData,
     setSelectedRO,
     repairOrders,
     lockWorkstation,
@@ -592,18 +591,6 @@ export const Navbar: React.FC = () => {
           )}
         </button>
 
-        {/* Restore Tickets Quick Action if list is empty */}
-        {repairOrders.length === 0 && (
-          <button
-            id="navbar-restore-ros-btn"
-            onClick={() => resetToDemoData()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black transition-all cursor-pointer text-xs shadow-md animate-pulse"
-            title="Reload repair orders and restore RO-37460"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Restore Tickets (RO 37460)</span>
-          </button>
-        )}
 
         {/* Active User Badge */}
         <div className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600/70 text-xs">

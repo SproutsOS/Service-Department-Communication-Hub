@@ -33,7 +33,8 @@ import {
   KeyRound,
   ShieldAlert,
   PhoneForwarded,
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -75,7 +76,6 @@ export const ManagerDashboard: React.FC = () => {
     openRecallWaitingModal,
     internalExtensions,
     openInternalExtensionModal,
-    resetToDemoData,
   } = useApp();
 
   const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);
@@ -1067,13 +1067,13 @@ export const ManagerDashboard: React.FC = () => {
                         <p className="text-base font-semibold text-slate-700">No repair orders match your criteria.</p>
                         {repairOrders.length === 0 ? (
                           <div className="flex flex-col items-center gap-2 mt-1">
-                            <p className="text-sm text-slate-500 max-w-md">Your active repair orders list is currently empty. Click below to load your active dealership tickets including RO-37460 (Woolwine Autoplex).</p>
+                            <p className="text-sm text-slate-500 max-w-md">No open or active repair orders. All repair orders have been cleared.</p>
                             <button
-                              onClick={() => resetToDemoData()}
+                              onClick={() => setIsNewROModalOpen(true)}
                               className="mt-1 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
                             >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                              Restore Repair Orders & RO 37460
+                              <Plus className="w-3.5 h-3.5" />
+                              Create New RO
                             </button>
                           </div>
                         ) : (
@@ -1259,13 +1259,13 @@ export const ManagerDashboard: React.FC = () => {
               <p className="text-base font-semibold text-slate-700">No repair orders match your criteria.</p>
               {repairOrders.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 mt-1">
-                  <p className="text-sm text-slate-500 max-w-md">Your active repair orders list is currently empty. Click below to load your active dealership tickets including RO-37460 (Woolwine Autoplex).</p>
+                  <p className="text-sm text-slate-500 max-w-md">No open or active repair orders. All repair orders have been cleared.</p>
                   <button
-                    onClick={() => resetToDemoData()}
+                    onClick={() => setIsNewROModalOpen(true)}
                     className="mt-1 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Restore Repair Orders & RO 37460
+                    <Plus className="w-3.5 h-3.5" />
+                    Create New RO
                   </button>
                 </div>
               ) : (

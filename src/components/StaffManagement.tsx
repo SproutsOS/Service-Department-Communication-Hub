@@ -41,7 +41,6 @@ export const StaffManagement: React.FC = () => {
     repairOrders, 
     clearAllRepairOrders, 
     resetAllDataToCleanSlateHandler,
-    resetToDemoData,
     isStaffManagementOpen,
     setIsStaffManagementOpen,
     shopName,

@@ -494,6 +494,7 @@ const STORAGE_KEY_CUSTOMERS = 'the_hub_customers_cloud_cache_v1';
 const STORAGE_KEY_INSPECTION_CHECKLIST = 'precision_auto_inspection_checklist_v1';
 const STORAGE_KEY_STAFF_LEAVE = 'dealership_staff_leave_calendar_v1';
 const STORAGE_KEY_APPOINTMENTS = 'dealership_service_appointments_v2_clean';
+const STORAGE_KEY_RO_PURGE_ALL = 'dealership_purge_all_open_and_archived_ros_v1';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -611,45 +612,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_USERS[0];
   });
 
-  // Repair orders state - resilient dual-cache with fallback to INITIAL_REPAIR_ORDERS
+  // Repair orders state - clean slate with zero open or archived ROs
   const [repairOrders, setRepairOrders] = useState<RepairOrder[]>(() => {
     try {
+      const isPurged = localStorage.getItem(STORAGE_KEY_RO_PURGE_ALL) === 'true';
+      if (!isPurged) {
+        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEY_ROS_BACKUP, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEY_WIPE_PERFORMED, 'true');
+        localStorage.setItem(STORAGE_KEY_RO_PURGE_ALL, 'true');
+        return [];
+      }
+      const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
+      if (isWiped) {
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEY_ROS);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((ro: RepairOrder) => {
-            const cleaned = cleanRO3700(ro);
-            if ((cleaned.id === '37460' || cleaned.id === 'RO-37460' || cleaned.id.includes('37460')) && cleaned.customerName === 'Woolwine CDJR') {
-              return {
-                ...cleaned,
-                customerName: 'Woolwine Autoplex'
-              };
-            }
-            return cleaned;
-          });
+          return parsed.map((ro: RepairOrder) => cleanRO3700(ro));
         }
       }
       const backup = localStorage.getItem(STORAGE_KEY_ROS_BACKUP);
       if (backup) {
         const parsedBackup = JSON.parse(backup);
         if (Array.isArray(parsedBackup) && parsedBackup.length > 0) {
-          return parsedBackup.map((ro: RepairOrder) => {
-            const cleaned = cleanRO3700(ro);
-            if ((cleaned.id === '37460' || cleaned.id === 'RO-37460' || cleaned.id.includes('37460')) && cleaned.customerName === 'Woolwine CDJR') {
-              return {
-                ...cleaned,
-                customerName: 'Woolwine Autoplex'
-              };
-            }
-            return cleaned;
-          });
+          return parsedBackup.map((ro: RepairOrder) => cleanRO3700(ro));
         }
       }
     } catch {
       // ignore
     }
-    return INITIAL_REPAIR_ORDERS;
+    return [];
   });
 
   // Notifications state
@@ -1368,10 +1363,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync to local storage - only persist when non-empty to prevent accidental blank-outs
   useEffect(() => {
     try {
-      if (repairOrders && repairOrders.length > 0) {
-        localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(repairOrders));
-        localStorage.setItem(STORAGE_KEY_ROS_BACKUP, JSON.stringify(repairOrders));
-      }
+      localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify(repairOrders || []));
+      localStorage.setItem(STORAGE_KEY_ROS_BACKUP, JSON.stringify(repairOrders || []));
     } catch {
       // ignore
     }
@@ -1398,6 +1391,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Automatically consolidate any legacy "Woolwine CDJR Inc" customer into "Woolwine CDJR"
     consolidateWoolwineAccounts();
 
+    // One-time purge of all open and archived ROs from Firestore and shop settings
+    const purgeFirestoreDone = localStorage.getItem('dealership_purge_firestore_ros_v1') === 'true';
+    if (!purgeFirestoreDone) {
+      clearAllROsFromFirestore().then(() => {
+        try {
+          localStorage.setItem('dealership_purge_firestore_ros_v1', 'true');
+        } catch {}
+      }).catch(err => {
+        console.warn('Error clearing Firestore repair orders:', err);
+      });
+      syncShopSettings({ cleanSlateInitialized: true, seededDemoData: false });
+    }
+
     // Check if user has explicitly wiped to clean slate
     const isWiped = localStorage.getItem(STORAGE_KEY_WIPE_PERFORMED) === 'true';
     if (!isWiped) {
@@ -1410,23 +1416,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevROMap = new Map<string, string>();
 
     const unsubscribeROs = subscribeToRepairOrders((cloudROs) => {
-      // If cloud is empty or subscription returned 0 docs due to quota/offline, NEVER wipe local tickets!
+      // If cloud is empty or subscription returned 0 docs, keep repair orders clean and empty
       if (!cloudROs || cloudROs.length === 0) {
-        setRepairOrders(prev => {
-          if (prev && prev.length > 0) {
-            return prev;
-          }
-          try {
-            const backup = localStorage.getItem(STORAGE_KEY_ROS_BACKUP) || localStorage.getItem(STORAGE_KEY_ROS);
-            if (backup) {
-              const parsed = JSON.parse(backup);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed;
-              }
-            }
-          } catch {}
-          return INITIAL_REPAIR_ORDERS;
-        });
+        setRepairOrders([]);
+        setIsCloudSynced(true);
         return;
       }
 
@@ -7858,8 +7851,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedROId(null);
     try {
       localStorage.setItem(STORAGE_KEY_ROS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEY_ROS_BACKUP, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEY_WIPE_PERFORMED, 'true');
+      localStorage.setItem(STORAGE_KEY_RO_PURGE_ALL, 'true');
     } catch {
       // ignore
     }
@@ -8058,31 +8053,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetToDemoData = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY_WIPE_PERFORMED);
-    } catch {
-      // ignore
-    }
-
     setUsers(INITIAL_USERS);
     INITIAL_USERS.forEach(u => syncUser(u));
 
-    setRepairOrders(INITIAL_REPAIR_ORDERS);
-    INITIAL_REPAIR_ORDERS.forEach(ro => syncRepairOrder(ro));
-
-    const resetNotif: UrgentNotification = {
-      id: `notif_${Date.now()}`,
-      roId: 'RO-10482',
-      roNumber: 'RO-10482',
-      title: 'Demo Data Restored',
-      message: 'Loaded sample service department repair orders, parts ETAs, and team members.',
-      timestamp: new Date().toISOString(),
-      isUrgent: false,
-      type: 'STATUS_CHANGE',
-      read: false,
-    };
-    setNotifications([resetNotif]);
-    syncNotification(resetNotif);
+    setRepairOrders([]);
+    clearAllROsFromFirestore();
+    syncShopSettings({ cleanSlateInitialized: true, seededDemoData: false });
   };
 
   const getFilteredROs = (): RepairOrder[] => {
