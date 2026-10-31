@@ -64,7 +64,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
 }) => {
   const { users, lockProfitLedger, openProfitLedgerPasswordModal } = useApp();
 
-  // Load weeks from persistent storage, ensuring user-added employees appear across all weeks
+  // Load weeks from persistent storage, ensuring user-added Profitability Ledger employees appear across all weeks
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
     let rawWeeks = DEFAULT_PROFITABILITY_WEEKS;
     try {
@@ -78,7 +78,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     } catch {
       // ignore
     }
-    return ensureMasterRosterOnAllWeeks(rawWeeks, users);
+    return ensureMasterRosterOnAllWeeks(rawWeeks);
   });
 
   // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'
@@ -103,10 +103,10 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Auto-save alert toast
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Helper to persist weeks to LocalStorage and Firestore, ensuring roster propagation across all weeks
+  // Helper to persist weeks to LocalStorage and Firestore, ensuring user-entered roster propagation across all weeks
   const saveWeeks = useCallback((updatedWeeks: ProfitabilityWeek[]) => {
-    const cleaned = removeSampleEmployees(updatedWeeks, users);
-    const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned, users);
+    const cleaned = removeSampleEmployees(updatedWeeks);
+    const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
     setWeeks(syncedRoster);
     try {
       localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
@@ -114,13 +114,13 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       // ignore
     }
     syncProfitabilityWeeksToCloud(syncedRoster);
-  }, [users]);
+  }, []);
 
   // Real-time listener for Firestore Profitability Ledger changes
   useEffect(() => {
     const unsubscribe = subscribeToProfitabilityWeeks((cloudWeeks) => {
       if (cloudWeeks && Array.isArray(cloudWeeks) && cloudWeeks.length > 0) {
-        const syncedRoster = ensureMasterRosterOnAllWeeks(cloudWeeks, users);
+        const syncedRoster = ensureMasterRosterOnAllWeeks(cloudWeeks);
         setWeeks(syncedRoster);
         try {
           localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
@@ -130,28 +130,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       }
     });
     return () => unsubscribe();
-  }, [users]);
-
-  // Automatically sync staff roster when users/staff list updates (e.g. GitHub import or Staff Management)
-  useEffect(() => {
-    if (Array.isArray(users) && users.length > 0) {
-      setWeeks(prevWeeks => {
-        const syncedRoster = ensureMasterRosterOnAllWeeks(prevWeeks, users);
-        const currentTotalRows = prevWeeks.reduce((sum, w) => sum + (w.rows?.length || 0), 0);
-        const syncedTotalRows = syncedRoster.reduce((sum, w) => sum + (w.rows?.length || 0), 0);
-        if (syncedTotalRows !== currentTotalRows) {
-          try {
-            localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
-          } catch {
-            // ignore
-          }
-          syncProfitabilityWeeksToCloud(syncedRoster);
-          return syncedRoster;
-        }
-        return prevWeeks;
-      });
-    }
-  }, [users]);
+  }, []);
 
   // Active week object
   const activeWeek = useMemo(() => {
@@ -620,16 +599,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 >
                   <Users className="w-3.5 h-3.5" />
                   <span>Sync Roster Across All Weeks</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleImportStaffFromRoster}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold border border-slate-300 transition-colors cursor-pointer"
-                  title="Import team members from the main dealership employee roster"
-                >
-                  <Users className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Sync Names from Staff</span>
                 </button>
 
                 {weeks.length > 1 && (

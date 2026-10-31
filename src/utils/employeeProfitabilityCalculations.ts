@@ -453,7 +453,7 @@ export function getNextWednesdayTuesdayPayPeriod(referenceDateStr?: string): {
 import { User } from '../types';
 
 /**
- * Helper to strip any legacy sample employee rows from weeks data, unless present in staff list
+ * Helper to strip any legacy sample employee rows from weeks data
  */
 const SAMPLE_EMPLOYEE_NAMES = [
   'marcus vance',
@@ -464,118 +464,27 @@ const SAMPLE_EMPLOYEE_NAMES = [
   'sarah jenkins'
 ];
 
-export function removeSampleEmployees(weeks: ProfitabilityWeek[], usersList?: User[]): ProfitabilityWeek[] {
+export function removeSampleEmployees(weeks: ProfitabilityWeek[]): ProfitabilityWeek[] {
   if (!Array.isArray(weeks)) return [];
-  const activeUserNames = new Set((usersList || []).map(u => (u.name || '').trim().toLowerCase()));
-
   return weeks.map(w => ({
     ...w,
     rows: (w.rows || []).filter(r => {
       const cleanName = (r.name || '').trim().toLowerCase();
-      // If user exists in current staff roster (GitHub import or staff management), keep them!
-      if (activeUserNames.has(cleanName)) return true;
       return !SAMPLE_EMPLOYEE_NAMES.includes(cleanName);
     })
   }));
 }
 
 /**
- * Synchronizes all active dealership staff members from the main User directory (AppContext / GitHub import)
- * into all weekly sheets in the Profitability Ledger.
- * Preserves all previously entered hours, pay rates, and labor sales for existing employees.
- */
-export function syncStaffRosterToWeeks(
-  weeksList: ProfitabilityWeek[],
-  usersList: User[]
-): ProfitabilityWeek[] {
-  if (!Array.isArray(weeksList) || weeksList.length === 0) return weeksList;
-  if (!Array.isArray(usersList) || usersList.length === 0) return weeksList;
-
-  const activeUsers = usersList.filter(u => !u.isDeactivated && (u.name || '').trim().length > 0);
-  if (activeUsers.length === 0) return weeksList;
-
-  return weeksList.map(w => {
-    const existingMap = new Map<string, EmployeeProfitabilityRow>();
-    (w.rows || []).forEach(r => {
-      const k = (r.name || '').trim().toLowerCase();
-      if (k) existingMap.set(k, r);
-    });
-
-    const updatedRows: EmployeeProfitabilityRow[] = [];
-
-    activeUsers.forEach((u, idx) => {
-      const nameKey = (u.name || '').trim().toLowerCase();
-      const existing = existingMap.get(nameKey);
-
-      if (existing) {
-        updatedRows.push(existing);
-        existingMap.delete(nameKey);
-      } else {
-        let inferredPayType: EmployeePayType = 'FLAT_RATE';
-        let payRate = 32.00;
-
-        if (u.role === 'TECHNICIAN') {
-          const titleLower = (u.title || '').toLowerCase();
-          if (titleLower.includes('lube') || titleLower.includes('express') || titleLower.includes('oil')) {
-            inferredPayType = 'HOURLY';
-            payRate = 18.00;
-          } else {
-            inferredPayType = 'FLAT_RATE';
-            payRate = 32.00;
-          }
-        } else if (u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER') {
-          inferredPayType = 'SALARY';
-          payRate = u.role === 'SERVICE_MANAGER' ? 1750.00 : 1250.00;
-        } else {
-          inferredPayType = 'HOURLY';
-          payRate = 22.00;
-        }
-
-        updatedRows.push({
-          id: `emp_staff_${u.id}_${w.id}_${idx}`,
-          name: u.name,
-          role: u.title || (u.role === 'TECHNICIAN' ? 'Technician' : u.role === 'SERVICE_ADVISOR' ? 'Service Advisor' : 'Staff'),
-          payType: inferredPayType,
-          actualHours: 40.0,
-          flaggedHours: inferredPayType === 'FLAT_RATE' ? 40.0 : 0.0,
-          payRate,
-          laborSales: 0.00,
-          grossProfit: 0.00,
-          burdenType: 'PERCENT',
-          burdenValue: w.defaultBurdenPct || 10.0,
-          notes: ''
-        });
-      }
-    });
-
-    // Also keep any other custom rows user added directly to this week
-    existingMap.forEach(customRow => {
-      updatedRows.push(customRow);
-    });
-
-    return {
-      ...w,
-      updatedAt: new Date().toISOString(),
-      rows: updatedRows
-    };
-  });
-}
-
-/**
- * Ensures that all user-added employees are present across ALL weeks in the ledger.
+ * Ensures that all user-added employees in the Profitability Ledger are present across ALL weeks in the ledger.
  * Preserves existing weekly figures (hours, sales) for employees already present on a week,
- * and adds missing employees to other weeks with standard defaults.
+ * and adds missing user-entered employees to other weeks with standard defaults.
  */
-export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[], usersList?: User[]): ProfitabilityWeek[] {
+export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): ProfitabilityWeek[] {
   if (!Array.isArray(weeksList) || weeksList.length === 0) return weeksList;
 
   // First strip any legacy sample employees
-  let cleanedWeeks = removeSampleEmployees(weeksList, usersList);
-
-  // If users list was passed, sync staff roster first
-  if (Array.isArray(usersList) && usersList.length > 0) {
-    cleanedWeeks = syncStaffRosterToWeeks(cleanedWeeks, usersList);
-  }
+  const cleanedWeeks = removeSampleEmployees(weeksList);
 
   // Map of unique user-added employees found across any week in the ledger
   const masterMap = new Map<string, EmployeeProfitabilityRow>();
