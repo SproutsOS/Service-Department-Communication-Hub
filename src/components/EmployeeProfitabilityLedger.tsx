@@ -453,7 +453,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Track Actual vs. Flagged Hours, Salary / Flat Rate / Hourly pay, Labor Sales, and Gross vs. Net Profit margins.
+                Track Actual vs. Flagged Hours, Salary / Flat Rate / Hourly pay, Labor Sales, and Gross Profit margins.
               </p>
             </div>
           </div>
@@ -641,7 +641,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
             </div>
 
             {/* Scorecard KPI Cards for Active Week */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               
               {/* 1. Hours Card */}
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
@@ -711,19 +711,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 </div>
                 <span className="text-[10px] font-bold text-emerald-800">
                   {activeWeekSummary.overallGrossProfitPct.toFixed(1)}% Margin
-                </span>
-              </div>
-
-              {/* 6. Net Profit */}
-              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs bg-indigo-50/20">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                  Net Profit ($ & %)
-                </span>
-                <div className="text-base sm:text-lg font-black text-indigo-700 font-mono mt-0.5">
-                  {formatCurrency(activeWeekSummary.totalNetProfit)}
-                </div>
-                <span className="text-[10px] font-bold text-indigo-800">
-                  {activeWeekSummary.overallNetProfitPct.toFixed(1)}% Margin
                 </span>
               </div>
 
@@ -848,24 +835,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                           <ArrowUpDown className="w-3 h-3 text-slate-400" />
                         </div>
                       </th>
-                      <th 
-                        className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
-                        onClick={() => handleSortClick('netProfit')}
-                      >
-                        <div className="flex items-center justify-end gap-1">
-                          <span>Net Profit ($)</span>
-                          <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                        </div>
-                      </th>
-                      <th 
-                        className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
-                        onClick={() => handleSortClick('netProfitPct')}
-                      >
-                        <div className="flex items-center justify-end gap-1">
-                          <span>Net %</span>
-                          <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                        </div>
-                      </th>
                       <th className="py-2.5 px-3 text-center">Actions</th>
                     </tr>
                   </thead>
@@ -873,7 +842,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <tbody className="divide-y divide-slate-200">
                     {computedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={14} className="py-12 text-center text-slate-500">
+                        <td colSpan={12} className="py-12 text-center text-slate-500">
                           <p className="font-semibold text-sm">No employees listed in this sheet.</p>
                           <p className="text-xs text-slate-400 mt-1">Click "+ Add Employee Row" or "Sync Names from Staff" above.</p>
                         </td>
@@ -1001,57 +970,17 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               </div>
                             </td>
 
-                            {/* Gross Profit ($ Direct Input) */}
-                            <td className="py-1.5 px-2 text-right min-w-[125px]">
-                              <div className="flex items-center justify-end gap-1">
-                                <span className="text-slate-400 text-xs font-semibold">$</span>
-                                <input
-                                  type="number"
-                                  step="10"
-                                  value={r.grossProfit ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value === '' ? 0 : Number(e.target.value);
-                                    handleUpdateRow(r.id, { grossProfit: val });
-                                  }}
-                                  placeholder="0.00"
-                                  className={`w-24 px-2 py-1 text-right font-mono font-black bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded focus:outline-hidden ${
-                                    r.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600'
-                                  }`}
-                                />
-                              </div>
+                            {/* Gross Profit ($ Computed: Labor Sales - Total Pay) */}
+                            <td className="py-1.5 px-3 text-right font-mono font-black text-xs min-w-[110px]">
+                              <span className={r.grossProfit >= 0 ? 'text-emerald-700 font-extrabold' : 'text-rose-600 font-extrabold'}>
+                                {formatCurrency(r.grossProfit)}
+                              </span>
                             </td>
 
                             {/* Gross Profit % (Computed) */}
                             <td className="py-1.5 px-3 text-right font-mono font-black text-[11px] min-w-[85px]">
                               <span className={r.grossProfitPct >= 65 ? 'text-emerald-700 font-extrabold' : 'text-amber-700'}>
                                 {r.grossProfitPct.toFixed(1)}%
-                              </span>
-                            </td>
-
-                            {/* Net Profit ($ User Input or defaults to Gross Profit) */}
-                            <td className="py-1.5 px-2 text-right min-w-[125px]">
-                              <div className="flex items-center justify-end gap-1">
-                                <span className="text-slate-400 text-xs font-semibold">$</span>
-                                <input
-                                  type="number"
-                                  step="10"
-                                  value={r.manualNetProfit !== undefined && r.manualNetProfit !== null ? r.manualNetProfit : (r.grossProfit ?? '')}
-                                  onChange={(e) => {
-                                    const val = e.target.value === '' ? undefined : Number(e.target.value);
-                                    handleUpdateRow(r.id, { manualNetProfit: val });
-                                  }}
-                                  placeholder="0.00"
-                                  className={`w-24 px-2 py-1 text-right font-mono font-black bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded focus:outline-hidden ${
-                                    r.netProfit >= 0 ? 'text-indigo-700' : 'text-red-600'
-                                  }`}
-                                />
-                              </div>
-                            </td>
-
-                            {/* Net Profit % (Computed) */}
-                            <td className="py-1.5 px-3 text-right font-mono font-black text-[11px] min-w-[85px]">
-                              <span className={r.netProfitPct >= 50 ? 'text-indigo-800 font-extrabold' : 'text-amber-800'}>
-                                {r.netProfitPct.toFixed(1)}%
                               </span>
                             </td>
 
@@ -1114,12 +1043,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         <td className="py-3 px-3 text-right text-emerald-300 font-black">
                           {activeWeekSummary.overallGrossProfitPct.toFixed(1)}%
                         </td>
-                        <td className="py-3 px-3 text-right text-indigo-300 font-black">
-                          {formatCurrency(activeWeekSummary.totalNetProfit)}
-                        </td>
-                        <td className="py-3 px-3 text-right text-indigo-200 font-black">
-                          {activeWeekSummary.overallNetProfitPct.toFixed(1)}%
-                        </td>
                         <td className="py-3 px-3 text-center text-slate-400">--</td>
                       </tr>
                     </tfoot>
@@ -1130,6 +1053,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               {/* Table Bottom Help Footer */}
               <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
+                  <span><strong>GROSS PROFIT:</strong> Labor Sales − Total Pay</span>
+                  <span>•</span>
                   <span><strong>FLAT RATE:</strong> Flagged Hrs × Pay Rate</span>
                   <span>•</span>
                   <span><strong>HOURLY:</strong> Actual Hrs × Pay Rate (1.5x OT after 40h)</span>
@@ -1199,8 +1124,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                       <th className="py-2.5 px-3 text-right">Total Revenue</th>
                       <th className="py-2.5 px-3 text-right">Gross Profit ($)</th>
                       <th className="py-2.5 px-3 text-right">Gross %</th>
-                      <th className="py-2.5 px-3 text-right">Net Profit ($)</th>
-                      <th className="py-2.5 px-3 text-right">Net %</th>
                       <th className="py-2.5 px-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -1285,16 +1208,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                           {/* Gross % */}
                           <td className="py-3 px-3 text-right font-mono font-bold text-emerald-800">
                             {summary.overallGrossProfitPct.toFixed(1)}%
-                          </td>
-
-                          {/* Net Profit */}
-                          <td className="py-3 px-3 text-right font-mono font-extrabold text-indigo-700">
-                            {formatCurrency(summary.totalNetProfit)}
-                          </td>
-
-                          {/* Net % */}
-                          <td className="py-3 px-3 text-right font-mono font-bold text-indigo-800">
-                            {summary.overallNetProfitPct.toFixed(1)}%
                           </td>
 
                           {/* Action Button */}
@@ -1402,18 +1315,18 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                     </div>
                   </div>
 
-                  {/* Net Profit Margin Variance */}
+                  {/* Gross Profit Margin Variance */}
                   <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] font-black text-slate-500 uppercase block">Net Margin Difference</span>
+                    <span className="text-[10px] font-black text-slate-500 uppercase block">Gross Margin Difference</span>
                     <div className="text-lg font-black font-mono mt-1 flex items-baseline gap-1.5">
-                      <span>{summaryA.overallNetProfitPct.toFixed(1)}%</span>
+                      <span>{summaryA.overallGrossProfitPct.toFixed(1)}%</span>
                       <span className="text-xs font-normal text-slate-400">vs</span>
-                      <span>{summaryB.overallNetProfitPct.toFixed(1)}%</span>
+                      <span>{summaryB.overallGrossProfitPct.toFixed(1)}%</span>
                     </div>
                     <div className={`text-xs font-bold mt-1 ${
-                      summaryA.overallNetProfitPct >= summaryB.overallNetProfitPct ? 'text-emerald-600' : 'text-red-500'
+                      summaryA.overallGrossProfitPct >= summaryB.overallGrossProfitPct ? 'text-emerald-600' : 'text-red-500'
                     }`}>
-                      {summaryA.overallNetProfitPct >= summaryB.overallNetProfitPct ? '▲ +' : '▼ '} {(summaryA.overallNetProfitPct - summaryB.overallNetProfitPct).toFixed(1)}% margin shift
+                      {summaryA.overallGrossProfitPct >= summaryB.overallGrossProfitPct ? '▲ +' : '▼ '} {(summaryA.overallGrossProfitPct - summaryB.overallGrossProfitPct).toFixed(1)}% margin shift
                     </div>
                   </div>
 
@@ -1522,8 +1435,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                       <th className="py-2.5 px-3 text-right">Revenue Produced</th>
                       <th className="py-2.5 px-3 text-right">Gross Profit ($)</th>
                       <th className="py-2.5 px-3 text-right">Gross Margin %</th>
-                      <th className="py-2.5 px-3 text-right">Net Profit ($)</th>
-                      <th className="py-2.5 px-3 text-right">Net Margin %</th>
                     </tr>
                   </thead>
 
@@ -1568,12 +1479,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         <td className="py-3 px-3 text-right font-mono font-bold text-emerald-800">
                           {emp.grossProfitPct.toFixed(1)}%
                         </td>
-                        <td className="py-3 px-3 text-right font-mono font-black text-indigo-700">
-                          {formatCurrency(emp.totalNetProfit)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-indigo-800">
-                          {emp.netProfitPct.toFixed(1)}%
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1601,7 +1506,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
             </div>
 
             {/* Scorecard */}
-            <div className="grid grid-cols-4 gap-4 p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs">
+            <div className="grid grid-cols-3 gap-4 p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Hours</span>
                 <div className="font-mono font-bold text-sm">{activeWeekSummary.totalActualHours.toFixed(1)} Act / {activeWeekSummary.totalFlaggedHours.toFixed(1)} Flag</div>
@@ -1613,10 +1518,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Gross Profit</span>
                 <div className="font-mono font-bold text-sm text-emerald-700">{formatCurrency(activeWeekSummary.totalGrossProfit)} ({activeWeekSummary.overallGrossProfitPct.toFixed(1)}%)</div>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Net Profit</span>
-                <div className="font-mono font-bold text-sm text-indigo-700">{formatCurrency(activeWeekSummary.totalNetProfit)} ({activeWeekSummary.overallNetProfitPct.toFixed(1)}%)</div>
               </div>
             </div>
 
@@ -1633,7 +1534,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <th className="p-2 text-right">Total Pay</th>
                   <th className="p-2 text-right">Labor Sales</th>
                   <th className="p-2 text-right">Gross Profit</th>
-                  <th className="p-2 text-right">Net Profit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1650,7 +1550,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                       <td className="p-2 text-right font-mono">{formatCurrency(comp.totalPay)}</td>
                       <td className="p-2 text-right font-mono">{formatCurrency(comp.totalRevenue)}</td>
                       <td className="p-2 text-right font-mono font-bold">{formatCurrency(comp.grossProfit)} ({comp.grossProfitPct.toFixed(1)}%)</td>
-                      <td className="p-2 text-right font-mono font-bold">{formatCurrency(comp.netProfit)} ({comp.netProfitPct.toFixed(1)}%)</td>
                     </tr>
                   );
                 })}

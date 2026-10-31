@@ -63,16 +63,13 @@ export function computeEmployeeRow(
   const laborRevenue = laborSales;
   const totalRevenue = laborSales + partsSales;
 
-  // 4. Gross Profit ($): Direct user input (or fallback to laborSales - totalPay if unentered)
-  let grossProfit = Number(row.grossProfit);
-  if (isNaN(grossProfit) || row.grossProfit === undefined || row.grossProfit === null) {
-    grossProfit = laborSales > 0 ? Math.max(0, laborSales - totalPay) : 0;
-  }
+  // 4. Gross Profit ($): Labor Sales minus Total Pay
+  const grossProfit = laborSales - totalPay;
 
   // Gross Profit % = (Gross Profit / Labor Sales) * 100
   const grossProfitPct = laborSales > 0 ? (grossProfit / laborSales) * 100 : 0;
 
-  // 5. Net Profit ($): Manual override if entered, or Gross Profit (overhead burden removed)
+  // 5. Net Profit ($): defaults to grossProfit
   let netProfit: number;
   if (row.manualNetProfit !== undefined && row.manualNetProfit !== null && !isNaN(Number(row.manualNetProfit))) {
     netProfit = Number(row.manualNetProfit);
@@ -342,8 +339,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     'Labor Sales ($)',
     'Gross Profit ($)',
     'Gross Profit %',
-    'Net Profit ($)',
-    'Net Profit %',
     'Effective Cost/Hr ($)',
     'Effective Rev/Hr ($)'
   ];
@@ -366,8 +361,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
       `$${r.laborSales.toFixed(2)}`,
       `$${r.grossProfit.toFixed(2)}`,
       `${r.grossProfitPct.toFixed(1)}%`,
-      `$${r.netProfit.toFixed(2)}`,
-      `${r.netProfitPct.toFixed(1)}%`,
       `$${r.effectiveCostPerHour.toFixed(2)}`,
       `$${r.effectiveRevenuePerHour.toFixed(2)}`
     ];
@@ -378,7 +371,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
   lines.push([
     '"WEEK TOTALS / SUMMARY"',
     `"${computedRows.length} Employees"`,
-    '""',
     `"${summary.totalActualHours.toFixed(1)}"`,
     `"${summary.totalFlaggedHours.toFixed(1)}"`,
     `"${summary.overallEfficiencyPct.toFixed(1)}%"`,
@@ -387,8 +379,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     `"$${summary.totalRevenue.toFixed(2)}"`,
     `"$${summary.totalGrossProfit.toFixed(2)}"`,
     `"${summary.overallGrossProfitPct.toFixed(1)}%"`,
-    `"$${summary.totalNetProfit.toFixed(2)}"`,
-    `"${summary.overallNetProfitPct.toFixed(1)}%"`,
     '""',
     `"$${summary.avgRevenuePerHour.toFixed(2)}"`
   ].join(','));

@@ -479,7 +479,7 @@ const MainContent: React.FC = () => {
                         ? 'bg-emerald-600 text-white shadow-xs font-semibold'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
-                    title="Labor & Profitability Ledger (Password Protected - Independent Spreadsheet for Actual Hours, Flagged Hours, Salary/Flat Rate/Hourly Pay, Gross Profit, and Net Profit)"
+                    title="Labor & Profitability Ledger (Password Protected - Independent Spreadsheet for Actual Hours, Flagged Hours, Salary/Flat Rate/Hourly Pay, and Gross Profit)"
                   >
                     <div className="flex items-center gap-3">
                       <FileSpreadsheet className="w-4 h-4 shrink-0 text-emerald-400" />
