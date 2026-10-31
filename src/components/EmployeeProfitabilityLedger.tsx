@@ -78,7 +78,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     } catch {
       // ignore
     }
-    return ensureMasterRosterOnAllWeeks(rawWeeks);
+    return ensureMasterRosterOnAllWeeks(rawWeeks, users);
   });
 
   // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'
@@ -105,8 +105,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
 
   // Helper to persist weeks to LocalStorage and Firestore, ensuring roster propagation across all weeks
   const saveWeeks = useCallback((updatedWeeks: ProfitabilityWeek[]) => {
-    const cleaned = removeSampleEmployees(updatedWeeks);
-    const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
+    const cleaned = removeSampleEmployees(updatedWeeks, users);
+    const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned, users);
     setWeeks(syncedRoster);
     try {
       localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
@@ -114,13 +114,13 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       // ignore
     }
     syncProfitabilityWeeksToCloud(syncedRoster);
-  }, []);
+  }, [users]);
 
   // Real-time listener for Firestore Profitability Ledger changes
   useEffect(() => {
     const unsubscribe = subscribeToProfitabilityWeeks((cloudWeeks) => {
       if (cloudWeeks && Array.isArray(cloudWeeks) && cloudWeeks.length > 0) {
-        const syncedRoster = ensureMasterRosterOnAllWeeks(cloudWeeks);
+        const syncedRoster = ensureMasterRosterOnAllWeeks(cloudWeeks, users);
         setWeeks(syncedRoster);
         try {
           localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
@@ -130,7 +130,28 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [users]);
+
+  // Automatically sync staff roster when users/staff list updates (e.g. GitHub import or Staff Management)
+  useEffect(() => {
+    if (Array.isArray(users) && users.length > 0) {
+      setWeeks(prevWeeks => {
+        const syncedRoster = ensureMasterRosterOnAllWeeks(prevWeeks, users);
+        const currentTotalRows = prevWeeks.reduce((sum, w) => sum + (w.rows?.length || 0), 0);
+        const syncedTotalRows = syncedRoster.reduce((sum, w) => sum + (w.rows?.length || 0), 0);
+        if (syncedTotalRows !== currentTotalRows) {
+          try {
+            localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
+          } catch {
+            // ignore
+          }
+          syncProfitabilityWeeksToCloud(syncedRoster);
+          return syncedRoster;
+        }
+        return prevWeeks;
+      });
+    }
+  }, [users]);
 
   // Active week object
   const activeWeek = useMemo(() => {
