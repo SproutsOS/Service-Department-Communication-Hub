@@ -450,175 +450,133 @@ export function getNextWednesdayTuesdayPayPeriod(referenceDateStr?: string): {
 }
 
 /**
- * Propagates the employee roster from Pay Period Sep 2 - Sep 8 across all other pay periods in the ledger,
- * completely replacing any sample placeholder employees (e.g. Marcus Vance, Jake Reynolds) with the user's
- * real entered staff.
+ * Helper to strip any legacy sample employee rows from weeks data
  */
-export function syncRosterFromSep2ToAllWeeks(
-  weeksList: ProfitabilityWeek[],
-  overrideMasterRows?: EmployeeProfitabilityRow[]
-): ProfitabilityWeek[] {
+const SAMPLE_EMPLOYEE_NAMES = [
+  'marcus vance',
+  'jake reynolds',
+  'bobby henderson',
+  'tyler watson',
+  'cody miller',
+  'sarah jenkins'
+];
+
+export function removeSampleEmployees(weeks: ProfitabilityWeek[]): ProfitabilityWeek[] {
+  if (!Array.isArray(weeks)) return [];
+  return weeks.map(w => ({
+    ...w,
+    rows: (w.rows || []).filter(r => {
+      const cleanName = (r.name || '').trim().toLowerCase();
+      return !SAMPLE_EMPLOYEE_NAMES.includes(cleanName);
+    })
+  }));
+}
+
+/**
+ * Ensures that all user-added employees are present across ALL weeks in the ledger.
+ * Preserves existing weekly figures (hours, sales) for employees already present on a week,
+ * and adds missing employees to other weeks with standard defaults.
+ */
+export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): ProfitabilityWeek[] {
   if (!Array.isArray(weeksList) || weeksList.length === 0) return weeksList;
 
-  // Locate the Sep 2 - Sep 8 starting week
-  const sep2Week = weeksList.find(w => 
-    w.id === 'week_2026_09_08' || 
-    w.weekStartDate === '2026-09-02' ||
-    w.weekEndingDate === '2026-09-08' ||
-    (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
-  ) || weeksList[weeksList.length - 1];
+  // First strip any legacy sample employees
+  const cleanedWeeks = removeSampleEmployees(weeksList);
 
-  let masterRows = overrideMasterRows;
-  if (!masterRows || masterRows.length === 0) {
-    if (sep2Week && Array.isArray(sep2Week.rows) && sep2Week.rows.length > 0) {
-      masterRows = sep2Week.rows;
-    }
-  }
+  // Map of unique user-added employees found across any week in the ledger
+  const masterMap = new Map<string, EmployeeProfitabilityRow>();
 
-  if (!masterRows || masterRows.length === 0) return weeksList;
-
-  return weeksList.map(w => {
-    // If it's the Sep 2 week itself and no override was passed, preserve it exactly as the user entered
-    if (sep2Week && w.id === sep2Week.id && !overrideMasterRows) {
-      return w;
-    }
-
-    // For other weeks: keep strictly the employees from masterRows
-    const updatedRows: EmployeeProfitabilityRow[] = masterRows!.map((m, index) => {
-      const existing = w.rows.find(r => r.name.trim().toLowerCase() === m.name.trim().toLowerCase());
-      if (existing) {
-        return {
-          ...existing,
-          role: m.role || existing.role,
-          payType: m.payType || existing.payType,
-          payRate: m.payRate !== undefined ? m.payRate : existing.payRate,
-          overtimeMultiplier: m.overtimeMultiplier || existing.overtimeMultiplier || 1.5,
-          burdenType: m.burdenType || existing.burdenType || 'PERCENT',
-          burdenValue: m.burdenValue !== undefined ? m.burdenValue : (existing.burdenValue || 10.0),
-          notes: m.notes || existing.notes || ''
-        };
+  cleanedWeeks.forEach(w => {
+    (w.rows || []).forEach(r => {
+      const key = (r.name || '').trim().toLowerCase();
+      if (!key) return;
+      if (!masterMap.has(key)) {
+        masterMap.set(key, r);
       }
-
-      return {
-        id: `emp_${w.id}_${index}_${m.name.replace(/\s+/g, '_').toLowerCase()}`,
-        name: m.name,
-        role: m.role || 'Technician',
-        payType: m.payType || 'FLAT_RATE',
-        actualHours: m.actualHours !== undefined ? m.actualHours : 40.0,
-        flaggedHours: m.flaggedHours !== undefined ? m.flaggedHours : (m.payType === 'FLAT_RATE' ? 40.0 : 0.0),
-        payRate: m.payRate !== undefined ? m.payRate : 30.0,
-        overtimeMultiplier: m.overtimeMultiplier || 1.5,
-        laborSales: m.laborSales !== undefined ? m.laborSales : 0.0,
-        grossProfit: 0.0,
-        burdenType: m.burdenType || 'PERCENT',
-        burdenValue: m.burdenValue !== undefined ? m.burdenValue : 10.0,
-        notes: m.notes || ''
-      };
     });
+  });
+
+  if (masterMap.size === 0) return cleanedWeeks;
+
+  const masterList = Array.from(masterMap.values());
+
+  return cleanedWeeks.map(w => {
+    const existingNames = new Set((w.rows || []).map(r => (r.name || '').trim().toLowerCase()));
+    const missingEmployees: EmployeeProfitabilityRow[] = [];
+
+    masterList.forEach((m, idx) => {
+      const key = (m.name || '').trim().toLowerCase();
+      if (!existingNames.has(key)) {
+        missingEmployees.push({
+          id: `emp_${w.id}_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+          name: m.name,
+          role: m.role || 'Technician',
+          payType: m.payType || 'FLAT_RATE',
+          actualHours: m.actualHours !== undefined ? m.actualHours : 40.0,
+          flaggedHours: m.payType === 'FLAT_RATE' ? (m.flaggedHours !== undefined ? m.flaggedHours : 40.0) : 0.0,
+          payRate: Number(m.payRate) || 0,
+          overtimeMultiplier: Number(m.overtimeMultiplier) || 1.5,
+          laborSales: 0.0,
+          grossProfit: 0.0,
+          burdenType: m.burdenType || 'PERCENT',
+          burdenValue: m.burdenValue !== undefined ? m.burdenValue : 10.0,
+          notes: m.notes || ''
+        });
+      }
+    });
+
+    if (missingEmployees.length === 0) return w;
 
     return {
       ...w,
       updatedAt: new Date().toISOString(),
-      rows: updatedRows
+      rows: [...(w.rows || []), ...missingEmployees]
     };
   });
 }
 
 /**
- * Standard dealership employee roster template
+ * Automatically rolls over an employee roster from a previous week to a new week.
+ * Copies employee names, roles, pay types, pay rates, and settings, but resets sales/profit
+ * for a fresh week. Once created, weeks remain completely independent.
  */
-const BASE_ROSTER_ROWS: EmployeeProfitabilityRow[] = [
-  {
-    id: 'emp_row_1',
-    name: 'Marcus Vance',
-    role: 'Master Diagnostic Tech',
-    payType: 'FLAT_RATE',
-    actualHours: 40.0,
-    flaggedHours: 54.0,
-    payRate: 36.00,
-    laborSales: 8100.00,
-    grossProfit: 6156.00,
-    burdenType: 'PERCENT',
-    burdenValue: 10.0,
-    notes: 'Heavy line & complex diagnostics',
-  },
-  {
-    id: 'emp_row_2',
-    name: 'Jake Reynolds',
-    role: 'A-Level Tech',
-    payType: 'FLAT_RATE',
-    actualHours: 40.0,
-    flaggedHours: 48.0,
-    payRate: 30.00,
-    laborSales: 7200.00,
-    grossProfit: 5760.00,
-    burdenType: 'PERCENT',
-    burdenValue: 10.0,
-    notes: 'Transmissions, recalls & suspension work',
-  },
-  {
-    id: 'emp_row_3',
-    name: 'Bobby Henderson',
-    role: 'B-Level Technician',
-    payType: 'FLAT_RATE',
-    actualHours: 39.0,
-    flaggedHours: 41.5,
-    payRate: 26.00,
-    laborSales: 6225.00,
-    grossProfit: 5146.00,
-    burdenType: 'PERCENT',
-    burdenValue: 10.0,
-    notes: 'Brakes, scheduled services & water pumps',
-  },
-  {
-    id: 'emp_row_4',
-    name: 'Tyler Watson',
-    role: 'Lube / Express Tech',
-    payType: 'HOURLY',
-    actualHours: 41.5,
-    flaggedHours: 35.0,
-    payRate: 19.00,
-    overtimeMultiplier: 1.5,
-    laborSales: 4200.00,
-    grossProfit: 3397.00,
-    burdenType: 'PERCENT',
-    burdenValue: 10.0,
-    notes: 'Quick service, MPIs & tire rotations',
-  },
-  {
-    id: 'emp_row_5',
-    name: 'Cody Miller',
-    role: 'Senior Service Advisor',
-    payType: 'SALARY',
-    actualHours: 45.0,
-    flaggedHours: 62.0,
-    payRate: 1350.00,
-    laborSales: 9300.00,
-    grossProfit: 7950.00,
-    burdenType: 'PERCENT',
-    burdenValue: 10.0,
-    notes: 'Lead advisor drive management & MPI upsells',
-  },
-  {
-    id: 'emp_row_6',
-    name: 'Sarah Jenkins',
-    role: 'Service Advisor',
-    payType: 'SALARY',
-    actualHours: 42.0,
-    flaggedHours: 50.0,
-    payRate: 1100.00,
-    laborSales: 7500.00,
-    grossProfit: 6400.00,
-    burdenType: 'PERCENT',
-    burdenValue: 10.0,
-    notes: 'Customer follow-up calls & repair quotes',
-  },
-];
+export function rolloverRosterToNewWeek(
+  sourceRows: EmployeeProfitabilityRow[],
+  targetWeekId: string
+): EmployeeProfitabilityRow[] {
+  if (!Array.isArray(sourceRows) || sourceRows.length === 0) return [];
+  return sourceRows.map((r, index) => ({
+    id: `emp_${targetWeekId}_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
+    name: r.name,
+    role: r.role || 'Technician',
+    payType: r.payType || 'FLAT_RATE',
+    actualHours: r.actualHours !== undefined ? r.actualHours : 40.0,
+    flaggedHours: r.payType === 'FLAT_RATE' ? (r.flaggedHours !== undefined ? r.flaggedHours : 40.0) : 0.0,
+    payRate: Number(r.payRate) || 0,
+    overtimeMultiplier: Number(r.overtimeMultiplier) || 1.5,
+    laborSales: 0.0,
+    grossProfit: 0.0,
+    burdenType: r.burdenType || 'PERCENT',
+    burdenValue: r.burdenValue !== undefined ? r.burdenValue : 10.0,
+    notes: r.notes || ''
+  }));
+}
+
+/**
+ * Legacy alias for backwards compatibility
+ */
+export function syncRosterFromSep2ToAllWeeks(
+  weeksList: ProfitabilityWeek[],
+  _overrideMasterRows?: EmployeeProfitabilityRow[]
+): ProfitabilityWeek[] {
+  return ensureMasterRosterOnAllWeeks(weeksList);
+}
 
 /**
  * Dealership Payroll Weeks:
  * Weekly payroll cycles strictly run Wednesday through Tuesday,
  * starting Wednesday, September 2, 2026.
+ * All default weeks start with empty employee rows (no sample data).
  */
 export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
   // Week 9: Oct 28 - Nov 3, 2026 (Current Active Week)
@@ -632,12 +590,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-31T18:00:00Z',
     isLocked: false,
     notes: 'Active weekly cycle • Wednesday to Tuesday payroll',
-    rows: BASE_ROSTER_ROWS.map(r => ({
-      ...r,
-      id: `${r.id}_w9`,
-    }))
+    rows: []
   },
-
   // Week 8: Oct 21 - Oct 27, 2026
   {
     id: 'week_2026_10_27',
@@ -648,17 +602,9 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     createdAt: '2026-10-21T07:00:00Z',
     updatedAt: '2026-10-27T18:00:00Z',
     isLocked: true,
-    notes: 'Completed payroll • Strong flat rate technician efficiency',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w8', actualHours: 40.0, flaggedHours: 56.5, laborSales: 8475.00, grossProfit: 6441.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w8', actualHours: 40.0, flaggedHours: 49.0, laborSales: 7350.00, grossProfit: 5880.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w8', actualHours: 38.5, flaggedHours: 42.0, laborSales: 6300.00, grossProfit: 5208.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w8', actualHours: 42.0, flaggedHours: 36.0, laborSales: 4320.00, grossProfit: 3503.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w8', actualHours: 45.0, flaggedHours: 64.0, laborSales: 9600.00, grossProfit: 8250.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w8', actualHours: 42.0, flaggedHours: 51.0, laborSales: 7650.00, grossProfit: 6550.00 },
-    ]
+    notes: 'Completed payroll cycle',
+    rows: []
   },
-
   // Week 7: Oct 14 - Oct 20, 2026
   {
     id: 'week_2026_10_20',
@@ -669,17 +615,9 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     createdAt: '2026-10-14T07:00:00Z',
     updatedAt: '2026-10-20T18:00:00Z',
     isLocked: true,
-    notes: 'Completed payroll • High diagnostic repair volume',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w7', actualHours: 40.0, flaggedHours: 53.0, laborSales: 7950.00, grossProfit: 6042.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w7', actualHours: 40.0, flaggedHours: 47.5, laborSales: 7125.00, grossProfit: 5700.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w7', actualHours: 39.0, flaggedHours: 40.0, laborSales: 6000.00, grossProfit: 4960.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w7', actualHours: 40.0, flaggedHours: 34.0, laborSales: 4080.00, grossProfit: 3320.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w7', actualHours: 45.0, flaggedHours: 61.0, laborSales: 9150.00, grossProfit: 7800.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w7', actualHours: 41.5, flaggedHours: 49.0, laborSales: 7350.00, grossProfit: 6250.00 },
-    ]
+    notes: 'Completed payroll cycle',
+    rows: []
   },
-
   // Week 6: Oct 7 - Oct 13, 2026
   {
     id: 'week_2026_10_13',
@@ -691,16 +629,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-13T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w6', actualHours: 40.0, flaggedHours: 55.0, laborSales: 8250.00, grossProfit: 6270.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w6', actualHours: 40.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 5760.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w6', actualHours: 40.0, flaggedHours: 43.0, laborSales: 6450.00, grossProfit: 5332.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w6', actualHours: 41.0, flaggedHours: 35.5, laborSales: 4260.00, grossProfit: 3469.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w6', actualHours: 45.0, flaggedHours: 63.0, laborSales: 9450.00, grossProfit: 8100.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w6', actualHours: 42.0, flaggedHours: 50.0, laborSales: 7500.00, grossProfit: 6400.00 },
-    ]
+    rows: []
   },
-
   // Week 5: Sep 30 - Oct 6, 2026
   {
     id: 'week_2026_10_06',
@@ -712,16 +642,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-06T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w5', actualHours: 40.0, flaggedHours: 52.0, laborSales: 7800.00, grossProfit: 5928.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w5', actualHours: 40.0, flaggedHours: 46.0, laborSales: 6900.00, grossProfit: 5520.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w5', actualHours: 39.0, flaggedHours: 39.5, laborSales: 5925.00, grossProfit: 4898.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w5', actualHours: 40.0, flaggedHours: 33.0, laborSales: 3960.00, grossProfit: 3200.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w5', actualHours: 44.0, flaggedHours: 59.0, laborSales: 8850.00, grossProfit: 7500.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w5', actualHours: 42.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 6100.00 },
-    ]
+    rows: []
   },
-
   // Week 4: Sep 23 - Sep 29, 2026
   {
     id: 'week_2026_09_29',
@@ -733,16 +655,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-29T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w4', actualHours: 40.0, flaggedHours: 54.5, laborSales: 8175.00, grossProfit: 6213.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w4', actualHours: 40.0, flaggedHours: 48.5, laborSales: 7275.00, grossProfit: 5820.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w4', actualHours: 40.0, flaggedHours: 41.0, laborSales: 6150.00, grossProfit: 5084.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w4', actualHours: 42.0, flaggedHours: 35.0, laborSales: 4200.00, grossProfit: 3383.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w4', actualHours: 45.0, flaggedHours: 62.0, laborSales: 9300.00, grossProfit: 7950.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w4', actualHours: 42.0, flaggedHours: 49.0, laborSales: 7350.00, grossProfit: 6250.00 },
-    ]
+    rows: []
   },
-
   // Week 3: Sep 16 - Sep 22, 2026
   {
     id: 'week_2026_09_22',
@@ -754,16 +668,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-22T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w3', actualHours: 40.0, flaggedHours: 53.5, laborSales: 8025.00, grossProfit: 6099.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w3', actualHours: 40.0, flaggedHours: 47.0, laborSales: 7050.00, grossProfit: 5640.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w3', actualHours: 38.0, flaggedHours: 40.5, laborSales: 6075.00, grossProfit: 5022.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w3', actualHours: 40.0, flaggedHours: 34.0, laborSales: 4080.00, grossProfit: 3320.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w3', actualHours: 44.0, flaggedHours: 60.0, laborSales: 9000.00, grossProfit: 7650.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w3', actualHours: 42.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 6100.00 },
-    ]
+    rows: []
   },
-
   // Week 2: Sep 9 - Sep 15, 2026
   {
     id: 'week_2026_09_15',
@@ -775,16 +681,8 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-15T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w2', actualHours: 40.0, flaggedHours: 51.0, laborSales: 7650.00, grossProfit: 5814.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w2', actualHours: 40.0, flaggedHours: 45.0, laborSales: 6750.00, grossProfit: 5400.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w2', actualHours: 39.0, flaggedHours: 39.0, laborSales: 5850.00, grossProfit: 4836.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w2', actualHours: 40.0, flaggedHours: 33.0, laborSales: 3960.00, grossProfit: 3200.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w2', actualHours: 43.0, flaggedHours: 58.0, laborSales: 8700.00, grossProfit: 7350.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w2', actualHours: 41.0, flaggedHours: 47.0, laborSales: 7050.00, grossProfit: 5950.00 },
-    ]
+    rows: []
   },
-
   // Week 1: Sep 2 - Sep 8, 2026 (Initial Starting Week)
   {
     id: 'week_2026_09_08',
@@ -796,14 +694,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-08T18:00:00Z',
     isLocked: true,
     notes: 'Payroll starting period: Wednesday, Sep 2 through Tuesday, Sep 8, 2026',
-    rows: [
-      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w1', actualHours: 40.0, flaggedHours: 52.5, laborSales: 7875.00, grossProfit: 5985.00 },
-      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w1', actualHours: 40.0, flaggedHours: 46.0, laborSales: 6900.00, grossProfit: 5520.00 },
-      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w1', actualHours: 40.0, flaggedHours: 39.0, laborSales: 5850.00, grossProfit: 4836.00 },
-      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w1', actualHours: 42.0, flaggedHours: 34.0, laborSales: 4080.00, grossProfit: 3263.00 },
-      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w1', actualHours: 45.0, flaggedHours: 60.0, laborSales: 9000.00, grossProfit: 7650.00 },
-      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w1', actualHours: 42.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 6100.00 },
-    ]
+    rows: []
   }
 ];
 

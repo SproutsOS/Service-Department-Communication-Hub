@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Table, 
   FileSpreadsheet, 
@@ -45,13 +45,15 @@ import {
   exportWeekToCSV, 
   DEFAULT_PROFITABILITY_WEEKS,
   getNextWednesdayTuesdayPayPeriod,
-  syncRosterFromSep2ToAllWeeks
+  removeSampleEmployees,
+  rolloverRosterToNewWeek,
+  ensureMasterRosterOnAllWeeks
 } from '../utils/employeeProfitabilityCalculations';
 import { formatCurrency } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
+import { syncProfitabilityWeeksToCloud, subscribeToProfitabilityWeeks } from '../lib/firestoreSync';
 
 const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v4_wed_tue';
-const STORAGE_KEY_MASTER_ROSTER = 'dealership_employee_master_roster_sep2';
 
 interface EmployeeProfitabilityLedgerProps {
   onBackToDashboard?: () => void;
@@ -62,7 +64,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
 }) => {
   const { users, lockProfitLedger, openProfitLedgerPasswordModal } = useApp();
 
-  // Load weeks from persistent storage, automatically propagating Sep 2 - Sep 8 employees to all pay periods
+  // Load weeks from persistent storage, ensuring user-added employees appear across all weeks
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
     let rawWeeks = DEFAULT_PROFITABILITY_WEEKS;
     try {
@@ -76,21 +78,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     } catch {
       // ignore
     }
-
-    // Check if there is an explicit saved master roster from Sep 2 - Sep 8
-    try {
-      const savedMaster = localStorage.getItem(STORAGE_KEY_MASTER_ROSTER);
-      if (savedMaster) {
-        const parsedMaster = JSON.parse(savedMaster);
-        if (Array.isArray(parsedMaster) && parsedMaster.length > 0) {
-          return syncRosterFromSep2ToAllWeeks(rawWeeks, parsedMaster);
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    return syncRosterFromSep2ToAllWeeks(rawWeeks);
+    return ensureMasterRosterOnAllWeeks(rawWeeks);
   });
 
   // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'
@@ -115,45 +103,33 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Auto-save alert toast
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Sync to local storage whenever weeks change, and cache Sep 2 - Sep 8 roster
-  useEffect(() => {
+  // Helper to persist weeks to LocalStorage and Firestore, ensuring roster propagation across all weeks
+  const saveWeeks = useCallback((updatedWeeks: ProfitabilityWeek[]) => {
+    const cleaned = removeSampleEmployees(updatedWeeks);
+    const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
+    setWeeks(syncedRoster);
     try {
-      localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(weeks));
-      const sep2Week = weeks.find(w => 
-        w.id === 'week_2026_09_08' || 
-        w.weekStartDate === '2026-09-02' ||
-        w.weekEndingDate === '2026-09-08' ||
-        (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
-      ) || weeks[weeks.length - 1];
-
-      if (sep2Week && sep2Week.rows && sep2Week.rows.length > 0) {
-        localStorage.setItem(STORAGE_KEY_MASTER_ROSTER, JSON.stringify(sep2Week.rows));
-      }
+      localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
     } catch {
       // ignore
     }
-  }, [weeks]);
+    syncProfitabilityWeeksToCloud(syncedRoster);
+  }, []);
 
-  // If other weeks still contain legacy sample employees, automatically synchronize them with Sep 2 - Sep 8
+  // Real-time listener for Firestore Profitability Ledger changes
   useEffect(() => {
-    const sep2Week = weeks.find(w => 
-      w.id === 'week_2026_09_08' || 
-      w.weekStartDate === '2026-09-02' ||
-      w.weekEndingDate === '2026-09-08' ||
-      (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
-    ) || weeks[weeks.length - 1];
-
-    if (!sep2Week || !sep2Week.rows || sep2Week.rows.length === 0) return;
-
-    const sampleNames = ['marcus vance', 'jake reynolds', 'bobby henderson', 'tyler watson'];
-    const otherWeeksContainSample = weeks.some(w => 
-      w.id !== sep2Week.id && w.rows.some(r => sampleNames.includes(r.name.trim().toLowerCase()))
-    );
-
-    if (otherWeeksContainSample) {
-      const synced = syncRosterFromSep2ToAllWeeks(weeks, sep2Week.rows);
-      setWeeks(synced);
-    }
+    const unsubscribe = subscribeToProfitabilityWeeks((cloudWeeks) => {
+      if (cloudWeeks && Array.isArray(cloudWeeks) && cloudWeeks.length > 0) {
+        const syncedRoster = ensureMasterRosterOnAllWeeks(cloudWeeks);
+        setWeeks(syncedRoster);
+        try {
+          localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
+        } catch {
+          // ignore
+        }
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // Active week object
@@ -211,16 +187,15 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Handle updates to a row in the active week
   const handleUpdateRow = (rowId: string, updates: Partial<EmployeeProfitabilityRow>) => {
     if (!activeWeek) return;
-    setWeeks(prevWeeks => 
-      prevWeeks.map(w => {
-        if (w.id !== activeWeek.id) return w;
-        return {
-          ...w,
-          updatedAt: new Date().toISOString(),
-          rows: w.rows.map(r => r.id === rowId ? { ...r, ...updates } : r)
-        };
-      })
-    );
+    const updatedWeeks = weeks.map(w => {
+      if (w.id !== activeWeek.id) return w;
+      return {
+        ...w,
+        updatedAt: new Date().toISOString(),
+        rows: w.rows.map(r => r.id === rowId ? { ...r, ...updates } : r)
+      };
+    });
+    saveWeeks(updatedWeeks);
   };
 
   // Add new employee row to active week
@@ -241,32 +216,32 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       notes: ''
     };
 
-    setWeeks(prevWeeks => 
-      prevWeeks.map(w => {
-        if (w.id !== activeWeek.id) return w;
-        return {
-          ...w,
-          updatedAt: new Date().toISOString(),
-          rows: [...w.rows, newRow]
-        };
-      })
-    );
+    const updatedWeeks = weeks.map(w => {
+      if (w.id !== activeWeek.id) return w;
+      return {
+        ...w,
+        updatedAt: new Date().toISOString(),
+        rows: [...w.rows, newRow]
+      };
+    });
+    saveWeeks(updatedWeeks);
+    triggerSaveToast('Employee added.');
   };
 
   // Delete an employee row from active week
   const handleDeleteRow = (rowId: string, name: string) => {
     if (!activeWeek) return;
     if (confirm(`Remove ${name || 'this employee'} from this week's spreadsheet?`)) {
-      setWeeks(prevWeeks => 
-        prevWeeks.map(w => {
-          if (w.id !== activeWeek.id) return w;
-          return {
-            ...w,
-            updatedAt: new Date().toISOString(),
-            rows: w.rows.filter(r => r.id !== rowId)
-          };
-        })
-      );
+      const updatedWeeks = weeks.map(w => {
+        if (w.id !== activeWeek.id) return w;
+        return {
+          ...w,
+          updatedAt: new Date().toISOString(),
+          rows: w.rows.filter(r => r.id !== rowId)
+        };
+      });
+      saveWeeks(updatedWeeks);
+      triggerSaveToast('Employee removed.');
     }
   };
 
@@ -278,78 +253,36 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       id: `emp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: `${row.name} (Copy)`
     };
-    setWeeks(prevWeeks => 
-      prevWeeks.map(w => {
-        if (w.id !== activeWeek.id) return w;
-        return {
-          ...w,
-          updatedAt: new Date().toISOString(),
-          rows: [...w.rows, clone]
-        };
-      })
-    );
+    const updatedWeeks = weeks.map(w => {
+      if (w.id !== activeWeek.id) return w;
+      return {
+        ...w,
+        updatedAt: new Date().toISOString(),
+        rows: [...w.rows, clone]
+      };
+    });
+    saveWeeks(updatedWeeks);
   };
 
-  // Update sheet-level settings (Billed rate, Burden %, Date, Label)
+  // Update sheet-level settings
   const handleUpdateWeekMeta = (updates: Partial<ProfitabilityWeek>) => {
     if (!activeWeek) return;
-    setWeeks(prevWeeks => 
-      prevWeeks.map(w => w.id === activeWeek.id ? { ...w, ...updates, updatedAt: new Date().toISOString() } : w)
-    );
+    const updatedWeeks = weeks.map(w => w.id === activeWeek.id ? { ...w, ...updates, updatedAt: new Date().toISOString() } : w);
+    saveWeeks(updatedWeeks);
   };
 
-  // Explicit 1-click action to push the Sep 2 - Sep 8 employee roster to all other weeks
-  const handleApplySep2RosterToAllWeeks = () => {
-    const sep2Week = weeks.find(w => 
-      w.id === 'week_2026_09_08' || 
-      w.weekStartDate === '2026-09-02' ||
-      w.weekEndingDate === '2026-09-08' ||
-      (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
-    ) || weeks[weeks.length - 1];
-
-    if (!sep2Week || !sep2Week.rows || sep2Week.rows.length === 0) {
-      alert('No employee entries found on Pay Period Sep 2 - Sep 8.');
-      return;
-    }
-
-    const syncedWeeks = syncRosterFromSep2ToAllWeeks(weeks, sep2Week.rows);
-    setWeeks(syncedWeeks);
-    try {
-      localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedWeeks));
-      localStorage.setItem(STORAGE_KEY_MASTER_ROSTER, JSON.stringify(sep2Week.rows));
-    } catch {
-      // ignore
-    }
-    triggerSaveToast(`✓ Applied ${sep2Week.rows.length} employees from Sep 2 - Sep 8 across all pay periods! Sample employees removed.`);
-  };
-
-  // Create a new week (Wednesday to Tuesday payroll cycle)
-  const handleCreateNewWeek = (copyFromCurrent: boolean = true) => {
-    // Find newest week ending date to advance to next Wednesday - Tuesday pay period
+  // Create a new week (Wednesday to Tuesday payroll cycle), automatically rolling over the employee roster
+  const handleCreateNewWeek = () => {
     const newestWeek = weeks[0];
     const { startDate, endDate, label } = getNextWednesdayTuesdayPayPeriod(newestWeek?.weekEndingDate);
     const newWeekId = `week_${endDate.replace(/-/g, '_')}_${Date.now()}`;
 
-    // Prefer copying from Sep 2 - Sep 8 or active week, NEVER sample employees!
-    const sep2Week = weeks.find(w => 
-      w.id === 'week_2026_09_08' || 
-      w.weekStartDate === '2026-09-02' ||
-      w.weekEndingDate === '2026-09-08' ||
-      (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
-    ) || weeks[weeks.length - 1];
-
-    const sourceRows = (copyFromCurrent && activeWeek && activeWeek.rows.length > 0)
+    // Inherit employee roster from the current or previous week
+    const sourceRows = (activeWeek && activeWeek.rows.length > 0)
       ? activeWeek.rows
-      : (sep2Week?.rows || []);
+      : (weeks.find(w => w.rows.length > 0)?.rows || []);
 
-    const newRows: EmployeeProfitabilityRow[] = sourceRows.map(r => ({
-      ...r,
-      id: `emp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      actualHours: 40.0,
-      flaggedHours: r.payType === 'FLAT_RATE' ? 40.0 : 0.0, // Default to standard week
-      laborSales: 0.0, // Clear sales for fresh week
-      grossProfit: 0.0,
-    }));
+    const rolledOverRows = rolloverRosterToNewWeek(sourceRows, newWeekId);
 
     const newWeek: ProfitabilityWeek = {
       id: newWeekId,
@@ -357,15 +290,16 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       weekEndingDate: endDate,
       weekLabel: label,
       defaultBurdenPct: activeWeek?.defaultBurdenPct || 10.0,
-      rows: newRows,
+      rows: rolledOverRows,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       notes: 'Wednesday through Tuesday payroll period'
     };
 
-    setWeeks([newWeek, ...weeks]);
+    const updatedWeeks = [newWeek, ...weeks];
+    saveWeeks(updatedWeeks);
     setSelectedWeekId(newWeekId);
-    triggerSaveToast(`Created new pay-period sheet: ${label}`);
+    triggerSaveToast(`Created new pay period with rolled-over roster: ${label}`);
   };
 
   // Delete current week
@@ -377,27 +311,9 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     }
     if (confirm(`Are you sure you want to delete "${activeWeek.weekLabel}"? This action cannot be undone.`)) {
       const remaining = weeks.filter(w => w.id !== activeWeek.id);
-      setWeeks(remaining);
+      saveWeeks(remaining);
       setSelectedWeekId(remaining[0]?.id || '');
       triggerSaveToast('Week deleted.');
-    }
-  };
-
-  // Reset weeks to Wednesday-Tuesday payroll schedule, preserving Sep 2 - Sep 8 entered employees
-  const handleResetToDefaultTemplate = () => {
-    if (confirm('Reset ledger to the Wednesday-Tuesday payroll schedule? Your entered employees from Sep 2 - Sep 8 will be preserved across all weeks.')) {
-      const sep2Week = weeks.find(w => 
-        w.id === 'week_2026_09_08' || 
-        w.weekStartDate === '2026-09-02' ||
-        w.weekEndingDate === '2026-09-08' ||
-        (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
-      ) || weeks[weeks.length - 1];
-
-      const masterRows = sep2Week?.rows || [];
-      const resetWeeks = syncRosterFromSep2ToAllWeeks(DEFAULT_PROFITABILITY_WEEKS, masterRows.length > 0 ? masterRows : undefined);
-      setWeeks(resetWeeks);
-      setSelectedWeekId(resetWeeks[0].id);
-      triggerSaveToast('Restored Wednesday-Tuesday payroll schedule with your Sep 2 - Sep 8 employees.');
     }
   };
 
@@ -408,6 +324,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     const newStaffRows: EmployeeProfitabilityRow[] = [];
 
     users.forEach(u => {
+
       const name = (u.name || '').trim();
       if (!name || existingNames.has(name.toLowerCase())) return;
 
@@ -449,17 +366,23 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       return;
     }
 
-    setWeeks(prevWeeks => 
-      prevWeeks.map(w => {
-        if (w.id !== activeWeek.id) return w;
-        return {
-          ...w,
-          updatedAt: new Date().toISOString(),
-          rows: [...w.rows, ...newStaffRows]
-        };
-      })
-    );
+    const updatedWeeks = weeks.map(w => {
+      if (w.id !== activeWeek.id) return w;
+      return {
+        ...w,
+        updatedAt: new Date().toISOString(),
+        rows: [...w.rows, ...newStaffRows]
+      };
+    });
+    saveWeeks(updatedWeeks);
     triggerSaveToast(`Imported ${newStaffRows.length} team members from roster.`);
+  };
+
+  // Explicit 1-click action to synchronize user-added roster across all weekly sheets
+  const handleSyncRosterToAllWeeks = () => {
+    const synced = ensureMasterRosterOnAllWeeks(weeks);
+    saveWeeks(synced);
+    triggerSaveToast('✓ Employee roster synchronized across all weekly pay periods!');
   };
 
   // CSV Export download
@@ -659,7 +582,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 {/* Week Action Buttons */}
                 <button
                   type="button"
-                  onClick={() => handleCreateNewWeek(true)}
+                  onClick={() => handleCreateNewWeek()}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
                   title="Create a new week using this week's staff roster and pay rates"
                 >
@@ -667,14 +590,15 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <span>+ New Week</span>
                 </button>
 
+
                 <button
                   type="button"
-                  onClick={handleApplySep2RosterToAllWeeks}
+                  onClick={handleSyncRosterToAllWeeks}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-                  title="Apply the employees you entered in Pay Period Sep 2 - Sep 8 to all weeks, replacing all sample employees"
+                  title="Ensure all employees you added are present across every weekly pay period in the ledger"
                 >
                   <Users className="w-3.5 h-3.5" />
-                  <span>Apply Sep 2–8 Employees to All Weeks</span>
+                  <span>Sync Roster Across All Weeks</span>
                 </button>
 
                 <button
@@ -1147,15 +1071,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <span>•</span>
                   <span><strong>SALARY:</strong> Fixed Weekly Base Pay</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    type="button"
-                    onClick={handleResetToDefaultTemplate}
-                    className="text-[11px] text-slate-500 hover:text-blue-700 underline cursor-pointer"
-                  >
-                    Restore Default Sample Template
-                  </button>
-                </div>
+
               </div>
 
             </div>
@@ -1181,19 +1097,11 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleApplySep2RosterToAllWeeks}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
-                  title="Apply employees entered in Sep 2 - Sep 8 across all pay periods"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Apply Sep 2–8 Employees to All Weeks</span>
-                </button>
+
 
                 <button
                   type="button"
-                  onClick={() => handleCreateNewWeek(true)}
+                  onClick={() => handleCreateNewWeek()}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -1454,15 +1362,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleApplySep2RosterToAllWeeks}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                    title="Apply employees entered in Sep 2 - Sep 8 across all pay periods"
-                  >
-                    <Users className="w-3.5 h-3.5" />
-                    <span>Apply Sep 2–8 Employees to All Weeks</span>
-                  </button>
+
                   <div className="px-3 py-1 bg-slate-800 rounded-lg text-xs font-mono font-bold text-slate-300 border border-slate-700">
                     {runningTotals.totalWeeksCount} Completed Weeks Recorded
                   </div>

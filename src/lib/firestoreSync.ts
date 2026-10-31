@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer, StandaloneQuote } from '../types';
+import { ProfitabilityWeek } from '../types/employeeProfitability';
 
 // Collection references
 export const REPAIR_ORDERS_COL = 'repairOrders';
@@ -23,6 +24,7 @@ export const USERS_COL = 'users';
 export const NOTIFICATIONS_COL = 'notifications';
 export const SETTINGS_COL = 'settings';
 export const SHOP_SETTINGS_DOC = 'shop';
+export const PROFITABILITY_LEDGER_DOC = 'profitabilityLedger';
 export const SHOP_MESSAGES_COL = 'shopMessages';
 export const QUOTES_COL = 'standaloneQuotes';
 
@@ -635,3 +637,42 @@ export async function seedInitialDataIfEmpty(initialUsers: User[], initialROs: R
     handleFirestoreError(err, OperationType.WRITE, USERS_COL);
   }
 }
+
+/**
+ * Persists the entire Profitability & Labor Ledger to Firestore under settings/profitabilityLedger
+ * so user-entered employees and weekly payroll records are never lost.
+ */
+export async function syncProfitabilityWeeksToCloud(weeks: ProfitabilityWeek[]): Promise<boolean> {
+  try {
+    const docRef = doc(db, SETTINGS_COL, PROFITABILITY_LEDGER_DOC);
+    const cleanData = sanitizeForFirestore({
+      weeks,
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(docRef, cleanData, { merge: true });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COL}/${PROFITABILITY_LEDGER_DOC}`);
+    return false;
+  }
+}
+
+/**
+ * Real-time listener for the Profitability Ledger in Firestore.
+ */
+export function subscribeToProfitabilityWeeks(callback: (weeks: ProfitabilityWeek[] | null) => void) {
+  const docRef = doc(db, SETTINGS_COL, PROFITABILITY_LEDGER_DOC);
+  return onSnapshot(docRef, (snapshot) => {
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      if (Array.isArray(data?.weeks)) {
+        callback(data.weeks as ProfitabilityWeek[]);
+        return;
+      }
+    }
+    callback(null);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, `${SETTINGS_COL}/${PROFITABILITY_LEDGER_DOC}`);
+  });
+}
+
