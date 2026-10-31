@@ -43,12 +43,13 @@ import {
   computeRunningTotals, 
   computeEmployeeRunningTotals, 
   exportWeekToCSV, 
-  DEFAULT_PROFITABILITY_WEEKS 
+  DEFAULT_PROFITABILITY_WEEKS,
+  getNextWednesdayTuesdayPayPeriod
 } from '../utils/employeeProfitabilityCalculations';
 import { formatCurrency } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
 
-const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v3';
+const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v4_wed_tue';
 
 interface EmployeeProfitabilityLedgerProps {
   onBackToDashboard?: () => void;
@@ -59,36 +60,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
 }) => {
   const { users, lockProfitLedger, openProfitLedgerPasswordModal } = useApp();
 
-  // Load weeks from isolated persistent storage, with fallback to default realistic template weeks
+  // Load weeks from isolated persistent storage, with fallback to default realistic template weeks starting Wed Sep 2, 2026
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
     try {
-      const savedV3 = localStorage.getItem('dealership_employee_profitability_weeks_v3');
-      if (savedV3) {
-        const parsed = JSON.parse(savedV3);
+      const savedV4 = localStorage.getItem('dealership_employee_profitability_weeks_v4_wed_tue');
+      if (savedV4) {
+        const parsed = JSON.parse(savedV4);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
-        }
-      }
-      const savedV2 = localStorage.getItem('dealership_employee_profitability_weeks_v2');
-      if (savedV2) {
-        const parsed = JSON.parse(savedV2);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((w: ProfitabilityWeek) => ({
-            ...w,
-            rows: (w.rows || []).map((r: any) => {
-              const flagged = Number(r.flaggedHours) || 0;
-              const pay = Number(r.payRate) || 0;
-              const billed = Number(r.billedLaborRate) || 150;
-              const laborSales = Number(r.laborSales) || (flagged > 0 ? flagged * billed : 0);
-              const computedPay = r.payType === 'FLAT_RATE' ? flagged * pay : pay;
-              const grossProfit = Number(r.grossProfit) || Math.max(0, laborSales - computedPay);
-              return {
-                ...r,
-                laborSales,
-                grossProfit,
-              };
-            })
-          }));
         }
       }
     } catch {
@@ -270,12 +249,12 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     );
   };
 
-  // Create a new week
+  // Create a new week (Wednesday to Tuesday payroll cycle)
   const handleCreateNewWeek = (copyFromCurrent: boolean = true) => {
-    const today = new Date();
-    const formattedDate = today.toISOString().split('T')[0];
-    const newWeekId = `week_${Date.now()}`;
-    const newWeekLabel = `Week Ending ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    // Find newest week ending date to advance to next Wednesday - Tuesday pay period
+    const newestWeek = weeks[0];
+    const { startDate, endDate, label } = getNextWednesdayTuesdayPayPeriod(newestWeek?.weekEndingDate);
+    const newWeekId = `week_${endDate.replace(/-/g, '_')}_${Date.now()}`;
 
     let newRows: EmployeeProfitabilityRow[] = [];
     if (copyFromCurrent && activeWeek && activeWeek.rows.length > 0) {
@@ -292,7 +271,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
         {
           id: `emp_${Date.now()}_1`,
           name: 'Marcus Vance',
-          role: 'Master Tech',
+          role: 'Master Diagnostic Tech',
           payType: 'FLAT_RATE',
           actualHours: 40.0,
           flaggedHours: 0.0,
@@ -307,18 +286,19 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
 
     const newWeek: ProfitabilityWeek = {
       id: newWeekId,
-      weekEndingDate: formattedDate,
-      weekLabel: newWeekLabel,
+      weekStartDate: startDate,
+      weekEndingDate: endDate,
+      weekLabel: label,
       defaultBurdenPct: activeWeek?.defaultBurdenPct || 10.0,
       rows: newRows,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      notes: ''
+      notes: 'Wednesday through Tuesday payroll period'
     };
 
     setWeeks([newWeek, ...weeks]);
     setSelectedWeekId(newWeekId);
-    triggerSaveToast(`Created new pay-period sheet: ${newWeekLabel}`);
+    triggerSaveToast(`Created new pay-period sheet: ${label}`);
   };
 
   // Delete current week
@@ -336,12 +316,12 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     }
   };
 
-  // Reset all to default sample weeks
+  // Reset all to Wednesday-Tuesday payroll schedule starting September 2, 2026
   const handleResetToDefaultTemplate = () => {
-    if (confirm('Reset ledger to the default 2-week dealership sample with Salary, Flat Rate, and Hourly employee templates? Any custom entries will be restored to default.')) {
+    if (confirm('Reset ledger to the Wednesday-Tuesday payroll schedule starting September 2, 2026? Any custom entries will be restored to default.')) {
       setWeeks(DEFAULT_PROFITABILITY_WEEKS);
       setSelectedWeekId(DEFAULT_PROFITABILITY_WEEKS[0].id);
-      triggerSaveToast('Restored default dealership template.');
+      triggerSaveToast('Restored Wednesday-Tuesday payroll schedule (Starts Sep 2, 2026).');
     }
   };
 
@@ -595,6 +575,9 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                       </option>
                     ))}
                   </select>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hidden sm:inline-flex items-center gap-1">
+                    Wed – Tue
+                  </span>
                 </div>
 
                 {/* Week Action Buttons */}
@@ -1620,7 +1603,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
             <div className="flex items-center justify-between pb-4 border-b-2 border-slate-900">
               <div>
                 <h1 className="text-xl font-black uppercase tracking-tight">Dealership Employee Profitability & Hours Ledger</h1>
-                <p className="text-xs text-slate-600 font-medium mt-0.5">Pay Period: {activeWeek.weekLabel} • Ending: {activeWeek.weekEndingDate}</p>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">{activeWeek.weekLabel} • Payroll Cycle: Wednesday to Tuesday</p>
               </div>
               <div className="text-right text-xs">
                 <div>Printed: {new Date().toLocaleDateString()}</div>

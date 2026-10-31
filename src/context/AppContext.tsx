@@ -766,7 +766,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore
     }
-    return '1234';
+    return '';
   });
 
   const updateProfitLedgerPassword = useCallback((newPass: string): boolean => {
@@ -784,12 +784,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const verifyProfitLedgerPassword = useCallback((input: string): boolean => {
     const cred = (input || '').trim();
     if (!cred) return false;
-    if (cred === profitLedgerPassword) return true;
-    if (cred === '1234' || cred === 'admin123' || (currentUser?.pin && cred === currentUser.pin)) {
-      return true;
-    }
-    return false;
-  }, [profitLedgerPassword, currentUser]);
+    // Strictly verify against the password that was set or changed to - no default bypass
+    return Boolean(profitLedgerPassword && cred === profitLedgerPassword);
+  }, [profitLedgerPassword]);
 
   const requestOpenProfitLedger = useCallback(() => {
     if (isProfitLedgerUnlocked) {

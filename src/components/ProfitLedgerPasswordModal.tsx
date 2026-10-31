@@ -23,7 +23,8 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
     verifyProfitLedgerPassword,
     updateProfitLedgerPassword,
     setIsProfitLedgerUnlocked,
-    openEmployeeProfitability
+    openEmployeeProfitability,
+    profitLedgerPassword
   } = useApp();
 
   const [passwordInput, setPasswordInput] = useState('');
@@ -46,17 +47,21 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
     if (isProfitLedgerPasswordModalOpen) {
       setPasswordInput('');
       setErrorMessage('');
-      setIsChangePasswordMode(false);
       setCurrentPasswordInput('');
       setNewPasswordInput('');
       setConfirmPasswordInput('');
       setChangeError('');
       setChangeSuccess('');
+      if (!profitLedgerPassword) {
+        setIsChangePasswordMode(true);
+      } else {
+        setIsChangePasswordMode(false);
+      }
       setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
     }
-  }, [isProfitLedgerPasswordModalOpen]);
+  }, [isProfitLedgerPasswordModalOpen, profitLedgerPassword]);
 
   if (!isProfitLedgerPasswordModalOpen) return null;
 
@@ -78,7 +83,7 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
         closeProfitLedgerPasswordModal();
         openEmployeeProfitability();
       } else {
-        setErrorMessage('Incorrect password. Please try again or use the default "1234".');
+        setErrorMessage('Incorrect password. Please try again.');
         setPasswordInput('');
         inputRef.current?.focus();
       }
@@ -108,14 +113,16 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
     setChangeError('');
     setChangeSuccess('');
 
-    if (!currentPasswordInput.trim()) {
-      setChangeError('Please enter your current password.');
-      return;
-    }
+    if (profitLedgerPassword) {
+      if (!currentPasswordInput.trim()) {
+        setChangeError('Please enter your current password.');
+        return;
+      }
 
-    if (!verifyProfitLedgerPassword(currentPasswordInput)) {
-      setChangeError('Current password does not match.');
-      return;
+      if (!verifyProfitLedgerPassword(currentPasswordInput)) {
+        setChangeError('Current password does not match.');
+        return;
+      }
     }
 
     if (!newPasswordInput.trim()) {
@@ -223,7 +230,7 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
                       setPasswordInput(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
-                    placeholder="Enter password (e.g. 1234)"
+                    placeholder="Enter authorization password"
                     className="w-full pl-10 pr-12 py-3 bg-slate-950/70 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-white font-mono text-base tracking-widest focus:outline-hidden transition-all shadow-inner"
                     autoComplete="off"
                     autoFocus
@@ -286,20 +293,8 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Helpful Default Hint & Change Password Link */}
-              <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-500">Default:</span>
-                  <button
-                    type="button"
-                    onClick={() => setPasswordInput('1234')}
-                    className="font-mono font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-2 cursor-pointer"
-                    title="Click to insert default passcode (1234)"
-                  >
-                    1234
-                  </button>
-                </div>
-
+              {/* Change Password Link */}
+              <div className="pt-2 flex items-center justify-end text-[11px] text-slate-400 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsChangePasswordMode(true)}
@@ -337,10 +332,12 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Key className="w-4 h-4 text-blue-400" />
-                  <span>Set New Profit Ledger Password</span>
+                  <span>{profitLedgerPassword ? 'Change Profit Ledger Password' : 'Set Profit Ledger Password'}</span>
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Update the authorization password required whenever the Profit Ledger button is clicked.
+                  {profitLedgerPassword 
+                    ? 'Update the authorization password required to access the Profit Ledger.'
+                    : 'Create an authorization password required to access the Profit Ledger.'}
                 </p>
               </div>
 
@@ -359,24 +356,26 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
               )}
 
               <div className="space-y-3">
-                {/* Current Password */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    Current Password
-                  </label>
-                  <input
-                    type="password"
-                    value={currentPasswordInput}
-                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
-                    placeholder="Enter current password (default: 1234)"
-                    className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-white font-mono text-sm focus:border-blue-500 focus:outline-hidden"
-                  />
-                </div>
+                {/* Current Password (only required if a password is already set) */}
+                {profitLedgerPassword ? (
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                      Current Password
+                    </label>
+                    <input
+                      type="password"
+                      value={currentPasswordInput}
+                      onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                      placeholder="Enter current password"
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-white font-mono text-sm focus:border-blue-500 focus:outline-hidden"
+                    />
+                  </div>
+                ) : null}
 
                 {/* New Password */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    New Password / PIN
+                    {profitLedgerPassword ? 'New Password / PIN' : 'Password / PIN'}
                   </label>
                   <input
                     type="password"
@@ -390,13 +389,13 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
                 {/* Confirm New Password */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    Confirm New Password
+                    {profitLedgerPassword ? 'Confirm New Password' : 'Confirm Password'}
                   </label>
                   <input
                     type="password"
                     value={confirmPasswordInput}
                     onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                    placeholder="Re-enter new password"
+                    placeholder="Re-enter password"
                     className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-white font-mono text-sm focus:border-blue-500 focus:outline-hidden"
                   />
                 </div>
@@ -406,16 +405,22 @@ export const ProfitLedgerPasswordModal: React.FC = () => {
               <div className="pt-2 flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsChangePasswordMode(false)}
+                  onClick={() => {
+                    if (profitLedgerPassword) {
+                      setIsChangePasswordMode(false);
+                    } else {
+                      closeProfitLedgerPasswordModal();
+                    }
+                  }}
                   className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer border border-slate-700"
                 >
-                  Back
+                  {profitLedgerPassword ? 'Back' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
                 >
-                  Save New Password
+                  {profitLedgerPassword ? 'Save New Password' : 'Save Password'}
                 </button>
               </div>
             </form>

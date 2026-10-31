@@ -36,8 +36,9 @@ export interface ComputedEmployeeRow extends EmployeeProfitabilityRow {
 
 export interface ProfitabilityWeek {
   id: string;
-  weekEndingDate: string; // YYYY-MM-DD
-  weekLabel: string; // e.g. "Week Ending Oct 30, 2026"
+  weekStartDate?: string; // YYYY-MM-DD (e.g. Wednesday 2026-09-02)
+  weekEndingDate: string; // YYYY-MM-DD (e.g. Tuesday 2026-09-08)
+  weekLabel: string; // e.g. "Pay Period: Sep 2 - Sep 8, 2026"
   defaultBilledRate?: number; // Optional legacy field
   defaultBurdenPct: number; // Default % overhead allocation (e.g., 10.0%)
   rows: EmployeeProfitabilityRow[];
@@ -49,6 +50,7 @@ export interface ProfitabilityWeek {
 
 export interface WeekSummaryTotals {
   weekId: string;
+  weekStartDate?: string;
   weekEndingDate: string;
   weekLabel: string;
   employeeCount: number;

@@ -17,13 +17,13 @@ export interface DayPunch {
 }
 
 const DEFAULT_DAYS: DayPunch[] = [
-  { dayName: 'Monday', in1: '', out1: '', in2: '', out2: '' },
-  { dayName: 'Tuesday', in1: '', out1: '', in2: '', out2: '' },
   { dayName: 'Wednesday', in1: '', out1: '', in2: '', out2: '' },
   { dayName: 'Thursday', in1: '', out1: '', in2: '', out2: '' },
   { dayName: 'Friday', in1: '', out1: '', in2: '', out2: '' },
   { dayName: 'Saturday', in1: '', out1: '', in2: '', out2: '' },
   { dayName: 'Sunday', in1: '', out1: '', in2: '', out2: '' },
+  { dayName: 'Monday', in1: '', out1: '', in2: '', out2: '' },
+  { dayName: 'Tuesday', in1: '', out1: '', in2: '', out2: '' },
 ];
 
 const PUNCH_FIELDS: (keyof DayPunch)[] = ['in1', 'out1', 'in2', 'out2'];

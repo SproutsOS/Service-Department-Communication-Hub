@@ -162,6 +162,7 @@ export function computeWeekSummary(week: ProfitabilityWeek): WeekSummaryTotals {
 
   return {
     weekId: week.id,
+    weekStartDate: week.weekStartDate,
     weekEndingDate: week.weekEndingDate,
     weekLabel: week.weekLabel,
     employeeCount: computedRows.length,
@@ -357,7 +358,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
 
   const lines: string[] = [];
   lines.push(`"Employee Profitability Ledger - ${week.weekLabel}"`);
-  lines.push(`"Week Ending: ${week.weekEndingDate} | Overhead Burden: ${week.defaultBurdenPct}%"`);
+  lines.push(`"Payroll Cycle: Wednesday to Tuesday | Ending: ${week.weekEndingDate} | Overhead Burden: ${week.defaultBurdenPct}%"`);
   lines.push('');
   lines.push(headers.map(h => `"${h}"`).join(','));
 
@@ -406,202 +407,348 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
 }
 
 /**
- * Starter benchmark weeks with realistic dealership staff:
- * Features Salary, Flat Rate, and Hourly employees
+ * Calculates the next Wednesday to Tuesday pay period after a given reference date (or current date).
  */
-export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
+export function getNextWednesdayTuesdayPayPeriod(referenceDateStr?: string): {
+  startDate: string;
+  endDate: string;
+  label: string;
+} {
+  const formatIso = (d: Date) => {
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  };
+
+  if (referenceDateStr) {
+    const parts = referenceDateStr.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      // Reference is previous week ending date (Tuesday). Next starts Wednesday (+1 day)
+      const prevEnd = new Date(parts[0], parts[1] - 1, parts[2]);
+      const nextStart = new Date(prevEnd);
+      nextStart.setDate(prevEnd.getDate() + 1);
+      const nextEnd = new Date(nextStart);
+      nextEnd.setDate(nextStart.getDate() + 6);
+
+      const startMonth = nextStart.toLocaleDateString('en-US', { month: 'short' });
+      const endMonth = nextEnd.toLocaleDateString('en-US', { month: 'short' });
+      const year = nextEnd.getFullYear();
+      const label = startMonth === endMonth 
+        ? `Pay Period: ${startMonth} ${nextStart.getDate()} - ${nextEnd.getDate()}, ${year}`
+        : `Pay Period: ${startMonth} ${nextStart.getDate()} - ${endMonth} ${nextEnd.getDate()}, ${year}`;
+
+      return {
+        startDate: formatIso(nextStart),
+        endDate: formatIso(nextEnd),
+        label
+      };
+    }
+  }
+
+  // Calculate Wednesday through Tuesday period enclosing today
+  const now = new Date();
+  const day = now.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
+  const diffToWed = (day - 3 + 7) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - diffToWed);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+  const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+  const year = end.getFullYear();
+  const label = startMonth === endMonth 
+    ? `Pay Period: ${startMonth} ${start.getDate()} - ${end.getDate()}, ${year}`
+    : `Pay Period: ${startMonth} ${start.getDate()} - ${endMonth} ${end.getDate()}, ${year}`;
+
+  return {
+    startDate: formatIso(start),
+    endDate: formatIso(end),
+    label
+  };
+}
+
+/**
+ * Standard dealership employee roster template
+ */
+const BASE_ROSTER_ROWS: EmployeeProfitabilityRow[] = [
   {
-    id: 'week_2026_10_24',
-    weekEndingDate: '2026-10-24',
-    weekLabel: 'Week Ending Oct 24, 2026',
-    defaultBurdenPct: 10.0,
-    createdAt: '2026-10-24T18:00:00Z',
-    updatedAt: '2026-10-24T18:00:00Z',
-    isLocked: false,
-    notes: 'Standard pay period • Solid dealership shop efficiency at 116.8%',
-    rows: [
-      {
-        id: 'emp_row_1',
-        name: 'Marcus Vance',
-        role: 'Master Diagnostic Tech',
-        payType: 'FLAT_RATE',
-        actualHours: 40.0,
-        flaggedHours: 52.5,
-        payRate: 36.00, // $36.00 / flagged hr (Pay = $1,890.00)
-        laborSales: 7875.00,
-        grossProfit: 5985.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Top flat-rate producer, diesel diagnostics & recall jobs',
-      },
-      {
-        id: 'emp_row_2',
-        name: 'Jake Reynolds',
-        role: 'A-Level Tech',
-        payType: 'FLAT_RATE',
-        actualHours: 40.0,
-        flaggedHours: 46.0,
-        payRate: 30.00, // $30.00 / flagged hr (Pay = $1,380.00)
-        laborSales: 6900.00,
-        grossProfit: 5520.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Transmission replacements, front brakes & suspensions',
-      },
-      {
-        id: 'emp_row_3',
-        name: 'Bobby Henderson',
-        role: 'B-Level Technician',
-        payType: 'FLAT_RATE',
-        actualHours: 40.0,
-        flaggedHours: 39.0,
-        payRate: 26.00, // $26.00 / flagged hr (Pay = $1,014.00)
-        laborSales: 5850.00,
-        grossProfit: 4836.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Brakes, steering linkage & cooling systems',
-      },
-      {
-        id: 'emp_row_4',
-        name: 'Tyler Watson',
-        role: 'Lube / Express Tech',
-        payType: 'HOURLY',
-        actualHours: 42.0, // 40 reg + 2 OT (Pay = $817.00)
-        flaggedHours: 34.0,
-        payRate: 19.00,
-        overtimeMultiplier: 1.5,
-        laborSales: 4080.00,
-        grossProfit: 3263.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Express oil changes, tire rotations & multi-point inspections',
-      },
-      {
-        id: 'emp_row_5',
-        name: 'Cody Miller',
-        role: 'Senior Service Advisor',
-        payType: 'SALARY',
-        actualHours: 45.0,
-        flaggedHours: 60.0,
-        payRate: 1350.00, // $1,350.00 / week salary base
-        laborSales: 9000.00,
-        grossProfit: 7650.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Service desk drive management & customer follow-up cadence',
-      },
-      {
-        id: 'emp_row_6',
-        name: 'Sarah Jenkins',
-        role: 'Service Advisor',
-        payType: 'SALARY',
-        actualHours: 42.0,
-        flaggedHours: 48.0,
-        payRate: 1100.00, // $1,100.00 / week salary base
-        laborSales: 7200.00,
-        grossProfit: 6100.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Recall appointment scheduling & internal recon tickets',
-      },
-    ]
+    id: 'emp_row_1',
+    name: 'Marcus Vance',
+    role: 'Master Diagnostic Tech',
+    payType: 'FLAT_RATE',
+    actualHours: 40.0,
+    flaggedHours: 54.0,
+    payRate: 36.00,
+    laborSales: 8100.00,
+    grossProfit: 6156.00,
+    burdenType: 'PERCENT',
+    burdenValue: 10.0,
+    notes: 'Heavy line & complex diagnostics',
   },
   {
-    id: 'week_2026_10_31',
-    weekEndingDate: '2026-10-31',
-    weekLabel: 'Week Ending Oct 31, 2026',
+    id: 'emp_row_2',
+    name: 'Jake Reynolds',
+    role: 'A-Level Tech',
+    payType: 'FLAT_RATE',
+    actualHours: 40.0,
+    flaggedHours: 48.0,
+    payRate: 30.00,
+    laborSales: 7200.00,
+    grossProfit: 5760.00,
+    burdenType: 'PERCENT',
+    burdenValue: 10.0,
+    notes: 'Transmissions, recalls & suspension work',
+  },
+  {
+    id: 'emp_row_3',
+    name: 'Bobby Henderson',
+    role: 'B-Level Technician',
+    payType: 'FLAT_RATE',
+    actualHours: 39.0,
+    flaggedHours: 41.5,
+    payRate: 26.00,
+    laborSales: 6225.00,
+    grossProfit: 5146.00,
+    burdenType: 'PERCENT',
+    burdenValue: 10.0,
+    notes: 'Brakes, scheduled services & water pumps',
+  },
+  {
+    id: 'emp_row_4',
+    name: 'Tyler Watson',
+    role: 'Lube / Express Tech',
+    payType: 'HOURLY',
+    actualHours: 41.5,
+    flaggedHours: 35.0,
+    payRate: 19.00,
+    overtimeMultiplier: 1.5,
+    laborSales: 4200.00,
+    grossProfit: 3397.00,
+    burdenType: 'PERCENT',
+    burdenValue: 10.0,
+    notes: 'Quick service, MPIs & tire rotations',
+  },
+  {
+    id: 'emp_row_5',
+    name: 'Cody Miller',
+    role: 'Senior Service Advisor',
+    payType: 'SALARY',
+    actualHours: 45.0,
+    flaggedHours: 62.0,
+    payRate: 1350.00,
+    laborSales: 9300.00,
+    grossProfit: 7950.00,
+    burdenType: 'PERCENT',
+    burdenValue: 10.0,
+    notes: 'Lead advisor drive management & MPI upsells',
+  },
+  {
+    id: 'emp_row_6',
+    name: 'Sarah Jenkins',
+    role: 'Service Advisor',
+    payType: 'SALARY',
+    actualHours: 42.0,
+    flaggedHours: 50.0,
+    payRate: 1100.00,
+    laborSales: 7500.00,
+    grossProfit: 6400.00,
+    burdenType: 'PERCENT',
+    burdenValue: 10.0,
+    notes: 'Customer follow-up calls & repair quotes',
+  },
+];
+
+/**
+ * Dealership Payroll Weeks:
+ * Weekly payroll cycles strictly run Wednesday through Tuesday,
+ * starting Wednesday, September 2, 2026.
+ */
+export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
+  // Week 9: Oct 28 - Nov 3, 2026 (Current Active Week)
+  {
+    id: 'week_2026_11_03',
+    weekStartDate: '2026-10-28',
+    weekEndingDate: '2026-11-03',
+    weekLabel: 'Pay Period: Oct 28 - Nov 3, 2026 (Current)',
     defaultBurdenPct: 10.0,
-    createdAt: '2026-10-31T18:00:00Z',
+    createdAt: '2026-10-28T07:00:00Z',
     updatedAt: '2026-10-31T18:00:00Z',
     isLocked: false,
-    notes: 'Heavy transmission week • Outstanding gross margins',
+    notes: 'Active weekly cycle • Wednesday to Tuesday payroll',
+    rows: BASE_ROSTER_ROWS.map(r => ({
+      ...r,
+      id: `${r.id}_w9`,
+    }))
+  },
+
+  // Week 8: Oct 21 - Oct 27, 2026
+  {
+    id: 'week_2026_10_27',
+    weekStartDate: '2026-10-21',
+    weekEndingDate: '2026-10-27',
+    weekLabel: 'Pay Period: Oct 21 - Oct 27, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-10-21T07:00:00Z',
+    updatedAt: '2026-10-27T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll • Strong flat rate technician efficiency',
     rows: [
-      {
-        id: 'emp_row_1',
-        name: 'Marcus Vance',
-        role: 'Master Diagnostic Tech',
-        payType: 'FLAT_RATE',
-        actualHours: 40.0,
-        flaggedHours: 58.0, // Produced 58 flagged hrs (Pay = $2,088.00)
-        payRate: 36.00,
-        laborSales: 8700.00,
-        grossProfit: 6612.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Completed 2 EcoDiesel high-pressure pumps & wiring diagnosis',
-      },
-      {
-        id: 'emp_row_2',
-        name: 'Jake Reynolds',
-        role: 'A-Level Tech',
-        payType: 'FLAT_RATE',
-        actualHours: 40.0,
-        flaggedHours: 49.5, // Produced 49.5 hrs (Pay = $1,485.00)
-        payRate: 30.00,
-        laborSales: 7425.00,
-        grossProfit: 5940.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Completed warranty engine tear-down and intake heater relay updates',
-      },
-      {
-        id: 'emp_row_3',
-        name: 'Bobby Henderson',
-        role: 'B-Level Technician',
-        payType: 'FLAT_RATE',
-        actualHours: 38.0,
-        flaggedHours: 42.0, // Produced 42 hrs (Pay = $1,092.00)
-        payRate: 26.00,
-        laborSales: 6300.00,
-        grossProfit: 5208.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Finished brake jobs & 30k interval services',
-      },
-      {
-        id: 'emp_row_4',
-        name: 'Tyler Watson',
-        role: 'Lube / Express Tech',
-        payType: 'HOURLY',
-        actualHours: 40.0,
-        flaggedHours: 36.0,
-        payRate: 19.00, // Pay = $760.00
-        overtimeMultiplier: 1.5,
-        laborSales: 4320.00,
-        grossProfit: 3560.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Express oil changes & battery replacements',
-      },
-      {
-        id: 'emp_row_5',
-        name: 'Cody Miller',
-        role: 'Senior Service Advisor',
-        payType: 'SALARY',
-        actualHours: 45.0,
-        flaggedHours: 65.0,
-        payRate: 1350.00,
-        laborSales: 9750.00,
-        grossProfit: 8400.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Record tire and brake upsell volume',
-      },
-      {
-        id: 'emp_row_6',
-        name: 'Sarah Jenkins',
-        role: 'Service Advisor',
-        payType: 'SALARY',
-        actualHours: 43.0,
-        flaggedHours: 52.0,
-        payRate: 1100.00,
-        laborSales: 7800.00,
-        grossProfit: 6700.00,
-        burdenType: 'PERCENT',
-        burdenValue: 10.0,
-        notes: 'Customer follow-up cadence calls completed on schedule',
-      },
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w8', actualHours: 40.0, flaggedHours: 56.5, laborSales: 8475.00, grossProfit: 6441.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w8', actualHours: 40.0, flaggedHours: 49.0, laborSales: 7350.00, grossProfit: 5880.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w8', actualHours: 38.5, flaggedHours: 42.0, laborSales: 6300.00, grossProfit: 5208.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w8', actualHours: 42.0, flaggedHours: 36.0, laborSales: 4320.00, grossProfit: 3503.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w8', actualHours: 45.0, flaggedHours: 64.0, laborSales: 9600.00, grossProfit: 8250.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w8', actualHours: 42.0, flaggedHours: 51.0, laborSales: 7650.00, grossProfit: 6550.00 },
+    ]
+  },
+
+  // Week 7: Oct 14 - Oct 20, 2026
+  {
+    id: 'week_2026_10_20',
+    weekStartDate: '2026-10-14',
+    weekEndingDate: '2026-10-20',
+    weekLabel: 'Pay Period: Oct 14 - Oct 20, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-10-14T07:00:00Z',
+    updatedAt: '2026-10-20T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll • High diagnostic repair volume',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w7', actualHours: 40.0, flaggedHours: 53.0, laborSales: 7950.00, grossProfit: 6042.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w7', actualHours: 40.0, flaggedHours: 47.5, laborSales: 7125.00, grossProfit: 5700.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w7', actualHours: 39.0, flaggedHours: 40.0, laborSales: 6000.00, grossProfit: 4960.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w7', actualHours: 40.0, flaggedHours: 34.0, laborSales: 4080.00, grossProfit: 3320.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w7', actualHours: 45.0, flaggedHours: 61.0, laborSales: 9150.00, grossProfit: 7800.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w7', actualHours: 41.5, flaggedHours: 49.0, laborSales: 7350.00, grossProfit: 6250.00 },
+    ]
+  },
+
+  // Week 6: Oct 7 - Oct 13, 2026
+  {
+    id: 'week_2026_10_13',
+    weekStartDate: '2026-10-07',
+    weekEndingDate: '2026-10-13',
+    weekLabel: 'Pay Period: Oct 7 - Oct 13, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-10-07T07:00:00Z',
+    updatedAt: '2026-10-13T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll cycle',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w6', actualHours: 40.0, flaggedHours: 55.0, laborSales: 8250.00, grossProfit: 6270.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w6', actualHours: 40.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 5760.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w6', actualHours: 40.0, flaggedHours: 43.0, laborSales: 6450.00, grossProfit: 5332.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w6', actualHours: 41.0, flaggedHours: 35.5, laborSales: 4260.00, grossProfit: 3469.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w6', actualHours: 45.0, flaggedHours: 63.0, laborSales: 9450.00, grossProfit: 8100.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w6', actualHours: 42.0, flaggedHours: 50.0, laborSales: 7500.00, grossProfit: 6400.00 },
+    ]
+  },
+
+  // Week 5: Sep 30 - Oct 6, 2026
+  {
+    id: 'week_2026_10_06',
+    weekStartDate: '2026-09-30',
+    weekEndingDate: '2026-10-06',
+    weekLabel: 'Pay Period: Sep 30 - Oct 6, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-09-30T07:00:00Z',
+    updatedAt: '2026-10-06T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll cycle',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w5', actualHours: 40.0, flaggedHours: 52.0, laborSales: 7800.00, grossProfit: 5928.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w5', actualHours: 40.0, flaggedHours: 46.0, laborSales: 6900.00, grossProfit: 5520.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w5', actualHours: 39.0, flaggedHours: 39.5, laborSales: 5925.00, grossProfit: 4898.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w5', actualHours: 40.0, flaggedHours: 33.0, laborSales: 3960.00, grossProfit: 3200.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w5', actualHours: 44.0, flaggedHours: 59.0, laborSales: 8850.00, grossProfit: 7500.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w5', actualHours: 42.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 6100.00 },
+    ]
+  },
+
+  // Week 4: Sep 23 - Sep 29, 2026
+  {
+    id: 'week_2026_09_29',
+    weekStartDate: '2026-09-23',
+    weekEndingDate: '2026-09-29',
+    weekLabel: 'Pay Period: Sep 23 - Sep 29, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-09-23T07:00:00Z',
+    updatedAt: '2026-09-29T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll cycle',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w4', actualHours: 40.0, flaggedHours: 54.5, laborSales: 8175.00, grossProfit: 6213.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w4', actualHours: 40.0, flaggedHours: 48.5, laborSales: 7275.00, grossProfit: 5820.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w4', actualHours: 40.0, flaggedHours: 41.0, laborSales: 6150.00, grossProfit: 5084.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w4', actualHours: 42.0, flaggedHours: 35.0, laborSales: 4200.00, grossProfit: 3383.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w4', actualHours: 45.0, flaggedHours: 62.0, laborSales: 9300.00, grossProfit: 7950.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w4', actualHours: 42.0, flaggedHours: 49.0, laborSales: 7350.00, grossProfit: 6250.00 },
+    ]
+  },
+
+  // Week 3: Sep 16 - Sep 22, 2026
+  {
+    id: 'week_2026_09_22',
+    weekStartDate: '2026-09-16',
+    weekEndingDate: '2026-09-22',
+    weekLabel: 'Pay Period: Sep 16 - Sep 22, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-09-16T07:00:00Z',
+    updatedAt: '2026-09-22T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll cycle',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w3', actualHours: 40.0, flaggedHours: 53.5, laborSales: 8025.00, grossProfit: 6099.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w3', actualHours: 40.0, flaggedHours: 47.0, laborSales: 7050.00, grossProfit: 5640.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w3', actualHours: 38.0, flaggedHours: 40.5, laborSales: 6075.00, grossProfit: 5022.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w3', actualHours: 40.0, flaggedHours: 34.0, laborSales: 4080.00, grossProfit: 3320.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w3', actualHours: 44.0, flaggedHours: 60.0, laborSales: 9000.00, grossProfit: 7650.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w3', actualHours: 42.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 6100.00 },
+    ]
+  },
+
+  // Week 2: Sep 9 - Sep 15, 2026
+  {
+    id: 'week_2026_09_15',
+    weekStartDate: '2026-09-09',
+    weekEndingDate: '2026-09-15',
+    weekLabel: 'Pay Period: Sep 9 - Sep 15, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-09-09T07:00:00Z',
+    updatedAt: '2026-09-15T18:00:00Z',
+    isLocked: true,
+    notes: 'Completed payroll cycle',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w2', actualHours: 40.0, flaggedHours: 51.0, laborSales: 7650.00, grossProfit: 5814.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w2', actualHours: 40.0, flaggedHours: 45.0, laborSales: 6750.00, grossProfit: 5400.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w2', actualHours: 39.0, flaggedHours: 39.0, laborSales: 5850.00, grossProfit: 4836.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w2', actualHours: 40.0, flaggedHours: 33.0, laborSales: 3960.00, grossProfit: 3200.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w2', actualHours: 43.0, flaggedHours: 58.0, laborSales: 8700.00, grossProfit: 7350.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w2', actualHours: 41.0, flaggedHours: 47.0, laborSales: 7050.00, grossProfit: 5950.00 },
+    ]
+  },
+
+  // Week 1: Sep 2 - Sep 8, 2026 (Initial Starting Week)
+  {
+    id: 'week_2026_09_08',
+    weekStartDate: '2026-09-02',
+    weekEndingDate: '2026-09-08',
+    weekLabel: 'Pay Period: Sep 2 - Sep 8, 2026 (Starting Week)',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-09-02T07:00:00Z',
+    updatedAt: '2026-09-08T18:00:00Z',
+    isLocked: true,
+    notes: 'Payroll starting period: Wednesday, Sep 2 through Tuesday, Sep 8, 2026',
+    rows: [
+      { ...BASE_ROSTER_ROWS[0], id: 'emp_row_1_w1', actualHours: 40.0, flaggedHours: 52.5, laborSales: 7875.00, grossProfit: 5985.00 },
+      { ...BASE_ROSTER_ROWS[1], id: 'emp_row_2_w1', actualHours: 40.0, flaggedHours: 46.0, laborSales: 6900.00, grossProfit: 5520.00 },
+      { ...BASE_ROSTER_ROWS[2], id: 'emp_row_3_w1', actualHours: 40.0, flaggedHours: 39.0, laborSales: 5850.00, grossProfit: 4836.00 },
+      { ...BASE_ROSTER_ROWS[3], id: 'emp_row_4_w1', actualHours: 42.0, flaggedHours: 34.0, laborSales: 4080.00, grossProfit: 3263.00 },
+      { ...BASE_ROSTER_ROWS[4], id: 'emp_row_5_w1', actualHours: 45.0, flaggedHours: 60.0, laborSales: 9000.00, grossProfit: 7650.00 },
+      { ...BASE_ROSTER_ROWS[5], id: 'emp_row_6_w1', actualHours: 42.0, flaggedHours: 48.0, laborSales: 7200.00, grossProfit: 6100.00 },
     ]
   }
 ];
+
