@@ -455,13 +455,40 @@ import { User } from '../types';
 /**
  * Helper to strip any legacy sample employee rows from weeks data
  */
-const SAMPLE_EMPLOYEE_NAMES = [
+/**
+ * Helper to strip any legacy sample employee rows or auto-synced shop roster items from weeks data
+ */
+const UNWANTED_NON_TECH_NAMES = [
   'marcus vance',
   'jake reynolds',
   'bobby henderson',
   'tyler watson',
   'cody miller',
-  'sarah jenkins'
+  'sarah jenkins',
+  'amy',
+  'sammy',
+  'greg - manager',
+  'greg - parts',
+  'shelby graves',
+  'donnie',
+  'ronnie',
+  'matt',
+  'branson',
+  'dane',
+  'jacob',
+  'jesse',
+  'montana',
+  'greg'
+];
+
+export const INITIAL_MANUAL_TECHNICIANS: EmployeeProfitabilityRow[] = [
+  { id: 'tech_branson_oneal', name: 'BRANSON ONEAL', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_dane_griffin', name: 'DANE GRIFFIN', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_donald_ingram', name: 'DONALD INGRAM', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_jacob_mooney', name: 'JACOB MOONEY', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_jesse_allman', name: 'JESSE ALLMAN', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_matthew_johnson', name: 'MATTHEW JOHNSON', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_montana_ishee', name: 'MONTANA ISHEE', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' }
 ];
 
 export function removeSampleEmployees(weeks: ProfitabilityWeek[]): ProfitabilityWeek[] {
@@ -470,7 +497,7 @@ export function removeSampleEmployees(weeks: ProfitabilityWeek[]): Profitability
     ...w,
     rows: (w.rows || []).filter(r => {
       const cleanName = (r.name || '').trim().toLowerCase();
-      return !SAMPLE_EMPLOYEE_NAMES.includes(cleanName);
+      return !UNWANTED_NON_TECH_NAMES.includes(cleanName);
     })
   }));
 }
@@ -483,12 +510,13 @@ export function removeSampleEmployees(weeks: ProfitabilityWeek[]): Profitability
 export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): ProfitabilityWeek[] {
   if (!Array.isArray(weeksList) || weeksList.length === 0) return weeksList;
 
-  // First strip any legacy sample employees
+  // First strip any legacy sample employees or auto-synced roster entries
   const cleanedWeeks = removeSampleEmployees(weeksList);
 
   // Map of unique user-added employees found across any week in the ledger
   const masterMap = new Map<string, EmployeeProfitabilityRow>();
 
+  // If no employees exist at all across any week, seed with the 7 technicians
   cleanedWeeks.forEach(w => {
     (w.rows || []).forEach(r => {
       const key = (r.name || '').trim().toLowerCase();
@@ -499,7 +527,11 @@ export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): Pr
     });
   });
 
-  if (masterMap.size === 0) return cleanedWeeks;
+  if (masterMap.size === 0) {
+    INITIAL_MANUAL_TECHNICIANS.forEach(tech => {
+      masterMap.set(tech.name.trim().toLowerCase(), tech);
+    });
+  }
 
   const masterList = Array.from(masterMap.values());
 
@@ -517,7 +549,7 @@ export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): Pr
           payType: m.payType || 'FLAT_RATE',
           actualHours: m.actualHours !== undefined ? m.actualHours : 40.0,
           flaggedHours: m.payType === 'FLAT_RATE' ? (m.flaggedHours !== undefined ? m.flaggedHours : 40.0) : 0.0,
-          payRate: Number(m.payRate) || 0,
+          payRate: Number(m.payRate) || 30.0,
           overtimeMultiplier: Number(m.overtimeMultiplier) || 1.5,
           laborSales: 0.0,
           grossProfit: 0.0,
@@ -579,21 +611,34 @@ export function syncRosterFromSep2ToAllWeeks(
  * Dealership Payroll Weeks:
  * Weekly payroll cycles strictly run Wednesday through Tuesday,
  * starting Wednesday, September 2, 2026.
- * All default weeks start with empty employee rows (no sample data).
+ * Initialized with the 7 Flat-Rate Technicians tracked in the Profitability Ledger.
  */
 export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
-  // Week 9: Oct 28 - Nov 3, 2026 (Current Active Week)
+  // Week 10: Nov 4 - Nov 10, 2026 (Current Active Week)
+  {
+    id: 'week_2026_11_10',
+    weekStartDate: '2026-11-04',
+    weekEndingDate: '2026-11-10',
+    weekLabel: 'Pay Period: Nov 4 - 10, 2026',
+    defaultBurdenPct: 10.0,
+    createdAt: '2026-11-04T07:00:00Z',
+    updatedAt: '2026-11-04T18:00:00Z',
+    isLocked: false,
+    notes: 'Active weekly cycle • Wednesday to Tuesday payroll',
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w10_${idx}` }))
+  },
+  // Week 9: Oct 28 - Nov 3, 2026
   {
     id: 'week_2026_11_03',
     weekStartDate: '2026-10-28',
     weekEndingDate: '2026-11-03',
-    weekLabel: 'Pay Period: Oct 28 - Nov 3, 2026 (Current)',
+    weekLabel: 'Pay Period: Oct 28 - Nov 3, 2026',
     defaultBurdenPct: 10.0,
     createdAt: '2026-10-28T07:00:00Z',
     updatedAt: '2026-10-31T18:00:00Z',
-    isLocked: false,
-    notes: 'Active weekly cycle • Wednesday to Tuesday payroll',
-    rows: []
+    isLocked: true,
+    notes: 'Completed weekly cycle',
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w9_${idx}` }))
   },
   // Week 8: Oct 21 - Oct 27, 2026
   {
@@ -606,7 +651,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-27T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w8_${idx}` }))
   },
   // Week 7: Oct 14 - Oct 20, 2026
   {
@@ -619,7 +664,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-20T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w7_${idx}` }))
   },
   // Week 6: Oct 7 - Oct 13, 2026
   {
@@ -632,7 +677,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-13T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w6_${idx}` }))
   },
   // Week 5: Sep 30 - Oct 6, 2026
   {
@@ -645,7 +690,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-10-06T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w5_${idx}` }))
   },
   // Week 4: Sep 23 - Sep 29, 2026
   {
@@ -658,7 +703,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-29T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w4_${idx}` }))
   },
   // Week 3: Sep 16 - Sep 22, 2026
   {
@@ -671,7 +716,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-22T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w3_${idx}` }))
   },
   // Week 2: Sep 9 - Sep 15, 2026
   {
@@ -684,7 +729,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-15T18:00:00Z',
     isLocked: true,
     notes: 'Completed payroll cycle',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w2_${idx}` }))
   },
   // Week 1: Sep 2 - Sep 8, 2026 (Initial Starting Week)
   {
@@ -697,7 +742,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-09-08T18:00:00Z',
     isLocked: true,
     notes: 'Payroll starting period: Wednesday, Sep 2 through Tuesday, Sep 8, 2026',
-    rows: []
+    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w1_${idx}` }))
   }
 ];
 

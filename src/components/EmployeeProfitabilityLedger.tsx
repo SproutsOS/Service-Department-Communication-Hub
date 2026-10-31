@@ -53,7 +53,7 @@ import { formatCurrency } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
 import { syncProfitabilityWeeksToCloud, subscribeToProfitabilityWeeks } from '../lib/firestoreSync';
 
-const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v4_wed_tue';
+const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v5_techs_only';
 
 interface EmployeeProfitabilityLedgerProps {
   onBackToDashboard?: () => void;
@@ -68,9 +68,9 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
     let rawWeeks = DEFAULT_PROFITABILITY_WEEKS;
     try {
-      const savedV4 = localStorage.getItem(STORAGE_KEY_PROFITABILITY_WEEKS);
-      if (savedV4) {
-        const parsed = JSON.parse(savedV4);
+      const savedV5 = localStorage.getItem(STORAGE_KEY_PROFITABILITY_WEEKS);
+      if (savedV5) {
+        const parsed = JSON.parse(savedV5);
         if (Array.isArray(parsed) && parsed.length > 0) {
           rawWeeks = parsed;
         }
@@ -78,7 +78,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     } catch {
       // ignore
     }
-    return ensureMasterRosterOnAllWeeks(rawWeeks);
+    const cleaned = removeSampleEmployees(rawWeeks);
+    return ensureMasterRosterOnAllWeeks(cleaned);
   });
 
   // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'
@@ -120,7 +121,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   useEffect(() => {
     const unsubscribe = subscribeToProfitabilityWeeks((cloudWeeks) => {
       if (cloudWeeks && Array.isArray(cloudWeeks) && cloudWeeks.length > 0) {
-        const syncedRoster = ensureMasterRosterOnAllWeeks(cloudWeeks);
+        const cleaned = removeSampleEmployees(cloudWeeks);
+        const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
         setWeeks(syncedRoster);
         try {
           localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
