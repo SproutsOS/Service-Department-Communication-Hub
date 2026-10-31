@@ -44,12 +44,14 @@ import {
   computeEmployeeRunningTotals, 
   exportWeekToCSV, 
   DEFAULT_PROFITABILITY_WEEKS,
-  getNextWednesdayTuesdayPayPeriod
+  getNextWednesdayTuesdayPayPeriod,
+  syncRosterFromSep2ToAllWeeks
 } from '../utils/employeeProfitabilityCalculations';
 import { formatCurrency } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
 
 const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v4_wed_tue';
+const STORAGE_KEY_MASTER_ROSTER = 'dealership_employee_master_roster_sep2';
 
 interface EmployeeProfitabilityLedgerProps {
   onBackToDashboard?: () => void;
@@ -60,20 +62,35 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
 }) => {
   const { users, lockProfitLedger, openProfitLedgerPasswordModal } = useApp();
 
-  // Load weeks from isolated persistent storage, with fallback to default realistic template weeks starting Wed Sep 2, 2026
+  // Load weeks from persistent storage, automatically propagating Sep 2 - Sep 8 employees to all pay periods
   const [weeks, setWeeks] = useState<ProfitabilityWeek[]>(() => {
+    let rawWeeks = DEFAULT_PROFITABILITY_WEEKS;
     try {
-      const savedV4 = localStorage.getItem('dealership_employee_profitability_weeks_v4_wed_tue');
+      const savedV4 = localStorage.getItem(STORAGE_KEY_PROFITABILITY_WEEKS);
       if (savedV4) {
         const parsed = JSON.parse(savedV4);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          rawWeeks = parsed;
         }
       }
     } catch {
       // ignore
     }
-    return DEFAULT_PROFITABILITY_WEEKS;
+
+    // Check if there is an explicit saved master roster from Sep 2 - Sep 8
+    try {
+      const savedMaster = localStorage.getItem(STORAGE_KEY_MASTER_ROSTER);
+      if (savedMaster) {
+        const parsedMaster = JSON.parse(savedMaster);
+        if (Array.isArray(parsedMaster) && parsedMaster.length > 0) {
+          return syncRosterFromSep2ToAllWeeks(rawWeeks, parsedMaster);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return syncRosterFromSep2ToAllWeeks(rawWeeks);
   });
 
   // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'
@@ -98,14 +115,46 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Auto-save alert toast
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Sync to local storage whenever weeks change
+  // Sync to local storage whenever weeks change, and cache Sep 2 - Sep 8 roster
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(weeks));
+      const sep2Week = weeks.find(w => 
+        w.id === 'week_2026_09_08' || 
+        w.weekStartDate === '2026-09-02' ||
+        w.weekEndingDate === '2026-09-08' ||
+        (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
+      ) || weeks[weeks.length - 1];
+
+      if (sep2Week && sep2Week.rows && sep2Week.rows.length > 0) {
+        localStorage.setItem(STORAGE_KEY_MASTER_ROSTER, JSON.stringify(sep2Week.rows));
+      }
     } catch {
       // ignore
     }
   }, [weeks]);
+
+  // If other weeks still contain legacy sample employees, automatically synchronize them with Sep 2 - Sep 8
+  useEffect(() => {
+    const sep2Week = weeks.find(w => 
+      w.id === 'week_2026_09_08' || 
+      w.weekStartDate === '2026-09-02' ||
+      w.weekEndingDate === '2026-09-08' ||
+      (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
+    ) || weeks[weeks.length - 1];
+
+    if (!sep2Week || !sep2Week.rows || sep2Week.rows.length === 0) return;
+
+    const sampleNames = ['marcus vance', 'jake reynolds', 'bobby henderson', 'tyler watson'];
+    const otherWeeksContainSample = weeks.some(w => 
+      w.id !== sep2Week.id && w.rows.some(r => sampleNames.includes(r.name.trim().toLowerCase()))
+    );
+
+    if (otherWeeksContainSample) {
+      const synced = syncRosterFromSep2ToAllWeeks(weeks, sep2Week.rows);
+      setWeeks(synced);
+    }
+  }, []);
 
   // Active week object
   const activeWeek = useMemo(() => {
@@ -249,6 +298,31 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     );
   };
 
+  // Explicit 1-click action to push the Sep 2 - Sep 8 employee roster to all other weeks
+  const handleApplySep2RosterToAllWeeks = () => {
+    const sep2Week = weeks.find(w => 
+      w.id === 'week_2026_09_08' || 
+      w.weekStartDate === '2026-09-02' ||
+      w.weekEndingDate === '2026-09-08' ||
+      (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
+    ) || weeks[weeks.length - 1];
+
+    if (!sep2Week || !sep2Week.rows || sep2Week.rows.length === 0) {
+      alert('No employee entries found on Pay Period Sep 2 - Sep 8.');
+      return;
+    }
+
+    const syncedWeeks = syncRosterFromSep2ToAllWeeks(weeks, sep2Week.rows);
+    setWeeks(syncedWeeks);
+    try {
+      localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedWeeks));
+      localStorage.setItem(STORAGE_KEY_MASTER_ROSTER, JSON.stringify(sep2Week.rows));
+    } catch {
+      // ignore
+    }
+    triggerSaveToast(`✓ Applied ${sep2Week.rows.length} employees from Sep 2 - Sep 8 across all pay periods! Sample employees removed.`);
+  };
+
   // Create a new week (Wednesday to Tuesday payroll cycle)
   const handleCreateNewWeek = (copyFromCurrent: boolean = true) => {
     // Find newest week ending date to advance to next Wednesday - Tuesday pay period
@@ -256,33 +330,26 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     const { startDate, endDate, label } = getNextWednesdayTuesdayPayPeriod(newestWeek?.weekEndingDate);
     const newWeekId = `week_${endDate.replace(/-/g, '_')}_${Date.now()}`;
 
-    let newRows: EmployeeProfitabilityRow[] = [];
-    if (copyFromCurrent && activeWeek && activeWeek.rows.length > 0) {
-      newRows = activeWeek.rows.map(r => ({
-        ...r,
-        id: `emp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        actualHours: 40.0,
-        flaggedHours: 0.0, // Clear flagged hours so user enters fresh production
-        laborSales: 0.0, // Clear sales for fresh week
-        grossProfit: 0.0, // Clear gross profit for fresh week
-      }));
-    } else {
-      newRows = [
-        {
-          id: `emp_${Date.now()}_1`,
-          name: 'Marcus Vance',
-          role: 'Master Diagnostic Tech',
-          payType: 'FLAT_RATE',
-          actualHours: 40.0,
-          flaggedHours: 0.0,
-          payRate: 36.00,
-          laborSales: 0.00,
-          grossProfit: 0.00,
-          burdenType: 'PERCENT',
-          burdenValue: 10.0,
-        }
-      ];
-    }
+    // Prefer copying from Sep 2 - Sep 8 or active week, NEVER sample employees!
+    const sep2Week = weeks.find(w => 
+      w.id === 'week_2026_09_08' || 
+      w.weekStartDate === '2026-09-02' ||
+      w.weekEndingDate === '2026-09-08' ||
+      (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
+    ) || weeks[weeks.length - 1];
+
+    const sourceRows = (copyFromCurrent && activeWeek && activeWeek.rows.length > 0)
+      ? activeWeek.rows
+      : (sep2Week?.rows || []);
+
+    const newRows: EmployeeProfitabilityRow[] = sourceRows.map(r => ({
+      ...r,
+      id: `emp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      actualHours: 40.0,
+      flaggedHours: r.payType === 'FLAT_RATE' ? 40.0 : 0.0, // Default to standard week
+      laborSales: 0.0, // Clear sales for fresh week
+      grossProfit: 0.0,
+    }));
 
     const newWeek: ProfitabilityWeek = {
       id: newWeekId,
@@ -316,12 +383,21 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     }
   };
 
-  // Reset all to Wednesday-Tuesday payroll schedule starting September 2, 2026
+  // Reset weeks to Wednesday-Tuesday payroll schedule, preserving Sep 2 - Sep 8 entered employees
   const handleResetToDefaultTemplate = () => {
-    if (confirm('Reset ledger to the Wednesday-Tuesday payroll schedule starting September 2, 2026? Any custom entries will be restored to default.')) {
-      setWeeks(DEFAULT_PROFITABILITY_WEEKS);
-      setSelectedWeekId(DEFAULT_PROFITABILITY_WEEKS[0].id);
-      triggerSaveToast('Restored Wednesday-Tuesday payroll schedule (Starts Sep 2, 2026).');
+    if (confirm('Reset ledger to the Wednesday-Tuesday payroll schedule? Your entered employees from Sep 2 - Sep 8 will be preserved across all weeks.')) {
+      const sep2Week = weeks.find(w => 
+        w.id === 'week_2026_09_08' || 
+        w.weekStartDate === '2026-09-02' ||
+        w.weekEndingDate === '2026-09-08' ||
+        (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
+      ) || weeks[weeks.length - 1];
+
+      const masterRows = sep2Week?.rows || [];
+      const resetWeeks = syncRosterFromSep2ToAllWeeks(DEFAULT_PROFITABILITY_WEEKS, masterRows.length > 0 ? masterRows : undefined);
+      setWeeks(resetWeeks);
+      setSelectedWeekId(resetWeeks[0].id);
+      triggerSaveToast('Restored Wednesday-Tuesday payroll schedule with your Sep 2 - Sep 8 employees.');
     }
   };
 
@@ -589,6 +665,16 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ New Week</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleApplySep2RosterToAllWeeks}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  title="Apply the employees you entered in Pay Period Sep 2 - Sep 8 to all weeks, replacing all sample employees"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Apply Sep 2–8 Employees to All Weeks</span>
                 </button>
 
                 <button
@@ -1094,14 +1180,26 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleCreateNewWeek(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Add Next Week</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleApplySep2RosterToAllWeeks}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+                  title="Apply employees entered in Sep 2 - Sep 8 across all pay periods"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Apply Sep 2–8 Employees to All Weeks</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateNewWeek(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Next Week</span>
+                </button>
+              </div>
             </div>
 
             {/* 1. All Weeks Comparative Grid Table */}
@@ -1355,8 +1453,19 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                     Continuous cumulative production, total wages paid, gross profits generated, and overall blended margin.
                   </p>
                 </div>
-                <div className="px-3 py-1 bg-slate-800 rounded-lg text-xs font-mono font-bold text-slate-300 border border-slate-700">
-                  {runningTotals.totalWeeksCount} Completed Weeks Recorded
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleApplySep2RosterToAllWeeks}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                    title="Apply employees entered in Sep 2 - Sep 8 across all pay periods"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Apply Sep 2–8 Employees to All Weeks</span>
+                  </button>
+                  <div className="px-3 py-1 bg-slate-800 rounded-lg text-xs font-mono font-bold text-slate-300 border border-slate-700">
+                    {runningTotals.totalWeeksCount} Completed Weeks Recorded
+                  </div>
                 </div>
               </div>
 

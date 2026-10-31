@@ -450,6 +450,81 @@ export function getNextWednesdayTuesdayPayPeriod(referenceDateStr?: string): {
 }
 
 /**
+ * Propagates the employee roster from Pay Period Sep 2 - Sep 8 across all other pay periods in the ledger,
+ * completely replacing any sample placeholder employees (e.g. Marcus Vance, Jake Reynolds) with the user's
+ * real entered staff.
+ */
+export function syncRosterFromSep2ToAllWeeks(
+  weeksList: ProfitabilityWeek[],
+  overrideMasterRows?: EmployeeProfitabilityRow[]
+): ProfitabilityWeek[] {
+  if (!Array.isArray(weeksList) || weeksList.length === 0) return weeksList;
+
+  // Locate the Sep 2 - Sep 8 starting week
+  const sep2Week = weeksList.find(w => 
+    w.id === 'week_2026_09_08' || 
+    w.weekStartDate === '2026-09-02' ||
+    w.weekEndingDate === '2026-09-08' ||
+    (w.weekLabel && w.weekLabel.toLowerCase().includes('sep 2'))
+  ) || weeksList[weeksList.length - 1];
+
+  let masterRows = overrideMasterRows;
+  if (!masterRows || masterRows.length === 0) {
+    if (sep2Week && Array.isArray(sep2Week.rows) && sep2Week.rows.length > 0) {
+      masterRows = sep2Week.rows;
+    }
+  }
+
+  if (!masterRows || masterRows.length === 0) return weeksList;
+
+  return weeksList.map(w => {
+    // If it's the Sep 2 week itself and no override was passed, preserve it exactly as the user entered
+    if (sep2Week && w.id === sep2Week.id && !overrideMasterRows) {
+      return w;
+    }
+
+    // For other weeks: keep strictly the employees from masterRows
+    const updatedRows: EmployeeProfitabilityRow[] = masterRows!.map((m, index) => {
+      const existing = w.rows.find(r => r.name.trim().toLowerCase() === m.name.trim().toLowerCase());
+      if (existing) {
+        return {
+          ...existing,
+          role: m.role || existing.role,
+          payType: m.payType || existing.payType,
+          payRate: m.payRate !== undefined ? m.payRate : existing.payRate,
+          overtimeMultiplier: m.overtimeMultiplier || existing.overtimeMultiplier || 1.5,
+          burdenType: m.burdenType || existing.burdenType || 'PERCENT',
+          burdenValue: m.burdenValue !== undefined ? m.burdenValue : (existing.burdenValue || 10.0),
+          notes: m.notes || existing.notes || ''
+        };
+      }
+
+      return {
+        id: `emp_${w.id}_${index}_${m.name.replace(/\s+/g, '_').toLowerCase()}`,
+        name: m.name,
+        role: m.role || 'Technician',
+        payType: m.payType || 'FLAT_RATE',
+        actualHours: m.actualHours !== undefined ? m.actualHours : 40.0,
+        flaggedHours: m.flaggedHours !== undefined ? m.flaggedHours : (m.payType === 'FLAT_RATE' ? 40.0 : 0.0),
+        payRate: m.payRate !== undefined ? m.payRate : 30.0,
+        overtimeMultiplier: m.overtimeMultiplier || 1.5,
+        laborSales: m.laborSales !== undefined ? m.laborSales : 0.0,
+        grossProfit: 0.0,
+        burdenType: m.burdenType || 'PERCENT',
+        burdenValue: m.burdenValue !== undefined ? m.burdenValue : 10.0,
+        notes: m.notes || ''
+      };
+    });
+
+    return {
+      ...w,
+      updatedAt: new Date().toISOString(),
+      rows: updatedRows
+    };
+  });
+}
+
+/**
  * Standard dealership employee roster template
  */
 const BASE_ROSTER_ROWS: EmployeeProfitabilityRow[] = [
