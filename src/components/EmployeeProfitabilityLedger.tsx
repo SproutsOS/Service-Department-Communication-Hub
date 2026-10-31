@@ -614,22 +614,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 )}
               </div>
 
-              {/* Right: Overhead Burden % & Export */}
+              {/* Right: Export & Actions */}
               <div className="flex items-center gap-3 flex-wrap">
-
-                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-                  <label className="text-[11px] font-black text-slate-600 uppercase">Overhead Burden:</label>
-                  <div className="flex items-center gap-0.5">
-                    <input
-                      type="number"
-                      step="1"
-                      value={activeWeek.defaultBurdenPct}
-                      onChange={(e) => handleUpdateWeekMeta({ defaultBurdenPct: Number(e.target.value) || 0 })}
-                      className="w-14 px-1.5 py-0.5 text-xs font-mono font-bold bg-white border border-slate-300 rounded text-right focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                    />
-                    <span className="text-xs text-slate-500 font-bold">%</span>
-                  </div>
-                </div>
 
                 <button
                   type="button"
@@ -737,7 +723,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   {formatCurrency(activeWeekSummary.totalNetProfit)}
                 </div>
                 <span className="text-[10px] font-bold text-indigo-800">
-                  {activeWeekSummary.overallNetProfitPct.toFixed(1)}% After Burden
+                  {activeWeekSummary.overallNetProfitPct.toFixed(1)}% Margin
                 </span>
               </div>
 
@@ -862,7 +848,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                           <ArrowUpDown className="w-3 h-3 text-slate-400" />
                         </div>
                       </th>
-                      <th className="py-2.5 px-3 text-right">Burden ($)</th>
                       <th 
                         className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
                         onClick={() => handleSortClick('netProfit')}
@@ -888,7 +873,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <tbody className="divide-y divide-slate-200">
                     {computedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={15} className="py-12 text-center text-slate-500">
+                        <td colSpan={14} className="py-12 text-center text-slate-500">
                           <p className="font-semibold text-sm">No employees listed in this sheet.</p>
                           <p className="text-xs text-slate-400 mt-1">Click "+ Add Employee Row" or "Sync Names from Staff" above.</p>
                         </td>
@@ -1043,16 +1028,24 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               </span>
                             </td>
 
-                            {/* Burden Overhead ($) */}
-                            <td className="py-1.5 px-3 text-right font-mono text-slate-500 text-xs min-w-[85px]">
-                              {formatCurrency(r.calculatedBurden)}
-                            </td>
-
-                            {/* Net Profit ($ Computed) */}
-                            <td className={`py-1.5 px-3 text-right font-mono font-black text-xs min-w-[105px] ${
-                              r.netProfit >= 0 ? 'text-indigo-700' : 'text-red-700'
-                            }`}>
-                              {formatCurrency(r.netProfit)}
+                            {/* Net Profit ($ User Input or defaults to Gross Profit) */}
+                            <td className="py-1.5 px-2 text-right min-w-[125px]">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-slate-400 text-xs font-semibold">$</span>
+                                <input
+                                  type="number"
+                                  step="10"
+                                  value={r.manualNetProfit !== undefined && r.manualNetProfit !== null ? r.manualNetProfit : (r.grossProfit ?? '')}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? undefined : Number(e.target.value);
+                                    handleUpdateRow(r.id, { manualNetProfit: val });
+                                  }}
+                                  placeholder="0.00"
+                                  className={`w-24 px-2 py-1 text-right font-mono font-black bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded focus:outline-hidden ${
+                                    r.netProfit >= 0 ? 'text-indigo-700' : 'text-red-600'
+                                  }`}
+                                />
+                              </div>
                             </td>
 
                             {/* Net Profit % (Computed) */}
@@ -1120,9 +1113,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         </td>
                         <td className="py-3 px-3 text-right text-emerald-300 font-black">
                           {activeWeekSummary.overallGrossProfitPct.toFixed(1)}%
-                        </td>
-                        <td className="py-3 px-3 text-right text-slate-300">
-                          {formatCurrency(activeWeekSummary.totalBurden)}
                         </td>
                         <td className="py-3 px-3 text-right text-indigo-300 font-black">
                           {formatCurrency(activeWeekSummary.totalNetProfit)}
@@ -1607,7 +1597,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               </div>
               <div className="text-right text-xs">
                 <div>Printed: {new Date().toLocaleDateString()}</div>
-                <div className="font-bold text-slate-800">Overhead Burden: {activeWeek.defaultBurdenPct}%</div>
               </div>
             </div>
 

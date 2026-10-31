@@ -72,21 +72,14 @@ export function computeEmployeeRow(
   // Gross Profit % = (Gross Profit / Labor Sales) * 100
   const grossProfitPct = laborSales > 0 ? (grossProfit / laborSales) * 100 : 0;
 
-  // 5. Burden / Overhead Cost:
-  // Fixed $ or Percentage of Pay (defaults to defaultBurdenPct)
-  const burdenType = row.burdenType || 'PERCENT';
-  const burdenVal = Number(row.burdenValue ?? defaultBurdenPct);
-  const calculatedBurden = burdenType === 'FIXED' 
-    ? burdenVal 
-    : (totalPay * (burdenVal / 100));
-
-  // 6. Net Profit ($): Manual override if entered, or Gross Profit - calculatedBurden
+  // 5. Net Profit ($): Manual override if entered, or Gross Profit (overhead burden removed)
   let netProfit: number;
   if (row.manualNetProfit !== undefined && row.manualNetProfit !== null && !isNaN(Number(row.manualNetProfit))) {
     netProfit = Number(row.manualNetProfit);
   } else {
-    netProfit = grossProfit - calculatedBurden;
+    netProfit = grossProfit;
   }
+  const calculatedBurden = 0;
 
   const netProfitPct = laborSales > 0 ? (netProfit / laborSales) * 100 : 0;
 
@@ -349,7 +342,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     'Labor Sales ($)',
     'Gross Profit ($)',
     'Gross Profit %',
-    'Burden & Overhead ($)',
     'Net Profit ($)',
     'Net Profit %',
     'Effective Cost/Hr ($)',
@@ -358,7 +350,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
 
   const lines: string[] = [];
   lines.push(`"Employee Profitability Ledger - ${week.weekLabel}"`);
-  lines.push(`"Payroll Cycle: Wednesday to Tuesday | Ending: ${week.weekEndingDate} | Overhead Burden: ${week.defaultBurdenPct}%"`);
+  lines.push(`"Payroll Cycle: Wednesday to Tuesday | Ending: ${week.weekEndingDate}"`);
   lines.push('');
   lines.push(headers.map(h => `"${h}"`).join(','));
 
@@ -374,7 +366,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
       `$${r.laborSales.toFixed(2)}`,
       `$${r.grossProfit.toFixed(2)}`,
       `${r.grossProfitPct.toFixed(1)}%`,
-      `$${r.calculatedBurden.toFixed(2)}`,
       `$${r.netProfit.toFixed(2)}`,
       `${r.netProfitPct.toFixed(1)}%`,
       `$${r.effectiveCostPerHour.toFixed(2)}`,
@@ -396,7 +387,6 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     `"$${summary.totalRevenue.toFixed(2)}"`,
     `"$${summary.totalGrossProfit.toFixed(2)}"`,
     `"${summary.overallGrossProfitPct.toFixed(1)}%"`,
-    `"$${summary.totalBurden.toFixed(2)}"`,
     `"$${summary.totalNetProfit.toFixed(2)}"`,
     `"${summary.overallNetProfitPct.toFixed(1)}%"`,
     '""',
