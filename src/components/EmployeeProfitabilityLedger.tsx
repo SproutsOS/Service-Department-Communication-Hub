@@ -319,66 +319,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     }
   };
 
-  // Quick 1-click import of employee names from dealership staff roster
-  const handleImportStaffFromRoster = () => {
-    if (!activeWeek) return;
-    const existingNames = new Set(activeWeek.rows.map(r => r.name.toLowerCase().trim()));
-    const newStaffRows: EmployeeProfitabilityRow[] = [];
 
-    users.forEach(u => {
-
-      const name = (u.name || '').trim();
-      if (!name || existingNames.has(name.toLowerCase())) return;
-
-      let inferredPayType: EmployeePayType = 'FLAT_RATE';
-      let payRate = 30.00;
-
-      if (u.role === 'TECHNICIAN') {
-        const titleLower = (u.title || '').toLowerCase();
-        if (titleLower.includes('lube') || titleLower.includes('express') || titleLower.includes('oil')) {
-          inferredPayType = 'HOURLY';
-          payRate = 18.00;
-        } else {
-          inferredPayType = 'FLAT_RATE';
-          payRate = 32.00;
-        }
-      } else if (u.role === 'SERVICE_ADVISOR' || u.role === 'SERVICE_MANAGER') {
-        inferredPayType = 'SALARY';
-        payRate = u.role === 'SERVICE_MANAGER' ? 1750.00 : 1250.00;
-      }
-
-      newStaffRows.push({
-        id: `emp_roster_${u.id}_${Date.now()}`,
-        name: u.name,
-        role: u.title || (u.role === 'TECHNICIAN' ? 'Technician' : u.role === 'SERVICE_ADVISOR' ? 'Service Advisor' : 'Staff'),
-        payType: inferredPayType,
-        actualHours: 40.0,
-        flaggedHours: inferredPayType === 'FLAT_RATE' ? 40.0 : 0.0,
-        payRate,
-        laborSales: 0.00,
-        grossProfit: 0.00,
-        burdenType: 'PERCENT',
-        burdenValue: activeWeek.defaultBurdenPct || 10.0,
-        notes: `Imported from roster (${u.role.replace('_', ' ')})`
-      });
-    });
-
-    if (newStaffRows.length === 0) {
-      alert('All staff from your employee roster are already listed in this week.');
-      return;
-    }
-
-    const updatedWeeks = weeks.map(w => {
-      if (w.id !== activeWeek.id) return w;
-      return {
-        ...w,
-        updatedAt: new Date().toISOString(),
-        rows: [...w.rows, ...newStaffRows]
-      };
-    });
-    saveWeeks(updatedWeeks);
-    triggerSaveToast(`Imported ${newStaffRows.length} team members from roster.`);
-  };
 
   // Explicit 1-click action to synchronize user-added roster across all weekly sheets
   const handleSyncRosterToAllWeeks = () => {
