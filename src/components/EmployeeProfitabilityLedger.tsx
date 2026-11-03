@@ -534,16 +534,6 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 </button>
 
 
-                <button
-                  type="button"
-                  onClick={handleSyncRosterToAllWeeks}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-                  title="Ensure all employees you added are present across every weekly pay period in the ledger"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Sync Roster Across All Weeks</span>
-                </button>
-
                 {weeks.length > 1 && (
                   <button
                     type="button"
