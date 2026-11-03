@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   BarChart3, 
   Users, 
@@ -15,26 +15,28 @@ import {
   ListFilter, 
   Check, 
   Calendar, 
-  CalendarDays,
-  CalendarCheck,
-  Award,
-  Calculator,
-  ShieldCheck,
-  PhoneCall,
-  ExternalLink,
-  Receipt,
-  Archive,
-  ChevronRight,
-  Bell,
-  X,
-  Bookmark,
-  Tag,
-  Phone,
-  KeyRound,
-  ShieldAlert,
-  PhoneForwarded,
-  RefreshCw,
-  Plus
+  CalendarDays, 
+  CalendarCheck, 
+  Award, 
+  Calculator, 
+  ShieldCheck, 
+  PhoneCall, 
+  ExternalLink, 
+  Receipt, 
+  Archive, 
+  ChevronRight, 
+  ChevronDown,
+  BookOpen,
+  Bell, 
+  X, 
+  Bookmark, 
+  Tag, 
+  Phone, 
+  KeyRound, 
+  ShieldAlert, 
+  PhoneForwarded, 
+  RefreshCw, 
+  Plus 
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -81,6 +83,35 @@ export const ManagerDashboard: React.FC = () => {
   const [selectedWorkloadTech, setSelectedWorkloadTech] = useState<User | null>(null);
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
   const [isPartsOnOrderModalOpen, setIsPartsOnOrderModalOpen] = useState(false);
+  const [isDirectoriesMenuOpen, setIsDirectoriesMenuOpen] = useState(false);
+  const directoriesMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isDirectoriesMenuOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDirectoriesMenuOpen(false);
+      }
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (directoriesMenuRef.current && !directoriesMenuRef.current.contains(e.target as Node)) {
+        setIsDirectoriesMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDirectoriesMenuOpen]);
+
+  const totalDirectoriesCount = (specialParts?.length || 0) + 
+    (importantNumbers?.length || 0) + 
+    (managerPasswords?.length || 0) + 
+    (recallWaitingList?.length || 0) + 
+    (internalExtensions?.length || 0);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ROStatus | 'ALL' | 'CALLS_DUE'>('ALL');
   const [techFilter, setTechFilter] = useState<string>('ALL');
@@ -312,22 +343,8 @@ export const ManagerDashboard: React.FC = () => {
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            id="open-archived-ros-mgr"
-            onClick={() => openArchivedROsModal()}
-            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600"
-            title="Open Archived Closed Repair Orders Repository"
-          >
-            <Archive className="w-4 h-4 text-amber-400" />
-            <span>Archived ROs</span>
-            {completedCount > 0 && (
-              <span className="bg-slate-900 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-slate-700">
-                {completedCount}
-              </span>
-            )}
-          </button>
-
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Daily Parts Tracker Board Toggle */}
           <button
             id="open-parts-on-order-report-mgr"
             onClick={() => setViewSection(viewSection === 'PARTS_TRACKER' ? 'FLOOR' : 'PARTS_TRACKER')}
@@ -347,96 +364,173 @@ export const ManagerDashboard: React.FC = () => {
             )}
           </button>
 
-          <button
-            id="open-special-parts-mgr"
-            onClick={() => openSpecialPartsModal()}
-            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-amber-400"
-            title="Open Frequent & Special Part Numbers Directory"
-          >
-            <Bookmark className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-            <span>Special Parts</span>
-            {specialParts.length > 0 && (
-              <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400/40">
-                {specialParts.length}
-              </span>
-            )}
-          </button>
+          {/* Quick Directories & Resources Dropdown */}
+          <div ref={directoriesMenuRef} className="relative">
+            <button
+              id="open-directories-menu-mgr"
+              type="button"
+              onClick={() => setIsDirectoriesMenuOpen(prev => !prev)}
+              className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border ${
+                isDirectoriesMenuOpen
+                  ? 'bg-slate-700 text-white border-blue-400 ring-2 ring-blue-400/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-600'
+              }`}
+              title="Shop Directories, Numbers, Passwords & Recall Lists"
+            >
+              <BookOpen className="w-4 h-4 text-amber-400" />
+              <span>Directories & Vaults</span>
+              {totalDirectoriesCount > 0 && (
+                <span className="bg-slate-900 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-slate-700 font-mono">
+                  {totalDirectoriesCount}
+                </span>
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isDirectoriesMenuOpen ? 'rotate-180 text-white' : ''}`} />
+            </button>
 
-          <button
-            id="open-important-numbers-mgr"
-            onClick={() => openImportantNumbersModal()}
-            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-sky-400"
-            title="Open Important Phone Numbers & Vendor Directory"
-          >
-            <Phone className="w-4 h-4 text-sky-400" />
-            <span>Important Numbers</span>
-            {importantNumbers.length > 0 && (
-              <span className="bg-sky-500/20 text-sky-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-sky-400/40">
-                {importantNumbers.length}
-              </span>
-            )}
-          </button>
+            {isDirectoriesMenuOpen && (
+              <div 
+                id="manager-directories-dropdown"
+                className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-2xl border-2 border-slate-300 z-50 animate-in fade-in zoom-in-95 duration-100 text-slate-900 overflow-hidden"
+              >
+                <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <span className="font-black text-xs uppercase tracking-wider text-slate-700">Shop References</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-400">Quick Access</span>
+                </div>
 
-          <button
-            id="open-manager-passwords-mgr"
-            onClick={() => openManagerPasswordsModal()}
-            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-indigo-400"
-            title="Open Manager Passwords & Portal Credentials Vault"
-          >
-            <KeyRound className="w-4 h-4 text-indigo-400" />
-            <span>Passwords</span>
-            {managerPasswords.length > 0 && (
-              <span className="bg-indigo-500/20 text-indigo-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-indigo-400/40">
-                {managerPasswords.length}
-              </span>
-            )}
-          </button>
+                <div className="p-1.5 divide-y divide-slate-100">
+                  {/* Special Parts */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectoriesMenuOpen(false);
+                      openSpecialPartsModal();
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-amber-50/70 text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-amber-100 text-amber-700 group-hover:bg-amber-200 transition-colors">
+                        <Bookmark className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-amber-800">Special Parts</div>
+                        <div className="text-[10px] text-slate-500">Frequent & special order part numbers</div>
+                      </div>
+                    </div>
+                    {specialParts.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-mono">
+                        {specialParts.length}
+                      </span>
+                    )}
+                  </button>
 
-          <button
-            id="open-recall-waiting-mgr"
-            onClick={() => openRecallWaitingModal()}
-            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-red-400"
-            title="Open Recall Waiting List (Track customers waiting on recall parts, ordered oldest to newest)"
-          >
-            <ShieldAlert className="w-4 h-4 text-red-400" />
-            <span>Recall Waiting List</span>
-            {recallWaitingList.length > 0 && (
-              <span className="bg-red-500/20 text-red-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-red-400/40 font-mono">
-                {recallWaitingList.length}
-              </span>
-            )}
-          </button>
+                  {/* Important Numbers */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectoriesMenuOpen(false);
+                      openImportantNumbersModal();
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-sky-50/70 text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-sky-100 text-sky-700 group-hover:bg-sky-200 transition-colors">
+                        <Phone className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-sky-800">Important Numbers</div>
+                        <div className="text-[10px] text-slate-500">Vendors, hotlines & towing contacts</div>
+                      </div>
+                    </div>
+                    {importantNumbers.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300 font-mono">
+                        {importantNumbers.length}
+                      </span>
+                    )}
+                  </button>
 
-          <button
-            id="open-internal-extensions-mgr"
-            onClick={() => openInternalExtensionModal()}
-            className="inline-flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer border border-slate-600 hover:border-teal-400"
-            title="Open Dealership Internal Phone & Extension Directory (By Name, Extension #, Department)"
-          >
-            <PhoneForwarded className="w-4 h-4 text-teal-400" />
-            <span>Phone Extensions</span>
-            {internalExtensions.length > 0 && (
-              <span className="bg-teal-500/20 text-teal-300 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-teal-400/40 font-mono">
-                {internalExtensions.length}
-              </span>
-            )}
-          </button>
+                  {/* Manager Passwords */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectoriesMenuOpen(false);
+                      openManagerPasswordsModal();
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-indigo-50/70 text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 transition-colors">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-indigo-800">Manager Passwords</div>
+                        <div className="text-[10px] text-slate-500">Portals & DMS credentials vault</div>
+                      </div>
+                    </div>
+                    {managerPasswords.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-300 font-mono">
+                        {managerPasswords.length}
+                      </span>
+                    )}
+                  </button>
 
-          <button
-            id="open-quote-builder-mgr"
-            onClick={() => openQuoteBuilder()}
-            className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer"
-            title="Pre-RO Quote & Estimate Builder (Roll into Repair Orders)"
-          >
-            <Receipt className="w-4 h-4 text-amber-200" />
-            <span>Quote Builder</span>
-            {quotes.length > 0 && (
-              <span className="bg-amber-950 text-amber-200 text-[10px] px-1.5 py-0.2 rounded-full font-black border border-amber-400">
-                {quotes.length}
-              </span>
-            )}
-          </button>
+                  {/* Recall Waiting List */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectoriesMenuOpen(false);
+                      openRecallWaitingModal();
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-red-50/70 text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-red-100 text-red-700 group-hover:bg-red-200 transition-colors">
+                        <ShieldAlert className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-red-800">Recall Waiting List</div>
+                        <div className="text-[10px] text-slate-500">Customers waiting on recall parts</div>
+                      </div>
+                    </div>
+                    {recallWaitingList.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 font-mono">
+                        {recallWaitingList.length}
+                      </span>
+                    )}
+                  </button>
 
+                  {/* Internal Phone Extensions */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDirectoriesMenuOpen(false);
+                      openInternalExtensionModal();
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-teal-50/70 text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-teal-100 text-teal-700 group-hover:bg-teal-200 transition-colors">
+                        <PhoneForwarded className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-teal-800">Phone Extensions</div>
+                        <div className="text-[10px] text-slate-500">Dealership staff internal extensions</div>
+                      </div>
+                    </div>
+                    {internalExtensions.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300 font-mono">
+                        {internalExtensions.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Primary Action Button */}
           <button
             id="create-new-ro-btn-mgr"
             onClick={() => setIsNewROModalOpen(true)}
