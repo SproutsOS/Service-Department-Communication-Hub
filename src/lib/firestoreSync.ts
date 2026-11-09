@@ -16,6 +16,7 @@ import {
 import { db, auth } from './firebase';
 import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer, StandaloneQuote } from '../types';
 import { ProfitabilityWeek } from '../types/employeeProfitability';
+import { DailySalesRecord } from '../types/dailySales';
 
 // Collection references
 export const REPAIR_ORDERS_COL = 'repairOrders';
@@ -25,6 +26,7 @@ export const NOTIFICATIONS_COL = 'notifications';
 export const SETTINGS_COL = 'settings';
 export const SHOP_SETTINGS_DOC = 'shop';
 export const PROFITABILITY_LEDGER_DOC = 'profitabilityLedger';
+export const DAILY_SALES_TRACKER_DOC = 'dailySalesTracker';
 export const SHOP_MESSAGES_COL = 'shopMessages';
 export const QUOTES_COL = 'standaloneQuotes';
 
@@ -675,4 +677,42 @@ export function subscribeToProfitabilityWeeks(callback: (weeks: ProfitabilityWee
     handleFirestoreError(error, OperationType.GET, `${SETTINGS_COL}/${PROFITABILITY_LEDGER_DOC}`);
   });
 }
+
+/**
+ * Persists Daily Sales & RO Count records to Firestore under settings/dailySalesTracker
+ */
+export async function syncDailySalesToCloud(records: DailySalesRecord[]): Promise<boolean> {
+  try {
+    const docRef = doc(db, SETTINGS_COL, DAILY_SALES_TRACKER_DOC);
+    const cleanData = sanitizeForFirestore({
+      records,
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(docRef, cleanData, { merge: true });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COL}/${DAILY_SALES_TRACKER_DOC}`);
+    return false;
+  }
+}
+
+/**
+ * Real-time listener for Daily Sales & RO Count Tracker in Firestore.
+ */
+export function subscribeToDailySales(callback: (records: DailySalesRecord[] | null) => void) {
+  const docRef = doc(db, SETTINGS_COL, DAILY_SALES_TRACKER_DOC);
+  return onSnapshot(docRef, (snapshot) => {
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      if (Array.isArray(data?.records)) {
+        callback(data.records as DailySalesRecord[]);
+        return;
+      }
+    }
+    callback(null);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, `${SETTINGS_COL}/${DAILY_SALES_TRACKER_DOC}`);
+  });
+}
+
 

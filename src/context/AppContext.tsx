@@ -136,8 +136,8 @@ interface AppContextType {
   isStaffManagementOpen: boolean;
   isTimeCardCalculatorOpen: boolean;
   isCustomerDirectoryOpen: boolean;
-  managerViewSection: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER';
-  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER') => void;
+  managerViewSection: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES';
+  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES') => void;
   prefilledCustomerForNewRO: Customer | null;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
@@ -784,12 +784,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [profitLedgerPassword]);
 
   const requestOpenProfitLedger = useCallback(() => {
-    if (isProfitLedgerUnlocked) {
-      openEmployeeProfitability();
-    } else {
-      setIsProfitLedgerPasswordModalOpen(true);
-    }
-  }, [isProfitLedgerUnlocked, openEmployeeProfitability]);
+    setIsProfitLedgerUnlocked(false);
+    setIsProfitLedgerPasswordModalOpen(true);
+  }, []);
 
   const lockProfitLedger = useCallback(() => {
     setIsProfitLedgerUnlocked(false);
@@ -837,7 +834,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return getInitialStaffLeaveEntries();
   });
   const [isStaffCalendarOpen, setIsStaffCalendarOpen] = useState(false);
-  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER'>('FLOOR');
+  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES'>('FLOOR');
 
   // Service Appointment Calendar (Service Advisors & Service Manager)
   const [appointments, setAppointments] = useState<ServiceAppointment[]>(() => {

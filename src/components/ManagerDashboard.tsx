@@ -48,6 +48,7 @@ import { CustomerFollowUpModal } from './CustomerFollowUpModal';
 import { ManagerPartsOnOrderModal } from './ManagerPartsOnOrderModal';
 import { TechWorkloadModal } from './TechWorkloadModal';
 import { DailyPartsTrackerBoard } from './DailyPartsTrackerBoard';
+import { DailySalesTrackerBoard } from './DailySalesTrackerBoard';
 import { getContactCadenceStatus, isEligibleForCadence, isWoolwineVehicle } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
@@ -344,6 +345,21 @@ export const ManagerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Daily RO & Sales Tracker Board Toggle */}
+          <button
+            id="open-daily-sales-tracker-mgr"
+            onClick={() => setViewSection(viewSection === 'DAILY_SALES' ? 'FLOOR' : 'DAILY_SALES')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer ${
+              viewSection === 'DAILY_SALES'
+                ? 'bg-emerald-600 text-white border-2 border-emerald-300 ring-2 ring-emerald-400/40'
+                : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+            }`}
+            title="Open Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2026)"
+          >
+            <BarChart3 className="w-4 h-4 text-emerald-200" />
+            <span>Daily RO & Sales Tracker</span>
+          </button>
+
           {/* Daily Parts Tracker Board Toggle */}
           <button
             id="open-parts-on-order-report-mgr"
@@ -761,6 +777,8 @@ export const ManagerDashboard: React.FC = () => {
 
       {viewSection === 'PARTS_TRACKER' ? (
         <DailyPartsTrackerBoard onOpenRO={(ro) => setSelectedRO(ro)} />
+      ) : viewSection === 'DAILY_SALES' ? (
+        <DailySalesTrackerBoard onBackToDashboard={() => setViewSection('FLOOR')} />
       ) : viewSection === 'CALL_SHEET' ? (
         <CustomerCallSheetWidget 
           onSelectRO={setSelectedRO}

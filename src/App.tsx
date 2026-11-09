@@ -54,7 +54,8 @@ import {
   PhoneCall,
   PlusCircle,
   Receipt,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BarChart3
 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -307,6 +308,29 @@ const MainContent: React.FC = () => {
                   >
                     <LayoutDashboard className="w-4 h-4 shrink-0 text-blue-400" />
                     <span className="text-sm font-medium">Shop Tracker</span>
+                  </button>
+
+                  {/* Daily RO & Sales Tracker */}
+                  <button
+                    id="sidebar-daily-sales-tracker-btn"
+                    onClick={() => {
+                      setIsStaffManagementOpen(false);
+                      setIsTimeCardCalculatorOpen(false);
+                      setIsStaffCalendarOpen(false);
+                      setIsAppointmentCalendarOpen(false);
+                      setIsEmployeeProfitabilityOpen(false);
+                      setActiveRoleView('SERVICE_MANAGER');
+                      setManagerViewSection('DAILY_SALES');
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors cursor-pointer mt-1 ${
+                      !isStaffManagementOpen && !isTimeCardCalculatorOpen && !isStaffCalendarOpen && !isAppointmentCalendarOpen && !isEmployeeProfitabilityOpen && activeRoleView === 'SERVICE_MANAGER' && managerViewSection === 'DAILY_SALES'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2026)"
+                  >
+                    <BarChart3 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span className="text-sm font-medium">Daily Sales Tracker</span>
                   </button>
 
                   {/* 2. Daily Call Log */}

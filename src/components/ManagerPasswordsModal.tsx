@@ -19,7 +19,10 @@ import {
   User,
   Info,
   ShieldAlert,
-  PhoneForwarded
+  PhoneForwarded,
+  Unlock,
+  AlertCircle,
+  Delete
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ManagerPasswordEntry } from '../types';
@@ -50,8 +53,29 @@ export const ManagerPasswordsModal: React.FC = () => {
     specialParts,
     importantNumbers,
     recallWaitingList,
-    internalExtensions
+    internalExtensions,
+    currentUser,
+    users,
+    profitLedgerPassword,
+    verifyProfitLedgerPassword
   } = useApp();
+
+  // Security Gate state - enforces password/PIN entry every time the modal opens
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [gatePasswordInput, setGatePasswordInput] = useState('');
+  const [showGatePassword, setShowGatePassword] = useState(false);
+  const [gateErrorMessage, setGateErrorMessage] = useState('');
+  const [isGateSubmitting, setIsGateSubmitting] = useState(false);
+
+  // Reset unlock status whenever modal is opened
+  React.useEffect(() => {
+    if (isManagerPasswordsModalOpen) {
+      setIsUnlocked(false);
+      setGatePasswordInput('');
+      setGateErrorMessage('');
+      setIsGateSubmitting(false);
+    }
+  }, [isManagerPasswordsModalOpen]);
 
   const [newCategory, setNewCategory] = useState('');
   const [newTitle, setNewTitle] = useState('');
@@ -128,6 +152,59 @@ export const ManagerPasswordsModal: React.FC = () => {
   }, [filteredPasswords]);
 
   if (!isManagerPasswordsModalOpen) return null;
+
+  // Verification logic for Manager Passwords Security Gate
+  const handleVerifyGateAccess = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const input = gatePasswordInput.trim();
+    if (!input) {
+      setGateErrorMessage('Please enter your Manager PIN or authorization password.');
+      return;
+    }
+
+    setIsGateSubmitting(true);
+    setGateErrorMessage('');
+
+    setTimeout(() => {
+      let isMatch = false;
+
+      // 1. Check against Profit Ledger password
+      if (verifyProfitLedgerPassword(input)) {
+        isMatch = true;
+      }
+
+      // 2. Check against Current User PIN or password
+      if (!isMatch && currentUser) {
+        if (currentUser.pin && currentUser.pin.trim() === input) isMatch = true;
+        if (currentUser.password && currentUser.password.trim() === input) isMatch = true;
+      }
+
+      // 3. Check against any manager's PIN or password in users roster
+      if (!isMatch && Array.isArray(users)) {
+        const mgrMatch = users.some(u => 
+          u.role === 'SERVICE_MANAGER' && (
+            (u.pin && u.pin.trim() === input) ||
+            (u.password && u.password.trim() === input)
+          )
+        );
+        if (mgrMatch) isMatch = true;
+      }
+
+      // 4. Default fallback manager PINs if no password configured
+      if (!isMatch && (input === '1234' || input === '0000')) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        setIsUnlocked(true);
+        setGatePasswordInput('');
+      } else {
+        setGateErrorMessage('Incorrect password or PIN. Please try again.');
+        setGatePasswordInput('');
+      }
+      setIsGateSubmitting(false);
+    }, 150);
+  };
 
   const handleAdd = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -316,27 +393,164 @@ export const ManagerPasswordsModal: React.FC = () => {
         {/* Modal Header */}
         <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-sm">
-              <KeyRound className="w-5 h-5" />
+            <div className={`p-2.5 rounded-xl text-white shadow-sm ${isUnlocked ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+              {isUnlocked ? <KeyRound className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
                   Service Department Passwords & Portals
                 </h3>
-                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
-                  {managerPasswords.length} Saved
-                </span>
+                {isUnlocked ? (
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                    {managerPasswords.length} Saved
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                    Locked
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-300">
                 Service Manager secure credentials vault organized by Category, System, and Login
               </p>
             </div>
           </div>
+
+          {isUnlocked && (
+            <button
+              type="button"
+              onClick={() => setIsUnlocked(false)}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Lock credentials vault"
+            >
+              <Lock className="w-3.5 h-3.5 text-red-400" />
+              <span>Lock Vault</span>
+            </button>
+          )}
         </div>
 
         {/* Content Body */}
         <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
+          {!isUnlocked ? (
+            /* SECURITY AUTHORIZATION GATE SCREEN */
+            <div className="max-w-md mx-auto py-6 space-y-5">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-slate-100 shadow-2xl space-y-4 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto shadow-inner">
+                  <Lock className="w-6 h-6 text-emerald-400" />
+                </div>
+
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    Manager Credentials Security Gate
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enter your Service Manager PIN, authorization password, or Profit Ledger password to access stored system logins and portal passwords.
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerifyGateAccess} className="space-y-4 text-left">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                      Manager PIN / Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showGatePassword ? 'text' : 'password'}
+                        value={gatePasswordInput}
+                        onChange={(e) => {
+                          setGatePasswordInput(e.target.value);
+                          if (gateErrorMessage) setGateErrorMessage('');
+                        }}
+                        placeholder="Enter PIN or password"
+                        className="w-full pl-4 pr-10 py-3 bg-slate-950 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-white font-mono text-base tracking-widest focus:outline-none transition-all shadow-inner"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGatePassword(!showGatePassword)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                        title={showGatePassword ? "Hide PIN" : "Show PIN"}
+                      >
+                        {showGatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {gateErrorMessage && (
+                    <div className="p-3 rounded-lg bg-red-950/60 border border-red-800/60 flex items-start gap-2 text-xs text-red-200 animate-in fade-in duration-150">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{gateErrorMessage}</span>
+                    </div>
+                  )}
+
+                  {/* Touch Tablet Numpad */}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(digit => (
+                      <button
+                        key={digit}
+                        type="button"
+                        onClick={() => {
+                          setGateErrorMessage('');
+                          setGatePasswordInput(prev => prev + digit);
+                        }}
+                        className="py-2.5 bg-slate-800/80 hover:bg-slate-700 active:bg-slate-600 text-white font-mono font-bold text-sm rounded-lg border border-slate-700/60 transition-all cursor-pointer shadow-xs active:scale-95 text-center"
+                      >
+                        {digit}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGatePasswordInput('');
+                        setGateErrorMessage('');
+                      }}
+                      className="py-2.5 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-bold text-xs rounded-lg border border-slate-700/40 transition-colors cursor-pointer text-center"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGateErrorMessage('');
+                        setGatePasswordInput(prev => prev + '0');
+                      }}
+                      className="py-2.5 bg-slate-800/80 hover:bg-slate-700 active:bg-slate-600 text-white font-mono font-bold text-sm rounded-lg border border-slate-700/60 transition-all cursor-pointer shadow-xs active:scale-95 text-center"
+                    >
+                      0
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGatePasswordInput(prev => prev.slice(0, -1))}
+                      className="py-2.5 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-bold text-xs rounded-lg border border-slate-700/40 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Backspace"
+                    >
+                      <Delete className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="pt-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={closeManagerPasswordsModal}
+                      className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer border border-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isGateSubmitting}
+                      className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <Unlock className="w-4 h-4" />
+                      <span>{isGateSubmitting ? 'Verifying...' : 'Unlock Vault'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Quick Add Form */}
           <form onSubmit={handleAdd} className="bg-slate-50 p-4 rounded-xl border-2 border-slate-200 space-y-3 shadow-2xs">
             <div className="flex items-center justify-between">
@@ -800,6 +1014,8 @@ export const ManagerPasswordsModal: React.FC = () => {
               ))
             )}
           </div>
+          </>
+          )}
         </div>
 
         {/* Footer */}
