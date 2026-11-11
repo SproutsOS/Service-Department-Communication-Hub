@@ -136,8 +136,8 @@ interface AppContextType {
   isStaffManagementOpen: boolean;
   isTimeCardCalculatorOpen: boolean;
   isCustomerDirectoryOpen: boolean;
-  managerViewSection: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES';
-  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES') => void;
+  managerViewSection: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES' | 'MANAGER_LOG';
+  setManagerViewSection: (section: 'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES' | 'MANAGER_LOG') => void;
   prefilledCustomerForNewRO: Customer | null;
   isSoundEnabled: boolean;
   pushPermission: NotificationPermission | 'default';
@@ -834,7 +834,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return getInitialStaffLeaveEntries();
   });
   const [isStaffCalendarOpen, setIsStaffCalendarOpen] = useState(false);
-  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES'>('FLOOR');
+  const [managerViewSection, setManagerViewSection] = useState<'FLOOR' | 'CALL_SHEET' | 'PARTS_TRACKER' | 'DAILY_SALES' | 'MANAGER_LOG'>('FLOOR');
 
   // Service Appointment Calendar (Service Advisors & Service Manager)
   const [appointments, setAppointments] = useState<ServiceAppointment[]>(() => {

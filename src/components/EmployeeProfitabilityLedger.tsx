@@ -857,6 +857,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         const isFlatRate = r.payType === 'FLAT_RATE';
                         const isHourly = r.payType === 'HOURLY';
                         const isSalary = r.payType === 'SALARY';
+                        const isHourlyPlusFlag = r.payType === 'HOURLY_PLUS_FLAG';
 
                         return (
                           <tr 
@@ -879,14 +880,16 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               />
                             </td>
 
-                            {/* Pay Type Selector (Salary / Flat Rate / Hourly) */}
-                            <td className="py-1.5 px-2 min-w-[120px]">
+                            {/* Pay Type Selector (Salary / Flat Rate / Hourly / Hourly + Flag) */}
+                            <td className="py-1.5 px-2 min-w-[130px]">
                               <select
                                 value={r.payType}
                                 onChange={(e) => handleUpdateRow(r.id, { payType: e.target.value as EmployeePayType })}
                                 className={`px-2 py-1 text-xs font-bold rounded border cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-blue-500 ${
                                   isSalary 
                                     ? 'bg-purple-50 text-purple-800 border-purple-300' 
+                                    : isHourlyPlusFlag
+                                    ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
                                     : isFlatRate 
                                     ? 'bg-blue-50 text-blue-800 border-blue-300' 
                                     : 'bg-emerald-50 text-emerald-800 border-emerald-300'
@@ -894,6 +897,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               >
                                 <option value="FLAT_RATE">FLAT RATE</option>
                                 <option value="HOURLY">HOURLY</option>
+                                <option value="HOURLY_PLUS_FLAG">HOURLY + FLAG</option>
                                 <option value="SALARY">SALARY</option>
                               </select>
                             </td>
@@ -935,21 +939,52 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               </span>
                             </td>
 
-                            {/* Rate of Pay ($/hr or $/wk) */}
-                            <td className="py-1.5 px-2 text-right min-w-[110px]">
-                              <div className="flex items-center justify-end gap-1">
-                                <span className="text-slate-400 text-xs">$</span>
-                                <input
-                                  type="number"
-                                  step={isSalary ? '50' : '0.5'}
-                                  value={r.payRate}
-                                  onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 })}
-                                  className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
-                                />
-                                <span className="text-[10px] text-slate-400 font-medium">
-                                  {isSalary ? '/wk' : '/hr'}
-                                </span>
-                              </div>
+                            {/* Rate of Pay ($/hr, $/wk, or Base $/hr + Flag $/hr) */}
+                            <td className="py-1.5 px-2 text-right min-w-[150px]">
+                              {isHourlyPlusFlag ? (
+                                <div className="flex flex-col items-end gap-1 text-[11px]">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="text-slate-500 text-[10px] font-bold">Base: $</span>
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      value={r.payRate}
+                                      onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 })}
+                                      className="w-16 px-1.5 py-0.5 text-right font-mono font-bold bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
+                                      placeholder="0.00"
+                                      title="Base hourly pay rate for actual clock hours"
+                                    />
+                                    <span className="text-[10px] text-slate-500 font-medium">/hr</span>
+                                  </div>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="text-indigo-600 text-[10px] font-bold">+Flag: $</span>
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      value={r.flagRate ?? 0}
+                                      onChange={(e) => handleUpdateRow(r.id, { flagRate: Number(e.target.value) || 0 })}
+                                      className="w-16 px-1.5 py-0.5 text-right font-mono font-bold bg-indigo-50/80 focus:bg-white border border-indigo-300 focus:border-indigo-500 rounded text-indigo-900 focus:outline-hidden"
+                                      placeholder="0.00"
+                                      title="Flag bonus rate per billed/flagged hour"
+                                    />
+                                    <span className="text-[10px] text-indigo-600 font-bold">/flag</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-slate-400 text-xs">$</span>
+                                  <input
+                                    type="number"
+                                    step={isSalary ? '50' : '0.5'}
+                                    value={r.payRate}
+                                    onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 })}
+                                    className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
+                                  />
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    {isSalary ? '/wk' : '/hr'}
+                                  </span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Total Pay ($ Computed) */}
@@ -1079,6 +1114,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <span><strong>FLAT RATE:</strong> Flagged Hrs × Pay Rate</span>
                   <span>•</span>
                   <span><strong>HOURLY:</strong> Actual Hrs × Pay Rate (1.5x OT after 40h)</span>
+                  <span>•</span>
+                  <span><strong>HOURLY + FLAG:</strong> (Actual Hrs × Base Rate) + (Flagged Hrs × Flag Rate)</span>
                   <span>•</span>
                   <span><strong>SALARY:</strong> Fixed Weekly Base Pay</span>
                 </div>

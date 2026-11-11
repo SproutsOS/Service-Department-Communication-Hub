@@ -1,4 +1,4 @@
-export type EmployeePayType = 'SALARY' | 'FLAT_RATE' | 'HOURLY';
+export type EmployeePayType = 'SALARY' | 'FLAT_RATE' | 'HOURLY' | 'HOURLY_PLUS_FLAG';
 
 export interface EmployeeProfitabilityRow {
   id: string;
@@ -7,7 +7,8 @@ export interface EmployeeProfitabilityRow {
   payType: EmployeePayType;
   actualHours: number; // Clocked attendance hours (e.g., 40.0)
   flaggedHours: number; // Flat-rate / billable hours produced (e.g., 52.5)
-  payRate: number; // $/hr for Hourly/Flat-rate, or Weekly Fixed $ for Salary
+  payRate: number; // $/hr for Hourly/Flat-rate, or Weekly Fixed $ for Salary, or Base $/hr for HOURLY_PLUS_FLAG
+  flagRate?: number; // Optional $/flag hr bonus rate when payType is HOURLY_PLUS_FLAG
   laborSales: number; // Direct user input: Labor Sales in dollars (e.g. 5200.00)
   grossProfit: number; // Direct user input: Gross Profit in dollars (e.g. 3850.00)
   manualNetProfit?: number; // Optional user override for Net Profit in dollars

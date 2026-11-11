@@ -36,7 +36,8 @@ import {
   ShieldAlert, 
   PhoneForwarded, 
   RefreshCw, 
-  Plus 
+  Plus,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ROCard } from './ROCard';
@@ -49,6 +50,7 @@ import { ManagerPartsOnOrderModal } from './ManagerPartsOnOrderModal';
 import { TechWorkloadModal } from './TechWorkloadModal';
 import { DailyPartsTrackerBoard } from './DailyPartsTrackerBoard';
 import { DailySalesTrackerBoard } from './DailySalesTrackerBoard';
+import { ManagerROPartsSpreadsheet } from './ManagerROPartsSpreadsheet';
 import { getContactCadenceStatus, isEligibleForCadence, isWoolwineVehicle } from '../utils/cadenceUtils';
 
 export const ManagerDashboard: React.FC = () => {
@@ -378,6 +380,21 @@ export const ManagerDashboard: React.FC = () => {
                 {totalPartsOnOrderCount}
               </span>
             )}
+          </button>
+
+          {/* Service Manager Master Log & Parts Spreadsheet Button */}
+          <button
+            id="open-manager-log-spreadsheet-btn"
+            onClick={() => setViewSection(viewSection === 'MANAGER_LOG' ? 'FLOOR' : 'MANAGER_LOG')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer ${
+              viewSection === 'MANAGER_LOG'
+                ? 'bg-purple-600 text-white border-2 border-purple-300 ring-2 ring-purple-400/40'
+                : 'bg-purple-700 hover:bg-purple-800 text-white'
+            }`}
+            title="Open Service Manager RO & Parts Spreadsheet Log"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-purple-200" />
+            <span>Service Manager Log</span>
           </button>
 
           {/* Quick Directories & Resources Dropdown */}
@@ -814,7 +831,9 @@ export const ManagerDashboard: React.FC = () => {
         </div>
       )}
 
-      {viewSection === 'PARTS_TRACKER' ? (
+      {viewSection === 'MANAGER_LOG' ? (
+        <ManagerROPartsSpreadsheet onBackToDashboard={() => setViewSection('FLOOR')} />
+      ) : viewSection === 'PARTS_TRACKER' ? (
         <DailyPartsTrackerBoard onOpenRO={(ro) => setSelectedRO(ro)} />
       ) : viewSection === 'DAILY_SALES' ? (
         <DailySalesTrackerBoard onBackToDashboard={() => setViewSection('FLOOR')} />

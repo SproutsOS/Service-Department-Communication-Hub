@@ -98,6 +98,7 @@ export interface ShopSettings {
   managerPasswords?: any[];
   recallWaitingList?: any[];
   internalExtensions?: any[];
+  managerROPartsSpreadsheet?: any[];
   updatedAt?: string;
 }
 

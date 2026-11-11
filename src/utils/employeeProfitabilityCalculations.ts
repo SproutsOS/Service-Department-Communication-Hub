@@ -49,6 +49,19 @@ export function computeEmployeeRow(
     }
   } else if (row.payType === 'SALARY') {
     totalPay = payRate;
+  } else if (row.payType === 'HOURLY_PLUS_FLAG') {
+    // Hourly attendance pay + Flag production bonus pay
+    let hourlyBasePay = 0;
+    if (actualHours <= 40 || overtimeMult <= 1.0) {
+      hourlyBasePay = actualHours * payRate;
+    } else {
+      const regularHours = 40;
+      const otHours = actualHours - 40;
+      hourlyBasePay = (regularHours * payRate) + (otHours * payRate * overtimeMult);
+    }
+    const flagRate = Number(row.flagRate) || 0;
+    const flagPay = flaggedHours * flagRate;
+    totalPay = hourlyBasePay + flagPay;
   }
 
   // 3. Labor Sales: Direct user input (with fallback if opening older saved data)
@@ -361,13 +374,18 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
   lines.push(headers.map(h => `"${h}"`).join(','));
 
   computedRows.forEach(r => {
+    const payTypeStr = r.payType === 'HOURLY_PLUS_FLAG' ? 'HOURLY + FLAG' : r.payType;
+    const rateStr = r.payType === 'HOURLY_PLUS_FLAG' 
+      ? `$${r.payRate.toFixed(2)}/hr + $${(r.flagRate || 0).toFixed(2)}/flag` 
+      : `$${r.payRate.toFixed(2)}`;
+
     const rowData = [
       r.name,
-      r.payType,
+      payTypeStr,
       r.actualHours.toFixed(1),
       r.flaggedHours.toFixed(1),
       `${r.efficiencyPct.toFixed(1)}%`,
-      `$${r.payRate.toFixed(2)}`,
+      rateStr,
       `$${r.totalPay.toFixed(2)}`,
       `$${r.laborSales.toFixed(2)}`,
       `$${r.effectiveLaborRate.toFixed(2)}/hr`,
