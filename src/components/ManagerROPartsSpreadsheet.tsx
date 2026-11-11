@@ -1216,13 +1216,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             <td colSpan={11} className="p-3 sm:p-4">
                               <div className="bg-white rounded-xl border-2 border-purple-300 p-3 sm:p-4 shadow-sm space-y-3">
                                 
-                                <div className="flex items-center justify-between pb-2 border-b border-purple-100">
-                                  <div className="flex items-center gap-2">
-                                    <Package className="w-4 h-4 text-purple-600" />
-                                    <h4 className="font-extrabold text-xs uppercase tracking-wider text-purple-950">
-                                      Parts Line Items Breakdown for {r.roNumber} ({r.customerName})
-                                    </h4>
-                                  </div>
+                                <div className="flex items-center justify-start pb-2">
                                   <button
                                     type="button"
                                     onClick={() => handleAddSubPart(r.id)}
@@ -1238,7 +1232,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   <table className="w-full text-left text-xs border border-purple-200 rounded-lg overflow-hidden">
                                     <thead className="bg-purple-100 text-purple-950 uppercase text-[10px] font-bold">
                                       <tr>
-                                        <th className="p-2 min-w-[120px]">Part Number</th>
+                                        <th className="p-2 w-28 min-w-[100px]">Part Number</th>
                                         <th className="p-2 min-w-[180px]">Description</th>
                                         <th className="p-2 text-center w-16">Qty</th>
                                         <th className="p-2 min-w-[130px]">Order Date</th>
@@ -1252,14 +1246,14 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                       {partsList.map((sp, spIdx) => (
                                         <tr key={sp.id} className="hover:bg-purple-50/50">
                                           
-                                          {/* Part Number */}
-                                          <td className="p-1.5 font-mono">
+                                          {/* Part Number (Compacted for ~10 digits) */}
+                                          <td className="p-1.5 font-mono w-28">
                                             <input
                                               type="text"
                                               value={sp.partNumber}
                                               onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partNumber: e.target.value })}
-                                              className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
-                                              placeholder="Part #"
+                                              className="w-28 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
+                                              placeholder="10 Digits"
                                             />
                                           </td>
 
