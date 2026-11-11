@@ -37,6 +37,7 @@ const STORAGE_KEY_MANAGER_SPREADSHEET = 'dealership_service_manager_ro_parts_spr
 const STATUS_OPTIONS: ManagerLogStatus[] = [
   'Dispatched',
   'In Diag',
+  'Waiting for Approval',
   'In Repair',
   'Finished',
   'Waiting for Payment'
@@ -150,11 +151,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       ro.parts.forEach((p, idx) => {
         const etaStr = p.estimatedArrival || 'Pending';
         const isRec = p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH' || p.status === 'IN_STOCK';
+        const orderDt = p.orderedAt ? p.orderedAt.split('T')[0] : (ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
         roPartsList.push({
           id: p.id || `subpart_${ro.id}_${idx}`,
           partNumber: p.partNumber || `Part #${idx + 1}`,
           partDescription: p.description || p.name || '',
           quantity: p.quantity || 1,
+          orderDate: orderDt,
           originalEta: etaStr,
           currentEta: etaStr,
           etaHistory: [
@@ -175,11 +178,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     if (roPartsList.length === 0 && ro.quote?.partsItems && ro.quote.partsItems.length > 0) {
       ro.quote.partsItems.forEach((qp, idx) => {
         const etaStr = (qp as any).estimatedArrival || 'Pending';
+        const orderDt = ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
         roPartsList.push({
           id: qp.id || `subpart_quote_${ro.id}_${idx}`,
           partNumber: qp.partNumber || `Part #${idx + 1}`,
           partDescription: qp.description || '',
           quantity: qp.quantity || 1,
+          orderDate: orderDt,
           originalEta: etaStr,
           currentEta: etaStr,
           etaHistory: [
@@ -197,11 +202,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     }
 
     if (roPartsList.length === 0) {
+      const orderDt = ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
       roPartsList.push({
         id: `subpart_default_${ro.id}_${Date.now()}`,
         partNumber: 'N/A',
         partDescription: ro.primaryConcern || 'General Parts',
         quantity: 1,
+        orderDate: orderDt,
         originalEta: 'Pending',
         currentEta: 'Pending',
         etaHistory: [
@@ -234,7 +241,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       let mappedStatus: ManagerLogStatus = 'Dispatched';
       if (ro.status === 'WAITING_DIAGNOSTICS' || ro.status === 'IN_DIAG') {
         mappedStatus = ro.techId ? 'In Diag' : 'Dispatched';
-      } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'PARTS_IN_TO_TECH' || ro.status === 'ESTIMATE_DONE' || ro.status === 'APPROVED' || ro.status === 'PARTS_ORDERED') {
+      } else if (ro.status === 'ESTIMATE_DONE' || ro.status === 'WAITING_FOR_APPROVAL') {
+        mappedStatus = 'Waiting for Approval';
+      } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'PARTS_IN_TO_TECH' || ro.status === 'APPROVED' || ro.status === 'PARTS_ORDERED') {
         mappedStatus = 'In Repair';
       } else if (ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP') {
         mappedStatus = 'Finished';
@@ -283,11 +292,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
   // Add manual new RO row
   const handleAddManualRow = () => {
+    const todayDt = new Date().toISOString().split('T')[0];
     const newSubPart: ManagerSubPartItem = {
       id: `subpart_init_${Date.now()}`,
       partNumber: 'PART-1001',
       partDescription: 'Component Description',
       quantity: 1,
+      orderDate: todayDt,
       originalEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
       currentEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
       etaHistory: [
@@ -312,6 +323,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       status: 'Dispatched',
       partNumber: newSubPart.partNumber,
       partDescription: newSubPart.partDescription,
+      orderDate: todayDt,
       originalEta: newSubPart.originalEta,
       currentEta: newSubPart.currentEta,
       etaHistory: newSubPart.etaHistory,
@@ -330,6 +342,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
   // Add a sub-part line item to a row (Option 2 feature)
   const handleAddSubPart = (rowId: string) => {
+    const todayDt = new Date().toISOString().split('T')[0];
     const updated = rows.map(r => {
       if (r.id !== rowId) return r;
       const currentParts = r.parts && r.parts.length > 0 ? r.parts : [
@@ -338,6 +351,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           partNumber: r.partNumber || 'PART-1',
           partDescription: r.partDescription || '',
           quantity: 1,
+          orderDate: r.orderDate || todayDt,
           originalEta: r.originalEta || 'Pending',
           currentEta: r.currentEta || 'Pending',
           etaHistory: r.etaHistory || [],
@@ -353,6 +367,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         partNumber: `PART-${currentParts.length + 1}`,
         partDescription: 'New Part Item',
         quantity: 1,
+        orderDate: todayDt,
         originalEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
         currentEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
         etaHistory: [
@@ -668,6 +683,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       'Status',
       'Part Number',
       'Part Description',
+      'Order Date',
       'Original ETA',
       'Current ETA',
       'Parts In',
@@ -687,6 +703,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           id: 'legacy',
           partNumber: r.partNumber,
           partDescription: r.partDescription,
+          orderDate: r.orderDate,
           originalEta: r.originalEta,
           currentEta: r.currentEta,
           isPartsIn: r.isPartsIn,
@@ -703,6 +720,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           r.status,
           p.partNumber,
           p.partDescription || '',
+          p.orderDate || '',
           p.originalEta,
           p.currentEta,
           p.isPartsIn ? 'YES' : 'NO',
@@ -1064,6 +1082,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   ? 'bg-amber-50 text-amber-900 border-amber-300' 
                                   : r.status === 'In Diag' 
                                   ? 'bg-blue-50 text-blue-900 border-blue-300' 
+                                  : r.status === 'Waiting for Approval'
+                                  ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold'
                                   : r.status === 'In Repair' 
                                   ? 'bg-purple-50 text-purple-900 border-purple-300' 
                                   : r.status === 'Finished' 
@@ -1073,6 +1093,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             >
                               <option value="Dispatched">Dispatched</option>
                               <option value="In Diag">In Diag</option>
+                              <option value="Waiting for Approval">Waiting for Approval</option>
                               <option value="In Repair">In Repair</option>
                               <option value="Finished">Finished</option>
                               <option value="Waiting for Payment">Waiting for Payment</option>
@@ -1220,6 +1241,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                         <th className="p-2 min-w-[120px]">Part Number</th>
                                         <th className="p-2 min-w-[180px]">Description</th>
                                         <th className="p-2 text-center w-16">Qty</th>
+                                        <th className="p-2 min-w-[130px]">Order Date</th>
                                         <th className="p-2 min-w-[160px]">Part ETA & History</th>
                                         <th className="p-2 text-center min-w-[120px]">Parts In?</th>
                                         <th className="p-2 text-center min-w-[140px]">Advisor Notified?</th>
@@ -1260,6 +1282,16 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                               value={sp.quantity || 1}
                                               onChange={(e) => handleUpdateSubPart(r.id, sp.id, { quantity: parseInt(e.target.value) || 1 })}
                                               className="w-12 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
+                                            />
+                                          </td>
+
+                                          {/* Order Date */}
+                                          <td className="p-1.5 font-mono">
+                                            <input
+                                              type="date"
+                                              value={sp.orderDate || ''}
+                                              onChange={(e) => handleUpdateSubPart(r.id, sp.id, { orderDate: e.target.value })}
+                                              className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
                                             />
                                           </td>
 
@@ -1512,6 +1544,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 <th className="p-2">Status</th>
                 <th className="p-2">Part #</th>
                 <th className="p-2">Description</th>
+                <th className="p-2">Order Date</th>
                 <th className="p-2">Current ETA</th>
                 <th className="p-2">Parts In?</th>
                 <th className="p-2">Advisor Notified?</th>
@@ -1524,6 +1557,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                     id: 'legacy',
                     partNumber: r.partNumber,
                     partDescription: r.partDescription,
+                    orderDate: r.orderDate,
                     currentEta: r.currentEta,
                     isPartsIn: r.isPartsIn,
                     isAdvisorNotified: r.isAdvisorNotified
@@ -1538,6 +1572,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                     <td className="p-2 font-sans font-bold">{r.status}</td>
                     <td className="p-2 font-bold">{p.partNumber}</td>
                     <td className="p-2 font-sans">{p.partDescription || '-'}</td>
+                    <td className="p-2">{p.orderDate || '-'}</td>
                     <td className="p-2">{p.currentEta}</td>
                     <td className="p-2 font-sans">{p.isPartsIn ? 'YES' : 'NO'}</td>
                     <td className="p-2 font-sans">{p.isAdvisorNotified ? 'YES' : 'NO'}</td>

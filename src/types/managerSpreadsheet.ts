@@ -1,6 +1,7 @@
 export type ManagerLogStatus = 
   | 'Dispatched' 
   | 'In Diag' 
+  | 'Waiting for Approval'
   | 'In Repair' 
   | 'Finished' 
   | 'Waiting for Payment';
@@ -18,6 +19,7 @@ export interface ManagerSubPartItem {
   partNumber: string;
   partDescription?: string;
   quantity?: number;
+  orderDate?: string;
   originalEta: string;
   currentEta: string;
   etaHistory: EtaHistoryEntry[];
@@ -40,6 +42,7 @@ export interface ManagerSpreadsheetRow {
   // Single or primary part fields (fallback)
   partNumber: string;
   partDescription?: string;
+  orderDate?: string;
   originalEta: string;
   currentEta: string;
   etaHistory: EtaHistoryEntry[];
