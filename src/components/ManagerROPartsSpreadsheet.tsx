@@ -64,7 +64,6 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      // Migration from v1
       const oldSaved = localStorage.getItem('dealership_service_manager_ro_parts_spreadsheet_v1');
       if (oldSaved) {
         const parsedOld = JSON.parse(oldSaved);
@@ -76,7 +75,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     return [];
   });
 
-  // Track expanded row IDs for multi-part sub-rows (Option 2)
+  // Track expanded row IDs for multi-part sub-rows
   const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
 
   const toggleRowExpand = (rowId: string) => {
@@ -104,7 +103,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const [statusFilter, setStatusFilter] = useState<ManagerLogStatus | 'ALL'>('ALL');
   const [partsInFilter, setPartsInFilter] = useState<'ALL' | 'PARTS_IN' | 'PARTS_WAITING'>('ALL');
 
-  // ETA History Modal State (Supports whole row or specific sub-part)
+  // ETA History Modal State
   const [etaModalTarget, setEtaModalTarget] = useState<{ rowId: string; subPartId?: string } | null>(null);
   const [newEtaInput, setNewEtaInput] = useState('');
   const [newEtaNote, setNewEtaNote] = useState('');
@@ -201,29 +200,6 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       });
     }
 
-    if (roPartsList.length === 0) {
-      const orderDt = ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
-      roPartsList.push({
-        id: `subpart_default_${ro.id}_${Date.now()}`,
-        partNumber: 'N/A',
-        partDescription: ro.primaryConcern || 'General Parts',
-        quantity: 1,
-        orderDate: orderDt,
-        originalEta: 'Pending',
-        currentEta: 'Pending',
-        etaHistory: [
-          {
-            id: `eta_def_${Date.now()}`,
-            etaDate: 'Pending',
-            updatedAt: new Date().toISOString(),
-            updatedBy: 'System Auto-Import'
-          }
-        ],
-        isPartsIn: false,
-        isAdvisorNotified: false
-      });
-    }
-
     return roPartsList;
   };
 
@@ -263,12 +239,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           assignedTechId: ro.techId,
           assignedTechName: ro.techName || 'Unassigned',
           status: mappedStatus,
-          partNumber: firstPart.partNumber,
-          partDescription: firstPart.partDescription,
-          originalEta: firstPart.originalEta,
-          currentEta: firstPart.currentEta,
-          etaHistory: firstPart.etaHistory,
-          isPartsIn: extractedParts.every(p => p.isPartsIn),
+          partNumber: firstPart ? firstPart.partNumber : 'N/A',
+          partDescription: firstPart ? firstPart.partDescription : '',
+          orderDate: firstPart ? firstPart.orderDate : (ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]),
+          originalEta: firstPart ? firstPart.originalEta : 'N/A',
+          currentEta: firstPart ? firstPart.currentEta : 'N/A',
+          etaHistory: firstPart ? firstPart.etaHistory : [],
+          isPartsIn: extractedParts.length > 0 && extractedParts.every(p => p.isPartsIn),
           partsInAt: extractedParts.some(p => p.partsInAt) ? new Date().toISOString() : undefined,
           isAdvisorNotified: false,
           parts: extractedParts,
@@ -340,27 +317,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     triggerToast('Added new custom RO log entry with part sub-row');
   };
 
-  // Add a sub-part line item to a row (Option 2 feature)
+  // Add a sub-part line item to a row
   const handleAddSubPart = (rowId: string) => {
     const todayDt = new Date().toISOString().split('T')[0];
     const updated = rows.map(r => {
       if (r.id !== rowId) return r;
-      const currentParts = r.parts && r.parts.length > 0 ? r.parts : [
-        {
-          id: `subpart_legacy_${Date.now()}`,
-          partNumber: r.partNumber || 'PART-1',
-          partDescription: r.partDescription || '',
-          quantity: 1,
-          orderDate: r.orderDate || todayDt,
-          originalEta: r.originalEta || 'Pending',
-          currentEta: r.currentEta || 'Pending',
-          etaHistory: r.etaHistory || [],
-          isPartsIn: r.isPartsIn,
-          partsInAt: r.partsInAt,
-          isAdvisorNotified: r.isAdvisorNotified,
-          advisorNotifiedAt: r.advisorNotifiedAt
-        }
-      ];
+      const currentParts = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
 
       const newSubPart: ManagerSubPartItem = {
         id: `subpart_add_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -416,9 +378,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         return { ...p, ...updates };
       });
 
-      // Update parent summary flags
-      const allPartsIn = partsList.every(p => p.isPartsIn);
-      const allNotified = partsList.every(p => p.isAdvisorNotified);
+      const allPartsIn = partsList.length > 0 && partsList.every(p => p.isPartsIn);
+      const allNotified = partsList.length > 0 && partsList.every(p => p.isAdvisorNotified);
 
       return {
         ...r,
@@ -469,7 +430,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         };
       });
 
-      const allPartsIn = partsList.every(p => p.isPartsIn);
+      const allPartsIn = partsList.length > 0 && partsList.every(p => p.isPartsIn);
 
       return {
         ...r,
@@ -520,7 +481,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         };
       });
 
-      const allNotified = partsList.every(p => p.isAdvisorNotified);
+      const allNotified = partsList.length > 0 && partsList.every(p => p.isAdvisorNotified);
 
       return {
         ...r,
@@ -556,7 +517,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     }
   };
 
-  // Add revised ETA entry in history trail (supports row or sub-part)
+  // Add revised ETA entry in history trail
   const handleAddEtaRevision = () => {
     if (!etaModalTarget) return;
     const dateVal = newEtaInput.trim();
@@ -593,7 +554,6 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         };
       }
 
-      // Top-level row fallback
       const newEntry: EtaHistoryEntry = {
         id: `eta_rev_${Date.now()}`,
         etaDate: dateVal,
@@ -623,13 +583,16 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
       if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
-      if (partsInFilter === 'PARTS_IN' && !r.isPartsIn) return false;
-      if (partsInFilter === 'PARTS_WAITING' && r.isPartsIn) return false;
+      const validParts = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+      const hasPartsIn = validParts.some(p => p.isPartsIn);
+
+      if (partsInFilter === 'PARTS_IN' && !hasPartsIn) return false;
+      if (partsInFilter === 'PARTS_WAITING' && hasPartsIn) return false;
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.trim().toLowerCase();
 
-      const partsMatch = (r.parts || []).some(p => 
+      const partsMatch = validParts.some(p => 
         p.partNumber.toLowerCase().includes(q) ||
         (p.partDescription && p.partDescription.toLowerCase().includes(q))
       );
@@ -639,7 +602,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         r.customerName.toLowerCase().includes(q) ||
         r.vin.toLowerCase().includes(q) ||
         (r.assignedTechName && r.assignedTechName.toLowerCase().includes(q)) ||
-        r.partNumber.toLowerCase().includes(q) ||
+        (r.partNumber && r.partNumber !== 'N/A' && r.partNumber.toLowerCase().includes(q)) ||
         (r.partDescription && r.partDescription.toLowerCase().includes(q)) ||
         partsMatch ||
         (r.notes && r.notes.toLowerCase().includes(q))
@@ -698,37 +661,45 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     lines.push(headers.map(h => `"${h}"`).join(','));
 
     filteredRows.forEach(r => {
-      const partsList = r.parts && r.parts.length > 0 ? r.parts : [
-        {
-          id: 'legacy',
-          partNumber: r.partNumber,
-          partDescription: r.partDescription,
-          orderDate: r.orderDate,
-          originalEta: r.originalEta,
-          currentEta: r.currentEta,
-          isPartsIn: r.isPartsIn,
-          isAdvisorNotified: r.isAdvisorNotified
-        }
-      ];
+      const partsList = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
 
-      partsList.forEach((p, idx) => {
+      if (partsList.length === 0) {
         const line = [
-          idx === 0 ? r.roNumber : `${r.roNumber} (Part ${idx + 1})`,
+          r.roNumber,
           r.customerName,
           r.vin,
           r.assignedTechName || '',
           r.status,
-          p.partNumber,
-          p.partDescription || '',
-          p.orderDate || '',
-          p.originalEta,
-          p.currentEta,
-          p.isPartsIn ? 'YES' : 'NO',
-          p.isAdvisorNotified ? 'YES' : 'NO',
+          'No Parts Ordered',
+          '',
+          '',
+          '',
+          '',
+          'NO',
+          'NO',
           r.notes || ''
         ];
         lines.push(line.map(v => `"${v.replace(/"/g, '""')}"`).join(','));
-      });
+      } else {
+        partsList.forEach((p, idx) => {
+          const line = [
+            idx === 0 ? r.roNumber : `${r.roNumber} (Part ${idx + 1})`,
+            r.customerName,
+            r.vin,
+            r.assignedTechName || '',
+            r.status,
+            p.partNumber,
+            p.partDescription || '',
+            p.orderDate || '',
+            p.originalEta,
+            p.currentEta,
+            p.isPartsIn ? 'YES' : 'NO',
+            p.isAdvisorNotified ? 'YES' : 'NO',
+            r.notes || ''
+          ];
+          lines.push(line.map(v => `"${v.replace(/"/g, '""')}"`).join(','));
+        });
+      }
     });
 
     const csvContent = lines.join('\r\n');
@@ -965,21 +936,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 ) : (
                   filteredRows.map((r, idx) => {
                     const linkedRO = repairOrders.find(ro => String(ro.id).toLowerCase() === r.roNumber.trim().toLowerCase());
-                    const partsList = r.parts && r.parts.length > 0 ? r.parts : [
-                      {
-                        id: 'legacy',
-                        partNumber: r.partNumber || 'PART-1',
-                        partDescription: r.partDescription || '',
-                        quantity: 1,
-                        originalEta: r.originalEta || 'Pending',
-                        currentEta: r.currentEta || 'Pending',
-                        etaHistory: r.etaHistory || [],
-                        isPartsIn: r.isPartsIn,
-                        partsInAt: r.partsInAt,
-                        isAdvisorNotified: r.isAdvisorNotified,
-                        advisorNotifiedAt: r.advisorNotifiedAt
-                      }
-                    ];
+                    const partsList = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+                    const hasParts = partsList.length > 0;
 
                     const isExpanded = expandedRowIds.has(r.id);
                     const partsInCount = partsList.filter(p => p.isPartsIn).length;
@@ -1105,95 +1063,117 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             <button
                               type="button"
                               onClick={() => toggleRowExpand(r.id)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 transition-colors cursor-pointer font-bold text-xs"
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer font-bold text-xs ${
+                                hasParts
+                                  ? 'bg-purple-100 hover:bg-purple-200 text-purple-900 border-purple-300'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-300 font-medium'
+                              }`}
                             >
-                              <Package className="w-3.5 h-3.5 text-purple-700" />
-                              <span>{partsList.length} Part{partsList.length === 1 ? '' : 's'}</span>
-                              <span className="text-[10px] text-purple-600 font-mono">
-                                ({partsList[0]?.partNumber || 'Details'})
-                              </span>
+                              <Package className={`w-3.5 h-3.5 ${hasParts ? 'text-purple-700' : 'text-slate-400'}`} />
+                              {hasParts ? (
+                                <>
+                                  <span>{partsList.length} Part{partsList.length === 1 ? '' : 's'}</span>
+                                  <span className="text-[10px] text-purple-600 font-mono">
+                                    ({partsList[0]?.partNumber || 'Details'})
+                                  </span>
+                                </>
+                              ) : (
+                                <span>No Parts Ordered</span>
+                              )}
                             </button>
                           </td>
 
                           {/* Overall ETA */}
                           <td className="py-1.5 px-2 min-w-[160px]">
-                            <div className="flex items-center justify-between gap-1.5">
-                              <div className="min-w-0 font-mono text-xs font-bold text-slate-800">
-                                {partsList[0]?.currentEta || r.currentEta || 'Pending'}
+                            {hasParts ? (
+                              <div className="flex items-center justify-between gap-1.5">
+                                <div className="min-w-0 font-mono text-xs font-bold text-slate-800">
+                                  {partsList[0]?.currentEta || r.currentEta || 'Pending'}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEtaModalTarget({ rowId: r.id });
+                                    setNewEtaInput(partsList[0]?.currentEta || r.currentEta || '');
+                                    setNewEtaNote('');
+                                  }}
+                                  className="px-2 py-1 rounded bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 font-bold text-[10px] border border-slate-300 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                                >
+                                  <History className="w-3 h-3 text-purple-600" />
+                                  <span>History</span>
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEtaModalTarget({ rowId: r.id });
-                                  setNewEtaInput(partsList[0]?.currentEta || r.currentEta || '');
-                                  setNewEtaNote('');
-                                }}
-                                className="px-2 py-1 rounded bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 font-bold text-[10px] border border-slate-300 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
-                              >
-                                <History className="w-3 h-3 text-purple-600" />
-                                <span>History</span>
-                              </button>
-                            </div>
+                            ) : (
+                              <span className="text-slate-400 font-medium text-xs font-mono">No Parts</span>
+                            )}
                           </td>
 
                           {/* Parent Parts In Summary Toggle */}
                           <td className="py-1.5 px-2 text-center min-w-[120px]">
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePartsInParent(r.id)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
-                                partsInCount === partsList.length 
-                                  ? 'bg-emerald-600 text-white border-emerald-700' 
-                                  : partsInCount > 0 
-                                  ? 'bg-amber-500 text-white border-amber-600' 
-                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
-                              }`}
-                              title="Click to toggle Parts IN state for all parts"
-                            >
-                              {partsInCount === partsList.length ? (
-                                <span className="flex items-center gap-1 justify-center">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>All Parts In ({partsInCount}/{partsList.length})</span>
-                                </span>
-                              ) : partsInCount > 0 ? (
-                                <span className="flex items-center gap-1 justify-center">
-                                  <Clock className="w-3.5 h-3.5" />
-                                  <span>{partsInCount}/{partsList.length} Parts In</span>
-                                </span>
-                              ) : (
-                                <span>0/{partsList.length} Parts In</span>
-                              )}
-                            </button>
+                            {hasParts ? (
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePartsInParent(r.id)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                                  partsInCount === partsList.length 
+                                    ? 'bg-emerald-600 text-white border-emerald-700' 
+                                    : partsInCount > 0 
+                                    ? 'bg-amber-500 text-white border-amber-600' 
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                                }`}
+                                title="Click to toggle Parts IN state for all parts"
+                              >
+                                {partsInCount === partsList.length ? (
+                                  <span className="flex items-center gap-1 justify-center">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>All Parts In ({partsInCount}/{partsList.length})</span>
+                                  </span>
+                                ) : partsInCount > 0 ? (
+                                  <span className="flex items-center gap-1 justify-center">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>{partsInCount}/{partsList.length} Parts In</span>
+                                  </span>
+                                ) : (
+                                  <span>0/{partsList.length} Parts In</span>
+                                )}
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 font-medium text-xs">No Parts</span>
+                            )}
                           </td>
 
                           {/* Parent Advisor Notified Summary Toggle */}
                           <td className="py-1.5 px-2 text-center min-w-[130px]">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleAdvisorNotifiedParent(r.id)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
-                                partsNotifiedCount === partsList.length 
-                                  ? 'bg-blue-600 text-white border-blue-700' 
-                                  : partsNotifiedCount > 0 
-                                  ? 'bg-sky-500 text-white border-sky-600' 
-                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
-                              }`}
-                              title="Click to toggle Service Advisor notification for all parts"
-                            >
-                              {partsNotifiedCount === partsList.length ? (
-                                <span className="flex items-center gap-1 justify-center">
-                                  <Bell className="w-3.5 h-3.5" />
-                                  <span>All Notified ({partsNotifiedCount}/{partsList.length})</span>
-                                </span>
-                              ) : partsNotifiedCount > 0 ? (
-                                <span className="flex items-center gap-1 justify-center">
-                                  <Bell className="w-3.5 h-3.5" />
-                                  <span>{partsNotifiedCount}/{partsList.length} Notified</span>
-                                </span>
-                              ) : (
-                                <span>Not Notified</span>
-                              )}
-                            </button>
+                            {hasParts ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleAdvisorNotifiedParent(r.id)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                                  partsNotifiedCount === partsList.length 
+                                    ? 'bg-blue-600 text-white border-blue-700' 
+                                    : partsNotifiedCount > 0 
+                                    ? 'bg-sky-500 text-white border-sky-600' 
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                                }`}
+                                title="Click to toggle Service Advisor notification for all parts"
+                              >
+                                {partsNotifiedCount === partsList.length ? (
+                                  <span className="flex items-center gap-1 justify-center">
+                                    <Bell className="w-3.5 h-3.5" />
+                                    <span>All Notified ({partsNotifiedCount}/{partsList.length})</span>
+                                  </span>
+                                ) : partsNotifiedCount > 0 ? (
+                                  <span className="flex items-center gap-1 justify-center">
+                                    <Bell className="w-3.5 h-3.5" />
+                                    <span>{partsNotifiedCount}/{partsList.length} Notified</span>
+                                  </span>
+                                ) : (
+                                  <span>Not Notified</span>
+                                )}
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 font-medium text-xs">N/A</span>
+                            )}
                           </td>
 
                           {/* Actions */}
@@ -1243,129 +1223,137 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-purple-100 font-sans">
-                                      {partsList.map((sp, spIdx) => (
-                                        <tr key={sp.id} className="hover:bg-purple-50/50">
-                                          
-                                          {/* Part Number (Compacted for ~10 digits) */}
-                                          <td className="p-1.5 font-mono w-28">
-                                            <input
-                                              type="text"
-                                              value={sp.partNumber}
-                                              onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partNumber: e.target.value })}
-                                              className="w-28 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
-                                              placeholder="10 Digits"
-                                            />
+                                      {partsList.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={8} className="p-4 text-center text-slate-500 bg-slate-50 font-medium text-xs">
+                                            No parts currently ordered for this Repair Order. Click "+ Add Part Item" above to add part numbers.
                                           </td>
-
-                                          {/* Description */}
-                                          <td className="p-1.5">
-                                            <input
-                                              type="text"
-                                              value={sp.partDescription || ''}
-                                              onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partDescription: e.target.value })}
-                                              className="w-full px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
-                                              placeholder="Part Description"
-                                            />
-                                          </td>
-
-                                          {/* Quantity */}
-                                          <td className="p-1.5 text-center">
-                                            <input
-                                              type="number"
-                                              min={1}
-                                              value={sp.quantity || 1}
-                                              onChange={(e) => handleUpdateSubPart(r.id, sp.id, { quantity: parseInt(e.target.value) || 1 })}
-                                              className="w-12 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
-                                            />
-                                          </td>
-
-                                          {/* Order Date */}
-                                          <td className="p-1.5 font-mono">
-                                            <input
-                                              type="date"
-                                              value={sp.orderDate || ''}
-                                              onChange={(e) => handleUpdateSubPart(r.id, sp.id, { orderDate: e.target.value })}
-                                              className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
-                                            />
-                                          </td>
-
-                                          {/* ETA & History */}
-                                          <td className="p-1.5">
-                                            <div className="flex items-center justify-between gap-1">
-                                              <span className="font-mono text-xs font-bold text-slate-900">
-                                                {sp.currentEta}
-                                              </span>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setEtaModalTarget({ rowId: r.id, subPartId: sp.id });
-                                                  setNewEtaInput(sp.currentEta || '');
-                                                  setNewEtaNote('');
-                                                }}
-                                                className="px-2 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] border border-purple-300 transition-colors cursor-pointer flex items-center gap-1"
-                                              >
-                                                <History className="w-3 h-3 text-purple-700" />
-                                                <span>ETA History</span>
-                                              </button>
-                                            </div>
-                                          </td>
-
-                                          {/* Parts In Toggle */}
-                                          <td className="p-1.5 text-center">
-                                            <button
-                                              type="button"
-                                              onClick={() => handleToggleSubPartPartsIn(r.id, sp.id)}
-                                              className={`w-full py-1 rounded text-xs font-bold transition-colors cursor-pointer border ${
-                                                sp.isPartsIn
-                                                  ? 'bg-emerald-600 text-white border-emerald-700'
-                                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                                              }`}
-                                            >
-                                              {sp.isPartsIn ? '✓ IN' : 'Waiting'}
-                                            </button>
-                                            {sp.partsInAt && (
-                                              <div className="text-[9px] text-slate-400 font-mono mt-0.5">
-                                                {new Date(sp.partsInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                              </div>
-                                            )}
-                                          </td>
-
-                                          {/* Advisor Notified Toggle */}
-                                          <td className="p-1.5 text-center">
-                                            <button
-                                              type="button"
-                                              onClick={() => handleToggleSubPartAdvisorNotified(r.id, sp.id)}
-                                              className={`w-full py-1 rounded text-xs font-bold transition-colors cursor-pointer border ${
-                                                sp.isAdvisorNotified
-                                                  ? 'bg-blue-600 text-white border-blue-700'
-                                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                                              }`}
-                                            >
-                                              {sp.isAdvisorNotified ? '✓ Notified' : 'Notify'}
-                                            </button>
-                                            {sp.advisorNotifiedAt && (
-                                              <div className="text-[9px] text-slate-400 font-mono mt-0.5">
-                                                {new Date(sp.advisorNotifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                              </div>
-                                            )}
-                                          </td>
-
-                                          {/* Action */}
-                                          <td className="p-1.5 text-center">
-                                            {partsList.length > 1 && (
-                                              <button
-                                                type="button"
-                                                onClick={() => handleDeleteSubPart(r.id, sp.id)}
-                                                className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                                                title="Delete this part item"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            )}
-                                          </td>
-
                                         </tr>
-                                      ))}
+                                      ) : (
+                                        partsList.map((sp, spIdx) => (
+                                          <tr key={sp.id} className="hover:bg-purple-50/50">
+                                            
+                                            {/* Part Number (Compacted for ~10 digits) */}
+                                            <td className="p-1.5 font-mono w-28">
+                                              <input
+                                                type="text"
+                                                value={sp.partNumber}
+                                                onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partNumber: e.target.value })}
+                                                className="w-28 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
+                                                placeholder="10 Digits"
+                                              />
+                                            </td>
+
+                                            {/* Description */}
+                                            <td className="p-1.5">
+                                              <input
+                                                type="text"
+                                                value={sp.partDescription || ''}
+                                                onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partDescription: e.target.value })}
+                                                className="w-full px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
+                                                placeholder="Part Description"
+                                              />
+                                            </td>
+
+                                            {/* Quantity */}
+                                            <td className="p-1.5 text-center">
+                                              <input
+                                                type="number"
+                                                min={1}
+                                                value={sp.quantity || 1}
+                                                onChange={(e) => handleUpdateSubPart(r.id, sp.id, { quantity: parseInt(e.target.value) || 1 })}
+                                                className="w-12 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
+                                              />
+                                            </td>
+
+                                            {/* Order Date */}
+                                            <td className="p-1.5 font-mono">
+                                              <input
+                                                type="date"
+                                                value={sp.orderDate || ''}
+                                                onChange={(e) => handleUpdateSubPart(r.id, sp.id, { orderDate: e.target.value })}
+                                                className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
+                                              />
+                                            </td>
+
+                                            {/* ETA & History */}
+                                            <td className="p-1.5">
+                                              <div className="flex items-center justify-between gap-1">
+                                                <span className="font-mono text-xs font-bold text-slate-900">
+                                                  {sp.currentEta}
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEtaModalTarget({ rowId: r.id, subPartId: sp.id });
+                                                    setNewEtaInput(sp.currentEta || '');
+                                                    setNewEtaNote('');
+                                                  }}
+                                                  className="px-2 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] border border-purple-300 transition-colors cursor-pointer flex items-center gap-1"
+                                                >
+                                                  <History className="w-3 h-3 text-purple-700" />
+                                                  <span>ETA History</span>
+                                                </button>
+                                              </div>
+                                            </td>
+
+                                            {/* Parts In Toggle */}
+                                            <td className="p-1.5 text-center">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleToggleSubPartPartsIn(r.id, sp.id)}
+                                                className={`w-full py-1 rounded text-xs font-bold transition-colors cursor-pointer border ${
+                                                  sp.isPartsIn
+                                                    ? 'bg-emerald-600 text-white border-emerald-700'
+                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                                                }`}
+                                              >
+                                                {sp.isPartsIn ? '✓ IN' : 'Waiting'}
+                                              </button>
+                                              {sp.partsInAt && (
+                                                <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                                  {new Date(sp.partsInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </div>
+                                              )}
+                                            </td>
+
+                                            {/* Advisor Notified Toggle */}
+                                            <td className="p-1.5 text-center">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleToggleSubPartAdvisorNotified(r.id, sp.id)}
+                                                className={`w-full py-1 rounded text-xs font-bold transition-colors cursor-pointer border ${
+                                                  sp.isAdvisorNotified
+                                                    ? 'bg-blue-600 text-white border-blue-700'
+                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                                                }`}
+                                              >
+                                                {sp.isAdvisorNotified ? '✓ Notified' : 'Notify'}
+                                              </button>
+                                              {sp.advisorNotifiedAt && (
+                                                <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                                  {new Date(sp.advisorNotifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </div>
+                                              )}
+                                            </td>
+
+                                            {/* Action */}
+                                            <td className="p-1.5 text-center">
+                                              {partsList.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteSubPart(r.id, sp.id)}
+                                                  className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                                                  title="Delete this part item"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              )}
+                                            </td>
+
+                                          </tr>
+                                        ))
+                                      )}
                                     </tbody>
                                   </table>
                                 </div>
@@ -1546,17 +1534,24 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
             </thead>
             <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
               {filteredRows.map(r => {
-                const partsList = r.parts && r.parts.length > 0 ? r.parts : [
-                  {
-                    id: 'legacy',
-                    partNumber: r.partNumber,
-                    partDescription: r.partDescription,
-                    orderDate: r.orderDate,
-                    currentEta: r.currentEta,
-                    isPartsIn: r.isPartsIn,
-                    isAdvisorNotified: r.isAdvisorNotified
-                  }
-                ];
+                const partsList = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+                if (partsList.length === 0) {
+                  return (
+                    <tr key={r.id}>
+                      <td className="p-2 font-bold">{r.roNumber}</td>
+                      <td className="p-2 font-sans font-bold">{r.customerName}</td>
+                      <td className="p-2">{r.vin}</td>
+                      <td className="p-2 font-sans">{r.assignedTechName || 'Unassigned'}</td>
+                      <td className="p-2 font-sans font-bold">{r.status}</td>
+                      <td className="p-2 font-sans text-slate-500">No Parts Ordered</td>
+                      <td className="p-2 font-sans text-slate-400">-</td>
+                      <td className="p-2 font-sans text-slate-400">-</td>
+                      <td className="p-2 font-sans text-slate-400">-</td>
+                      <td className="p-2 font-sans">NO</td>
+                      <td className="p-2 font-sans">NO</td>
+                    </tr>
+                  );
+                }
                 return partsList.map((p, pIdx) => (
                   <tr key={`${r.id}_${pIdx}`}>
                     <td className="p-2 font-bold">{pIdx === 0 ? r.roNumber : `${r.roNumber} (${pIdx + 1})`}</td>
