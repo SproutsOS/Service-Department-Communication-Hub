@@ -920,11 +920,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <thead>
                 <tr className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-800 whitespace-nowrap">
                   <th className="py-3 px-3 text-center w-10">Expand</th>
-                  <th className="py-3 px-3 min-w-[90px]">RO #</th>
+                  <th className="py-3 px-3 min-w-[70px]">RO #</th>
                   <th className="py-3 px-3 min-w-[125px]">RO Date</th>
                   <th className="py-3 px-3 min-w-[150px]">Customer Name</th>
-                  <th className="py-3 px-3 min-w-[160px]">VIN / Vehicle</th>
-                  <th className="py-3 px-3 min-w-[140px]">Assigned Tech</th>
+                  <th className="py-3 px-3 min-w-[130px]">VIN / Vehicle</th>
+                  <th className="py-3 px-3 min-w-[110px]">Assigned Tech</th>
                   <th className="py-3 px-3 min-w-[170px]">Status (Stage)</th>
                   <th className="py-3 px-3 min-w-[170px]">Parts Breakdown</th>
                   <th className="py-3 px-3 min-w-[160px]">Overall ETA</th>
@@ -973,14 +973,15 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             </button>
                           </td>
 
-                          {/* RO Number */}
-                          <td className="py-1.5 px-2 font-mono font-bold text-slate-900 min-w-[90px]">
+                          {/* RO Number (Compact 5 digits) */}
+                          <td className="py-1.5 px-2 font-mono font-bold text-slate-900 min-w-[70px]">
                             <div className="flex items-center gap-1">
                               <input
                                 type="text"
                                 value={r.roNumber}
+                                maxLength={6}
                                 onChange={(e) => handleUpdateField(r.id, { roNumber: e.target.value })}
-                                className="w-20 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-black text-purple-900 focus:outline-none text-xs"
+                                className="w-16 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-black text-purple-900 focus:outline-none text-xs"
                               />
                               {linkedRO && (
                                 <button
@@ -1016,19 +1017,20 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             />
                           </td>
 
-                          {/* VIN / Vehicle */}
-                          <td className="py-1.5 px-2 font-mono text-xs text-slate-700 min-w-[160px]">
+                          {/* VIN / Vehicle (Compact 17 digits) */}
+                          <td className="py-1.5 px-2 font-mono text-xs text-slate-700 min-w-[130px]">
                             <input
                               type="text"
                               value={r.vin}
+                              maxLength={17}
                               onChange={(e) => handleUpdateField(r.id, { vin: e.target.value })}
-                              className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono text-slate-800 focus:outline-none text-xs"
-                              placeholder="VIN or Vehicle"
+                              className="w-32 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono text-slate-800 focus:outline-none text-xs tracking-tighter"
+                              placeholder="17-Digit VIN"
                             />
                           </td>
 
-                          {/* Assigned Tech */}
-                          <td className="py-1.5 px-2 min-w-[140px]">
+                          {/* Assigned Tech (Compact dropdown) */}
+                          <td className="py-1.5 px-2 min-w-[110px]">
                             <select
                               value={r.assignedTechId || ''}
                               onChange={(e) => {
@@ -1039,7 +1041,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   assignedTechName: selectedTech ? selectedTech.name : 'Unassigned'
                                 });
                               }}
-                              className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-xs font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                              className="w-[110px] px-1.5 py-1 bg-white border border-slate-300 rounded text-xs font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 focus:outline-none cursor-pointer"
                             >
                               <option value="">Unassigned</option>
                               {technicians.map(t => (
