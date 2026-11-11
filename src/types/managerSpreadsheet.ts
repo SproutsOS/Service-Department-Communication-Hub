@@ -34,6 +34,7 @@ export interface ManagerSubPartItem {
 export interface ManagerSpreadsheetRow {
   id: string;
   roNumber: string;
+  roDate?: string;
   customerName: string;
   vin: string;
   assignedTechId?: string;

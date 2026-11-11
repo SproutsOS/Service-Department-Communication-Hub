@@ -232,9 +232,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       const firstPart = extractedParts[0];
 
       if (!existing) {
+        const roOpenedDate = ro.createdAt ? ro.createdAt.split('T')[0] : ((ro as any).dateOpened ? String((ro as any).dateOpened).split('T')[0] : new Date().toISOString().split('T')[0]);
+
         newOrUpdatedRows.unshift({
           id: `mgr_log_${ro.id}_${Date.now()}`,
           roNumber: String(ro.id),
+          roDate: roOpenedDate,
           customerName: ro.customerName || 'Customer',
           vin: ro.vehicle?.vin || `${ro.vehicle?.year || ''} ${ro.vehicle?.make || ''} ${ro.vehicle?.model || ''}`.trim(),
           assignedTechId: ro.techId,
@@ -294,6 +297,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     const newRow: ManagerSpreadsheetRow = {
       id: `mgr_log_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       roNumber: `RO-${Math.floor(1000 + Math.random() * 9000)}`,
+      roDate: todayDt,
       customerName: 'Customer Name',
       vin: '1C4PJLCB7KD...',
       assignedTechId: technicians[0]?.id || '',
@@ -600,6 +604,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
       return (
         r.roNumber.toLowerCase().includes(q) ||
+        (r.roDate && r.roDate.toLowerCase().includes(q)) ||
         r.customerName.toLowerCase().includes(q) ||
         r.vin.toLowerCase().includes(q) ||
         (r.assignedTechName && r.assignedTechName.toLowerCase().includes(q)) ||
@@ -641,6 +646,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const handleExportCSV = () => {
     const headers = [
       'RO #',
+      'RO Date',
       'Customer Name',
       'VIN',
       'Assigned Tech',
@@ -667,6 +673,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       if (partsList.length === 0) {
         const line = [
           r.roNumber,
+          r.roDate || (r.createdAt ? r.createdAt.split('T')[0] : ''),
           r.customerName,
           r.vin,
           r.assignedTechName || '',
@@ -685,6 +692,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         partsList.forEach((p, idx) => {
           const line = [
             idx === 0 ? r.roNumber : `${r.roNumber} (Part ${idx + 1})`,
+            r.roDate || (r.createdAt ? r.createdAt.split('T')[0] : ''),
             r.customerName,
             r.vin,
             r.assignedTechName || '',
@@ -913,10 +921,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 <tr className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-800 whitespace-nowrap">
                   <th className="py-3 px-3 text-center w-10">Expand</th>
                   <th className="py-3 px-3 min-w-[90px]">RO #</th>
+                  <th className="py-3 px-3 min-w-[125px]">RO Date</th>
                   <th className="py-3 px-3 min-w-[150px]">Customer Name</th>
                   <th className="py-3 px-3 min-w-[160px]">VIN / Vehicle</th>
                   <th className="py-3 px-3 min-w-[140px]">Assigned Tech</th>
-                  <th className="py-3 px-3 min-w-[150px]">Status (Stage)</th>
+                  <th className="py-3 px-3 min-w-[170px]">Status (Stage)</th>
                   <th className="py-3 px-3 min-w-[170px]">Parts Breakdown</th>
                   <th className="py-3 px-3 min-w-[160px]">Overall ETA</th>
                   <th className="py-3 px-3 text-center min-w-[120px]">Parts In?</th>
@@ -928,7 +937,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <tbody className="divide-y divide-slate-200">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-500">
+                    <td colSpan={12} className="py-12 text-center text-slate-500">
                       <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                       <p className="font-bold text-slate-700 text-sm">No spreadsheet log entries found</p>
                       <p className="text-xs text-slate-400 mt-0.5">Click "+ Add RO Row" or "Sync Active ROs" above to populate rows.</p>
@@ -984,6 +993,16 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                 </button>
                               )}
                             </div>
+                          </td>
+
+                          {/* RO Date */}
+                          <td className="py-1.5 px-2 font-mono text-xs min-w-[125px]">
+                            <input
+                              type="date"
+                              value={r.roDate || (r.createdAt ? r.createdAt.split('T')[0] : '')}
+                              onChange={(e) => handleUpdateField(r.id, { roDate: e.target.value })}
+                              className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-bold text-slate-800 focus:outline-none text-xs"
+                            />
                           </td>
 
                           {/* Customer Name */}
@@ -1197,7 +1216,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         {/* Expandable Sub-Rows Section (Option 2) */}
                         {isExpanded && (
                           <tr className="bg-slate-50/90 border-b-2 border-purple-200">
-                            <td colSpan={11} className="p-3 sm:p-4">
+                            <td colSpan={12} className="p-3 sm:p-4">
                               <div className="bg-white rounded-xl border-2 border-purple-300 p-3 sm:p-4 shadow-sm space-y-3">
                                 
                                 <div className="flex items-center justify-start pb-2">
