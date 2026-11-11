@@ -624,7 +624,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
             </div>
 
             {/* Scorecard KPI Cards for Active Week */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               
               {/* 1. Hours Card */}
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
@@ -684,7 +684,20 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                 </span>
               </div>
 
-              {/* 5. Gross Profit */}
+              {/* 5. Effective Labor Rate */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs bg-blue-50/20">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                  Effective Labor Rate
+                </span>
+                <div className="text-base sm:text-lg font-black text-blue-800 font-mono mt-0.5">
+                  ${activeWeekSummary.avgEffectiveLaborRate.toFixed(2)} <span className="text-xs font-normal text-slate-500">/hr</span>
+                </div>
+                <span className="text-[10px] text-slate-500">
+                  Labor Sales ÷ Flagged Hrs
+                </span>
+              </div>
+
+              {/* 6. Gross Profit */}
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs bg-emerald-50/20">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
                   Gross Profit ($ & %)
@@ -802,6 +815,15 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                       </th>
                       <th 
                         className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
+                        onClick={() => handleSortClick('effectiveLaborRate')}
+                      >
+                        <div className="flex items-center justify-end gap-1 text-blue-300">
+                          <span>Effective Rate ($/Billed Hr)</span>
+                          <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                        </div>
+                      </th>
+                      <th 
+                        className="py-2.5 px-3 text-right cursor-pointer hover:bg-slate-800"
                         onClick={() => handleSortClick('grossProfit')}
                       >
                         <div className="flex items-center justify-end gap-1 text-emerald-300">
@@ -825,7 +847,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                   <tbody className="divide-y divide-slate-200">
                     {computedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={12} className="py-12 text-center text-slate-500">
+                        <td colSpan={13} className="py-12 text-center text-slate-500">
                           <p className="font-semibold text-sm">No employees listed in this sheet.</p>
                           <p className="text-xs text-slate-400 mt-1">Click "+ Add Employee Row" or "Sync Names from Staff" above.</p>
                         </td>
@@ -953,6 +975,17 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               </div>
                             </td>
 
+                            {/* Effective Labor Rate ($/Billed Hr = Labor Sales / Flagged Hours) */}
+                            <td className="py-1.5 px-3 text-right font-mono font-bold text-xs min-w-[130px]">
+                              {r.flaggedHours > 0 ? (
+                                <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-900 font-black border border-blue-200/80">
+                                  ${r.effectiveLaborRate.toFixed(2)}/hr
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal">--</span>
+                              )}
+                            </td>
+
                             {/* Gross Profit ($ Computed: Labor Sales - Total Pay) */}
                             <td className="py-1.5 px-3 text-right font-mono font-black text-xs min-w-[110px]">
                               <span className={r.grossProfit >= 0 ? 'text-emerald-700 font-extrabold' : 'text-rose-600 font-extrabold'}>
@@ -1020,6 +1053,9 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                         <td className="py-3 px-3 text-right text-white font-black">
                           {formatCurrency(activeWeekSummary.totalRevenue)}
                         </td>
+                        <td className="py-3 px-3 text-right text-blue-300 font-black">
+                          ${activeWeekSummary.avgEffectiveLaborRate.toFixed(2)}/hr
+                        </td>
                         <td className="py-3 px-3 text-right text-emerald-400 font-black">
                           {formatCurrency(activeWeekSummary.totalGrossProfit)}
                         </td>
@@ -1036,6 +1072,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               {/* Table Bottom Help Footer */}
               <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
+                  <span><strong>EFFECTIVE LABOR RATE:</strong> Labor Sales ÷ Flagged Hours</span>
+                  <span>•</span>
                   <span><strong>GROSS PROFIT:</strong> Labor Sales − Total Pay</span>
                   <span>•</span>
                   <span><strong>FLAT RATE:</strong> Flagged Hrs × Pay Rate</span>

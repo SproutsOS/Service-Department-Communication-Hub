@@ -85,6 +85,9 @@ export function computeEmployeeRow(
   const effectiveCostPerHour = actualHours > 0 ? totalPay / actualHours : 0;
   const effectiveRevenuePerHour = actualHours > 0 ? totalRevenue / actualHours : 0;
 
+  // 6. Effective Labor Rate ($/Billed Hr) = Labor Sales / Flagged Hours
+  const effectiveLaborRate = flaggedHours > 0 ? laborSales / flaggedHours : 0;
+
   return {
     ...row,
     actualHours,
@@ -102,6 +105,7 @@ export function computeEmployeeRow(
     netProfitPct,
     effectiveCostPerHour,
     effectiveRevenuePerHour,
+    effectiveLaborRate,
   };
 }
 
@@ -151,6 +155,10 @@ export function computeWeekSummary(week: ProfitabilityWeek): WeekSummaryTotals {
     ? totalRevenue / totalActualHours 
     : 0;
 
+  const avgEffectiveLaborRate = totalFlaggedHours > 0 
+    ? totalRevenue / totalFlaggedHours 
+    : 0;
+
   return {
     weekId: week.id,
     weekStartDate: week.weekStartDate,
@@ -169,6 +177,7 @@ export function computeWeekSummary(week: ProfitabilityWeek): WeekSummaryTotals {
     overallNetProfitPct,
     avgPayRate,
     avgRevenuePerHour,
+    avgEffectiveLaborRate,
   };
 }
 
@@ -338,6 +347,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
     'Rate of Pay ($)',
     'Total Pay ($)',
     'Labor Sales ($)',
+    'Effective Labor Rate ($/Billed Hr)',
     'Gross Profit ($)',
     'Gross Profit %',
     'Effective Cost/Hr ($)',
@@ -360,6 +370,7 @@ export function exportWeekToCSV(week: ProfitabilityWeek): string {
       `$${r.payRate.toFixed(2)}`,
       `$${r.totalPay.toFixed(2)}`,
       `$${r.laborSales.toFixed(2)}`,
+      `$${r.effectiveLaborRate.toFixed(2)}/hr`,
       `$${r.grossProfit.toFixed(2)}`,
       `${r.grossProfitPct.toFixed(1)}%`,
       `$${r.effectiveCostPerHour.toFixed(2)}`,

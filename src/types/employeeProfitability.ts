@@ -32,6 +32,7 @@ export interface ComputedEmployeeRow extends EmployeeProfitabilityRow {
   netProfitPct: number; // (netProfit / laborSales) * 100
   effectiveCostPerHour: number; // totalPay / actualHours
   effectiveRevenuePerHour: number; // totalRevenue / actualHours
+  effectiveLaborRate: number; // laborSales / flaggedHours
 }
 
 export interface ProfitabilityWeek {
@@ -66,6 +67,7 @@ export interface WeekSummaryTotals {
   overallNetProfitPct: number;
   avgPayRate: number;
   avgRevenuePerHour: number;
+  avgEffectiveLaborRate: number;
 }
 
 export interface RunningTotalsAccumulator {
