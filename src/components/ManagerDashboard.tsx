@@ -541,10 +541,49 @@ export const ManagerDashboard: React.FC = () => {
                       </span>
                     )}
                   </button>
+
+                  {/* ProDemand (Mitchell 1) */}
+                  <a
+                    href="https://www.prodemand.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setIsDirectoriesMenuOpen(false)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-red-50/80 text-left transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-red-100 text-red-700 group-hover:bg-red-200 transition-colors">
+                        <Wrench className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-red-800 flex items-center gap-1">
+                          <span>ProDemand (Mitchell 1)</span>
+                          <ExternalLink className="w-3 h-3 text-red-500 opacity-70" />
+                        </div>
+                        <div className="text-[10px] text-slate-500">OEM repair info, wiring diagrams & labor times</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 font-mono uppercase">
+                      Portal
+                    </span>
+                  </a>
                 </div>
               </div>
             )}
           </div>
+
+          {/* ProDemand Quick Launch Button */}
+          <a
+            id="open-prodemand-btn-mgr"
+            href="https://www.prodemand.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-extrabold bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-700 hover:to-rose-800 text-white shadow-sm transition-all cursor-pointer border border-red-400/50 hover:shadow-md hover:scale-[1.02] active:scale-95"
+            title="Open Mitchell 1 ProDemand OEM Repair Info & Labor Estimator"
+          >
+            <Wrench className="w-4 h-4 text-red-100" />
+            <span>ProDemand</span>
+            <ExternalLink className="w-3.5 h-3.5 text-red-200 opacity-90" />
+          </a>
 
           {/* Primary Action Button */}
           <button

@@ -474,7 +474,6 @@ const UNWANTED_NON_TECH_NAMES = [
   'ronnie',
   'matt',
   'branson',
-  'dane',
   'jacob',
   'jesse',
   'montana',
@@ -503,9 +502,8 @@ export function removeSampleEmployees(weeks: ProfitabilityWeek[]): Profitability
 }
 
 /**
- * Ensures that all user-added employees in the Profitability Ledger are present across ALL weeks in the ledger.
- * Preserves existing weekly figures (hours, sales) for employees already present on a week,
- * and adds missing user-entered employees to other weeks with standard defaults.
+ * Ensures that active user-added employees are synced appropriately across weeks in the ledger.
+ * Excludes inactive employees (e.g. Dane Griffin) from current and future pay periods while preserving them on past historical weeks.
  */
 export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): ProfitabilityWeek[] {
   if (!Array.isArray(weeksList) || weeksList.length === 0) return weeksList;
@@ -513,37 +511,48 @@ export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): Pr
   // First strip any legacy sample employees or auto-synced roster entries
   const cleanedWeeks = removeSampleEmployees(weeksList);
 
-  // Map of unique user-added employees found across any week in the ledger
-  const masterMap = new Map<string, EmployeeProfitabilityRow>();
+  const isDane = (name: string) => (name || '').trim().toLowerCase().includes('dane griffin');
 
-  // If no employees exist at all across any week, seed with the 7 technicians
-  cleanedWeeks.forEach(w => {
-    (w.rows || []).forEach(r => {
-      const key = (r.name || '').trim().toLowerCase();
-      if (!key) return;
-      if (!masterMap.has(key)) {
-        masterMap.set(key, r);
-      }
-    });
+  // Filter current/future weeks to exclude Dane Griffin, while keeping past weeks untouched
+  const updatedWeeks = cleanedWeeks.map((w, idx) => {
+    const isCurrentOrFutureWeek = idx === 0 || w.id === 'week_2026_11_10' || (w.weekStartDate && w.weekStartDate >= '2026-11-04');
+    
+    if (isCurrentOrFutureWeek) {
+      return {
+        ...w,
+        rows: (w.rows || []).filter(r => !isDane(r.name))
+      };
+    }
+    return w;
   });
 
-  if (masterMap.size === 0) {
-    INITIAL_MANUAL_TECHNICIANS.forEach(tech => {
-      masterMap.set(tech.name.trim().toLowerCase(), tech);
-    });
-  }
+  // Collect active master list from current active week (excluding inactive techs)
+  const activeWeek = updatedWeeks[0];
+  const activeMasterMap = new Map<string, EmployeeProfitabilityRow>();
+  (activeWeek?.rows || []).forEach(r => {
+    const key = (r.name || '').trim().toLowerCase();
+    if (key && !activeMasterMap.has(key)) {
+      activeMasterMap.set(key, r);
+    }
+  });
 
-  const masterList = Array.from(masterMap.values());
+  const activeMasterList = Array.from(activeMasterMap.values());
 
-  return cleanedWeeks.map(w => {
+  return updatedWeeks.map((w, idx) => {
+    const isCurrentOrFutureWeek = idx === 0 || w.id === 'week_2026_11_10' || (w.weekStartDate && w.weekStartDate >= '2026-11-04');
+    if (!isCurrentOrFutureWeek) {
+      // Past week - keep existing rows as recorded
+      return w;
+    }
+
     const existingNames = new Set((w.rows || []).map(r => (r.name || '').trim().toLowerCase()));
     const missingEmployees: EmployeeProfitabilityRow[] = [];
 
-    masterList.forEach((m, idx) => {
+    activeMasterList.forEach((m, i) => {
       const key = (m.name || '').trim().toLowerCase();
       if (!existingNames.has(key)) {
         missingEmployees.push({
-          id: `emp_${w.id}_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+          id: `emp_${w.id}_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
           name: m.name,
           role: m.role || 'Technician',
           payType: m.payType || 'FLAT_RATE',
@@ -625,7 +634,7 @@ export const DEFAULT_PROFITABILITY_WEEKS: ProfitabilityWeek[] = [
     updatedAt: '2026-11-04T18:00:00Z',
     isLocked: false,
     notes: 'Active weekly cycle • Wednesday to Tuesday payroll',
-    rows: INITIAL_MANUAL_TECHNICIANS.map((t, idx) => ({ ...t, id: `emp_w10_${idx}` }))
+    rows: INITIAL_MANUAL_TECHNICIANS.filter(t => t.name !== 'DANE GRIFFIN').map((t, idx) => ({ ...t, id: `emp_w10_${idx}` }))
   },
   // Week 9: Oct 28 - Nov 3, 2026
   {
