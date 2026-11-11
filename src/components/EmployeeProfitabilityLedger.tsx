@@ -104,6 +104,36 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Auto-save alert toast
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
+  // 5-Minute Inactivity Auto-Lock Security Timer (300 seconds)
+  const INACTIVITY_TIMEOUT_SECONDS = 300;
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(INACTIVITY_TIMEOUT_SECONDS);
+
+  useEffect(() => {
+    const handleUserActivity = () => {
+      setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach(evt => window.addEventListener(evt, handleUserActivity, { passive: true }));
+
+    const intervalId = setInterval(() => {
+      setSecondsRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          lockProfitLedger();
+          if (onBackToDashboard) onBackToDashboard();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, handleUserActivity));
+      clearInterval(intervalId);
+    };
+  }, [lockProfitLedger, onBackToDashboard]);
+
   // Helper to persist weeks to LocalStorage and Firestore, ensuring user-entered roster propagation across all weeks
   const saveWeeks = useCallback((updatedWeeks: ProfitabilityWeek[]) => {
     const cleaned = removeSampleEmployees(updatedWeeks);
@@ -448,8 +478,28 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               </button>
             </div>
 
-            {/* Header Controls: Lock, Password Settings, and Back */}
+            {/* Header Controls: Inactivity Timer, Lock, Password Settings, and Back */}
             <div className="flex items-center gap-2">
+              {/* 5-Min Inactivity Live Timer Badge */}
+              <div 
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all ${
+                  secondsRemaining <= 60 
+                    ? 'bg-red-950/90 text-red-200 border-red-500 ring-2 ring-red-500/40 animate-pulse' 
+                    : secondsRemaining <= 120
+                    ? 'bg-amber-950/70 text-amber-200 border-amber-500/80'
+                    : 'bg-slate-900/90 text-emerald-300 border-slate-700/90'
+                }`}
+                title="Security Auto-Lock: Profit Ledger automatically locks after 5 minutes of inactivity"
+              >
+                <Clock className={`w-3.5 h-3.5 ${secondsRemaining <= 60 ? 'text-red-400 animate-spin' : 'text-emerald-400'}`} />
+                <span>
+                  {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, '0')}
+                </span>
+                <span className="text-[10px] font-sans font-semibold text-slate-400 hidden sm:inline">
+                  Auto-Lock
+                </span>
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
