@@ -1,7 +1,8 @@
 export type ManagerLogStatus = 
   | 'Dispatched' 
   | 'In Diag' 
-  | 'Waiting for Approval'
+  | 'Pending Customer Approval'
+  | 'Pending Warranty Approval'
   | 'In Repair' 
   | 'Finished' 
   | 'Waiting for Payment';

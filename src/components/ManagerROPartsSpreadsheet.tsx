@@ -37,7 +37,8 @@ const STORAGE_KEY_MANAGER_SPREADSHEET = 'dealership_service_manager_ro_parts_spr
 const STATUS_OPTIONS: ManagerLogStatus[] = [
   'Dispatched',
   'In Diag',
-  'Waiting for Approval',
+  'Pending Customer Approval',
+  'Pending Warranty Approval',
   'In Repair',
   'Finished',
   'Waiting for Payment'
@@ -218,7 +219,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       if (ro.status === 'WAITING_DIAGNOSTICS' || ro.status === 'IN_DIAG') {
         mappedStatus = ro.techId ? 'In Diag' : 'Dispatched';
       } else if (ro.status === 'ESTIMATE_DONE' || ro.status === 'WAITING_FOR_APPROVAL') {
-        mappedStatus = 'Waiting for Approval';
+        mappedStatus = 'Pending Customer Approval';
       } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'PARTS_IN_TO_TECH' || ro.status === 'APPROVED' || ro.status === 'PARTS_ORDERED') {
         mappedStatus = 'In Repair';
       } else if (ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP') {
@@ -1030,8 +1031,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             </select>
                           </td>
 
-                          {/* Status (Dropdown Menu with 5 options) */}
-                          <td className="py-1.5 px-2 min-w-[150px]">
+                          {/* Status Dropdown Menu */}
+                          <td className="py-1.5 px-2 min-w-[170px]">
                             <select
                               value={r.status}
                               onChange={(e) => handleUpdateField(r.id, { status: e.target.value as ManagerLogStatus })}
@@ -1040,10 +1041,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   ? 'bg-amber-50 text-amber-900 border-amber-300' 
                                   : r.status === 'In Diag' 
                                   ? 'bg-blue-50 text-blue-900 border-blue-300' 
-                                  : r.status === 'Waiting for Approval'
+                                  : r.status === 'Pending Customer Approval'
                                   ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold'
+                                  : r.status === 'Pending Warranty Approval'
+                                  ? 'bg-purple-100 text-purple-950 border-purple-400 font-extrabold'
                                   : r.status === 'In Repair' 
-                                  ? 'bg-purple-50 text-purple-900 border-purple-300' 
+                                  ? 'bg-indigo-50 text-indigo-900 border-indigo-300' 
                                   : r.status === 'Finished' 
                                   ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
                                   : 'bg-rose-50 text-rose-900 border-rose-300'
@@ -1051,7 +1054,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             >
                               <option value="Dispatched">Dispatched</option>
                               <option value="In Diag">In Diag</option>
-                              <option value="Waiting for Approval">Waiting for Approval</option>
+                              <option value="Pending Customer Approval">Pending Customer Approval</option>
+                              <option value="Pending Warranty Approval">Pending Warranty Approval</option>
                               <option value="In Repair">In Repair</option>
                               <option value="Finished">Finished</option>
                               <option value="Waiting for Payment">Waiting for Payment</option>
@@ -1339,16 +1343,14 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
                                             {/* Action */}
                                             <td className="p-1.5 text-center">
-                                              {partsList.length > 1 && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleDeleteSubPart(r.id, sp.id)}
-                                                  className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                                                  title="Delete this part item"
-                                                >
-                                                  <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                              )}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteSubPart(r.id, sp.id)}
+                                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                                                title="Delete this part item"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
                                             </td>
 
                                           </tr>
