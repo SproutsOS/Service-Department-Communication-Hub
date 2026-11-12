@@ -39,10 +39,35 @@ const STATUS_OPTIONS: ManagerLogStatus[] = [
   'In Diag',
   'Pending Customer Approval',
   'Pending Warranty Approval',
+  'Waiting on Parts',
   'In Repair',
   'Finished',
   'Waiting for Payment'
 ];
+
+export const formatEtaDisplayDate = (dateStr: string | undefined): string => {
+  if (!dateStr || dateStr === 'Pending' || dateStr === 'N/A') return dateStr || 'Pending';
+  const trimmed = dateStr.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [y, m, d] = trimmed.split('-');
+    return `${m}/${d}/${y}`;
+  }
+  if (trimmed.includes('T')) {
+    const dateOnly = trimmed.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+      const [y, m, d] = dateOnly.split('-');
+      return `${m}/${d}/${y}`;
+    }
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    const y = parsed.getFullYear();
+    return `${m}/${d}/${y}`;
+  }
+  return trimmed;
+};
 
 interface ManagerROPartsSpreadsheetProps {
   onBackToDashboard?: () => void;
@@ -149,7 +174,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
     if (Array.isArray(ro.parts) && ro.parts.length > 0) {
       ro.parts.forEach((p, idx) => {
-        const etaStr = p.estimatedArrival || 'Pending';
+        const etaStr = p.estimatedArrival ? formatEtaDisplayDate(p.estimatedArrival) : 'Pending';
         const isRec = p.status === 'RECEIVED' || p.status === 'ISSUED_TO_TECH' || p.status === 'IN_STOCK';
         const orderDt = p.orderedAt ? p.orderedAt.split('T')[0] : (ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
         roPartsList.push({
@@ -177,7 +202,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
     if (roPartsList.length === 0 && ro.quote?.partsItems && ro.quote.partsItems.length > 0) {
       ro.quote.partsItems.forEach((qp, idx) => {
-        const etaStr = (qp as any).estimatedArrival || 'Pending';
+        const etaStr = (qp as any).estimatedArrival ? formatEtaDisplayDate((qp as any).estimatedArrival) : 'Pending';
         const orderDt = ro.createdAt ? ro.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
         roPartsList.push({
           id: qp.id || `subpart_quote_${ro.id}_${idx}`,
@@ -220,7 +245,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         mappedStatus = ro.techId ? 'In Diag' : 'Dispatched';
       } else if (ro.status === 'ESTIMATE_DONE' || ro.status === 'WAITING_FOR_APPROVAL') {
         mappedStatus = 'Pending Customer Approval';
-      } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'PARTS_IN_TO_TECH' || ro.status === 'APPROVED' || ro.status === 'PARTS_ORDERED') {
+      } else if (ro.status === 'PARTS_ORDERED' || (ro.status as string) === 'WAITING_FOR_PARTS') {
+        mappedStatus = 'Waiting on Parts';
+      } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'PARTS_IN_TO_TECH' || ro.status === 'APPROVED') {
         mappedStatus = 'In Repair';
       } else if (ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP') {
         mappedStatus = 'Finished';
@@ -511,8 +538,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   // Add revised ETA entry in history trail
   const handleAddEtaRevision = () => {
     if (!etaModalTarget) return;
-    const dateVal = newEtaInput.trim();
-    if (!dateVal) return;
+    const rawVal = newEtaInput.trim();
+    if (!rawVal) return;
+    const dateVal = formatEtaDisplayDate(rawVal);
 
     const { rowId, subPartId } = etaModalTarget;
 
@@ -1050,6 +1078,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold'
                                   : r.status === 'Pending Warranty Approval'
                                   ? 'bg-purple-100 text-purple-950 border-purple-400 font-extrabold'
+                                  : r.status === 'Waiting on Parts'
+                                  ? 'bg-orange-100 text-orange-950 border-orange-400 font-extrabold'
                                   : r.status === 'In Repair' 
                                   ? 'bg-indigo-50 text-indigo-900 border-indigo-300' 
                                   : r.status === 'Finished' 
@@ -1061,6 +1091,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               <option value="In Diag">In Diag</option>
                               <option value="Pending Customer Approval">Pending Customer Approval</option>
                               <option value="Pending Warranty Approval">Pending Warranty Approval</option>
+                              <option value="Waiting on Parts">Waiting on Parts</option>
                               <option value="In Repair">In Repair</option>
                               <option value="Finished">Finished</option>
                               <option value="Waiting for Payment">Waiting for Payment</option>
@@ -1097,7 +1128,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             {hasParts ? (
                               <div className="flex items-center justify-between gap-1.5">
                                 <div className="min-w-0 font-mono text-xs font-bold text-slate-800">
-                                  {partsList[0]?.currentEta || r.currentEta || 'Pending'}
+                                  {formatEtaDisplayDate(partsList[0]?.currentEta || r.currentEta)}
                                 </div>
                                 <button
                                   type="button"
@@ -1289,7 +1320,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                             <td className="p-1.5">
                                               <div className="flex items-center justify-between gap-1">
                                                 <span className="font-mono text-xs font-bold text-slate-900">
-                                                  {sp.currentEta}
+                                                  {formatEtaDisplayDate(sp.currentEta)}
                                                 </span>
                                                 <button
                                                   type="button"
@@ -1408,13 +1439,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Original ETA</div>
                   <div className="text-sm font-black font-mono text-slate-900 mt-0.5">
-                    {etaModalTargetObj.originalEta || 'Pending'}
+                    {formatEtaDisplayDate(etaModalTargetObj.originalEta)}
                   </div>
                 </div>
                 <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
                   <div className="text-[10px] font-bold text-purple-800 uppercase tracking-wider">Current Revised ETA</div>
                   <div className="text-sm font-black font-mono text-purple-950 mt-0.5">
-                    {etaModalTargetObj.currentEta || 'Pending'}
+                    {formatEtaDisplayDate(etaModalTargetObj.currentEta)}
                   </div>
                 </div>
               </div>
@@ -1428,10 +1459,10 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">New ETA Date</label>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">New ETA Date (MM/DD/YYYY)</label>
                     <input
                       type="text"
-                      placeholder="e.g. 2026-11-20 or Nov 20"
+                      placeholder="e.g. 11/13/2026"
                       value={newEtaInput}
                       onChange={e => setNewEtaInput(e.target.value)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-none"
@@ -1473,7 +1504,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         </span>
                         <div>
                           <div className="font-mono font-black text-slate-900 text-xs">
-                            ETA: {item.etaDate}
+                            ETA: {formatEtaDisplayDate(item.etaDate)}
                           </div>
                           {item.note && (
                             <p className="text-xs text-slate-600 mt-0.5 font-medium">

@@ -3,6 +3,7 @@ export type ManagerLogStatus =
   | 'In Diag' 
   | 'Pending Customer Approval'
   | 'Pending Warranty Approval'
+  | 'Waiting on Parts'
   | 'In Repair' 
   | 'Finished' 
   | 'Waiting for Payment';
