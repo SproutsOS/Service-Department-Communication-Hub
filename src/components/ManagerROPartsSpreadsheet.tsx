@@ -50,7 +50,7 @@ const STATUS_OPTIONS: ManagerLogStatus[] = [
 export const getStatusBadgeStyle = (status: ManagerLogStatus | string): string => {
   switch (status) {
     case 'Dispatched':
-      return 'bg-amber-50 text-amber-900 border-amber-300 font-extrabold';
+      return 'bg-purple-100 text-purple-950 border-purple-400 font-extrabold';
     case 'In Diag': // Light Green
       return 'bg-green-100 text-green-950 border-green-300 font-extrabold';
     case 'Pending Customer Approval': // Blue
