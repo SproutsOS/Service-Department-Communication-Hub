@@ -6,7 +6,8 @@ export type ManagerLogStatus =
   | 'Waiting on Parts'
   | 'In Repair' 
   | 'Finished' 
-  | 'Waiting for Payment';
+  | 'Waiting for Payment'
+  | 'Waiting on Payment';
 
 export interface EtaHistoryEntry {
   id: string;

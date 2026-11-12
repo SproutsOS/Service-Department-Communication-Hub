@@ -22,10 +22,12 @@ import {
   User,
   Package,
   Layers,
-  Check
+  Check,
+  CheckSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ManagerSpreadsheetRow, ManagerLogStatus, EtaHistoryEntry, ManagerSubPartItem } from '../types/managerSpreadsheet';
+import { ManagerNotepadModal } from './ManagerNotepadModal';
 import { printIsolatedDocument } from '../utils/printUtils';
 import { 
   syncShopSettings, 
@@ -42,8 +44,32 @@ const STATUS_OPTIONS: ManagerLogStatus[] = [
   'Waiting on Parts',
   'In Repair',
   'Finished',
-  'Waiting for Payment'
+  'Waiting on Payment'
 ];
+
+export const getStatusBadgeStyle = (status: ManagerLogStatus | string): string => {
+  switch (status) {
+    case 'Dispatched':
+      return 'bg-amber-50 text-amber-900 border-amber-300 font-extrabold';
+    case 'In Diag': // Light Green
+      return 'bg-green-100 text-green-950 border-green-300 font-extrabold';
+    case 'Pending Customer Approval': // Blue
+      return 'bg-blue-100 text-blue-950 border-blue-400 font-extrabold';
+    case 'Pending Warranty Approval': // Medium Green
+      return 'bg-emerald-600 text-white border-emerald-700 font-extrabold';
+    case 'Waiting on Parts': // Light Red
+      return 'bg-red-100 text-red-950 border-red-300 font-extrabold';
+    case 'In Repair': // Dark Blue
+      return 'bg-blue-900 text-white border-blue-950 font-extrabold';
+    case 'Finished': // Dark Green
+      return 'bg-emerald-950 text-white border-emerald-900 font-extrabold';
+    case 'Waiting on Payment': // Black
+    case 'Waiting for Payment':
+      return 'bg-black text-white border-slate-900 font-extrabold';
+    default:
+      return 'bg-slate-100 text-slate-800 border-slate-300 font-extrabold';
+  }
+};
 
 export const formatEtaDisplayDate = (dateStr: string | undefined): string => {
   if (!dateStr || dateStr === 'Pending' || dateStr === 'N/A') return dateStr || 'Pending';
@@ -77,6 +103,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   onBackToDashboard 
 }) => {
   const { repairOrders, users, setSelectedRO } = useApp();
+
+  const [isNotepadOpen, setIsNotepadOpen] = useState(false);
 
   const technicians = useMemo(() => {
     return users.filter(u => u.role === 'TECHNICIAN' && !u.isDeactivated);
@@ -252,7 +280,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       } else if (ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP') {
         mappedStatus = 'Finished';
       } else if (ro.status === 'COMPLETED' || ro.status === 'CLOSED') {
-        mappedStatus = 'Waiting for Payment';
+        mappedStatus = 'Waiting on Payment';
       }
 
       const extractedParts = extractSubPartsFromRO(ro);
@@ -601,7 +629,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   // Filtered rows
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
-      if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+      if (statusFilter !== 'ALL') {
+        const matches = r.status === statusFilter || 
+          (statusFilter === 'Waiting on Payment' && (r.status as string) === 'Waiting for Payment');
+        if (!matches) return false;
+      }
       const validParts = r.parts || [];
       const hasPartsIn = validParts.some(p => p.isPartsIn);
 
@@ -774,6 +806,16 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsNotepadOpen(true)}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white border border-amber-500 shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Open Service Manager Notepad & Scratchpad"
+            >
+              <CheckSquare className="w-4 h-4 text-amber-100" />
+              <span>Manager Notepad</span>
+            </button>
+
             {onBackToDashboard && (
               <button
                 type="button"
@@ -892,7 +934,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               All Stages ({rows.length})
             </button>
             {STATUS_OPTIONS.map(st => {
-              const count = rows.filter(r => r.status === st).length;
+              const count = rows.filter(r => r.status === st || (st === 'Waiting on Payment' && (r.status as string) === 'Waiting for Payment')).length;
               const isSelected = statusFilter === st;
               return (
                 <button
@@ -1067,34 +1109,18 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           {/* Status Dropdown Menu */}
                           <td className="py-1.5 px-2 min-w-[170px]">
                             <select
-                              value={r.status}
+                              value={r.status === 'Waiting for Payment' ? 'Waiting on Payment' : r.status}
                               onChange={(e) => handleUpdateField(r.id, { status: e.target.value as ManagerLogStatus })}
-                              className={`w-full px-2 py-1 text-xs font-black rounded border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                                r.status === 'Dispatched' 
-                                  ? 'bg-amber-50 text-amber-900 border-amber-300' 
-                                  : r.status === 'In Diag' 
-                                  ? 'bg-blue-50 text-blue-900 border-blue-300' 
-                                  : r.status === 'Pending Customer Approval'
-                                  ? 'bg-amber-100 text-amber-950 border-amber-400 font-extrabold'
-                                  : r.status === 'Pending Warranty Approval'
-                                  ? 'bg-purple-100 text-purple-950 border-purple-400 font-extrabold'
-                                  : r.status === 'Waiting on Parts'
-                                  ? 'bg-orange-100 text-orange-950 border-orange-400 font-extrabold'
-                                  : r.status === 'In Repair' 
-                                  ? 'bg-indigo-50 text-indigo-900 border-indigo-300' 
-                                  : r.status === 'Finished' 
-                                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
-                                  : 'bg-rose-50 text-rose-900 border-rose-300'
-                              }`}
+                              className={`w-full px-2 py-1 text-xs font-black rounded border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${getStatusBadgeStyle(r.status)}`}
                             >
-                              <option value="Dispatched">Dispatched</option>
-                              <option value="In Diag">In Diag</option>
-                              <option value="Pending Customer Approval">Pending Customer Approval</option>
-                              <option value="Pending Warranty Approval">Pending Warranty Approval</option>
-                              <option value="Waiting on Parts">Waiting on Parts</option>
-                              <option value="In Repair">In Repair</option>
-                              <option value="Finished">Finished</option>
-                              <option value="Waiting for Payment">Waiting for Payment</option>
+                              <option value="Dispatched" className="bg-white text-slate-900 font-medium">Dispatched</option>
+                              <option value="In Diag" className="bg-white text-slate-900 font-medium">In Diag</option>
+                              <option value="Pending Customer Approval" className="bg-white text-slate-900 font-medium">Pending Customer Approval</option>
+                              <option value="Pending Warranty Approval" className="bg-white text-slate-900 font-medium">Pending Warranty Approval</option>
+                              <option value="Waiting on Parts" className="bg-white text-slate-900 font-medium">Waiting on Parts</option>
+                              <option value="In Repair" className="bg-white text-slate-900 font-medium">In Repair</option>
+                              <option value="Finished" className="bg-white text-slate-900 font-medium">Finished</option>
+                              <option value="Waiting on Payment" className="bg-white text-slate-900 font-medium">Waiting on Payment</option>
                             </select>
                           </td>
 
@@ -1611,6 +1637,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         </div>
       </div>
 
+      {/* Personal Manager Notepad Modal */}
+      <ManagerNotepadModal
+        isOpen={isNotepadOpen}
+        onClose={() => setIsNotepadOpen(false)}
+      />
     </div>
   );
 };

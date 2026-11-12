@@ -99,6 +99,7 @@ export interface ShopSettings {
   recallWaitingList?: any[];
   internalExtensions?: any[];
   managerROPartsSpreadsheet?: any[];
+  managerNotepadData?: any;
   updatedAt?: string;
 }
 

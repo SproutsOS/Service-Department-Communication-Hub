@@ -37,9 +37,11 @@ import {
   PhoneForwarded, 
   RefreshCw, 
   Plus,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { ManagerNotepadModal } from './ManagerNotepadModal';
 import { ROCard } from './ROCard';
 import { ROStatus, RepairOrder, User } from '../types';
 import { STATUS_CONFIG, normalizeROStatus } from '../data/mockData';
@@ -87,6 +89,7 @@ export const ManagerDashboard: React.FC = () => {
   const [selectedFollowUpRO, setSelectedFollowUpRO] = useState<RepairOrder | null>(null);
   const [isPartsOnOrderModalOpen, setIsPartsOnOrderModalOpen] = useState(false);
   const [isDirectoriesMenuOpen, setIsDirectoriesMenuOpen] = useState(false);
+  const [isNotepadOpen, setIsNotepadOpen] = useState(false);
   const directoriesMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -395,6 +398,17 @@ export const ManagerDashboard: React.FC = () => {
           >
             <FileSpreadsheet className="w-4 h-4 text-purple-200" />
             <span>Service Manager Log</span>
+          </button>
+
+          {/* Personal Manager Notepad Button */}
+          <button
+            id="open-manager-notepad-btn"
+            onClick={() => setIsNotepadOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer bg-amber-600 hover:bg-amber-700 text-white border border-amber-500 hover:shadow-md"
+            title="Open Personal Checklist, Scratchpad & Quick References"
+          >
+            <CheckSquare className="w-4 h-4 text-amber-100" />
+            <span>Manager Notepad</span>
           </button>
 
           {/* Quick Directories & Resources Dropdown */}
@@ -1485,6 +1499,12 @@ export const ManagerDashboard: React.FC = () => {
           setSelectedRO(ro);
         }}
         onStartDiag={(roId) => startDiagnosis(roId)}
+      />
+
+      {/* Personal Manager Notepad & Scratchpad Modal */}
+      <ManagerNotepadModal
+        isOpen={isNotepadOpen}
+        onClose={() => setIsNotepadOpen(false)}
       />
 
     </div>
