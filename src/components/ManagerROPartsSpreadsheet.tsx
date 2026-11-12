@@ -276,39 +276,32 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     const todayDt = new Date().toISOString().split('T')[0];
     const newSubPart: ManagerSubPartItem = {
       id: `subpart_init_${Date.now()}`,
-      partNumber: 'PART-1001',
-      partDescription: 'Component Description',
+      partNumber: '',
+      partDescription: '',
       quantity: 1,
       orderDate: todayDt,
-      originalEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-      currentEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-      etaHistory: [
-        {
-          id: `eta_manual_init_${Date.now()}`,
-          etaDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-          updatedAt: new Date().toISOString(),
-          updatedBy: 'Service Manager'
-        }
-      ],
+      originalEta: '',
+      currentEta: '',
+      etaHistory: [],
       isPartsIn: false,
       isAdvisorNotified: false
     };
 
     const newRow: ManagerSpreadsheetRow = {
       id: `mgr_log_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      roNumber: `RO-${Math.floor(1000 + Math.random() * 9000)}`,
+      roNumber: '',
       roDate: todayDt,
-      customerName: 'Customer Name',
-      vin: '1C4PJLCB7KD...',
-      assignedTechId: technicians[0]?.id || '',
-      assignedTechName: technicians[0]?.name || 'Unassigned',
+      customerName: '',
+      vin: '',
+      assignedTechId: '',
+      assignedTechName: 'Unassigned',
       status: 'Dispatched',
-      partNumber: newSubPart.partNumber,
-      partDescription: newSubPart.partDescription,
+      partNumber: '',
+      partDescription: '',
       orderDate: todayDt,
-      originalEta: newSubPart.originalEta,
-      currentEta: newSubPart.currentEta,
-      etaHistory: newSubPart.etaHistory,
+      originalEta: '',
+      currentEta: '',
+      etaHistory: [],
       isPartsIn: false,
       isAdvisorNotified: false,
       parts: [newSubPart],
@@ -319,7 +312,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
     saveRows([newRow, ...rows]);
     setExpandedRowIds(prev => new Set([...prev, newRow.id]));
-    triggerToast('Added new custom RO log entry with part sub-row');
+    triggerToast('Added new custom RO log entry');
   };
 
   // Add a sub-part line item to a row
@@ -331,20 +324,13 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
       const newSubPart: ManagerSubPartItem = {
         id: `subpart_add_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        partNumber: `PART-${currentParts.length + 1}`,
-        partDescription: 'New Part Item',
+        partNumber: '',
+        partDescription: '',
         quantity: 1,
         orderDate: todayDt,
-        originalEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-        currentEta: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-        etaHistory: [
-          {
-            id: `eta_sub_add_${Date.now()}`,
-            etaDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-            updatedAt: new Date().toISOString(),
-            updatedBy: 'Service Manager'
-          }
-        ],
+        originalEta: '',
+        currentEta: '',
+        etaHistory: [],
         isPartsIn: false,
         isAdvisorNotified: false
       };
@@ -1013,7 +999,6 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               value={r.customerName}
                               onChange={(e) => handleUpdateField(r.id, { customerName: e.target.value })}
                               className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-bold text-slate-900 focus:outline-none"
-                              placeholder="Customer Name"
                             />
                           </td>
 
@@ -1025,7 +1010,6 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               maxLength={17}
                               onChange={(e) => handleUpdateField(r.id, { vin: e.target.value })}
                               className="w-32 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono text-slate-800 focus:outline-none text-xs tracking-tighter"
-                              placeholder="17-Digit VIN"
                             />
                           </td>
 
@@ -1265,7 +1249,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                                 value={sp.partNumber}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partNumber: e.target.value })}
                                                 className="w-28 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
-                                                placeholder="10 Digits"
+                                                
                                               />
                                             </td>
 
@@ -1276,7 +1260,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                                 value={sp.partDescription || ''}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partDescription: e.target.value })}
                                                 className="w-full px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
-                                                placeholder="Part Description"
+                                                
                                               />
                                             </td>
 
