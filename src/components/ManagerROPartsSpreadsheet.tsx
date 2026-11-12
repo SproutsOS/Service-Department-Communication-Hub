@@ -347,7 +347,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     const todayDt = new Date().toISOString().split('T')[0];
     const updated = rows.map(r => {
       if (r.id !== rowId) return r;
-      const currentParts = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+      const currentParts = r.parts || [];
 
       const newSubPart: ManagerSubPartItem = {
         id: `subpart_add_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -602,7 +602,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
       if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
-      const validParts = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+      const validParts = r.parts || [];
       const hasPartsIn = validParts.some(p => p.isPartsIn);
 
       if (partsInFilter === 'PARTS_IN' && !hasPartsIn) return false;
@@ -682,7 +682,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     lines.push(headers.map(h => `"${h}"`).join(','));
 
     filteredRows.forEach(r => {
-      const partsList = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+      const partsList = r.parts || [];
 
       if (partsList.length === 0) {
         const line = [
@@ -960,7 +960,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 ) : (
                   filteredRows.map((r, idx) => {
                     const linkedRO = repairOrders.find(ro => String(ro.id).toLowerCase() === r.roNumber.trim().toLowerCase());
-                    const partsList = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+                    const partsList = r.parts || [];
                     const hasParts = partsList.length > 0;
 
                     const isExpanded = expandedRowIds.has(r.id);
@@ -1572,7 +1572,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
             </thead>
             <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
               {filteredRows.map(r => {
-                const partsList = (r.parts || []).filter(p => p.partNumber && p.partNumber !== 'N/A');
+                const partsList = r.parts || [];
                 if (partsList.length === 0) {
                   return (
                     <tr key={r.id}>
