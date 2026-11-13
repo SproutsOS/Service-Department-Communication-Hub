@@ -18,6 +18,8 @@ import {
   Wrench,
   AlertTriangle,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Calendar,
   User,
   Package,
@@ -159,6 +161,23 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ManagerLogStatus | 'ALL'>('ALL');
   const [partsInFilter, setPartsInFilter] = useState<'ALL' | 'PARTS_IN' | 'PARTS_WAITING'>('ALL');
+
+  // Column Sorting state
+  type SortField = 'roNumber' | 'roDate' | 'customerName' | 'assignedTechName' | 'status';
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleToggleSort = (field: SortField) => {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortDirection('asc');
+    } else if (sortDirection === 'asc') {
+      setSortDirection('desc');
+    } else {
+      setSortField(null);
+      setSortDirection('asc');
+    }
+  };
 
   // ETA History Modal State
   const [etaModalTarget, setEtaModalTarget] = useState<{ rowId: string; subPartId?: string } | null>(null);
@@ -726,9 +745,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     return warnings;
   }, [rows, repairOrders]);
 
-  // Filtered rows
+  // Filtered & sorted rows
   const filteredRows = useMemo(() => {
-    return rows.filter(r => {
+    const filtered = rows.filter(r => {
       if (statusFilter !== 'ALL') {
         const matches = r.status === statusFilter || 
           (statusFilter === 'Waiting on Payment' && (r.status as string) === 'Waiting for Payment');
@@ -760,7 +779,62 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         (r.notes && r.notes.toLowerCase().includes(q))
       );
     });
-  }, [rows, searchQuery, statusFilter, partsInFilter]);
+
+    if (!sortField) return filtered;
+
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    return [...filtered].sort((a, b) => {
+      if (sortField === 'roNumber') {
+        const aVal = (a.roNumber || '').trim();
+        const bVal = (b.roNumber || '').trim();
+        if (!aVal && !bVal) return 0;
+        if (!aVal) return 1;
+        if (!bVal) return -1;
+        return aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' }) * dir;
+      }
+
+      if (sortField === 'roDate') {
+        const aDate = a.roDate || (a.createdAt ? a.createdAt.split('T')[0] : '');
+        const bDate = b.roDate || (b.createdAt ? b.createdAt.split('T')[0] : '');
+        if (!aDate && !bDate) return 0;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return aDate.localeCompare(bDate) * dir;
+      }
+
+      if (sortField === 'customerName') {
+        const aVal = (a.customerName || '').trim();
+        const bVal = (b.customerName || '').trim();
+        if (!aVal && !bVal) return 0;
+        if (!aVal) return 1;
+        if (!bVal) return -1;
+        return aVal.localeCompare(bVal, undefined, { sensitivity: 'base' }) * dir;
+      }
+
+      if (sortField === 'assignedTechName') {
+        const aTech = (a.assignedTechName || '').trim();
+        const bTech = (b.assignedTechName || '').trim();
+        const aUnassigned = !aTech || aTech.toLowerCase() === 'unassigned';
+        const bUnassigned = !bTech || bTech.toLowerCase() === 'unassigned';
+        if (aUnassigned && bUnassigned) return 0;
+        if (aUnassigned) return 1;
+        if (bUnassigned) return -1;
+        return aTech.localeCompare(bTech, undefined, { sensitivity: 'base' }) * dir;
+      }
+
+      if (sortField === 'status') {
+        const normStatus = (st: string) => (st === 'Waiting for Payment' ? 'Waiting on Payment' : st);
+        const aIdx = STATUS_OPTIONS.indexOf(normStatus(a.status) as ManagerLogStatus);
+        const bIdx = STATUS_OPTIONS.indexOf(normStatus(b.status) as ManagerLogStatus);
+        const safeA = aIdx === -1 ? 999 : aIdx;
+        const safeB = bIdx === -1 ? 999 : bIdx;
+        return (safeA - safeB) * dir;
+      }
+
+      return 0;
+    });
+  }, [rows, searchQuery, statusFilter, partsInFilter, sortField, sortDirection]);
 
   // Active ETA modal target object
   const etaModalTargetObj = useMemo(() => {
@@ -1107,25 +1181,120 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         {/* Interactive Spreadsheet Table Container */}
         <div className="bg-white rounded-xl border border-slate-300 shadow-xs overflow-hidden flex flex-col">
           
-          <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600 font-semibold">
-            <span>Showing {filteredRows.length} of {rows.length} Repair Order log entries</span>
+          <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 font-semibold">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>Showing {filteredRows.length} of {rows.length} Repair Order log entries</span>
+              {sortField && (
+                <button
+                  type="button"
+                  onClick={() => setSortField(null)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold border border-purple-300 cursor-pointer transition-colors"
+                  title="Reset sort back to default order"
+                >
+                  <span>
+                    Sorted by{' '}
+                    {sortField === 'roNumber'
+                      ? 'RO #'
+                      : sortField === 'roDate'
+                      ? 'RO Date'
+                      : sortField === 'customerName'
+                      ? 'Customer Name'
+                      : sortField === 'assignedTechName'
+                      ? 'Assigned Tech'
+                      : 'Status'}{' '}
+                    ({sortDirection === 'asc' ? 'Asc' : 'Desc'})
+                  </span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
             <span className="text-[11px] text-purple-700 font-bold hidden sm:inline flex items-center gap-1">
               <Package className="w-3.5 h-3.5" />
-              <span>Click any "📦 X Parts" badge to expand or add multiple part items beneath that RO</span>
+              <span>Click RO#, RO Date, Tech, or Status headings to sort • Click "📦 X Parts" to expand parts</span>
             </span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-800 whitespace-nowrap">
+                <tr className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-800 whitespace-nowrap select-none">
                   <th className="py-3 px-3 text-center w-10">Expand</th>
-                  <th className="py-3 px-3 min-w-[70px]">RO #</th>
-                  <th className="py-3 px-3 min-w-[125px]">RO Date</th>
-                  <th className="py-3 px-3 min-w-[150px]">Customer Name</th>
+                  <th className="py-3 px-3 min-w-[70px]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSort('roNumber')}
+                      className="inline-flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer uppercase font-extrabold tracking-wider"
+                      title="Click to sort by RO #"
+                    >
+                      <span>RO #</span>
+                      {sortField === 'roNumber' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-300" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-300" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3 px-3 min-w-[125px]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSort('roDate')}
+                      className="inline-flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer uppercase font-extrabold tracking-wider"
+                      title="Click to sort by RO Date"
+                    >
+                      <span>RO Date</span>
+                      {sortField === 'roDate' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-300" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-300" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3 px-3 min-w-[150px]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSort('customerName')}
+                      className="inline-flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer uppercase font-extrabold tracking-wider"
+                      title="Click to sort by Customer Name"
+                    >
+                      <span>Customer Name</span>
+                      {sortField === 'customerName' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-300" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-300" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
                   <th className="py-3 px-3 min-w-[130px]">VIN / Vehicle</th>
-                  <th className="py-3 px-3 min-w-[110px]">Assigned Tech</th>
-                  <th className="py-3 px-3 min-w-[170px]">Status (Stage)</th>
+                  <th className="py-3 px-3 min-w-[110px]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSort('assignedTechName')}
+                      className="inline-flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer uppercase font-extrabold tracking-wider"
+                      title="Click to sort by Assigned Tech"
+                    >
+                      <span>Assigned Tech</span>
+                      {sortField === 'assignedTechName' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-300" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-300" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3 px-3 min-w-[170px]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSort('status')}
+                      className="inline-flex items-center gap-1 hover:text-purple-300 transition-colors cursor-pointer uppercase font-extrabold tracking-wider"
+                      title="Click to sort by Status stage order"
+                    >
+                      <span>Status (Stage)</span>
+                      {sortField === 'status' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-300" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-300" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
                   <th className="py-3 px-3 min-w-[170px]">Parts Breakdown</th>
                   <th className="py-3 px-3 min-w-[160px]">Overall ETA</th>
                   <th className="py-3 px-3 text-center min-w-[120px]">Parts In?</th>
