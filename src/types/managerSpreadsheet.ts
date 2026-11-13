@@ -5,6 +5,7 @@ export type ManagerLogStatus =
   | 'Pending Warranty Approval'
   | 'Waiting on Parts'
   | 'Vehicle Not Here'
+  | 'At Body Shop'
   | 'In Repair' 
   | 'Finished' 
   | 'Waiting for Payment'

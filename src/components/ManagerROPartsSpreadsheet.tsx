@@ -45,6 +45,7 @@ const STATUS_OPTIONS: ManagerLogStatus[] = [
   'Pending Warranty Approval',
   'Waiting on Parts',
   'Vehicle Not Here',
+  'At Body Shop',
   'In Repair',
   'Finished',
   'Waiting on Payment'
@@ -64,6 +65,8 @@ export const getStatusBadgeStyle = (status: ManagerLogStatus | string): string =
       return 'bg-red-100 text-red-950 border-red-300 font-extrabold';
     case 'Vehicle Not Here': // Cool Slate Gray
       return 'bg-slate-200 text-slate-900 border-slate-400 font-extrabold';
+    case 'At Body Shop': // Bright Yellow
+      return 'bg-yellow-100 text-yellow-950 border-yellow-400 font-extrabold';
     case 'In Repair': // Dark Blue
       return 'bg-blue-900 text-white border-blue-950 font-extrabold';
     case 'Finished': // Dark Green
@@ -1460,6 +1463,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               <option value="Pending Warranty Approval" className="bg-white text-slate-900 font-medium">Pending Warranty Approval</option>
                               <option value="Waiting on Parts" className="bg-white text-slate-900 font-medium">Waiting on Parts</option>
                               <option value="Vehicle Not Here" className="bg-white text-slate-900 font-medium">Vehicle Not Here</option>
+                              <option value="At Body Shop" className="bg-white text-slate-900 font-medium">At Body Shop</option>
                               <option value="In Repair" className="bg-white text-slate-900 font-medium">In Repair</option>
                               <option value="Finished" className="bg-white text-slate-900 font-medium">Finished</option>
                               <option value="Waiting on Payment" className="bg-white text-slate-900 font-medium">Waiting on Payment</option>
