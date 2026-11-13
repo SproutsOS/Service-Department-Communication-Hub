@@ -42,6 +42,7 @@ const STATUS_OPTIONS: ManagerLogStatus[] = [
   'Pending Customer Approval',
   'Pending Warranty Approval',
   'Waiting on Parts',
+  'Vehicle Not Here',
   'In Repair',
   'Finished',
   'Waiting on Payment'
@@ -59,6 +60,8 @@ export const getStatusBadgeStyle = (status: ManagerLogStatus | string): string =
       return 'bg-emerald-600 text-white border-emerald-700 font-extrabold';
     case 'Waiting on Parts': // Light Red
       return 'bg-red-100 text-red-950 border-red-300 font-extrabold';
+    case 'Vehicle Not Here': // Cool Slate Gray
+      return 'bg-slate-200 text-slate-900 border-slate-400 font-extrabold';
     case 'In Repair': // Dark Blue
       return 'bg-blue-900 text-white border-blue-950 font-extrabold';
     case 'Finished': // Dark Green
@@ -164,6 +167,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
   // Toast alert
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [roUsedAlert, setRoUsedAlert] = useState<{
+    rowId: string;
+    roNumber: string;
+    message: string;
+    type: 'DUPLICATE_IN_LOG' | 'USED_IN_SYSTEM';
+  } | null>(null);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -402,8 +411,51 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     triggerToast('Added part line item');
   };
 
+  // Check if an RO# has already been used in another log row or existing shop ticket
+  const checkRoNumberUsage = useCallback((rowId: string, rawRoNumber: string) => {
+    const trimmed = rawRoNumber.trim();
+    const norm = trimmed.toLowerCase();
+    if (!norm) {
+      setRoUsedAlert(prev => (prev?.rowId === rowId ? null : prev));
+      return;
+    }
+
+    const otherRowMatch = rows.find(
+      r => r.id !== rowId && r.roNumber.trim().toLowerCase() === norm
+    );
+    if (otherRowMatch) {
+      setRoUsedAlert({
+        rowId,
+        roNumber: trimmed,
+        message: `RO# ${trimmed} is already used in this log${otherRowMatch.customerName ? ` for ${otherRowMatch.customerName}` : ''}.`,
+        type: 'DUPLICATE_IN_LOG',
+      });
+      return;
+    }
+
+    const systemRO = repairOrders.find(
+      ro => String(ro.id).trim().toLowerCase() === norm
+    );
+    const isSyncedSelf = systemRO && rowId.startsWith(`mgr_log_${systemRO.id}_`);
+    if (systemRO && !isSyncedSelf) {
+      setRoUsedAlert({
+        rowId,
+        roNumber: trimmed,
+        message: `RO# ${trimmed} was already used on a shop Repair Order (${systemRO.customerName || 'Customer'} — ${systemRO.status}).`,
+        type: 'USED_IN_SYSTEM',
+      });
+      return;
+    }
+
+    setRoUsedAlert(prev => (prev?.rowId === rowId ? null : prev));
+  }, [rows, repairOrders]);
+
   // Update a top-level field on a row
   const handleUpdateField = (rowId: string, updates: Partial<ManagerSpreadsheetRow>) => {
+    if (updates.roNumber !== undefined) {
+      checkRoNumberUsage(rowId, updates.roNumber);
+    }
+
     const updated = rows.map(r => {
       if (r.id !== rowId) return r;
       return {
@@ -559,6 +611,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const handleDeleteRow = (rowId: string, roNum: string) => {
     if (confirm(`Remove entry for ${roNum} from Manager Spreadsheet?`)) {
       saveRows(rows.filter(r => r.id !== rowId));
+      setRoUsedAlert(prev =>
+        prev && (prev.rowId === rowId || prev.roNumber.trim().toLowerCase() === roNum.trim().toLowerCase())
+          ? null
+          : prev
+      );
       triggerToast(`Removed entry ${roNum}`);
     }
   };
@@ -625,6 +682,49 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     setNewEtaNote('');
     triggerToast(`✓ Updated ETA to ${dateVal} (recorded in history trail)`);
   };
+
+  // Detect duplicate RO#s across log rows and manually entered RO#s that already exist in shop tickets
+  const roUsageMap = useMemo(() => {
+    const counts = new Map<string, ManagerSpreadsheetRow[]>();
+    rows.forEach(r => {
+      const key = r.roNumber.trim().toLowerCase();
+      if (!key) return;
+      const list = counts.get(key) || [];
+      list.push(r);
+      counts.set(key, list);
+    });
+
+    const warnings = new Map<string, { type: 'DUPLICATE_IN_LOG' | 'USED_IN_SYSTEM'; message: string }>();
+    rows.forEach(r => {
+      const trimmed = r.roNumber.trim();
+      const key = trimmed.toLowerCase();
+      if (!key) return;
+
+      const matchesInLog = counts.get(key) || [];
+      if (matchesInLog.length > 1) {
+        const others = matchesInLog
+          .filter(o => o.id !== r.id)
+          .map(o => o.customerName || 'Another entry')
+          .join(', ');
+        warnings.set(r.id, {
+          type: 'DUPLICATE_IN_LOG',
+          message: `Duplicate RO# ${trimmed} — already used in this log (${others})`,
+        });
+        return;
+      }
+
+      const systemRO = repairOrders.find(ro => String(ro.id).trim().toLowerCase() === key);
+      const isSyncedSelf = systemRO && r.id.startsWith(`mgr_log_${systemRO.id}_`);
+      if (systemRO && !isSyncedSelf) {
+        warnings.set(r.id, {
+          type: 'USED_IN_SYSTEM',
+          message: `RO# ${trimmed} already used in shop ticket (${systemRO.customerName || 'Customer'} — ${systemRO.status})`,
+        });
+      }
+    });
+
+    return warnings;
+  }, [rows, repairOrders]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -960,6 +1060,50 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
         </div>
 
+        {/* Duplicate / Used RO# Alert Banner */}
+        {(roUsedAlert || Array.from(roUsageMap.values()).some(w => w.type === 'DUPLICATE_IN_LOG')) && (
+          <div
+            role="alert"
+            className={`p-3.5 rounded-xl border-2 shadow-sm flex items-start justify-between gap-3 animate-in fade-in ${
+              roUsedAlert?.type === 'USED_IN_SYSTEM' && !Array.from(roUsageMap.values()).some(w => w.type === 'DUPLICATE_IN_LOG')
+                ? 'bg-amber-50 border-amber-400 text-amber-950'
+                : 'bg-red-50 border-red-500 text-red-950'
+            }`}
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle
+                className={`w-5 h-5 shrink-0 mt-0.5 ${
+                  roUsedAlert?.type === 'USED_IN_SYSTEM' && !Array.from(roUsageMap.values()).some(w => w.type === 'DUPLICATE_IN_LOG')
+                    ? 'text-amber-600'
+                    : 'text-red-600'
+                }`}
+              />
+              <div className="text-xs space-y-0.5">
+                <div className="font-black uppercase tracking-wide">
+                  {roUsedAlert?.type === 'USED_IN_SYSTEM' && !Array.from(roUsageMap.values()).some(w => w.type === 'DUPLICATE_IN_LOG')
+                    ? 'Notice: RO Number Previously Used in Shop'
+                    : 'Alert: Duplicate RO Number Detected'}
+                </div>
+                <p className="font-semibold">
+                  {roUsedAlert
+                    ? roUsedAlert.message
+                    : 'One or more rows share the same RO#. Duplicate RO numbers are highlighted in red below.'}
+                </p>
+              </div>
+            </div>
+            {roUsedAlert && (
+              <button
+                type="button"
+                onClick={() => setRoUsedAlert(null)}
+                className="p-1 rounded hover:bg-black/5 text-current opacity-70 hover:opacity-100 cursor-pointer shrink-0"
+                title="Dismiss alert"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Interactive Spreadsheet Table Container */}
         <div className="bg-white rounded-xl border border-slate-300 shadow-xs overflow-hidden flex flex-col">
           
@@ -1008,10 +1152,17 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                     const isExpanded = expandedRowIds.has(r.id);
                     const partsInCount = partsList.filter(p => p.isPartsIn).length;
                     const partsNotifiedCount = partsList.filter(p => p.isAdvisorNotified).length;
+                    const roWarning = roUsageMap.get(r.id);
 
                     return (
                       <React.Fragment key={r.id}>
-                        <tr className={`hover:bg-purple-50/40 transition-colors whitespace-nowrap group ${isExpanded ? 'bg-purple-50/60 font-semibold' : ''}`}>
+                        <tr className={`transition-colors whitespace-nowrap group ${
+                          roWarning?.type === 'DUPLICATE_IN_LOG'
+                            ? 'bg-red-50/70 hover:bg-red-100/60'
+                            : isExpanded
+                            ? 'bg-purple-50/60 font-semibold hover:bg-purple-50/80'
+                            : 'hover:bg-purple-50/40'
+                        }`}>
                           
                           {/* Expand Toggle Button */}
                           <td className="py-2 px-3 text-center">
@@ -1037,8 +1188,29 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                 value={r.roNumber}
                                 maxLength={6}
                                 onChange={(e) => handleUpdateField(r.id, { roNumber: e.target.value })}
-                                className="w-16 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-black text-purple-900 focus:outline-none text-xs"
+                                onBlur={(e) => checkRoNumberUsage(r.id, e.target.value)}
+                                title={roWarning ? roWarning.message : 'Enter RO Number'}
+                                className={`w-16 px-1.5 py-1 rounded font-mono font-black focus:outline-none text-xs border ${
+                                  roWarning?.type === 'DUPLICATE_IN_LOG'
+                                    ? 'bg-red-100 border-red-500 text-red-900 ring-1 ring-red-400'
+                                    : roWarning?.type === 'USED_IN_SYSTEM'
+                                    ? 'bg-amber-100 border-amber-500 text-amber-950'
+                                    : 'bg-transparent hover:bg-white focus:bg-white border-transparent hover:border-slate-300 focus:border-purple-500 text-purple-900'
+                                }`}
                               />
+                              {roWarning && (
+                                <span
+                                  title={roWarning.message}
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-tight shrink-0 ${
+                                    roWarning.type === 'DUPLICATE_IN_LOG'
+                                      ? 'bg-red-600 text-white'
+                                      : 'bg-amber-500 text-white'
+                                  }`}
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>{roWarning.type === 'DUPLICATE_IN_LOG' ? 'Used' : 'In Shop'}</span>
+                                </span>
+                              )}
                               {linkedRO && (
                                 <button
                                   type="button"
@@ -1118,6 +1290,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               <option value="Pending Customer Approval" className="bg-white text-slate-900 font-medium">Pending Customer Approval</option>
                               <option value="Pending Warranty Approval" className="bg-white text-slate-900 font-medium">Pending Warranty Approval</option>
                               <option value="Waiting on Parts" className="bg-white text-slate-900 font-medium">Waiting on Parts</option>
+                              <option value="Vehicle Not Here" className="bg-white text-slate-900 font-medium">Vehicle Not Here</option>
                               <option value="In Repair" className="bg-white text-slate-900 font-medium">In Repair</option>
                               <option value="Finished" className="bg-white text-slate-900 font-medium">Finished</option>
                               <option value="Waiting on Payment" className="bg-white text-slate-900 font-medium">Waiting on Payment</option>
