@@ -364,7 +364,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       id: `subpart_init_${Date.now()}`,
       partNumber: '',
       partDescription: '',
-      quantity: 1,
+      quantity: undefined,
       orderDate: todayDt,
       originalEta: '',
       currentEta: '',
@@ -412,7 +412,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         id: `subpart_add_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         partNumber: '',
         partDescription: '',
-        quantity: 1,
+        quantity: undefined,
         orderDate: todayDt,
         originalEta: '',
         currentEta: '',
@@ -1625,7 +1625,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                     <thead className="bg-purple-100 text-purple-950 uppercase text-[10px] font-bold">
                                       <tr>
                                         <th className="p-2 w-28 min-w-[100px]">Part Number</th>
-                                        <th className="p-2 min-w-[180px]">Description</th>
+                                        <th className="p-2 w-44">Description</th>
                                         <th className="p-2 text-center w-16">Qty</th>
                                         <th className="p-2 min-w-[130px]">Order Date</th>
                                         <th className="p-2 min-w-[160px]">Part ETA & History</th>
@@ -1657,12 +1657,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                             </td>
 
                                             {/* Description */}
-                                            <td className="p-1.5">
+                                            <td className="p-1.5 w-44">
                                               <input
                                                 type="text"
                                                 value={sp.partDescription || ''}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partDescription: e.target.value })}
-                                                className="w-full px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
+                                                className="w-40 px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
                                                 
                                               />
                                             </td>
@@ -1672,8 +1672,16 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                               <input
                                                 type="number"
                                                 min={1}
-                                                value={sp.quantity || 1}
-                                                onChange={(e) => handleUpdateSubPart(r.id, sp.id, { quantity: parseInt(e.target.value) || 1 })}
+                                                value={sp.quantity !== undefined && sp.quantity !== null ? sp.quantity : ''}
+                                                onChange={(e) => {
+                                                  const raw = e.target.value;
+                                                  if (raw === '') {
+                                                    handleUpdateSubPart(r.id, sp.id, { quantity: undefined });
+                                                  } else {
+                                                    const parsed = parseInt(raw, 10);
+                                                    handleUpdateSubPart(r.id, sp.id, { quantity: isNaN(parsed) ? undefined : parsed });
+                                                  }
+                                                }}
                                                 className="w-12 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
                                               />
                                             </td>
