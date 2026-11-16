@@ -1606,7 +1606,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         {isExpanded && (
                           <tr className="bg-slate-50/90 border-b-2 border-purple-200">
                             <td colSpan={12} className="p-3 sm:p-4">
-                              <div className="bg-white rounded-xl border-2 border-purple-300 p-3 sm:p-4 shadow-sm space-y-3">
+                              <div className="w-fit max-w-[calc(100vw-3rem)] sticky left-3 bg-white rounded-xl border-2 border-purple-300 p-3 sm:p-4 shadow-sm space-y-3">
                                 
                                 <div className="flex items-center justify-start pb-2">
                                   <button
@@ -1621,17 +1621,17 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
                                 {/* Sub-Parts Table */}
                                 <div className="overflow-x-auto">
-                                  <table className="w-full text-left text-xs border border-purple-200 rounded-lg overflow-hidden">
+                                  <table className="w-auto text-left text-xs border border-purple-200 rounded-lg overflow-hidden">
                                     <thead className="bg-purple-100 text-purple-950 uppercase text-[10px] font-bold">
                                       <tr>
                                         <th className="p-2 w-28 min-w-[100px]">Part Number</th>
                                         <th className="p-2 w-44">Description</th>
                                         <th className="p-2 text-center w-16">Qty</th>
-                                        <th className="p-2 min-w-[130px]">Order Date</th>
-                                        <th className="p-2 min-w-[160px]">Part ETA & History</th>
-                                        <th className="p-2 text-center min-w-[120px]">Parts In?</th>
-                                        <th className="p-2 text-center min-w-[140px]">Advisor Notified?</th>
-                                        <th className="p-2 text-center w-12">Action</th>
+                                        <th className="p-2 w-32 min-w-[120px]">Order Date</th>
+                                        <th className="p-2 w-44 min-w-[165px]">Part ETA & History</th>
+                                        <th className="p-2 text-center w-24 min-w-[90px]">Parts In?</th>
+                                        <th className="p-2 text-center w-28 min-w-[105px]">Advisor Notified?</th>
+                                        <th className="p-2 text-center w-16">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-purple-100 font-sans">
@@ -1762,10 +1762,10 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                               <button
                                                 type="button"
                                                 onClick={() => handleDeleteSubPart(r.id, sp.id)}
-                                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                                                className="inline-flex items-center justify-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-md transition-colors cursor-pointer shadow-2xs"
                                                 title="Delete this part item"
                                               >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <Trash2 className="w-4 h-4" />
                                               </button>
                                             </td>
 
