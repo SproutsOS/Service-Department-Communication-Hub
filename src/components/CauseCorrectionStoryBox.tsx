@@ -34,15 +34,17 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
 
   const isEditingCauseRef = useRef(false);
   const isEditingCorrectionRef = useRef(false);
+  const lastCommittedAtRef = useRef<number>(0);
   const latestValuesRef = useRef({
     cause: row.techCause || '',
     correction: row.techCorrection || ''
   });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync incoming Firestore changes unless the user is actively typing in that field
+  // Sync incoming Firestore changes unless the user is actively typing, saving, or recently committed
   useEffect(() => {
-    if (!isEditingCauseRef.current && saveState !== 'saving') {
+    const recentlyCommitted = Date.now() - lastCommittedAtRef.current < 2500;
+    if (!isEditingCauseRef.current && !timerRef.current && saveState !== 'saving' && !recentlyCommitted) {
       const incoming = row.techCause || '';
       setCauseDraft(incoming);
       latestValuesRef.current.cause = incoming;
@@ -50,7 +52,8 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
   }, [row.techCause, row.id, saveState]);
 
   useEffect(() => {
-    if (!isEditingCorrectionRef.current && saveState !== 'saving') {
+    const recentlyCommitted = Date.now() - lastCommittedAtRef.current < 2500;
+    if (!isEditingCorrectionRef.current && !timerRef.current && saveState !== 'saving' && !recentlyCommitted) {
       const incoming = row.techCorrection || '';
       setCorrectionDraft(incoming);
       latestValuesRef.current.correction = incoming;
@@ -71,6 +74,7 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
       }
 
       const now = new Date().toISOString();
+      lastCommittedAtRef.current = Date.now();
       setSaveState('saving');
       await onPatchRow(row.id, {
         techCause: causeText,
@@ -78,6 +82,7 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
         techStoryUpdatedAt: now,
         techStoryUpdatedBy: authorName
       });
+      lastCommittedAtRef.current = Date.now();
       setSaveState('saved');
       setTimeout(() => {
         setSaveState((prev) => (prev === 'saved' ? 'idle' : prev));

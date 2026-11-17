@@ -108,26 +108,71 @@ export const TechQuickStatusBoard: React.FC = () => {
 
   const noteTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const latestDraftsRef = useRef<Record<string, string>>({});
+  const focusedNoteRowIdsRef = useRef<Set<string>>(new Set());
+  const inFlightRowsRef = useRef<Map<string, number>>(new Map());
+  const lastLocalEditAtRef = useRef<Map<string, number>>(new Map());
+  const dirtyFieldsRef = useRef<Map<string, Set<string>>>(new Map());
+  const latestRowsRef = useRef<ManagerSpreadsheetRow[]>(rows);
 
   useEffect(() => {
-    return () => {
-      Object.values(noteTimersRef.current).forEach((t) => clearTimeout(t));
-    };
-  }, []);
+    latestRowsRef.current = rows;
+  }, [rows]);
 
-  // Subscribe live to Service Manager Master RO & Parts Log
+  // Subscribe live to Service Manager Master RO & Parts Log without clobbering active typing or in-flight saves
   useEffect(() => {
     const unsubscribe = subscribeToShopSettings((settings) => {
       if (settings?.managerROPartsSpreadsheet && Array.isArray(settings.managerROPartsSpreadsheet)) {
-        setRows(settings.managerROPartsSpreadsheet);
-        try {
-          localStorage.setItem(
-            STORAGE_KEY_MANAGER_SPREADSHEET,
-            JSON.stringify(settings.managerROPartsSpreadsheet)
-          );
-        } catch {
-          // ignore
-        }
+        const incomingRows = settings.managerROPartsSpreadsheet as ManagerSpreadsheetRow[];
+        const now = Date.now();
+
+        setRows((prevRows) => {
+          const prevMap = new Map(prevRows.map((r) => [r.id, r]));
+
+          const mergedRows = incomingRows.map((cloudRow) => {
+            const localRow = prevMap.get(cloudRow.id);
+            if (!localRow) return cloudRow;
+
+            const isFocused = focusedNoteRowIdsRef.current.has(cloudRow.id);
+            const hasPendingDraft = latestDraftsRef.current[cloudRow.id] !== undefined;
+            const hasTimer = Boolean(noteTimersRef.current[cloudRow.id]);
+            const isInFlight = (inFlightRowsRef.current.get(cloudRow.id) || 0) > 0;
+            const lastEditAt = lastLocalEditAtRef.current.get(cloudRow.id) || 0;
+            const hasRecentEdit = now - lastEditAt < 2500;
+
+            if (!isFocused && !hasPendingDraft && !hasTimer && !isInFlight && !hasRecentEdit) {
+              return cloudRow;
+            }
+
+            const mergedRow: ManagerSpreadsheetRow = { ...cloudRow };
+            if (isFocused || hasPendingDraft || hasTimer) {
+              mergedRow.techNotes =
+                latestDraftsRef.current[cloudRow.id] !== undefined
+                  ? latestDraftsRef.current[cloudRow.id]
+                  : localRow.techNotes;
+              mergedRow.techNotesUpdatedAt = localRow.techNotesUpdatedAt;
+              mergedRow.techNotesUpdatedBy = localRow.techNotesUpdatedBy;
+            }
+
+            if (isInFlight || hasRecentEdit) {
+              const dirty = dirtyFieldsRef.current.get(cloudRow.id);
+              dirty?.forEach((field) => {
+                const key = field as keyof ManagerSpreadsheetRow;
+                (mergedRow as unknown as Record<string, unknown>)[key] =
+                  (localRow as unknown as Record<string, unknown>)[key];
+              });
+            }
+
+            return mergedRow;
+          });
+
+          latestRowsRef.current = mergedRows;
+          try {
+            localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(mergedRows));
+          } catch {
+            // ignore
+          }
+          return mergedRows;
+        });
       }
     });
     return () => unsubscribe();
@@ -143,34 +188,46 @@ export const TechQuickStatusBoard: React.FC = () => {
   const patchRow = useCallback(
     async (rowId: string, patch: Partial<ManagerSpreadsheetRow>) => {
       const now = new Date().toISOString();
-      let nextRowsSnapshot: ManagerSpreadsheetRow[] = [];
+      const dirtySet = dirtyFieldsRef.current.get(rowId) || new Set<string>();
+      Object.keys(patch).forEach((k) => dirtySet.add(k));
+      dirtyFieldsRef.current.set(rowId, dirtySet);
+      lastLocalEditAtRef.current.set(rowId, Date.now());
+      inFlightRowsRef.current.set(rowId, (inFlightRowsRef.current.get(rowId) || 0) + 1);
 
-      setRows((prev) => {
-        const updated = prev.map((r) => {
-          if (r.id !== rowId) return r;
-          return {
-            ...r,
-            ...patch,
-            updatedAt: now
-          };
-        });
-        nextRowsSnapshot = updated;
-        try {
-          localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updated));
-        } catch {
-          // ignore
-        }
-        return updated;
+      const updated = latestRowsRef.current.map((r) => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          ...patch,
+          updatedAt: now
+        };
       });
+      latestRowsRef.current = updated;
+      setRows(updated);
+      try {
+        localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
 
       flashSaved(rowId);
 
-      const ok = await updateManagerSpreadsheetRowInCloud(rowId, {
-        ...patch,
-        updatedAt: now
-      });
-      if (!ok && nextRowsSnapshot.length > 0) {
-        await syncShopSettings({ managerROPartsSpreadsheet: nextRowsSnapshot });
+      try {
+        const ok = await updateManagerSpreadsheetRowInCloud(rowId, {
+          ...patch,
+          updatedAt: now
+        });
+        if (!ok && latestRowsRef.current.length > 0) {
+          await syncShopSettings({ managerROPartsSpreadsheet: latestRowsRef.current });
+        }
+      } finally {
+        const nextCount = Math.max(0, (inFlightRowsRef.current.get(rowId) || 1) - 1);
+        if (nextCount === 0) {
+          inFlightRowsRef.current.delete(rowId);
+        } else {
+          inFlightRowsRef.current.set(rowId, nextCount);
+        }
+        lastLocalEditAtRef.current.set(rowId, Date.now());
       }
     },
     []
@@ -185,7 +242,11 @@ export const TechQuickStatusBoard: React.FC = () => {
   };
 
   const handleSaveNote = useCallback(
-    (row: ManagerSpreadsheetRow, explicitText?: string) => {
+    async (
+      row: ManagerSpreadsheetRow,
+      explicitText?: string,
+      options?: { trim?: boolean }
+    ) => {
       if (noteTimersRef.current[row.id]) {
         clearTimeout(noteTimersRef.current[row.id]);
         delete noteTimersRef.current[row.id];
@@ -198,14 +259,44 @@ export const TechQuickStatusBoard: React.FC = () => {
           : latestDraftsRef.current[row.id] !== undefined
           ? latestDraftsRef.current[row.id]
           : row.techNotes || '';
-      const trimmed = rawText.trim();
+
+      const shouldTrim =
+        options?.trim !== undefined
+          ? options.trim
+          : !focusedNoteRowIdsRef.current.has(row.id);
+      const textToSave = shouldTrim ? rawText.trim() : rawText;
 
       if (explicitText !== undefined) {
-        latestDraftsRef.current[row.id] = explicitText;
+        latestDraftsRef.current[row.id] = textToSave;
+        if (!focusedNoteRowIdsRef.current.has(row.id)) {
+          setDraftNotes((prev) => {
+            if (prev[row.id] === undefined) return prev;
+            const copy = { ...prev };
+            delete copy[row.id];
+            return copy;
+          });
+        } else {
+          setDraftNotes((prev) => ({
+            ...prev,
+            [row.id]: textToSave
+          }));
+        }
       }
 
-      // Clear draft only if user hasn't typed newer text while saving
-      if (explicitText !== undefined || latestDraftsRef.current[row.id] === rawText) {
+      lastLocalEditAtRef.current.set(row.id, Date.now());
+
+      await patchRow(row.id, {
+        techNotes: textToSave,
+        techNotesUpdatedAt: now,
+        techNotesUpdatedBy: currentUser.name
+      });
+
+      // Only release local draft once cloud save finishes AND user hasn't typed newer text or stayed focused with differing text
+      const currentLatest = latestDraftsRef.current[row.id];
+      if (
+        !focusedNoteRowIdsRef.current.has(row.id) &&
+        (currentLatest === undefined || currentLatest === rawText || currentLatest === textToSave)
+      ) {
         delete latestDraftsRef.current[row.id];
         setDraftNotes((prev) => {
           if (prev[row.id] === undefined) return prev;
@@ -215,25 +306,41 @@ export const TechQuickStatusBoard: React.FC = () => {
         });
       }
 
-      setSavingNoteIds((prev) => {
-        if (!prev.has(row.id)) return prev;
-        const next = new Set(prev);
-        next.delete(row.id);
-        return next;
-      });
-
-      patchRow(row.id, {
-        techNotes: trimmed,
-        techNotesUpdatedAt: now,
-        techNotesUpdatedBy: currentUser.name
-      });
+      if (!noteTimersRef.current[row.id]) {
+        setSavingNoteIds((prev) => {
+          if (!prev.has(row.id)) return prev;
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+      }
     },
     [currentUser.name, patchRow]
   );
 
+  useEffect(() => {
+    return () => {
+      Object.entries(noteTimersRef.current).forEach(([rowId, t]) => {
+        clearTimeout(t);
+        const pendingText = latestDraftsRef.current[rowId];
+        if (pendingText !== undefined) {
+          const now = new Date().toISOString();
+          updateManagerSpreadsheetRowInCloud(rowId, {
+            techNotes: pendingText.trim(),
+            techNotesUpdatedAt: now,
+            techNotesUpdatedBy: currentUser.name,
+            updatedAt: now
+          });
+        }
+      });
+      noteTimersRef.current = {};
+    };
+  }, [currentUser.name]);
+
   const handleNoteChange = useCallback(
     (row: ManagerSpreadsheetRow, nextValue: string) => {
       latestDraftsRef.current[row.id] = nextValue;
+      lastLocalEditAtRef.current.set(row.id, Date.now());
       setDraftNotes((prev) => ({
         ...prev,
         [row.id]: nextValue
@@ -250,7 +357,7 @@ export const TechQuickStatusBoard: React.FC = () => {
       }
 
       noteTimersRef.current[row.id] = setTimeout(() => {
-        handleSaveNote(row, latestDraftsRef.current[row.id]);
+        handleSaveNote(row, latestDraftsRef.current[row.id], { trim: false });
       }, 650);
     },
     [handleSaveNote]
@@ -677,20 +784,33 @@ export const TechQuickStatusBoard: React.FC = () => {
                       <input
                         type="text"
                         value={currentDraft}
+                        onFocus={() => {
+                          focusedNoteRowIdsRef.current.add(row.id);
+                        }}
                         onChange={(e) => handleNoteChange(row, e.target.value)}
                         onBlur={() => {
-                          if (
+                          focusedNoteRowIdsRef.current.delete(row.id);
+                          const hasUnsaved =
                             savingNoteIds.has(row.id) ||
-                            (draftNotes[row.id] !== undefined &&
-                              draftNotes[row.id].trim() !== (row.techNotes || '').trim())
-                          ) {
-                            handleSaveNote(row);
+                            Boolean(noteTimersRef.current[row.id]) ||
+                            (latestDraftsRef.current[row.id] !== undefined &&
+                              latestDraftsRef.current[row.id].trim() !== (row.techNotes || '').trim());
+                          if (hasUnsaved) {
+                            handleSaveNote(row, undefined, { trim: true });
+                          } else {
+                            delete latestDraftsRef.current[row.id];
+                            setDraftNotes((prev) => {
+                              if (prev[row.id] === undefined) return prev;
+                              const copy = { ...prev };
+                              delete copy[row.id];
+                              return copy;
+                            });
                           }
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            handleSaveNote(row);
+                            handleSaveNote(row, undefined, { trim: true });
                           }
                         }}
                         placeholder="Type note for Service Manager (auto-saves as you type)..."

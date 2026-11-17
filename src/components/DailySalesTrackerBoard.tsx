@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -104,22 +104,85 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     return `${yr}-${mo}-${dy}`;
   });
 
-  // Save records helper
-  const saveRecords = useCallback((updated: DailySalesRecord[]) => {
-    const sorted = [...updated].sort((a, b) => b.date.localeCompare(a.date));
-    setRecords(sorted);
-    try {
-      localStorage.setItem(STORAGE_KEY_DAILY_SALES, JSON.stringify(sorted));
-    } catch {
-      // ignore
+  const focusedInputsRef = useRef<number>(0);
+  const pendingCloudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasPendingCloudWriteRef = useRef<boolean>(false);
+  const inFlightCloudSyncRef = useRef<number>(0);
+  const lastLocalEditAtRef = useRef<number>(0);
+  const latestRecordsRef = useRef<DailySalesRecord[]>(records);
+
+  useEffect(() => {
+    latestRecordsRef.current = records;
+  }, [records]);
+
+  const flushCloudSync = useCallback(() => {
+    if (pendingCloudTimerRef.current) {
+      clearTimeout(pendingCloudTimerRef.current);
+      pendingCloudTimerRef.current = null;
     }
-    syncDailySalesToCloud(sorted);
+    if (!hasPendingCloudWriteRef.current) return;
+    hasPendingCloudWriteRef.current = false;
+
+    inFlightCloudSyncRef.current += 1;
+    lastLocalEditAtRef.current = Date.now();
+    Promise.resolve(syncDailySalesToCloud(latestRecordsRef.current)).finally(() => {
+      inFlightCloudSyncRef.current = Math.max(0, inFlightCloudSyncRef.current - 1);
+      lastLocalEditAtRef.current = Date.now();
+    });
   }, []);
 
-  // Subscribe to real-time Firestore updates
+  useEffect(() => {
+    return () => {
+      flushCloudSync();
+    };
+  }, [flushCloudSync]);
+
+  // Save records helper (debounced by default during typing; immediate for buttons)
+  const saveRecords = useCallback(
+    (updated: DailySalesRecord[], options?: { immediate?: boolean }) => {
+      const sorted = [...updated].sort((a, b) => b.date.localeCompare(a.date));
+      latestRecordsRef.current = sorted;
+      setRecords(sorted);
+      try {
+        localStorage.setItem(STORAGE_KEY_DAILY_SALES, JSON.stringify(sorted));
+      } catch {
+        // ignore
+      }
+
+      hasPendingCloudWriteRef.current = true;
+      lastLocalEditAtRef.current = Date.now();
+
+      if (pendingCloudTimerRef.current) {
+        clearTimeout(pendingCloudTimerRef.current);
+        pendingCloudTimerRef.current = null;
+      }
+
+      if (options?.immediate) {
+        flushCloudSync();
+      } else {
+        pendingCloudTimerRef.current = setTimeout(() => {
+          flushCloudSync();
+        }, 500);
+      }
+    },
+    [flushCloudSync]
+  );
+
+  // Subscribe to real-time Firestore updates without clobbering active typing or pending writes
   useEffect(() => {
     const unsubscribe = subscribeToDailySales((cloudRecords) => {
       if (cloudRecords && Array.isArray(cloudRecords) && cloudRecords.length > 0) {
+        const now = Date.now();
+        if (
+          focusedInputsRef.current > 0 ||
+          hasPendingCloudWriteRef.current ||
+          pendingCloudTimerRef.current !== null ||
+          inFlightCloudSyncRef.current > 0 ||
+          now - lastLocalEditAtRef.current < 2500
+        ) {
+          return;
+        }
+        latestRecordsRef.current = cloudRecords;
         setRecords(cloudRecords);
         try {
           localStorage.setItem(STORAGE_KEY_DAILY_SALES, JSON.stringify(cloudRecords));
@@ -225,11 +288,16 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
   }, [records, selectedRODate, roWeekCycle, wedTueWeeksList, calendarWeeksList, monthlyList]);
 
   // Handle inline updates (or upsert if date doesn't exist yet) to a daily record
-  const handleUpdateRecord = (dateStr: string, updates: Partial<DailySalesRecord>) => {
-    const exists = records.some(r => r.date === dateStr);
+  const handleUpdateRecord = (
+    dateStr: string,
+    updates: Partial<DailySalesRecord>,
+    options?: { immediate?: boolean }
+  ) => {
+    const current = latestRecordsRef.current;
+    const exists = current.some(r => r.date === dateStr);
     const now = new Date().toISOString();
     const updated = exists
-      ? records.map(r => (r.date === dateStr ? { ...r, ...updates, updatedAt: now } : r))
+      ? current.map(r => (r.date === dateStr ? { ...r, ...updates, updatedAt: now } : r))
       : [
           {
             date: dateStr,
@@ -240,28 +308,32 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             ...updates,
             updatedAt: now
           },
-          ...records
+          ...current
         ];
-    saveRecords(updated);
+    saveRecords(updated, options);
   };
 
   // Stepper helper for quick RO Count adjustments
   const handleStepROCount = (dateStr: string, delta: number) => {
-    const existing = records.find(r => r.date === dateStr);
+    const existing = latestRecordsRef.current.find(r => r.date === dateStr);
     const currentCount = existing ? Math.max(0, Number(existing.roCount) || 0) : 0;
     const nextCount = Math.max(0, currentCount + delta);
-    handleUpdateRecord(dateStr, { roCount: nextCount });
+    handleUpdateRecord(dateStr, { roCount: nextCount }, { immediate: true });
   };
 
   // Handle auto-calculating totals from repair orders for a given date
   const handleAutoFillFromROs = (dateStr: string) => {
     const autoData = calculateDailySalesFromROs(dateStr, repairOrders);
-    handleUpdateRecord(dateStr, {
-      roCount: autoData.roCount,
-      customerPaySales: autoData.customerPaySales,
-      warrantySales: autoData.warrantySales,
-      internalSales: autoData.internalSales,
-    });
+    handleUpdateRecord(
+      dateStr,
+      {
+        roCount: autoData.roCount,
+        customerPaySales: autoData.customerPaySales,
+        warrantySales: autoData.warrantySales,
+        internalSales: autoData.internalSales
+      },
+      { immediate: true }
+    );
     triggerSaveToast(`Auto-calculated figures from ROs for ${dateStr}.`);
   };
 
@@ -687,11 +759,18 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     type="number"
                     min="0"
                     value={roPeriodOverview.dayROCount}
+                    onFocus={() => {
+                      focusedInputsRef.current += 1;
+                    }}
                     onChange={(e) =>
                       handleUpdateRecord(selectedRODate, {
                         roCount: Math.max(0, Number(e.target.value) || 0)
                       })
                     }
+                    onBlur={() => {
+                      focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                      flushCloudSync();
+                    }}
                     className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-mono font-black text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
                   />
                   <button
@@ -920,7 +999,14 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                               type="number"
                               min="0"
                               value={record.roCount}
+                              onFocus={() => {
+                                focusedInputsRef.current += 1;
+                              }}
                               onChange={(e) => handleUpdateRecord(record.date, { roCount: Number(e.target.value) || 0 })}
+                              onBlur={() => {
+                                focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                flushCloudSync();
+                              }}
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded text-center font-mono font-black text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                             />
                           </td>
@@ -933,7 +1019,14 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                 step="0.01"
                                 min="0"
                                 value={record.customerPaySales}
+                                onFocus={() => {
+                                  focusedInputsRef.current += 1;
+                                }}
                                 onChange={(e) => handleUpdateRecord(record.date, { customerPaySales: Number(e.target.value) || 0 })}
+                                onBlur={() => {
+                                  focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  flushCloudSync();
+                                }}
                                 className="w-28 pl-5 pr-2 py-1 bg-white border border-slate-300 rounded font-mono font-extrabold text-xs text-blue-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                               />
                             </div>
@@ -947,7 +1040,14 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                 step="0.01"
                                 min="0"
                                 value={record.warrantySales}
+                                onFocus={() => {
+                                  focusedInputsRef.current += 1;
+                                }}
                                 onChange={(e) => handleUpdateRecord(record.date, { warrantySales: Number(e.target.value) || 0 })}
+                                onBlur={() => {
+                                  focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  flushCloudSync();
+                                }}
                                 className="w-28 pl-5 pr-2 py-1 bg-white border border-slate-300 rounded font-mono font-extrabold text-xs text-purple-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                               />
                             </div>
@@ -961,7 +1061,14 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                 step="0.01"
                                 min="0"
                                 value={record.internalSales}
+                                onFocus={() => {
+                                  focusedInputsRef.current += 1;
+                                }}
                                 onChange={(e) => handleUpdateRecord(record.date, { internalSales: Number(e.target.value) || 0 })}
+                                onBlur={() => {
+                                  focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  flushCloudSync();
+                                }}
                                 className="w-28 pl-5 pr-2 py-1 bg-white border border-slate-300 rounded font-mono font-extrabold text-xs text-amber-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                               />
                             </div>
@@ -1268,11 +1375,18 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                   type="number"
                                   min="0"
                                   value={record.roCount}
+                                  onFocus={() => {
+                                    focusedInputsRef.current += 1;
+                                  }}
                                   onChange={(e) =>
                                     handleUpdateRecord(record.date, {
                                       roCount: Math.max(0, Number(e.target.value) || 0)
                                     })
                                   }
+                                  onBlur={() => {
+                                    focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                    flushCloudSync();
+                                  }}
                                   className="w-14 px-1.5 py-1 bg-white border border-slate-300 rounded text-center font-mono font-black text-xs text-purple-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
                                 />
                                 <button

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   CheckSquare, 
   FileText, 
@@ -108,22 +108,92 @@ export const ManagerNotepadModal: React.FC<ManagerNotepadModalProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Save notepad data locally and sync to cloud
-  const saveNotepadData = useCallback((updated: ManagerNotepadData) => {
-    setNotepadData(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY_NOTEPAD, JSON.stringify(updated));
-    } catch {
-      // ignore
+  const isEditingScratchpadRef = useRef<boolean>(false);
+  const pendingCloudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasPendingCloudWriteRef = useRef<boolean>(false);
+  const inFlightCloudSyncRef = useRef<number>(0);
+  const lastLocalEditAtRef = useRef<number>(0);
+  const latestNotepadDataRef = useRef<ManagerNotepadData>(notepadData);
+
+  useEffect(() => {
+    latestNotepadDataRef.current = notepadData;
+  }, [notepadData]);
+
+  const flushCloudSync = useCallback(() => {
+    if (pendingCloudTimerRef.current) {
+      clearTimeout(pendingCloudTimerRef.current);
+      pendingCloudTimerRef.current = null;
     }
-    syncShopSettings({ managerNotepadData: updated });
+    if (!hasPendingCloudWriteRef.current) return;
+    hasPendingCloudWriteRef.current = false;
+
+    inFlightCloudSyncRef.current += 1;
+    lastLocalEditAtRef.current = Date.now();
+    Promise.resolve(syncShopSettings({ managerNotepadData: latestNotepadDataRef.current })).finally(() => {
+      inFlightCloudSyncRef.current = Math.max(0, inFlightCloudSyncRef.current - 1);
+      lastLocalEditAtRef.current = Date.now();
+    });
   }, []);
 
-  // Subscribe to real-time shop settings cloud changes
+  useEffect(() => {
+    if (!isOpen) {
+      isEditingScratchpadRef.current = false;
+      flushCloudSync();
+    }
+  }, [isOpen, flushCloudSync]);
+
+  useEffect(() => {
+    return () => {
+      flushCloudSync();
+    };
+  }, [flushCloudSync]);
+
+  // Save notepad data locally and sync to cloud (debounced while typing scratchpad; immediate for discrete actions)
+  const saveNotepadData = useCallback(
+    (updated: ManagerNotepadData, options?: { immediate?: boolean }) => {
+      latestNotepadDataRef.current = updated;
+      setNotepadData(updated);
+      try {
+        localStorage.setItem(STORAGE_KEY_NOTEPAD, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+
+      hasPendingCloudWriteRef.current = true;
+      lastLocalEditAtRef.current = Date.now();
+
+      if (pendingCloudTimerRef.current) {
+        clearTimeout(pendingCloudTimerRef.current);
+        pendingCloudTimerRef.current = null;
+      }
+
+      if (options?.immediate !== false) {
+        flushCloudSync();
+      } else {
+        pendingCloudTimerRef.current = setTimeout(() => {
+          flushCloudSync();
+        }, 500);
+      }
+    },
+    [flushCloudSync]
+  );
+
+  // Subscribe to real-time shop settings cloud changes without clobbering active typing
   useEffect(() => {
     const unsubscribe = subscribeToShopSettings((settings) => {
       if (settings?.managerNotepadData && typeof settings.managerNotepadData === 'object') {
+        const now = Date.now();
+        if (
+          isEditingScratchpadRef.current ||
+          hasPendingCloudWriteRef.current ||
+          pendingCloudTimerRef.current !== null ||
+          inFlightCloudSyncRef.current > 0 ||
+          now - lastLocalEditAtRef.current < 2500
+        ) {
+          return;
+        }
         const cloudData = settings.managerNotepadData as ManagerNotepadData;
+        latestNotepadDataRef.current = cloudData;
         setNotepadData(cloudData);
         try {
           localStorage.setItem(STORAGE_KEY_NOTEPAD, JSON.stringify(cloudData));
@@ -203,13 +273,13 @@ export const ManagerNotepadModal: React.FC<ManagerNotepadModalProps> = ({
   };
 
   // Update Scratchpad
-  const handleUpdateScratchpad = (text: string) => {
+  const handleUpdateScratchpad = (text: string, options?: { immediate?: boolean }) => {
     const updated: ManagerNotepadData = {
-      ...notepadData,
+      ...latestNotepadDataRef.current,
       scratchpad: text,
       updatedAt: new Date().toISOString()
     };
-    saveNotepadData(updated);
+    saveNotepadData(updated, { immediate: options?.immediate ?? false });
   };
 
   // Add Snippet
@@ -538,7 +608,7 @@ export const ManagerNotepadModal: React.FC<ManagerNotepadModalProps> = ({
                     type="button"
                     onClick={() => {
                       if (confirm('Clear scratchpad content?')) {
-                        handleUpdateScratchpad('');
+                        handleUpdateScratchpad('', { immediate: true });
                         triggerToast('Cleared scratchpad');
                       }
                     }}
@@ -551,7 +621,14 @@ export const ManagerNotepadModal: React.FC<ManagerNotepadModalProps> = ({
 
               <textarea
                 value={notepadData.scratchpad}
-                onChange={e => handleUpdateScratchpad(e.target.value)}
+                onFocus={() => {
+                  isEditingScratchpadRef.current = true;
+                }}
+                onChange={e => handleUpdateScratchpad(e.target.value, { immediate: false })}
+                onBlur={() => {
+                  isEditingScratchpadRef.current = false;
+                  flushCloudSync();
+                }}
                 placeholder="Type your notes, VIN drops, vendor phone numbers, customer messages, or scratch notes here..."
                 rows={14}
                 className="w-full p-4 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 leading-relaxed focus:ring-2 focus:ring-purple-500 focus:outline-none shadow-inner"

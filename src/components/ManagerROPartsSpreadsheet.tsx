@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -176,6 +176,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   type SortField = 'roNumber' | 'roDate' | 'customerName' | 'assignedTechName' | 'status';
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortRefreshTick, setSortRefreshTick] = useState(0);
+  const lastSortedRowOrderRef = useRef<string[]>([]);
 
   const handleToggleSort = (field: SortField) => {
     if (sortField !== field) {
@@ -208,27 +210,132 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Track active focused inputs, pending debounced patches, and in-flight saves so cloud snapshots never overwrite typing
+  const activeFieldKeysRef = useRef<Set<string>>(new Set());
+  const pendingRowPatchesRef = useRef<Map<string, Partial<ManagerSpreadsheetRow>>>(new Map());
+  const rowFlushTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const inFlightRowSavesRef = useRef<Map<string, number>>(new Map());
+  const dirtyFieldNamesRef = useRef<Map<string, Set<string>>>(new Map());
+  const lastLocalEditAtRef = useRef<Map<string, number>>(new Map());
+  const recentlyAddedRowsRef = useRef<Map<string, { row: ManagerSpreadsheetRow; addedAt: number }>>(new Map());
+  const recentlyDeletedRowIdsRef = useRef<Map<string, number>>(new Map());
+  const inFlightBulkSaveRef = useRef<number>(0);
+  const lastBulkSaveAtRef = useRef<number>(0);
+  const latestRowsRef = useRef<ManagerSpreadsheetRow[]>(rows);
+
+  useEffect(() => {
+    latestRowsRef.current = rows;
+  }, [rows]);
+
   // Persist rows locally and sync to cloud
   const saveRows = useCallback((updatedRows: ManagerSpreadsheetRow[]) => {
     setRows(updatedRows);
+    latestRowsRef.current = updatedRows;
     try {
       localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updatedRows));
     } catch {
       // ignore
     }
-    syncShopSettings({ managerROPartsSpreadsheet: updatedRows });
+    inFlightBulkSaveRef.current += 1;
+    lastBulkSaveAtRef.current = Date.now();
+    Promise.resolve(syncShopSettings({ managerROPartsSpreadsheet: updatedRows })).finally(() => {
+      inFlightBulkSaveRef.current = Math.max(0, inFlightBulkSaveRef.current - 1);
+      lastBulkSaveAtRef.current = Date.now();
+    });
   }, []);
 
-  // Sync with Firestore cloud changes
+  // Sync with Firestore cloud changes without clobbering locally edited or focused fields
   useEffect(() => {
     const unsubscribe = subscribeToShopSettings((settings) => {
       if (settings?.managerROPartsSpreadsheet && Array.isArray(settings.managerROPartsSpreadsheet)) {
-        setRows(settings.managerROPartsSpreadsheet);
-        try {
-          localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(settings.managerROPartsSpreadsheet));
-        } catch {
-          // ignore
+        const incomingRows = settings.managerROPartsSpreadsheet as ManagerSpreadsheetRow[];
+        const now = Date.now();
+        if (inFlightBulkSaveRef.current > 0 || now - lastBulkSaveAtRef.current < 1200) {
+          // Still merge carefully below so focused/pending fields win, and skip clobbering during active bulk save
         }
+
+        setRows(prevRows => {
+          const prevMap = new Map(prevRows.map(r => [r.id, r]));
+          const seenIds = new Set<string>();
+
+          const mergedRows: ManagerSpreadsheetRow[] = [];
+
+          incomingRows.forEach(cloudRow => {
+            const deletedAt = recentlyDeletedRowIdsRef.current.get(cloudRow.id);
+            if (deletedAt && now - deletedAt < 5000) {
+              return;
+            }
+            if (deletedAt && now - deletedAt >= 5000) {
+              recentlyDeletedRowIdsRef.current.delete(cloudRow.id);
+            }
+
+            seenIds.add(cloudRow.id);
+            if (recentlyAddedRowsRef.current.has(cloudRow.id)) {
+              recentlyAddedRowsRef.current.delete(cloudRow.id);
+            }
+
+            const localRow = prevMap.get(cloudRow.id);
+            if (!localRow) {
+              mergedRows.push(cloudRow);
+              return;
+            }
+
+            const pendingPatch = pendingRowPatchesRef.current.get(cloudRow.id);
+            const hasFlushTimer = rowFlushTimersRef.current.has(cloudRow.id);
+            const isInFlight =
+              (inFlightRowSavesRef.current.get(cloudRow.id) || 0) > 0 ||
+              inFlightBulkSaveRef.current > 0;
+            const lastEditAt = lastLocalEditAtRef.current.get(cloudRow.id) || 0;
+            const hasRecentEdit = now - lastEditAt < 2500 || now - lastBulkSaveAtRef.current < 1500;
+
+            const focusedFields: string[] = [];
+            activeFieldKeysRef.current.forEach(key => {
+              if (key.startsWith(`${cloudRow.id}:`)) {
+                focusedFields.push(key.slice(cloudRow.id.length + 1));
+              }
+            });
+
+            if (!pendingPatch && !hasFlushTimer && !isInFlight && focusedFields.length === 0 && !hasRecentEdit) {
+              mergedRows.push(cloudRow);
+              return;
+            }
+
+            const mergedRow: ManagerSpreadsheetRow = { ...cloudRow };
+            if (pendingPatch) {
+              Object.assign(mergedRow, pendingPatch);
+            }
+            const copyFieldFromLocal = (field: string) => {
+              const key = field as keyof ManagerSpreadsheetRow;
+              (mergedRow as unknown as Record<string, unknown>)[key] =
+                (localRow as unknown as Record<string, unknown>)[key];
+            };
+            focusedFields.forEach(copyFieldFromLocal);
+            if (isInFlight || hasRecentEdit) {
+              const dirtyFields = dirtyFieldNamesRef.current.get(cloudRow.id);
+              dirtyFields?.forEach(copyFieldFromLocal);
+            }
+
+            mergedRows.push(mergedRow);
+          });
+
+          // Preserve locally added rows for up to 5 seconds until Firestore echoes them back
+          const prepended: ManagerSpreadsheetRow[] = [];
+          recentlyAddedRowsRef.current.forEach((entry, addedId) => {
+            if (seenIds.has(addedId) || now - entry.addedAt >= 5000) {
+              recentlyAddedRowsRef.current.delete(addedId);
+            } else {
+              prepended.push(prevMap.get(addedId) || entry.row);
+            }
+          });
+
+          const finalRows = prepended.length > 0 ? [...prepended, ...mergedRows] : mergedRows;
+          try {
+            localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(finalRows));
+          } catch {
+            // ignore
+          }
+          return finalRows;
+        });
       }
     });
     return () => unsubscribe();
@@ -403,6 +510,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       updatedAt: new Date().toISOString(),
     };
 
+    recentlyAddedRowsRef.current.set(newRow.id, { row: newRow, addedAt: Date.now() });
     saveRows([newRow, ...rows]);
     setExpandedRowIds(prev => new Set([...prev, newRow.id]));
     triggerToast('Added new custom RO log entry');
@@ -435,6 +543,10 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       };
     });
 
+    const dirtySet = dirtyFieldNamesRef.current.get(rowId) || new Set<string>();
+    dirtySet.add('parts');
+    dirtyFieldNamesRef.current.set(rowId, dirtySet);
+    lastLocalEditAtRef.current.set(rowId, Date.now());
     saveRows(updated);
     setExpandedRowIds(prev => new Set([...prev, rowId]));
     triggerToast('Added part line item');
@@ -479,14 +591,71 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     setRoUsedAlert(prev => (prev?.rowId === rowId ? null : prev));
   }, [rows, repairOrders]);
 
-  // Update a top-level field on a row (uses atomic cloud patch so tech updates aren't overwritten)
-  const handleUpdateField = (rowId: string, updates: Partial<ManagerSpreadsheetRow>) => {
+  // Flush queued debounced patches for a single row to Firestore
+  const flushRowPatchesToCloud = useCallback(async (rowId: string): Promise<void> => {
+    const existingTimer = rowFlushTimersRef.current.get(rowId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      rowFlushTimersRef.current.delete(rowId);
+    }
+
+    const patch = pendingRowPatchesRef.current.get(rowId);
+    if (!patch || Object.keys(patch).length === 0) return;
+    pendingRowPatchesRef.current.delete(rowId);
+
+    const nowIso = new Date().toISOString();
+    const prevInFlight = inFlightRowSavesRef.current.get(rowId) || 0;
+    inFlightRowSavesRef.current.set(rowId, prevInFlight + 1);
+    lastLocalEditAtRef.current.set(rowId, Date.now());
+
+    try {
+      const ok = await updateManagerSpreadsheetRowInCloud(rowId, { ...patch, updatedAt: nowIso });
+      if (!ok) {
+        await syncShopSettings({ managerROPartsSpreadsheet: latestRowsRef.current });
+      }
+    } finally {
+      const currInFlight = inFlightRowSavesRef.current.get(rowId) || 1;
+      const nextInFlight = Math.max(0, currInFlight - 1);
+      if (nextInFlight === 0) {
+        inFlightRowSavesRef.current.delete(rowId);
+      } else {
+        inFlightRowSavesRef.current.set(rowId, nextInFlight);
+      }
+      lastLocalEditAtRef.current.set(rowId, Date.now());
+    }
+  }, []);
+
+  // Flush all pending row edits if component unmounts
+  useEffect(() => {
+    return () => {
+      rowFlushTimersRef.current.forEach((timer) => clearTimeout(timer));
+      rowFlushTimersRef.current.clear();
+      Array.from(pendingRowPatchesRef.current.keys()).forEach((rowId) => {
+        flushRowPatchesToCloud(rowId);
+      });
+    };
+  }, [flushRowPatchesToCloud]);
+
+  const markFieldFocus = (rowId: string, fieldKey: string) => {
+    activeFieldKeysRef.current.add(`${rowId}:${fieldKey}`);
+  };
+
+  const markFieldBlur = (rowId: string, fieldKey: string) => {
+    activeFieldKeysRef.current.delete(`${rowId}:${fieldKey}`);
+    flushRowPatchesToCloud(rowId);
+    if (sortField && fieldKey === sortField) {
+      setSortRefreshTick(t => t + 1);
+    }
+  };
+
+  // Immediate top-level field update (dropdowns, toggles, StoryBox commits)
+  const handleUpdateField = (rowId: string, updates: Partial<ManagerSpreadsheetRow>): Promise<void> => {
     if (updates.roNumber !== undefined) {
       checkRoNumberUsage(rowId, updates.roNumber);
     }
 
     const now = new Date().toISOString();
-    const updated = rows.map(r => {
+    const updated = latestRowsRef.current.map(r => {
       if (r.id !== rowId) return r;
       return {
         ...r,
@@ -496,22 +665,72 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     });
 
     setRows(updated);
+    latestRowsRef.current = updated;
     try {
       localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updated));
     } catch {
       // ignore
     }
 
-    updateManagerSpreadsheetRowInCloud(rowId, { ...updates, updatedAt: now }).then((ok) => {
-      if (!ok) {
-        syncShopSettings({ managerROPartsSpreadsheet: updated });
-      }
-    });
+    const existingPending = pendingRowPatchesRef.current.get(rowId) || {};
+    pendingRowPatchesRef.current.set(rowId, { ...existingPending, ...updates });
+    const dirtySet = dirtyFieldNamesRef.current.get(rowId) || new Set<string>();
+    Object.keys(updates).forEach(k => dirtySet.add(k));
+    dirtyFieldNamesRef.current.set(rowId, dirtySet);
+    lastLocalEditAtRef.current.set(rowId, Date.now());
+    return flushRowPatchesToCloud(rowId);
   };
 
-  // Update a specific sub-part item
+  // Smooth debounced typing update for text/date inputs (updates UI instantly, saves to cloud on pause/blur)
+  const handleTypingField = (rowId: string, fieldKey: string, updates: Partial<ManagerSpreadsheetRow>) => {
+    if (updates.roNumber !== undefined) {
+      checkRoNumberUsage(rowId, updates.roNumber);
+    }
+
+    const nowIso = new Date().toISOString();
+    const updated = latestRowsRef.current.map(r => {
+      if (r.id !== rowId) return r;
+      return {
+        ...r,
+        ...updates,
+        updatedAt: nowIso,
+      };
+    });
+
+    setRows(updated);
+    latestRowsRef.current = updated;
+    try {
+      localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    const existingPending = pendingRowPatchesRef.current.get(rowId) || {};
+    pendingRowPatchesRef.current.set(rowId, { ...existingPending, ...updates });
+
+    const dirtySet = dirtyFieldNamesRef.current.get(rowId) || new Set<string>();
+    dirtySet.add(fieldKey);
+    dirtyFieldNamesRef.current.set(rowId, dirtySet);
+    lastLocalEditAtRef.current.set(rowId, Date.now());
+
+    const existingTimer = rowFlushTimersRef.current.get(rowId);
+    if (existingTimer) clearTimeout(existingTimer);
+    rowFlushTimersRef.current.set(
+      rowId,
+      setTimeout(() => {
+        flushRowPatchesToCloud(rowId);
+      }, 500)
+    );
+  };
+
+  // Update a specific sub-part item with smooth debounced cloud sync
   const handleUpdateSubPart = (rowId: string, partId: string, updates: Partial<ManagerSubPartItem>) => {
-    const updated = rows.map(r => {
+    let nextPartsList: ManagerSubPartItem[] = [];
+    let nextAllPartsIn = false;
+    let nextAllNotified = false;
+    const nowIso = new Date().toISOString();
+
+    const updated = latestRowsRef.current.map(r => {
       if (r.id !== rowId) return r;
       const partsList = (r.parts || []).map(p => {
         if (p.id !== partId) return p;
@@ -520,16 +739,50 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
       const allPartsIn = partsList.length > 0 && partsList.every(p => p.isPartsIn);
       const allNotified = partsList.length > 0 && partsList.every(p => p.isAdvisorNotified);
+      nextPartsList = partsList;
+      nextAllPartsIn = allPartsIn;
+      nextAllNotified = allNotified;
 
       return {
         ...r,
         parts: partsList,
         isPartsIn: allPartsIn,
         isAdvisorNotified: allNotified,
-        updatedAt: new Date().toISOString()
+        updatedAt: nowIso
       };
     });
-    saveRows(updated);
+
+    setRows(updated);
+    latestRowsRef.current = updated;
+    try {
+      localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    const existingPending = pendingRowPatchesRef.current.get(rowId) || {};
+    pendingRowPatchesRef.current.set(rowId, {
+      ...existingPending,
+      parts: nextPartsList,
+      isPartsIn: nextAllPartsIn,
+      isAdvisorNotified: nextAllNotified
+    });
+
+    const dirtySet = dirtyFieldNamesRef.current.get(rowId) || new Set<string>();
+    dirtySet.add('parts');
+    dirtySet.add('isPartsIn');
+    dirtySet.add('isAdvisorNotified');
+    dirtyFieldNamesRef.current.set(rowId, dirtySet);
+    lastLocalEditAtRef.current.set(rowId, Date.now());
+
+    const existingTimer = rowFlushTimersRef.current.get(rowId);
+    if (existingTimer) clearTimeout(existingTimer);
+    rowFlushTimersRef.current.set(
+      rowId,
+      setTimeout(() => {
+        flushRowPatchesToCloud(rowId);
+      }, 500)
+    );
   };
 
   // Toggle Parts In on parent (toggles all sub-parts)
@@ -652,6 +905,14 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   // Delete whole row
   const handleDeleteRow = (rowId: string, roNum: string) => {
     if (confirm(`Remove entry for ${roNum} from Manager Spreadsheet?`)) {
+      recentlyDeletedRowIdsRef.current.set(rowId, Date.now());
+      recentlyAddedRowsRef.current.delete(rowId);
+      pendingRowPatchesRef.current.delete(rowId);
+      const timer = rowFlushTimersRef.current.get(rowId);
+      if (timer) {
+        clearTimeout(timer);
+        rowFlushTimersRef.current.delete(rowId);
+      }
       saveRows(rows.filter(r => r.id !== rowId));
       setRoUsedAlert(prev =>
         prev && (prev.rowId === rowId || prev.roNumber.trim().toLowerCase() === roNum.trim().toLowerCase())
@@ -814,11 +1075,26 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       );
     });
 
-    if (!sortField) return filtered;
+    if (!sortField) {
+      lastSortedRowOrderRef.current = filtered.map(r => r.id);
+      return filtered;
+    }
+
+    const isEditingSortedCol = Array.from(activeFieldKeysRef.current).some((k) =>
+      k.endsWith(`:${sortField}`)
+    );
+    if (isEditingSortedCol && lastSortedRowOrderRef.current.length > 0) {
+      const orderMap = new Map(lastSortedRowOrderRef.current.map((id, idx) => [id, idx]));
+      return [...filtered].sort((a, b) => {
+        const aIdx = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const bIdx = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        return aIdx - bIdx;
+      });
+    }
 
     const dir = sortDirection === 'asc' ? 1 : -1;
 
-    return [...filtered].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
       if (sortField === 'roNumber') {
         const aVal = (a.roNumber || '').trim();
         const bVal = (b.roNumber || '').trim();
@@ -868,7 +1144,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
       return 0;
     });
-  }, [rows, searchQuery, statusFilter, partsInFilter, onlyTechFlagged, sortField, sortDirection]);
+    lastSortedRowOrderRef.current = sorted.map(r => r.id);
+    return sorted;
+  }, [rows, searchQuery, statusFilter, partsInFilter, onlyTechFlagged, sortField, sortDirection, sortRefreshTick]);
 
   // Active ETA modal target object
   const etaModalTargetObj = useMemo(() => {
@@ -1423,8 +1701,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                 type="text"
                                 value={r.roNumber}
                                 maxLength={6}
-                                onChange={(e) => handleUpdateField(r.id, { roNumber: e.target.value })}
-                                onBlur={(e) => checkRoNumberUsage(r.id, e.target.value)}
+                                onFocus={() => markFieldFocus(r.id, 'roNumber')}
+                                onChange={(e) => handleTypingField(r.id, 'roNumber', { roNumber: e.target.value })}
+                                onBlur={(e) => {
+                                  checkRoNumberUsage(r.id, e.target.value);
+                                  markFieldBlur(r.id, 'roNumber');
+                                }}
                                 title={roWarning ? roWarning.message : 'Enter RO Number'}
                                 className={`w-16 px-1.5 py-1 rounded font-mono font-black focus:outline-none text-xs border ${
                                   roWarning?.type === 'DUPLICATE_IN_LOG'
@@ -1465,7 +1747,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             <input
                               type="date"
                               value={r.roDate || (r.createdAt ? r.createdAt.split('T')[0] : '')}
-                              onChange={(e) => handleUpdateField(r.id, { roDate: e.target.value })}
+                              onFocus={() => markFieldFocus(r.id, 'roDate')}
+                              onChange={(e) => handleTypingField(r.id, 'roDate', { roDate: e.target.value })}
+                              onBlur={() => markFieldBlur(r.id, 'roDate')}
                               className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-bold text-slate-800 focus:outline-none text-xs"
                             />
                           </td>
@@ -1475,7 +1759,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                             <input
                               type="text"
                               value={r.customerName}
-                              onChange={(e) => handleUpdateField(r.id, { customerName: e.target.value })}
+                              onFocus={() => markFieldFocus(r.id, 'customerName')}
+                              onChange={(e) => handleTypingField(r.id, 'customerName', { customerName: e.target.value })}
+                              onBlur={() => markFieldBlur(r.id, 'customerName')}
                               className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-bold text-slate-900 focus:outline-none"
                             />
                           </td>
@@ -1486,7 +1772,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               type="text"
                               value={r.vin}
                               maxLength={17}
-                              onChange={(e) => handleUpdateField(r.id, { vin: e.target.value })}
+                              onFocus={() => markFieldFocus(r.id, 'vin')}
+                              onChange={(e) => handleTypingField(r.id, 'vin', { vin: e.target.value })}
+                              onBlur={() => markFieldBlur(r.id, 'vin')}
                               className="w-32 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono text-slate-800 focus:outline-none text-xs tracking-tighter"
                             />
                           </td>
@@ -1564,7 +1852,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                 <input
                                   type="text"
                                   value={r.techNotes || ''}
-                                  onChange={(e) => handleUpdateField(r.id, { techNotes: e.target.value })}
+                                  onFocus={() => markFieldFocus(r.id, 'techNotes')}
+                                  onChange={(e) => handleTypingField(r.id, 'techNotes', { techNotes: e.target.value })}
+                                  onBlur={() => markFieldBlur(r.id, 'techNotes')}
                                   placeholder="No tech update yet"
                                   className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded text-xs font-semibold text-slate-800 focus:outline-none"
                                 />
@@ -1775,7 +2065,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                               <input
                                                 type="text"
                                                 value={sp.partNumber}
+                                                onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partNumber: e.target.value })}
+                                                onBlur={() => markFieldBlur(r.id, 'parts')}
                                                 className="w-28 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
                                                 
                                               />
@@ -1786,7 +2078,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                               <input
                                                 type="text"
                                                 value={sp.partDescription || ''}
+                                                onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partDescription: e.target.value })}
+                                                onBlur={() => markFieldBlur(r.id, 'parts')}
                                                 className="w-40 px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
                                                 
                                               />
@@ -1798,6 +2092,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                                 type="number"
                                                 min={1}
                                                 value={sp.quantity !== undefined && sp.quantity !== null ? sp.quantity : ''}
+                                                onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => {
                                                   const raw = e.target.value;
                                                   if (raw === '') {
@@ -1807,6 +2102,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                                     handleUpdateSubPart(r.id, sp.id, { quantity: isNaN(parsed) ? undefined : parsed });
                                                   }
                                                 }}
+                                                onBlur={() => markFieldBlur(r.id, 'parts')}
                                                 className="w-12 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
                                               />
                                             </td>
@@ -1816,7 +2112,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                               <input
                                                 type="date"
                                                 value={sp.orderDate || ''}
+                                                onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { orderDate: e.target.value })}
+                                                onBlur={() => markFieldBlur(r.id, 'parts')}
                                                 className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
                                               />
                                             </td>

@@ -96,6 +96,9 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   // Sort state for the spreadsheet
   const [sortField, setSortField] = useState<string>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortRefreshTick, setSortRefreshTick] = useState(0);
+  const isEditingNameRef = useRef<boolean>(false);
+  const lastSortedRowOrderRef = useRef<string[]>([]);
 
   // Comparison specific selector (compare week A vs week B)
   const [compareWeekAId, setCompareWeekAId] = useState<string>(() => weeks[0]?.id || '');
@@ -134,25 +137,88 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     };
   }, [lockProfitLedger, onBackToDashboard]);
 
-  // Helper to persist weeks to LocalStorage and Firestore, ensuring user-entered roster propagation across all weeks
-  const saveWeeks = useCallback((updatedWeeks: ProfitabilityWeek[]) => {
-    const cleaned = removeSampleEmployees(updatedWeeks);
-    const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
-    setWeeks(syncedRoster);
-    try {
-      localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
-    } catch {
-      // ignore
+  const focusedInputsRef = useRef<number>(0);
+  const pendingCloudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasPendingCloudWriteRef = useRef<boolean>(false);
+  const inFlightCloudSyncRef = useRef<number>(0);
+  const lastLocalEditAtRef = useRef<number>(0);
+  const latestWeeksRef = useRef<ProfitabilityWeek[]>(weeks);
+
+  useEffect(() => {
+    latestWeeksRef.current = weeks;
+  }, [weeks]);
+
+  const flushCloudSync = useCallback(() => {
+    if (pendingCloudTimerRef.current) {
+      clearTimeout(pendingCloudTimerRef.current);
+      pendingCloudTimerRef.current = null;
     }
-    syncProfitabilityWeeksToCloud(syncedRoster);
+    if (!hasPendingCloudWriteRef.current) return;
+    hasPendingCloudWriteRef.current = false;
+
+    inFlightCloudSyncRef.current += 1;
+    lastLocalEditAtRef.current = Date.now();
+    Promise.resolve(syncProfitabilityWeeksToCloud(latestWeeksRef.current)).finally(() => {
+      inFlightCloudSyncRef.current = Math.max(0, inFlightCloudSyncRef.current - 1);
+      lastLocalEditAtRef.current = Date.now();
+    });
   }, []);
 
-  // Real-time listener for Firestore Profitability Ledger changes
+  useEffect(() => {
+    return () => {
+      flushCloudSync();
+    };
+  }, [flushCloudSync]);
+
+  // Helper to persist weeks to LocalStorage and Firestore, ensuring user-entered roster propagation across all weeks
+  const saveWeeks = useCallback(
+    (updatedWeeks: ProfitabilityWeek[], options?: { immediate?: boolean }) => {
+      const cleaned = removeSampleEmployees(updatedWeeks);
+      const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
+      latestWeeksRef.current = syncedRoster;
+      setWeeks(syncedRoster);
+      try {
+        localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
+      } catch {
+        // ignore
+      }
+
+      hasPendingCloudWriteRef.current = true;
+      lastLocalEditAtRef.current = Date.now();
+
+      if (pendingCloudTimerRef.current) {
+        clearTimeout(pendingCloudTimerRef.current);
+        pendingCloudTimerRef.current = null;
+      }
+
+      if (options?.immediate !== false) {
+        flushCloudSync();
+      } else {
+        pendingCloudTimerRef.current = setTimeout(() => {
+          flushCloudSync();
+        }, 500);
+      }
+    },
+    [flushCloudSync]
+  );
+
+  // Real-time listener for Firestore Profitability Ledger changes without clobbering active typing
   useEffect(() => {
     const unsubscribe = subscribeToProfitabilityWeeks((cloudWeeks) => {
       if (cloudWeeks && Array.isArray(cloudWeeks) && cloudWeeks.length > 0) {
+        const now = Date.now();
+        if (
+          focusedInputsRef.current > 0 ||
+          hasPendingCloudWriteRef.current ||
+          pendingCloudTimerRef.current !== null ||
+          inFlightCloudSyncRef.current > 0 ||
+          now - lastLocalEditAtRef.current < 2500
+        ) {
+          return;
+        }
         const cleaned = removeSampleEmployees(cloudWeeks);
         const syncedRoster = ensureMasterRosterOnAllWeeks(cleaned);
+        latestWeeksRef.current = syncedRoster;
         setWeeks(syncedRoster);
         try {
           localStorage.setItem(STORAGE_KEY_PROFITABILITY_WEEKS, JSON.stringify(syncedRoster));
@@ -203,7 +269,16 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       );
     }
 
-    return filtered.sort((a, b) => {
+    if (isEditingNameRef.current && sortField === 'name' && lastSortedRowOrderRef.current.length > 0) {
+      const orderMap = new Map(lastSortedRowOrderRef.current.map((id, idx) => [id, idx]));
+      return [...filtered].sort((a, b) => {
+        const aIdx = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const bIdx = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        return aIdx - bIdx;
+      });
+    }
+
+    const sorted = [...filtered].sort((a, b) => {
       let aVal: any = (a as any)[sortField];
       let bVal: any = (b as any)[sortField];
       if (typeof aVal === 'string') {
@@ -214,12 +289,18 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [activeWeek, searchQuery, sortField, sortDirection]);
+    lastSortedRowOrderRef.current = sorted.map(r => r.id);
+    return sorted;
+  }, [activeWeek, searchQuery, sortField, sortDirection, sortRefreshTick]);
 
   // Handle updates to a row in the active week
-  const handleUpdateRow = (rowId: string, updates: Partial<EmployeeProfitabilityRow>) => {
+  const handleUpdateRow = (
+    rowId: string,
+    updates: Partial<EmployeeProfitabilityRow>,
+    options?: { immediate?: boolean }
+  ) => {
     if (!activeWeek) return;
-    const updatedWeeks = weeks.map(w => {
+    const updatedWeeks = latestWeeksRef.current.map(w => {
       if (w.id !== activeWeek.id) return w;
       return {
         ...w,
@@ -227,7 +308,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
         rows: w.rows.map(r => r.id === rowId ? { ...r, ...updates } : r)
       };
     });
-    saveWeeks(updatedWeeks);
+    saveWeeks(updatedWeeks, options);
   };
 
   // Add new employee row to active week
@@ -874,7 +955,17 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                               <input
                                 type="text"
                                 value={r.name}
-                                onChange={(e) => handleUpdateRow(r.id, { name: e.target.value })}
+                                onFocus={() => {
+                                  isEditingNameRef.current = true;
+                                  focusedInputsRef.current += 1;
+                                }}
+                                onChange={(e) => handleUpdateRow(r.id, { name: e.target.value }, { immediate: false })}
+                                onBlur={() => {
+                                  isEditingNameRef.current = false;
+                                  focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  flushCloudSync();
+                                  setSortRefreshTick(t => t + 1);
+                                }}
                                 className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded font-bold text-slate-900 focus:outline-hidden"
                                 placeholder="Employee Name"
                               />
@@ -884,7 +975,7 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                             <td className="py-1.5 px-2 min-w-[130px]">
                               <select
                                 value={r.payType}
-                                onChange={(e) => handleUpdateRow(r.id, { payType: e.target.value as EmployeePayType })}
+                                onChange={(e) => handleUpdateRow(r.id, { payType: e.target.value as EmployeePayType }, { immediate: true })}
                                 className={`px-2 py-1 text-xs font-bold rounded border cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-blue-500 ${
                                   isSalary 
                                     ? 'bg-purple-50 text-purple-800 border-purple-300' 
@@ -908,7 +999,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                                 type="number"
                                 step="0.5"
                                 value={r.actualHours}
-                                onChange={(e) => handleUpdateRow(r.id, { actualHours: Number(e.target.value) || 0 })}
+                                onFocus={() => {
+                                  focusedInputsRef.current += 1;
+                                }}
+                                onChange={(e) => handleUpdateRow(r.id, { actualHours: Number(e.target.value) || 0 }, { immediate: false })}
+                                onBlur={() => {
+                                  focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  flushCloudSync();
+                                }}
                                 className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                               />
                             </td>
@@ -919,7 +1017,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                                 type="number"
                                 step="0.5"
                                 value={r.flaggedHours}
-                                onChange={(e) => handleUpdateRow(r.id, { flaggedHours: Number(e.target.value) || 0 })}
+                                onFocus={() => {
+                                  focusedInputsRef.current += 1;
+                                }}
+                                onChange={(e) => handleUpdateRow(r.id, { flaggedHours: Number(e.target.value) || 0 }, { immediate: false })}
+                                onBlur={() => {
+                                  focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  flushCloudSync();
+                                }}
                                 className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                               />
                             </td>
@@ -949,7 +1054,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                                       type="number"
                                       step="0.5"
                                       value={r.payRate}
-                                      onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 })}
+                                      onFocus={() => {
+                                        focusedInputsRef.current += 1;
+                                      }}
+                                      onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 }, { immediate: false })}
+                                      onBlur={() => {
+                                        focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                        flushCloudSync();
+                                      }}
                                       className="w-16 px-1.5 py-0.5 text-right font-mono font-bold bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                                       placeholder="0.00"
                                       title="Base hourly pay rate for actual clock hours"
@@ -962,7 +1074,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                                       type="number"
                                       step="0.5"
                                       value={r.flagRate ?? 0}
-                                      onChange={(e) => handleUpdateRow(r.id, { flagRate: Number(e.target.value) || 0 })}
+                                      onFocus={() => {
+                                        focusedInputsRef.current += 1;
+                                      }}
+                                      onChange={(e) => handleUpdateRow(r.id, { flagRate: Number(e.target.value) || 0 }, { immediate: false })}
+                                      onBlur={() => {
+                                        focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                        flushCloudSync();
+                                      }}
                                       className="w-16 px-1.5 py-0.5 text-right font-mono font-bold bg-indigo-50/80 focus:bg-white border border-indigo-300 focus:border-indigo-500 rounded text-indigo-900 focus:outline-hidden"
                                       placeholder="0.00"
                                       title="Flag bonus rate per billed/flagged hour"
@@ -977,7 +1096,14 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                                     type="number"
                                     step={isSalary ? '50' : '0.5'}
                                     value={r.payRate}
-                                    onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 })}
+                                    onFocus={() => {
+                                      focusedInputsRef.current += 1;
+                                    }}
+                                    onChange={(e) => handleUpdateRow(r.id, { payRate: Number(e.target.value) || 0 }, { immediate: false })}
+                                    onBlur={() => {
+                                      focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                      flushCloudSync();
+                                    }}
                                     className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                                   />
                                   <span className="text-[10px] text-slate-400 font-medium">
@@ -1000,9 +1126,16 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                                   type="number"
                                   step="10"
                                   value={r.laborSales ?? ''}
+                                  onFocus={() => {
+                                    focusedInputsRef.current += 1;
+                                  }}
                                   onChange={(e) => {
                                     const val = e.target.value === '' ? 0 : Number(e.target.value);
-                                    handleUpdateRow(r.id, { laborSales: val });
+                                    handleUpdateRow(r.id, { laborSales: val }, { immediate: false });
+                                  }}
+                                  onBlur={() => {
+                                    focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                    flushCloudSync();
                                   }}
                                   placeholder="0.00"
                                   className="w-24 px-2 py-1 text-right font-mono font-bold bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
