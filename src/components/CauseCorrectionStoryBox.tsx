@@ -158,6 +158,7 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
         if (response.status === 404 && !data.error) {
           const host = typeof window !== 'undefined' ? window.location.host : 'this host';
           const isSharedHost = host.startsWith('ais-pre-');
+          const isVercelHost = host.endsWith('.vercel.app');
           let healthStatus: number | null = null;
           try {
             const healthRes = await fetch('/api/health');
@@ -169,6 +170,12 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
           if (isSharedHost) {
             throw new Error(
               `The Shared App link (${host}) returned 404 because its backend AI server is not active yet (health: ${healthStatus ?? 'unreachable'}). Please click Share / Republish after this update — or open the AI Studio Preview link to use the AI writer right away.`
+            );
+          }
+
+          if (isVercelHost) {
+            throw new Error(
+              `The Vercel deployment (${host}) returned 404 for /api/generate-story (health: ${healthStatus ?? 'unreachable'}). Please redeploy from the latest code so the /api serverless functions are included, and ensure GEMINI_API_KEY is set in Vercel Environment Variables.`
             );
           }
 

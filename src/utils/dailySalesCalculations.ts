@@ -156,6 +156,127 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
 }
 
 /**
+ * Given a YYYY-MM-DD date string, calculates the Sunday through Saturday calendar week enclosing that date.
+ */
+export function getSunSatWeekPeriodForDate(dateStr: string): {
+  startDate: string;
+  endDate: string;
+  label: string;
+  weekId: string;
+} {
+  const parts = dateStr.split('-').map(Number);
+  const year = parts[0] || 2026;
+  const month = (parts[1] || 1) - 1;
+  const day = parts[2] || 1;
+
+  const d = new Date(year, month, day);
+  const dayOfWeek = d.getDay(); // 0: Sun .. 6: Sat
+
+  const sunStart = new Date(d);
+  sunStart.setDate(d.getDate() - dayOfWeek);
+
+  const satEnd = new Date(sunStart);
+  satEnd.setDate(sunStart.getDate() + 6);
+
+  const formatIso = (dateObj: Date) => {
+    const yr = dateObj.getFullYear();
+    const mo = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dy = String(dateObj.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  };
+
+  const startDate = formatIso(sunStart);
+  const endDate = formatIso(satEnd);
+
+  const startMonthStr = sunStart.toLocaleDateString('en-US', { month: 'short' });
+  const endMonthStr = satEnd.toLocaleDateString('en-US', { month: 'short' });
+  const label = startMonthStr === endMonthStr
+    ? `${startMonthStr} ${sunStart.getDate()} - ${satEnd.getDate()}, ${satEnd.getFullYear()}`
+    : `${startMonthStr} ${sunStart.getDate()} - ${endMonthStr} ${satEnd.getDate()}, ${satEnd.getFullYear()}`;
+
+  const weekId = `calweek_${startDate.replace(/-/g, '_')}_${endDate.replace(/-/g, '_')}`;
+
+  return { startDate, endDate, label, weekId };
+}
+
+/**
+ * Groups daily sales records by Sunday-to-Saturday calendar weeks.
+ */
+export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTueWeekSalesSummary[] {
+  if (!Array.isArray(records) || records.length === 0) return [];
+
+  const map = new Map<string, {
+    startDate: string;
+    endDate: string;
+    label: string;
+    records: DailySalesRecord[];
+  }>();
+
+  records.forEach(r => {
+    const info = getSunSatWeekPeriodForDate(r.date);
+    const existing = map.get(info.weekId);
+    if (existing) {
+      existing.records.push(r);
+    } else {
+      map.set(info.weekId, {
+        startDate: info.startDate,
+        endDate: info.endDate,
+        label: info.label,
+        records: [r]
+      });
+    }
+  });
+
+  const summaries: WedTueWeekSalesSummary[] = [];
+
+  map.forEach((value, weekId) => {
+    let totalROCount = 0;
+    let totalCustomerPay = 0;
+    let totalWarranty = 0;
+    let totalInternal = 0;
+
+    value.records.forEach(r => {
+      const computed = computeDailyTotals(r);
+      totalROCount += computed.roCount;
+      totalCustomerPay += computed.customerPaySales;
+      totalWarranty += computed.warrantySales;
+      totalInternal += computed.internalSales;
+    });
+
+    const totalSales = totalCustomerPay + totalWarranty + totalInternal;
+    const avgSalesPerRO = totalROCount > 0 ? totalSales / totalROCount : 0;
+    const daysCount = value.records.length;
+    const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
+    const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+
+    const customerPayPct = totalSales > 0 ? (totalCustomerPay / totalSales) * 100 : 0;
+    const warrantyPct = totalSales > 0 ? (totalWarranty / totalSales) * 100 : 0;
+    const internalPct = totalSales > 0 ? (totalInternal / totalSales) * 100 : 0;
+
+    summaries.push({
+      weekId,
+      weekStartDate: value.startDate,
+      weekEndingDate: value.endDate,
+      weekLabel: value.label,
+      daysCount,
+      totalROCount,
+      totalCustomerPaySales: totalCustomerPay,
+      totalWarrantySales: totalWarranty,
+      totalInternalSales: totalInternal,
+      totalSales,
+      avgSalesPerRO,
+      avgDailySales,
+      avgDailyROCount,
+      customerPayPct,
+      warrantyPct,
+      internalPct,
+    });
+  });
+
+  return summaries.sort((a, b) => b.weekEndingDate.localeCompare(a.weekEndingDate));
+}
+
+/**
  * Groups daily sales records by Month (YYYY-MM).
  */
 export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSummary[] {

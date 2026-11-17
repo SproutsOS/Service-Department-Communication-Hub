@@ -23,17 +23,21 @@ import {
   Sliders,
   Award,
   Layers,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Hash,
+  Minus
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DailySalesRecord, DailySalesTotals } from '../types/dailySales';
 import { 
   computeDailyTotals, 
   groupRecordsByWedTueWeeks, 
+  groupRecordsByCalendarWeeks,
   groupRecordsByMonth, 
   seedInitialDailyRecords, 
   calculateDailySalesFromROs,
-  getWedTueWeekPeriodForDate
+  getWedTueWeekPeriodForDate,
+  getSunSatWeekPeriodForDate
 } from '../utils/dailySalesCalculations';
 import { formatCurrency } from '../utils/formatters';
 import { syncDailySalesToCloud, subscribeToDailySales } from '../lib/firestoreSync';
@@ -65,8 +69,20 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     return seedInitialDailyRecords();
   });
 
-  // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY'
-  const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY'>('DAILY');
+  // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT'
+  const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT'>('DAILY');
+  const [roViewGrouping, setRoViewGrouping] = useState<'DAY' | 'WEEK' | 'MONTH'>('DAY');
+  const [roWeekCycle, setRoWeekCycle] = useState<'WED_TUE' | 'SUN_SAT'>('WED_TUE');
+
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  }, []);
+
+  const [selectedRODate, setSelectedRODate] = useState<string>(todayIso);
 
   // Trend Graph Modal / View State
   const [showGraphModal, setShowGraphModal] = useState(false);
@@ -120,6 +136,11 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     return groupRecordsByWedTueWeeks(records);
   }, [records]);
 
+  // Compute Sunday–Saturday Calendar Weekly Rollups
+  const calendarWeeksList = useMemo(() => {
+    return groupRecordsByCalendarWeeks(records);
+  }, [records]);
+
   // Compute Monthly Rollups
   const monthlyList = useMemo(() => {
     return groupRecordsByMonth(records);
@@ -143,10 +164,12 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     const totalSales = totalCP + totalWarr + totalInt;
     const avgSalesPerRO = totalROs > 0 ? totalSales / totalROs : 0;
     const daysCount = records.length;
+    const avgROsPerDay = daysCount > 0 ? totalROs / daysCount : 0;
 
     return {
       daysCount,
       totalROs,
+      avgROsPerDay,
       totalCP,
       totalWarr,
       totalInt,
@@ -158,10 +181,76 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     };
   }, [records]);
 
-  // Handle inline updates to a daily record
+  // Day / Week / Month RO Count Summary derived from selectedRODate
+  const roPeriodOverview = useMemo(() => {
+    const dayRecord = records.find(r => r.date === selectedRODate);
+    const dayROCount = dayRecord ? Math.max(0, Number(dayRecord.roCount) || 0) : 0;
+
+    const activeWeeks = roWeekCycle === 'WED_TUE' ? wedTueWeeksList : calendarWeeksList;
+    const weekInfo =
+      roWeekCycle === 'WED_TUE'
+        ? getWedTueWeekPeriodForDate(selectedRODate)
+        : getSunSatWeekPeriodForDate(selectedRODate);
+    const weekIdx = activeWeeks.findIndex(w => w.weekId === weekInfo.weekId);
+    const currentWeek = weekIdx >= 0 ? activeWeeks[weekIdx] : null;
+    const prevWeek = weekIdx >= 0 && weekIdx + 1 < activeWeeks.length ? activeWeeks[weekIdx + 1] : null;
+
+    const monthKey = selectedRODate.slice(0, 7);
+    const monthParts = monthKey.split('-').map(Number);
+    const monthLabelFallback = new Date(
+      monthParts[0] || 2026,
+      (monthParts[1] || 1) - 1,
+      15
+    ).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const monthIdx = monthlyList.findIndex(m => m.monthKey === monthKey);
+    const currentMonth = monthIdx >= 0 ? monthlyList[monthIdx] : null;
+    const prevMonth = monthIdx >= 0 && monthIdx + 1 < monthlyList.length ? monthlyList[monthIdx + 1] : null;
+
+    return {
+      dayRecordExists: Boolean(dayRecord),
+      dayROCount,
+      weekLabel: weekInfo.label.replace('Pay Period: ', ''),
+      weekROCount: currentWeek ? currentWeek.totalROCount : 0,
+      weekDaysCount: currentWeek ? currentWeek.daysCount : 0,
+      weekAvgDailyROs: currentWeek ? currentWeek.avgDailyROCount : 0,
+      weekDeltaROs:
+        currentWeek && prevWeek ? currentWeek.totalROCount - prevWeek.totalROCount : null,
+      monthLabel: currentMonth ? currentMonth.monthLabel : monthLabelFallback,
+      monthROCount: currentMonth ? currentMonth.totalROCount : 0,
+      monthDaysCount: currentMonth ? currentMonth.daysCount : 0,
+      monthAvgDailyROs: currentMonth ? currentMonth.avgDailyROCount : 0,
+      monthDeltaROs:
+        currentMonth && prevMonth ? currentMonth.totalROCount - prevMonth.totalROCount : null,
+    };
+  }, [records, selectedRODate, roWeekCycle, wedTueWeeksList, calendarWeeksList, monthlyList]);
+
+  // Handle inline updates (or upsert if date doesn't exist yet) to a daily record
   const handleUpdateRecord = (dateStr: string, updates: Partial<DailySalesRecord>) => {
-    const updated = records.map(r => r.date === dateStr ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r);
+    const exists = records.some(r => r.date === dateStr);
+    const now = new Date().toISOString();
+    const updated = exists
+      ? records.map(r => (r.date === dateStr ? { ...r, ...updates, updatedAt: now } : r))
+      : [
+          {
+            date: dateStr,
+            roCount: 0,
+            customerPaySales: 0,
+            warrantySales: 0,
+            internalSales: 0,
+            ...updates,
+            updatedAt: now
+          },
+          ...records
+        ];
     saveRecords(updated);
+  };
+
+  // Stepper helper for quick RO Count adjustments
+  const handleStepROCount = (dateStr: string, delta: number) => {
+    const existing = records.find(r => r.date === dateStr);
+    const currentCount = existing ? Math.max(0, Number(existing.roCount) || 0) : 0;
+    const nextCount = Math.max(0, currentCount + delta);
+    handleUpdateRecord(dateStr, { roCount: nextCount });
   };
 
   // Handle auto-calculating totals from repair orders for a given date
@@ -180,19 +269,24 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
   const handleAddDateRecord = () => {
     if (!newDateInput) return;
     if (records.some(r => r.date === newDateInput)) {
-      alert(`A record for ${newDateInput} already exists in the tracker.`);
+      setSelectedRODate(newDateInput);
+      setSelectedMonthFilter('ALL');
+      setSearchQuery(newDateInput);
+      setIsAddDateModalOpen(false);
+      triggerSaveToast(`Selected existing record for ${newDateInput}.`);
       return;
     }
     const autoData = calculateDailySalesFromROs(newDateInput, repairOrders);
     const newRec: DailySalesRecord = {
       date: newDateInput,
-      roCount: autoData.roCount || 10,
-      customerPaySales: autoData.customerPaySales || 2500,
-      warrantySales: autoData.warrantySales || 800,
-      internalSales: autoData.internalSales || 300,
+      roCount: autoData.roCount,
+      customerPaySales: autoData.customerPaySales,
+      warrantySales: autoData.warrantySales,
+      internalSales: autoData.internalSales,
       updatedAt: new Date().toISOString()
     };
     saveRecords([newRec, ...records]);
+    setSelectedRODate(newDateInput);
     setIsAddDateModalOpen(false);
     triggerSaveToast(`Added record for ${newDateInput}.`);
   };
@@ -356,7 +450,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* View Mode Tabs */}
-            <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700">
+            <div className="bg-slate-800 p-1 rounded-xl flex items-center flex-wrap gap-0.5 border border-slate-700">
               <button
                 type="button"
                 onClick={() => setActiveTab('DAILY')}
@@ -394,6 +488,19 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Monthly Summary</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('RO_COUNT')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'RO_COUNT'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Hash className="w-3.5 h-3.5" />
+                <span>RO Count (Day/Wk/Mo)</span>
               </button>
             </div>
 
@@ -495,6 +602,214 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             <span className="text-xs font-bold text-amber-600 mt-0.5 block">
               {overallTotals.intPct.toFixed(1)}% of total sales
             </span>
+          </div>
+        </div>
+
+        {/* RO Count by Day, Week & Month Strip */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-purple-100 text-purple-700">
+                <Hash className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider">
+                  RO Count Tracker — Day, Week &amp; Month
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Track daily ticket volume alongside weekly and monthly totals ({overallTotals.totalROs} total ROs logged • {overallTotals.avgROsPerDay.toFixed(1)} avg/day).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-[11px] font-bold text-slate-600">Focus Date:</label>
+              <input
+                type="date"
+                value={selectedRODate}
+                onChange={(e) => e.target.value && setSelectedRODate(e.target.value)}
+                className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+              />
+              {selectedRODate !== todayIso && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedRODate(todayIso)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
+                >
+                  Today
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setActiveTab('RO_COUNT')}
+                className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold cursor-pointer transition-colors"
+              >
+                Open Full RO Count View
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Day RO Count Card */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                  Day RO Count ({selectedRODate})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleAutoFillFromROs(selectedRODate)}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 cursor-pointer"
+                  title="Auto-count ROs logged on this date"
+                >
+                  Auto-Count ROs
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black font-mono text-slate-900">
+                    {roPeriodOverview.dayROCount}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">ROs</span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleStepROCount(selectedRODate, -1)}
+                    className="p-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 cursor-pointer"
+                    title="Subtract 1 RO"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    value={roPeriodOverview.dayROCount}
+                    onChange={(e) =>
+                      handleUpdateRecord(selectedRODate, {
+                        roCount: Math.max(0, Number(e.target.value) || 0)
+                      })
+                    }
+                    className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-mono font-black text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleStepROCount(selectedRODate, 1)}
+                    className="p-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                    title="Add 1 RO"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                <span>
+                  {roPeriodOverview.dayRecordExists
+                    ? `Shop Avg: ${overallTotals.avgROsPerDay.toFixed(1)} ROs/day`
+                    : 'No entry yet for this date — adjust above to start'}
+                </span>
+              </div>
+            </div>
+
+            {/* Week RO Count Card */}
+            <div className="p-3.5 rounded-xl bg-purple-50/50 border border-purple-200 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-purple-900">
+                  Week RO Count
+                </span>
+                <div className="inline-flex rounded-md bg-white border border-purple-200 p-0.5 text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setRoWeekCycle('WED_TUE')}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      roWeekCycle === 'WED_TUE' ? 'bg-purple-600 text-white' : 'text-slate-600'
+                    }`}
+                  >
+                    Wed–Tue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoWeekCycle('SUN_SAT')}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      roWeekCycle === 'SUN_SAT' ? 'bg-purple-600 text-white' : 'text-slate-600'
+                    }`}
+                  >
+                    Sun–Sat
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black font-mono text-purple-900">
+                    {roPeriodOverview.weekROCount}
+                  </span>
+                  <span className="text-xs font-bold text-purple-700">ROs</span>
+                </div>
+                {roPeriodOverview.weekDeltaROs !== null && (
+                  <span
+                    className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
+                      roPeriodOverview.weekDeltaROs >= 0
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {roPeriodOverview.weekDeltaROs >= 0 ? '+' : ''}
+                    {roPeriodOverview.weekDeltaROs} vs prev wk
+                  </span>
+                )}
+              </div>
+
+              <div className="text-[11px] text-purple-800/80 flex items-center justify-between gap-2">
+                <span className="truncate font-semibold">{roPeriodOverview.weekLabel}</span>
+                <span className="font-mono shrink-0">
+                  {roPeriodOverview.weekDaysCount}d • {roPeriodOverview.weekAvgDailyROs.toFixed(1)}/day
+                </span>
+              </div>
+            </div>
+
+            {/* Month RO Count Card */}
+            <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                  Month RO Count
+                </span>
+                <span className="text-[11px] font-bold text-emerald-800 truncate">
+                  {roPeriodOverview.monthLabel}
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black font-mono text-emerald-900">
+                    {roPeriodOverview.monthROCount}
+                  </span>
+                  <span className="text-xs font-bold text-emerald-700">ROs</span>
+                </div>
+                {roPeriodOverview.monthDeltaROs !== null && (
+                  <span
+                    className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
+                      roPeriodOverview.monthDeltaROs >= 0
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {roPeriodOverview.monthDeltaROs >= 0 ? '+' : ''}
+                    {roPeriodOverview.monthDeltaROs} vs prev mo
+                  </span>
+                )}
+              </div>
+
+              <div className="text-[11px] text-emerald-800/80 flex items-center justify-between gap-2">
+                <span>{roPeriodOverview.monthDaysCount} days logged</span>
+                <span className="font-mono font-bold">
+                  {roPeriodOverview.monthAvgDailyROs.toFixed(1)} ROs/day
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -699,6 +1014,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     <th className="px-4 py-3">Pay Period</th>
                     <th className="px-4 py-3 text-center">Days Logged</th>
                     <th className="px-4 py-3 text-center">Total RO Count</th>
+                    <th className="px-4 py-3 text-center">Avg ROs / Day</th>
                     <th className="px-4 py-3 text-right">Customer Pay ($)</th>
                     <th className="px-4 py-3 text-right">Warranty Sales ($)</th>
                     <th className="px-4 py-3 text-right">Internal Sales ($)</th>
@@ -715,8 +1031,11 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                       <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">
                         {week.daysCount} Days
                       </td>
-                      <td className="px-4 py-3.5 text-center font-mono font-black text-slate-900">
+                      <td className="px-4 py-3.5 text-center font-mono font-black text-purple-900 text-sm">
                         {week.totalROCount}
+                      </td>
+                      <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">
+                        {week.avgDailyROCount.toFixed(1)}
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-bold text-blue-900">
                         {formatCurrency(week.totalCustomerPaySales)}
@@ -763,6 +1082,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     <th className="px-4 py-3">Month</th>
                     <th className="px-4 py-3 text-center">Days Recorded</th>
                     <th className="px-4 py-3 text-center">Total RO Count</th>
+                    <th className="px-4 py-3 text-center">Avg ROs / Day</th>
                     <th className="px-4 py-3 text-right">Customer Pay ($)</th>
                     <th className="px-4 py-3 text-right">Warranty Sales ($)</th>
                     <th className="px-4 py-3 text-right">Internal Sales ($)</th>
@@ -779,8 +1099,11 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                       <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">
                         {month.daysCount} Days
                       </td>
-                      <td className="px-4 py-3.5 text-center font-mono font-black text-slate-900 text-sm">
+                      <td className="px-4 py-3.5 text-center font-mono font-black text-purple-900 text-sm">
                         {month.totalROCount}
+                      </td>
+                      <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">
+                        {month.avgDailyROCount.toFixed(1)}
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-bold text-blue-900">
                         {formatCurrency(month.totalCustomerPaySales)}
@@ -805,6 +1128,346 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* TAB 4: DEDICATED RO COUNT TRACKER (BY DAY, WEEK & MONTH) */}
+        {activeTab === 'RO_COUNT' && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  RO Count Breakdown
+                </span>
+                <div className="inline-flex rounded-lg bg-slate-200 p-0.5 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setRoViewGrouping('DAY')}
+                    className={`px-3 py-1 rounded-md cursor-pointer transition-all ${
+                      roViewGrouping === 'DAY' ? 'bg-white text-purple-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    By Day ({records.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoViewGrouping('WEEK')}
+                    className={`px-3 py-1 rounded-md cursor-pointer transition-all ${
+                      roViewGrouping === 'WEEK' ? 'bg-white text-purple-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    By Week ({(roWeekCycle === 'WED_TUE' ? wedTueWeeksList : calendarWeeksList).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoViewGrouping('MONTH')}
+                    className={`px-3 py-1 rounded-md cursor-pointer transition-all ${
+                      roViewGrouping === 'MONTH' ? 'bg-white text-purple-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    By Month ({monthlyList.length})
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {roViewGrouping === 'WEEK' && (
+                  <div className="inline-flex rounded-lg bg-slate-100 border border-slate-300 p-0.5 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setRoWeekCycle('WED_TUE')}
+                      className={`px-2.5 py-1 rounded-md cursor-pointer ${
+                        roWeekCycle === 'WED_TUE' ? 'bg-purple-600 text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      Wed–Tue Payroll Week
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoWeekCycle('SUN_SAT')}
+                      className={`px-2.5 py-1 rounded-md cursor-pointer ${
+                        roWeekCycle === 'SUN_SAT' ? 'bg-purple-600 text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      Sun–Sat Calendar Week
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGraphMetric('RO_COUNT');
+                    setGraphTimeframe(
+                      roViewGrouping === 'DAY'
+                        ? 'DAILY'
+                        : roViewGrouping === 'WEEK'
+                        ? 'WEEKLY_WED_TUE'
+                        : 'MONTHLY'
+                    );
+                    setShowGraphModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white cursor-pointer flex items-center gap-1.5"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>View RO Count Graph</span>
+                </button>
+              </div>
+            </div>
+
+            {roViewGrouping === 'DAY' && (() => {
+              const maxDayRO = Math.max(...records.map(r => Math.max(0, Number(r.roCount) || 0)), 1);
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-[11px] uppercase font-black text-slate-600 border-b border-slate-200">
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Week</th>
+                        <th className="px-4 py-3 text-center">RO Count</th>
+                        <th className="px-4 py-3 w-48">Daily Volume</th>
+                        <th className="px-4 py-3 text-right">Total Sales</th>
+                        <th className="px-4 py-3 text-right">Avg $/RO</th>
+                        <th className="px-4 py-3 text-center">Quick Fill</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {records.map(record => {
+                        const computed = computeDailyTotals(record);
+                        const weekInfo =
+                          roWeekCycle === 'WED_TUE'
+                            ? getWedTueWeekPeriodForDate(record.date)
+                            : getSunSatWeekPeriodForDate(record.date);
+                        const barPct = Math.min(100, Math.round((computed.roCount / maxDayRO) * 100));
+                        const dateParts = record.date.split('-').map(Number);
+                        const dayName = new Date(
+                          dateParts[0] || 2026,
+                          (dateParts[1] || 1) - 1,
+                          dateParts[2] || 1
+                        ).toLocaleDateString('en-US', { weekday: 'short' });
+
+                        return (
+                          <tr key={record.date} className="hover:bg-purple-50/30 transition-colors">
+                            <td className="px-4 py-3 font-mono font-black text-slate-900 whitespace-nowrap">
+                              <span className="text-slate-500 font-sans mr-1.5">{dayName}</span>
+                              {record.date}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 font-medium text-[11px] whitespace-nowrap">
+                              {weekInfo.label.replace('Pay Period: ', '')}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStepROCount(record.date, -1)}
+                                  className="p-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 cursor-pointer"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={record.roCount}
+                                  onChange={(e) =>
+                                    handleUpdateRecord(record.date, {
+                                      roCount: Math.max(0, Number(e.target.value) || 0)
+                                    })
+                                  }
+                                  className="w-14 px-1.5 py-1 bg-white border border-slate-300 rounded text-center font-mono font-black text-xs text-purple-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleStepROCount(record.date, 1)}
+                                  className="p-1 rounded bg-purple-100 hover:bg-purple-200 border border-purple-300 text-purple-800 cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                <div
+                                  className="bg-purple-600 h-2.5 rounded-full transition-all"
+                                  style={{ width: `${barPct}%` }}
+                                />
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                              {formatCurrency(computed.totalSales)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">
+                              {formatCurrency(computed.avgSalesPerRO)}
+                            </td>
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleAutoFillFromROs(record.date)}
+                                className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded border border-slate-300 text-[10px] font-bold cursor-pointer"
+                              >
+                                Auto-Fill ROs
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            {roViewGrouping === 'WEEK' && (() => {
+              const activeWeeks = roWeekCycle === 'WED_TUE' ? wedTueWeeksList : calendarWeeksList;
+              const maxWeekRO = Math.max(...activeWeeks.map(w => w.totalROCount), 1);
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-[11px] uppercase font-black text-slate-600 border-b border-slate-200">
+                        <th className="px-4 py-3">
+                          {roWeekCycle === 'WED_TUE' ? 'Wed–Tue Payroll Week' : 'Sun–Sat Calendar Week'}
+                        </th>
+                        <th className="px-4 py-3 text-center">Days Logged</th>
+                        <th className="px-4 py-3 text-center">Total RO Count</th>
+                        <th className="px-4 py-3 text-center">Avg ROs / Day</th>
+                        <th className="px-4 py-3 text-center">vs Prior Week</th>
+                        <th className="px-4 py-3 w-48">Weekly Volume</th>
+                        <th className="px-4 py-3 text-right">Total Revenue</th>
+                        <th className="px-4 py-3 text-right">Avg $/RO</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {activeWeeks.map((week, idx) => {
+                        const prev = idx + 1 < activeWeeks.length ? activeWeeks[idx + 1] : null;
+                        const delta = prev ? week.totalROCount - prev.totalROCount : null;
+                        const barPct = Math.min(100, Math.round((week.totalROCount / maxWeekRO) * 100));
+                        return (
+                          <tr key={week.weekId} className="hover:bg-purple-50/30 transition-colors">
+                            <td className="px-4 py-3.5 font-bold text-slate-900 whitespace-nowrap">
+                              {week.weekLabel.replace('Pay Period: ', '')}
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">
+                              {week.daysCount} Days
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-black text-purple-900 text-sm">
+                              {week.totalROCount} ROs
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-800">
+                              {week.avgDailyROCount.toFixed(1)}
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-bold">
+                              {delta === null ? (
+                                <span className="text-slate-400">—</span>
+                              ) : (
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[11px] font-black ${
+                                    delta >= 0
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}
+                                >
+                                  {delta >= 0 ? '+' : ''}
+                                  {delta}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                <div
+                                  className="bg-purple-600 h-2.5 rounded-full transition-all"
+                                  style={{ width: `${barPct}%` }}
+                                />
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-slate-900">
+                              {formatCurrency(week.totalSales)}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-700">
+                              {formatCurrency(week.avgSalesPerRO)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            {roViewGrouping === 'MONTH' && (() => {
+              const maxMonthRO = Math.max(...monthlyList.map(m => m.totalROCount), 1);
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-[11px] uppercase font-black text-slate-600 border-b border-slate-200">
+                        <th className="px-4 py-3">Month</th>
+                        <th className="px-4 py-3 text-center">Days Logged</th>
+                        <th className="px-4 py-3 text-center">Total RO Count</th>
+                        <th className="px-4 py-3 text-center">Avg ROs / Day</th>
+                        <th className="px-4 py-3 text-center">vs Prior Month</th>
+                        <th className="px-4 py-3 w-48">Monthly Volume</th>
+                        <th className="px-4 py-3 text-right">Total Revenue</th>
+                        <th className="px-4 py-3 text-right">Avg $/RO</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {monthlyList.map((month, idx) => {
+                        const prev = idx + 1 < monthlyList.length ? monthlyList[idx + 1] : null;
+                        const delta = prev ? month.totalROCount - prev.totalROCount : null;
+                        const barPct = Math.min(100, Math.round((month.totalROCount / maxMonthRO) * 100));
+                        return (
+                          <tr key={month.monthKey} className="hover:bg-emerald-50/30 transition-colors">
+                            <td className="px-4 py-3.5 font-black text-slate-900 text-sm whitespace-nowrap">
+                              {month.monthLabel}
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">
+                              {month.daysCount} Days
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-black text-purple-900 text-sm">
+                              {month.totalROCount} ROs
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-800">
+                              {month.avgDailyROCount.toFixed(1)}
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono font-bold">
+                              {delta === null ? (
+                                <span className="text-slate-400">—</span>
+                              ) : (
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[11px] font-black ${
+                                    delta >= 0
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}
+                                >
+                                  {delta >= 0 ? '+' : ''}
+                                  {delta}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                <div
+                                  className="bg-emerald-600 h-2.5 rounded-full transition-all"
+                                  style={{ width: `${barPct}%` }}
+                                />
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-slate-900">
+                              {formatCurrency(month.totalSales)}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-700">
+                              {formatCurrency(month.avgSalesPerRO)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         )}
 
