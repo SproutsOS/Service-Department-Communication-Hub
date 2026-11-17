@@ -155,6 +155,11 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (response.status === 404 && !data.error) {
+          throw new Error(
+            'AI story service returned 404. Please refresh the page — or if using the Shared App link, re-share/republish the app so the backend AI route is active.'
+          );
+        }
         throw new Error(data.error || `Failed to generate story (${response.status})`);
       }
 

@@ -29,6 +29,10 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
 
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.json({ ok: true, hasApiKey: Boolean(process.env.GEMINI_API_KEY) });
+  });
+
   app.post('/api/generate-story', async (req: Request, res: Response) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -87,21 +91,55 @@ async function startServer() {
       .filter(Boolean)
       .join('\n\n');
 
-    try {
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
-          }
+    const extractFriendlyError = (err: unknown): { status: number; message: string } => {
+      const raw = err instanceof Error ? err.message : String(err || 'Failed to generate story.');
+      if (raw.includes('TIMEOUT_EXCEEDED') || raw.toLowerCase().includes('deadline expired')) {
+        return {
+          status: 504,
+          message: 'The AI service took too long to respond. Please try again.'
+        };
+      }
+      try {
+        const outer = JSON.parse(raw);
+        const inner = outer?.error || outer;
+        const code = Number(inner?.code) || 500;
+        const msg = typeof inner?.message === 'string' ? inner.message : raw;
+        if (code === 504 || inner?.status === 'DEADLINE_EXCEEDED' || msg.toLowerCase().includes('deadline expired')) {
+          return {
+            status: 504,
+            message: 'The AI service took too long to respond. Please try again.'
+          };
         }
+        if (code === 503 || inner?.status === 'UNAVAILABLE') {
+          return {
+            status: 503,
+            message: 'The AI writer is temporarily busy. Please click Write / Polish again in a few seconds.'
+          };
+        }
+        if (code === 429 || inner?.status === 'RESOURCE_EXHAUSTED') {
+          return {
+            status: 429,
+            message: 'AI usage limit reached temporarily. Please wait a moment and try again.'
+          };
+        }
+        return { status: code >= 400 && code < 600 ? code : 500, message: msg };
+      } catch {
+        return { status: 500, message: raw };
+      }
+    };
+
+    const callModelWithTimeout = async (ai: GoogleGenAI, modelName: string, timeoutMs: number) => {
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), timeoutMs);
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
+      const apiPromise = ai.models.generateContent({
+        model: modelName,
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          ...(modelName === 'gemini-4-hydrogen'
+            ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
+            : {}),
           systemInstruction:
             'You are an experienced automotive dealership technician and warranty story writer. ' +
             'Write clean, professional Cause and Correction statements ready to paste straight into a dealership DMS. ' +
@@ -129,17 +167,60 @@ async function startServer() {
         }
       });
 
-      const rawText = (response.text ?? '{}').trim();
-      const parsed = JSON.parse(rawText) as { cause?: string; correction?: string };
+      return Promise.race([apiPromise, timeoutPromise]);
+    };
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          timeout: 25000,
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+
+      const attempts: { model: string; delayMs: number; timeoutMs: number }[] = [
+        { model: 'gemini-3.1-flash-lite', delayMs: 0, timeoutMs: 12000 },
+        { model: 'gemini-4-hydrogen', delayMs: 200, timeoutMs: 15000 }
+      ];
+
+      let lastErr: unknown = null;
+      let responseText = '';
+
+      for (const attempt of attempts) {
+        if (attempt.delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, attempt.delayMs));
+        }
+        try {
+          const response = await callModelWithTimeout(ai, attempt.model, attempt.timeoutMs);
+          responseText = (response.text ?? '{}').trim();
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const info = extractFriendlyError(err);
+          if (info.status !== 503 && info.status !== 429 && info.status !== 504) {
+            throw err;
+          }
+        }
+      }
+
+      if (lastErr) {
+        throw lastErr;
+      }
+
+      const parsed = JSON.parse(responseText || '{}') as { cause?: string; correction?: string };
 
       res.json({
         cause: (parsed.cause || '').trim(),
         correction: (parsed.correction || '').trim()
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to generate Cause & Correction story.';
+      const friendly = extractFriendlyError(err);
       console.error('Error generating Cause & Correction:', err);
-      res.status(500).json({ error: msg });
+      res.status(friendly.status).json({ error: friendly.message });
     }
   });
 
@@ -158,7 +239,9 @@ async function startServer() {
     });
   }
 
-  const PORT = Number(process.env.PORT) || 3000;
+  const portFlagIdx = process.argv.indexOf('--port');
+  const cliPort = portFlagIdx !== -1 ? Number(process.argv[portFlagIdx + 1]) : NaN;
+  const PORT = (!isNaN(cliPort) && cliPort > 0) ? cliPort : (Number(process.env.PORT) || 3000);
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
   });
