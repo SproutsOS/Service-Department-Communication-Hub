@@ -1,9 +1,9 @@
 export interface DailySalesRecord {
   date: string; // YYYY-MM-DD
   roCount: number;
-  customerPaySales: number;
-  warrantySales: number;
-  internalSales: number;
+  techHours: number;
+  laborSales: number;
+  partsSales: number;
   notes?: string;
   updatedAt?: string;
 }
@@ -11,14 +11,15 @@ export interface DailySalesRecord {
 export interface DailySalesTotals {
   date: string;
   roCount: number;
-  customerPaySales: number;
-  warrantySales: number;
-  internalSales: number;
-  totalSales: number;
+  techHours: number;
+  laborSales: number;
+  partsSales: number;
+  totalSales: number; // Total Parts & Labor
   avgSalesPerRO: number;
-  customerPayPct: number;
-  warrantyPct: number;
-  internalPct: number;
+  effectiveLaborRate: number;
+  hoursPerRO: number;
+  laborPct: number;
+  partsPct: number;
 }
 
 export interface WedTueWeekSalesSummary {
@@ -28,16 +29,18 @@ export interface WedTueWeekSalesSummary {
   weekLabel: string;
   daysCount: number;
   totalROCount: number;
-  totalCustomerPaySales: number;
-  totalWarrantySales: number;
-  totalInternalSales: number;
-  totalSales: number;
+  totalTechHours: number;
+  totalLaborSales: number;
+  totalPartsSales: number;
+  totalSales: number; // Total Parts & Labor
   avgSalesPerRO: number;
   avgDailySales: number;
   avgDailyROCount: number;
-  customerPayPct: number;
-  warrantyPct: number;
-  internalPct: number;
+  avgDailyTechHours: number;
+  effectiveLaborRate: number;
+  hoursPerRO: number;
+  laborPct: number;
+  partsPct: number;
 }
 
 export interface MonthlySalesSummary {
@@ -47,14 +50,16 @@ export interface MonthlySalesSummary {
   month: number;
   daysCount: number;
   totalROCount: number;
-  totalCustomerPaySales: number;
-  totalWarrantySales: number;
-  totalInternalSales: number;
-  totalSales: number;
+  totalTechHours: number;
+  totalLaborSales: number;
+  totalPartsSales: number;
+  totalSales: number; // Total Parts & Labor
   avgSalesPerRO: number;
   avgDailySales: number;
   avgDailyROCount: number;
-  customerPayPct: number;
-  warrantyPct: number;
-  internalPct: number;
+  avgDailyTechHours: number;
+  effectiveLaborRate: number;
+  hoursPerRO: number;
+  laborPct: number;
+  partsPct: number;
 }

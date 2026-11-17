@@ -1,33 +1,52 @@
 import { DailySalesRecord, DailySalesTotals, WedTueWeekSalesSummary, MonthlySalesSummary } from '../types/dailySales';
 import { RepairOrder } from '../types';
 
+export const DAILY_SALES_START_DATE = '2025-09-01';
+
+/**
+ * Normalizes a daily record so all numeric metrics default cleanly to 0.
+ */
+export function normalizeDailySalesRecord(raw: Partial<DailySalesRecord> & { date: string }): DailySalesRecord {
+  return {
+    date: raw.date,
+    roCount: Math.max(0, Number(raw.roCount) || 0),
+    techHours: Math.max(0, Number(raw.techHours) || 0),
+    laborSales: Math.max(0, Number(raw.laborSales) || 0),
+    partsSales: Math.max(0, Number(raw.partsSales) || 0),
+    ...(raw.notes ? { notes: raw.notes } : { notes: '' }),
+    ...(raw.updatedAt ? { updatedAt: raw.updatedAt } : {})
+  };
+}
+
 /**
  * Computes totals and percentages for a single daily record
  */
 export function computeDailyTotals(record: DailySalesRecord): DailySalesTotals {
   const roCount = Math.max(0, Number(record.roCount) || 0);
-  const cpSales = Math.max(0, Number(record.customerPaySales) || 0);
-  const warrSales = Math.max(0, Number(record.warrantySales) || 0);
-  const intSales = Math.max(0, Number(record.internalSales) || 0);
+  const techHours = Math.max(0, Number(record.techHours) || 0);
+  const laborSales = Math.max(0, Number(record.laborSales) || 0);
+  const partsSales = Math.max(0, Number(record.partsSales) || 0);
 
-  const totalSales = cpSales + warrSales + intSales;
+  const totalSales = laborSales + partsSales;
   const avgSalesPerRO = roCount > 0 ? totalSales / roCount : 0;
+  const effectiveLaborRate = techHours > 0 ? laborSales / techHours : 0;
+  const hoursPerRO = roCount > 0 ? techHours / roCount : 0;
 
-  const customerPayPct = totalSales > 0 ? (cpSales / totalSales) * 100 : 0;
-  const warrantyPct = totalSales > 0 ? (warrSales / totalSales) * 100 : 0;
-  const internalPct = totalSales > 0 ? (intSales / totalSales) * 100 : 0;
+  const laborPct = totalSales > 0 ? (laborSales / totalSales) * 100 : 0;
+  const partsPct = totalSales > 0 ? (partsSales / totalSales) * 100 : 0;
 
   return {
     date: record.date,
     roCount,
-    customerPaySales: cpSales,
-    warrantySales: warrSales,
-    internalSales: intSales,
+    techHours,
+    laborSales,
+    partsSales,
     totalSales,
     avgSalesPerRO,
-    customerPayPct,
-    warrantyPct,
-    internalPct,
+    effectiveLaborRate,
+    hoursPerRO,
+    laborPct,
+    partsPct,
   };
 }
 
@@ -47,7 +66,7 @@ export function getWedTueWeekPeriodForDate(dateStr: string): {
 
   const d = new Date(year, month, day);
   const dayOfWeek = d.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
-  
+
   // Calculate Wednesday start (3)
   const diffToWed = (dayOfWeek - 3 + 7) % 7;
   const wedStart = new Date(d);
@@ -109,27 +128,29 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
 
   map.forEach((value, weekId) => {
     let totalROCount = 0;
-    let totalCustomerPay = 0;
-    let totalWarranty = 0;
-    let totalInternal = 0;
+    let totalTechHours = 0;
+    let totalLaborSales = 0;
+    let totalPartsSales = 0;
 
     value.records.forEach(r => {
       const computed = computeDailyTotals(r);
       totalROCount += computed.roCount;
-      totalCustomerPay += computed.customerPaySales;
-      totalWarranty += computed.warrantySales;
-      totalInternal += computed.internalSales;
+      totalTechHours += computed.techHours;
+      totalLaborSales += computed.laborSales;
+      totalPartsSales += computed.partsSales;
     });
 
-    const totalSales = totalCustomerPay + totalWarranty + totalInternal;
+    const totalSales = totalLaborSales + totalPartsSales;
     const avgSalesPerRO = totalROCount > 0 ? totalSales / totalROCount : 0;
     const daysCount = value.records.length;
     const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
     const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+    const avgDailyTechHours = daysCount > 0 ? totalTechHours / daysCount : 0;
+    const effectiveLaborRate = totalTechHours > 0 ? totalLaborSales / totalTechHours : 0;
+    const hoursPerRO = totalROCount > 0 ? totalTechHours / totalROCount : 0;
 
-    const customerPayPct = totalSales > 0 ? (totalCustomerPay / totalSales) * 100 : 0;
-    const warrantyPct = totalSales > 0 ? (totalWarranty / totalSales) * 100 : 0;
-    const internalPct = totalSales > 0 ? (totalInternal / totalSales) * 100 : 0;
+    const laborPct = totalSales > 0 ? (totalLaborSales / totalSales) * 100 : 0;
+    const partsPct = totalSales > 0 ? (totalPartsSales / totalSales) * 100 : 0;
 
     summaries.push({
       weekId,
@@ -138,16 +159,18 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
       weekLabel: value.label,
       daysCount,
       totalROCount,
-      totalCustomerPaySales: totalCustomerPay,
-      totalWarrantySales: totalWarranty,
-      totalInternalSales: totalInternal,
+      totalTechHours,
+      totalLaborSales,
+      totalPartsSales,
       totalSales,
       avgSalesPerRO,
       avgDailySales,
       avgDailyROCount,
-      customerPayPct,
-      warrantyPct,
-      internalPct,
+      avgDailyTechHours,
+      effectiveLaborRate,
+      hoursPerRO,
+      laborPct,
+      partsPct,
     });
   });
 
@@ -231,27 +254,29 @@ export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTue
 
   map.forEach((value, weekId) => {
     let totalROCount = 0;
-    let totalCustomerPay = 0;
-    let totalWarranty = 0;
-    let totalInternal = 0;
+    let totalTechHours = 0;
+    let totalLaborSales = 0;
+    let totalPartsSales = 0;
 
     value.records.forEach(r => {
       const computed = computeDailyTotals(r);
       totalROCount += computed.roCount;
-      totalCustomerPay += computed.customerPaySales;
-      totalWarranty += computed.warrantySales;
-      totalInternal += computed.internalSales;
+      totalTechHours += computed.techHours;
+      totalLaborSales += computed.laborSales;
+      totalPartsSales += computed.partsSales;
     });
 
-    const totalSales = totalCustomerPay + totalWarranty + totalInternal;
+    const totalSales = totalLaborSales + totalPartsSales;
     const avgSalesPerRO = totalROCount > 0 ? totalSales / totalROCount : 0;
     const daysCount = value.records.length;
     const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
     const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+    const avgDailyTechHours = daysCount > 0 ? totalTechHours / daysCount : 0;
+    const effectiveLaborRate = totalTechHours > 0 ? totalLaborSales / totalTechHours : 0;
+    const hoursPerRO = totalROCount > 0 ? totalTechHours / totalROCount : 0;
 
-    const customerPayPct = totalSales > 0 ? (totalCustomerPay / totalSales) * 100 : 0;
-    const warrantyPct = totalSales > 0 ? (totalWarranty / totalSales) * 100 : 0;
-    const internalPct = totalSales > 0 ? (totalInternal / totalSales) * 100 : 0;
+    const laborPct = totalSales > 0 ? (totalLaborSales / totalSales) * 100 : 0;
+    const partsPct = totalSales > 0 ? (totalPartsSales / totalSales) * 100 : 0;
 
     summaries.push({
       weekId,
@@ -260,16 +285,18 @@ export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTue
       weekLabel: value.label,
       daysCount,
       totalROCount,
-      totalCustomerPaySales: totalCustomerPay,
-      totalWarrantySales: totalWarranty,
-      totalInternalSales: totalInternal,
+      totalTechHours,
+      totalLaborSales,
+      totalPartsSales,
       totalSales,
       avgSalesPerRO,
       avgDailySales,
       avgDailyROCount,
-      customerPayPct,
-      warrantyPct,
-      internalPct,
+      avgDailyTechHours,
+      effectiveLaborRate,
+      hoursPerRO,
+      laborPct,
+      partsPct,
     });
   });
 
@@ -317,27 +344,29 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
 
   map.forEach((value, monthKey) => {
     let totalROCount = 0;
-    let totalCustomerPay = 0;
-    let totalWarranty = 0;
-    let totalInternal = 0;
+    let totalTechHours = 0;
+    let totalLaborSales = 0;
+    let totalPartsSales = 0;
 
     value.records.forEach(r => {
       const computed = computeDailyTotals(r);
       totalROCount += computed.roCount;
-      totalCustomerPay += computed.customerPaySales;
-      totalWarranty += computed.warrantySales;
-      totalInternal += computed.internalSales;
+      totalTechHours += computed.techHours;
+      totalLaborSales += computed.laborSales;
+      totalPartsSales += computed.partsSales;
     });
 
-    const totalSales = totalCustomerPay + totalWarranty + totalInternal;
+    const totalSales = totalLaborSales + totalPartsSales;
     const avgSalesPerRO = totalROCount > 0 ? totalSales / totalROCount : 0;
     const daysCount = value.records.length;
     const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
     const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+    const avgDailyTechHours = daysCount > 0 ? totalTechHours / daysCount : 0;
+    const effectiveLaborRate = totalTechHours > 0 ? totalLaborSales / totalTechHours : 0;
+    const hoursPerRO = totalROCount > 0 ? totalTechHours / totalROCount : 0;
 
-    const customerPayPct = totalSales > 0 ? (totalCustomerPay / totalSales) * 100 : 0;
-    const warrantyPct = totalSales > 0 ? (totalWarranty / totalSales) * 100 : 0;
-    const internalPct = totalSales > 0 ? (totalInternal / totalSales) * 100 : 0;
+    const laborPct = totalSales > 0 ? (totalLaborSales / totalSales) * 100 : 0;
+    const partsPct = totalSales > 0 ? (totalPartsSales / totalSales) * 100 : 0;
 
     summaries.push({
       monthKey,
@@ -346,16 +375,18 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
       month: value.month,
       daysCount,
       totalROCount,
-      totalCustomerPaySales: totalCustomerPay,
-      totalWarrantySales: totalWarranty,
-      totalInternalSales: totalInternal,
+      totalTechHours,
+      totalLaborSales,
+      totalPartsSales,
       totalSales,
       avgSalesPerRO,
       avgDailySales,
       avgDailyROCount,
-      customerPayPct,
-      warrantyPct,
-      internalPct,
+      avgDailyTechHours,
+      effectiveLaborRate,
+      hoursPerRO,
+      laborPct,
+      partsPct,
     });
   });
 
@@ -363,16 +394,17 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
 }
 
 /**
- * Calculates auto-suggested daily totals from actual repair orders created or closed on a specific date.
+ * Calculates auto-suggested daily RO count, tech hours, labor sales, and parts sales
+ * from actual repair orders logged or closed on a specific date.
  */
 export function calculateDailySalesFromROs(
   dateStr: string,
   repairOrders: RepairOrder[]
 ): {
   roCount: number;
-  customerPaySales: number;
-  warrantySales: number;
-  internalSales: number;
+  techHours: number;
+  laborSales: number;
+  partsSales: number;
 } {
   const matchesDate = (isoStr?: string) => {
     if (!isoStr) return false;
@@ -383,42 +415,53 @@ export function calculateDailySalesFromROs(
     return matchesDate(ro.createdAt) || matchesDate(ro.updatedAt) || matchesDate(ro.completedAt) || matchesDate(ro.closedAt);
   });
 
-  let cp = 0;
-  let warr = 0;
-  let int = 0;
+  let totalTechHours = 0;
+  let totalLaborSales = 0;
+  let totalPartsSales = 0;
 
   rosOnDate.forEach(ro => {
-    const payTypes = ro.concernPayTypes || [];
-    const mainPayType = payTypes[0] || 'CUSTOMER_PAY';
+    if (ro.quote) {
+      const nonDeclinedLabor = (ro.quote.laborItems || []).filter(item => item.status !== 'DECLINED');
+      const laborHoursFromItems = nonDeclinedLabor.reduce((sum, item) => sum + (Number(item.laborHours) || 0), 0);
+      const laborCostFromItems = nonDeclinedLabor.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
 
-    let roPartsTotal = 0;
-    (ro.parts || []).forEach(part => {
-      const qty = Number(part.quantity) || 1;
-      const price = Number(part.price) || Number(part.cost) || 0;
-      roPartsTotal += qty * price;
-    });
+      totalTechHours += laborHoursFromItems > 0 ? laborHoursFromItems : (Number(ro.quote.totalLaborHours) || 0);
+      totalLaborSales += laborCostFromItems > 0 ? laborCostFromItems : (Number(ro.quote.totalLaborCost) || 0);
 
-    const quoteTotal = Number(ro.quote?.grandTotal || ro.quote?.totalApprovedAmount) || 0;
-    const totalROVal = quoteTotal > 0 ? quoteTotal : (roPartsTotal + 250);
-
-    if (mainPayType === 'WARRANTY' || mainPayType === 'EXTENDED_WARRANTY') {
-      warr += totalROVal;
-    } else if (mainPayType === 'INTERNAL') {
-      int += totalROVal;
+      const nonDeclinedParts = (ro.quote.partsItems || []).filter(item => item.status !== 'DECLINED');
+      const partsFromQuoteItems = nonDeclinedParts.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+      if (partsFromQuoteItems > 0) {
+        totalPartsSales += partsFromQuoteItems;
+      } else if (Number(ro.quote.totalPartsCost) > 0) {
+        totalPartsSales += Number(ro.quote.totalPartsCost) || 0;
+      } else {
+        (ro.parts || []).forEach(part => {
+          const qty = Number(part.quantity) || 1;
+          const price = Number(part.price) || Number(part.cost) || 0;
+          totalPartsSales += qty * price;
+        });
+      }
     } else {
-      cp += totalROVal;
+      // Fallback from time punches & parts list if no quote is attached
+      const punchMinutes = (ro.timePunches || []).reduce((sum, p) => sum + (Number(p.durationMinutes) || 0), 0);
+      if (punchMinutes > 0) {
+        totalTechHours += punchMinutes / 60;
+      }
+      (ro.parts || []).forEach(part => {
+        const qty = Number(part.quantity) || 1;
+        const price = Number(part.price) || Number(part.cost) || 0;
+        totalPartsSales += qty * price;
+      });
     }
   });
 
   return {
     roCount: rosOnDate.length,
-    customerPaySales: Math.round(cp * 100) / 100,
-    warrantySales: Math.round(warr * 100) / 100,
-    internalSales: Math.round(int * 100) / 100,
+    techHours: Math.round(totalTechHours * 100) / 100,
+    laborSales: Math.round(totalLaborSales * 100) / 100,
+    partsSales: Math.round(totalPartsSales * 100) / 100,
   };
 }
-
-export const DAILY_SALES_START_DATE = '2025-09-01';
 
 /**
  * Ensures the Daily Sales & RO Entry Sheet spans every weekday (Mon–Fri) from
@@ -430,7 +473,7 @@ export function ensureDailySalesRange(existingRecords?: DailySalesRecord[]): Dai
   if (Array.isArray(existingRecords)) {
     existingRecords.forEach(rec => {
       if (rec && typeof rec.date === 'string' && rec.date.trim()) {
-        byDate.set(rec.date, rec);
+        byDate.set(rec.date, normalizeDailySalesRecord(rec));
       }
     });
   }
@@ -453,9 +496,9 @@ export function ensureDailySalesRange(existingRecords?: DailySalesRecord[]): Dai
       byDate.set(dateStr, {
         date: dateStr,
         roCount: 0,
-        customerPaySales: 0,
-        warrantySales: 0,
-        internalSales: 0,
+        techHours: 0,
+        laborSales: 0,
+        partsSales: 0,
         notes: ''
       });
     }
@@ -473,4 +516,3 @@ export function ensureDailySalesRange(existingRecords?: DailySalesRecord[]): Dai
 export function seedInitialDailyRecords(existingRecords?: DailySalesRecord[]): DailySalesRecord[] {
   return ensureDailySalesRange(existingRecords);
 }
-
