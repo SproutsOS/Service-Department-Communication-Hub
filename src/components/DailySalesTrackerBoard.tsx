@@ -35,6 +35,8 @@ import {
   groupRecordsByCalendarWeeks,
   groupRecordsByMonth, 
   seedInitialDailyRecords, 
+  ensureDailySalesRange,
+  DAILY_SALES_START_DATE,
   calculateDailySalesFromROs,
   getWedTueWeekPeriodForDate,
   getSunSatWeekPeriodForDate
@@ -53,14 +55,14 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
 }) => {
   const { repairOrders } = useApp();
 
-  // Load records from persistent storage or default seed (Sept 1, 2026 to present)
+  // Load records from persistent storage and ensure dates start Sept 1, 2025 to present
   const [records, setRecords] = useState<DailySalesRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_DAILY_SALES);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return ensureDailySalesRange(parsed);
         }
       }
     } catch {
@@ -182,10 +184,11 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
         ) {
           return;
         }
-        latestRecordsRef.current = cloudRecords;
-        setRecords(cloudRecords);
+        const normalizedCloud = ensureDailySalesRange(cloudRecords);
+        latestRecordsRef.current = normalizedCloud;
+        setRecords(normalizedCloud);
         try {
-          localStorage.setItem(STORAGE_KEY_DAILY_SALES, JSON.stringify(cloudRecords));
+          localStorage.setItem(STORAGE_KEY_DAILY_SALES, JSON.stringify(normalizedCloud));
         } catch {
           // ignore
         }
@@ -400,7 +403,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     ];
 
     const lines: string[] = [];
-    lines.push('"Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2026)"');
+    lines.push('"Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2025)"');
     lines.push('"Payroll Cycle: Wednesday through Tuesday"');
     lines.push('');
     lines.push(headers.map(h => `"${h}"`).join(','));
@@ -506,7 +509,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                   Daily Repair Order & Sales Tracker
                 </h1>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 uppercase tracking-widest">
-                  Starts Sept 1, 2026
+                  Starts Sept 1, 2025
                 </span>
                 {saveToast && (
                   <span className="text-xs text-emerald-300 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-600/50 animate-in fade-in">
@@ -698,6 +701,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
               <label className="text-[11px] font-bold text-slate-600">Focus Date:</label>
               <input
                 type="date"
+                min={DAILY_SALES_START_DATE}
                 value={selectedRODate}
                 onChange={(e) => e.target.value && setSelectedRODate(e.target.value)}
                 className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
@@ -914,7 +918,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                   onChange={(e) => setSelectedMonthFilter(e.target.value)}
                   className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-extrabold text-slate-900 cursor-pointer focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 >
-                  <option value="ALL">All Months (From Sept 1)</option>
+                  <option value="ALL">All Months (From Sept 1, 2025)</option>
                   {monthlyList.map(m => (
                     <option key={m.monthKey} value={m.monthKey}>
                       {m.monthLabel}
@@ -1605,7 +1609,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     Sales & Average $/RO Trend Line Graphs
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Visual performance trends over time starting Sept 1, 2026.
+                    Visual performance trends over time starting Sept 1, 2025.
                   </p>
                 </div>
               </div>
@@ -1888,9 +1892,10 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Select Date (Starts Sept 1, 2026):</label>
+                <label className="block font-bold text-slate-700 mb-1">Select Date (Starts Sept 1, 2025):</label>
                 <input
                   type="date"
+                  min={DAILY_SALES_START_DATE}
                   value={newDateInput}
                   onChange={(e) => setNewDateInput(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"

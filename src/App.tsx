@@ -327,7 +327,7 @@ const MainContent: React.FC = () => {
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
-                    title="Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2026)"
+                    title="Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2025)"
                   >
                     <BarChart3 className="w-4 h-4 shrink-0 text-emerald-400" />
                     <span className="text-sm font-medium">Daily Sales Tracker</span>

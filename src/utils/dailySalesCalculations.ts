@@ -418,23 +418,28 @@ export function calculateDailySalesFromROs(
   };
 }
 
+export const DAILY_SALES_START_DATE = '2025-09-01';
+
 /**
- * Seeds initial daily records starting from September 1, 2026 up to today (or Nov 10, 2026).
- * Pre-populates clean realistic dealership figures if empty.
+ * Ensures the Daily Sales & RO Entry Sheet spans every weekday (Mon–Fri) from
+ * September 1, 2025 through today without overwriting any existing user entries.
  */
-export function seedInitialDailyRecords(existingRecords?: DailySalesRecord[]): DailySalesRecord[] {
-  if (Array.isArray(existingRecords) && existingRecords.length > 0) {
-    return existingRecords;
+export function ensureDailySalesRange(existingRecords?: DailySalesRecord[]): DailySalesRecord[] {
+  const byDate = new Map<string, DailySalesRecord>();
+
+  if (Array.isArray(existingRecords)) {
+    existingRecords.forEach(rec => {
+      if (rec && typeof rec.date === 'string' && rec.date.trim()) {
+        byDate.set(rec.date, rec);
+      }
+    });
   }
 
-  // Pre-generate daily dates starting Sept 1, 2026 to Nov 10, 2026
-  const records: DailySalesRecord[] = [];
-  const start = new Date(2026, 8, 1); // Sept 1, 2026
-  const end = new Date(2026, 10, 10); // Nov 10, 2026
+  const start = new Date(2025, 8, 1); // Sept 1, 2025
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const curr = new Date(start);
-  let dayIndex = 0;
-
   while (curr <= end) {
     const yr = curr.getFullYear();
     const mo = String(curr.getMonth() + 1).padStart(2, '0');
@@ -444,27 +449,28 @@ export function seedInitialDailyRecords(existingRecords?: DailySalesRecord[]): D
     const dayOfWeek = curr.getDay(); // 0: Sun, 6: Sat
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-    if (!isWeekend) {
-      // Realistic dealership daily variation
-      const baseROs = 14 + (dayIndex % 7);
-      const cp = 3200 + ((dayIndex * 170) % 1800);
-      const warr = 1100 + ((dayIndex * 130) % 900);
-      const int = 400 + ((dayIndex * 80) % 500);
-
-      records.push({
+    if (!isWeekend && !byDate.has(dateStr)) {
+      byDate.set(dateStr, {
         date: dateStr,
-        roCount: baseROs,
-        customerPaySales: cp,
-        warrantySales: warr,
-        internalSales: int,
-        notes: dayOfWeek === 1 ? 'Monday busy intake' : dayOfWeek === 5 ? 'Friday quick turnarounds' : ''
+        roCount: 0,
+        customerPaySales: 0,
+        warrantySales: 0,
+        internalSales: 0,
+        notes: ''
       });
     }
 
     curr.setDate(curr.getDate() + 1);
-    dayIndex++;
   }
 
   // Sort descending (newest date first)
-  return records.sort((a, b) => b.date.localeCompare(a.date));
+  return Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
 }
+
+/**
+ * Seeds initial daily records starting from September 1, 2025 up to today.
+ */
+export function seedInitialDailyRecords(existingRecords?: DailySalesRecord[]): DailySalesRecord[] {
+  return ensureDailySalesRange(existingRecords);
+}
+

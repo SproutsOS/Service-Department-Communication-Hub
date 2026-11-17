@@ -359,7 +359,7 @@ export const ManagerDashboard: React.FC = () => {
                 ? 'bg-emerald-600 text-white border-2 border-emerald-300 ring-2 ring-emerald-400/40'
                 : 'bg-emerald-700 hover:bg-emerald-800 text-white'
             }`}
-            title="Open Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2026)"
+            title="Open Daily Repair Order Count & Sales Tracker (Starts Sept 1, 2025)"
           >
             <BarChart3 className="w-4 h-4 text-emerald-200" />
             <span>Daily RO & Sales Tracker</span>
