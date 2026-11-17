@@ -246,7 +246,7 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
   const hasExistingStory = Boolean(causeDraft.trim() || correctionDraft.trim());
 
   return (
-    <div className={`bg-slate-50 border border-slate-200 rounded-xl ${compact ? 'p-3' : 'p-3.5'} space-y-3`}>
+    <div className={`bg-slate-50 border border-slate-200 rounded-xl ${compact ? 'p-2.5' : 'p-3'} space-y-2`}>
       {/* Header Row: Title, Style Selector, AI Generate, Undo, Save Indicator */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -345,7 +345,7 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
       )}
 
       {/* Editable Cause & Correction Boxes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">

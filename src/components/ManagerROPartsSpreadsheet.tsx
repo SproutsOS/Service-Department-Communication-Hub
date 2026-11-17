@@ -1326,12 +1326,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
         
         {/* Control Bar: Search, Status Filters, Actions */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2">
           
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
             {/* Search Input */}
             <div className="relative flex-1 max-w-md">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1340,7 +1340,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 placeholder="Search RO#, Customer, VIN, Tech, Part#, Status..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full pl-9 pr-8 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               />
               {searchQuery && (
                 <button
@@ -1354,11 +1354,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
             </div>
 
             {/* Actions: Expand/Collapse All, Sync ROs, Add Row, Export, Print */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={expandAllRows}
-                className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-300"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-300"
                 title="Expand all multi-part sub-rows"
               >
                 Expand All Parts
@@ -1367,7 +1367,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <button
                 type="button"
                 onClick={collapseAllRows}
-                className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-300"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-300"
                 title="Collapse all multi-part sub-rows"
               >
                 Collapse All
@@ -1376,7 +1376,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <button
                 type="button"
                 onClick={handleSyncFromActiveROs}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer border border-slate-700"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer border border-slate-700"
                 title="Sync and import active open Repair Orders into spreadsheet"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-purple-400" />
@@ -1386,7 +1386,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <button
                 type="button"
                 onClick={handleAddManualRow}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Add RO Row</span>
@@ -1395,7 +1395,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 title="Export as Microsoft Excel / CSV"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1405,7 +1405,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <button
                 type="button"
                 onClick={handlePrint}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 title="Print clean spreadsheet report"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -1415,7 +1415,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           </div>
 
           {/* Status Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider shrink-0 mr-1">Status Filter:</span>
             <button
               type="button"
@@ -1560,8 +1560,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-900 text-white uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-800 whitespace-nowrap select-none">
-                  <th className="py-3 px-3 text-center w-10">Expand</th>
-                  <th className="py-3 px-3 min-w-[70px]">
+                  <th className="py-2 px-1.5 text-center w-8">Exp</th>
+                  <th className="py-2 px-1.5 min-w-[62px]">
                     <button
                       type="button"
                       onClick={() => handleToggleSort('roNumber')}
@@ -1576,7 +1576,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       )}
                     </button>
                   </th>
-                  <th className="py-3 px-3 min-w-[125px]">
+                  <th className="py-2 px-1.5 min-w-[112px]">
                     <button
                       type="button"
                       onClick={() => handleToggleSort('roDate')}
@@ -1591,7 +1591,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       )}
                     </button>
                   </th>
-                  <th className="py-3 px-3 min-w-[150px]">
+                  <th className="py-2 px-1.5 min-w-[125px]">
                     <button
                       type="button"
                       onClick={() => handleToggleSort('customerName')}
@@ -1606,8 +1606,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       )}
                     </button>
                   </th>
-                  <th className="py-3 px-3 min-w-[130px]">VIN / Vehicle</th>
-                  <th className="py-3 px-3 min-w-[110px]">
+                  <th className="py-2 px-1.5 min-w-[116px]">VIN / Vehicle</th>
+                  <th className="py-2 px-1.5 min-w-[98px]">
                     <button
                       type="button"
                       onClick={() => handleToggleSort('assignedTechName')}
@@ -1622,7 +1622,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       )}
                     </button>
                   </th>
-                  <th className="py-3 px-3 min-w-[170px]">
+                  <th className="py-2 px-1.5 min-w-[145px]">
                     <button
                       type="button"
                       onClick={() => handleToggleSort('status')}
@@ -1637,12 +1637,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       )}
                     </button>
                   </th>
-                  <th className="py-3 px-3 min-w-[230px]">Tech Update / Notes</th>
-                  <th className="py-3 px-3 min-w-[170px]">Parts Breakdown</th>
-                  <th className="py-3 px-3 min-w-[160px]">Overall ETA</th>
-                  <th className="py-3 px-3 text-center min-w-[120px]">Parts In?</th>
-                  <th className="py-3 px-3 text-center min-w-[130px]">Advisor Notified?</th>
-                  <th className="py-3 px-3 text-center w-16">Actions</th>
+                  <th className="py-2 px-1.5 min-w-[180px]">Tech Update / Notes</th>
+                  <th className="py-2 px-1.5 min-w-[125px]">Parts Breakdown</th>
+                  <th className="py-2 px-1.5 min-w-[130px]">Overall ETA</th>
+                  <th className="py-2 px-1.5 text-center min-w-[96px]">Parts In?</th>
+                  <th className="py-2 px-1.5 text-center min-w-[104px]">Advisor Notified?</th>
+                  <th className="py-2 px-1.5 text-center w-10">Actions</th>
                 </tr>
               </thead>
 
@@ -1679,11 +1679,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         }`}>
                           
                           {/* Expand Toggle Button */}
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-1 px-1.5 text-center">
                             <button
                               type="button"
                               onClick={() => toggleRowExpand(r.id)}
-                              className="p-1 rounded hover:bg-purple-200 text-purple-700 transition-colors cursor-pointer"
+                              className="p-0.5 rounded hover:bg-purple-200 text-purple-700 transition-colors cursor-pointer"
                               title={isExpanded ? "Collapse parts list" : "Expand parts list"}
                             >
                               {isExpanded ? (
@@ -1695,8 +1695,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* RO Number (Compact 5 digits) */}
-                          <td className="py-1.5 px-2 font-mono font-bold text-slate-900 min-w-[70px]">
-                            <div className="flex items-center gap-1">
+                          <td className="py-1 px-1 font-mono font-bold text-slate-900 min-w-[62px]">
+                            <div className="flex items-center gap-0.5">
                               <input
                                 type="text"
                                 value={r.roNumber}
@@ -1708,7 +1708,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   markFieldBlur(r.id, 'roNumber');
                                 }}
                                 title={roWarning ? roWarning.message : 'Enter RO Number'}
-                                className={`w-16 px-1.5 py-1 rounded font-mono font-black focus:outline-none text-xs border ${
+                                className={`w-14 px-1 py-1 rounded font-mono font-black focus:outline-none text-xs border ${
                                   roWarning?.type === 'DUPLICATE_IN_LOG'
                                     ? 'bg-red-100 border-red-500 text-red-900 ring-1 ring-red-400'
                                     : roWarning?.type === 'USED_IN_SYSTEM'
@@ -1743,31 +1743,31 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* RO Date */}
-                          <td className="py-1.5 px-2 font-mono text-xs min-w-[125px]">
+                          <td className="py-1 px-1 font-mono text-xs min-w-[112px]">
                             <input
                               type="date"
                               value={r.roDate || (r.createdAt ? r.createdAt.split('T')[0] : '')}
                               onFocus={() => markFieldFocus(r.id, 'roDate')}
                               onChange={(e) => handleTypingField(r.id, 'roDate', { roDate: e.target.value })}
                               onBlur={() => markFieldBlur(r.id, 'roDate')}
-                              className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-bold text-slate-800 focus:outline-none text-xs"
+                              className="w-full px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono font-bold text-slate-800 focus:outline-none text-xs"
                             />
                           </td>
 
                           {/* Customer Name */}
-                          <td className="py-1.5 px-2 font-bold text-slate-900 min-w-[150px]">
+                          <td className="py-1 px-1 font-bold text-slate-900 min-w-[125px]">
                             <input
                               type="text"
                               value={r.customerName}
                               onFocus={() => markFieldFocus(r.id, 'customerName')}
                               onChange={(e) => handleTypingField(r.id, 'customerName', { customerName: e.target.value })}
                               onBlur={() => markFieldBlur(r.id, 'customerName')}
-                              className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-bold text-slate-900 focus:outline-none"
+                              className="w-full px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-bold text-slate-900 focus:outline-none"
                             />
                           </td>
 
                           {/* VIN / Vehicle (Compact 17 digits) */}
-                          <td className="py-1.5 px-2 font-mono text-xs text-slate-700 min-w-[130px]">
+                          <td className="py-1 px-1 font-mono text-xs text-slate-700 min-w-[116px]">
                             <input
                               type="text"
                               value={r.vin}
@@ -1775,12 +1775,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               onFocus={() => markFieldFocus(r.id, 'vin')}
                               onChange={(e) => handleTypingField(r.id, 'vin', { vin: e.target.value })}
                               onBlur={() => markFieldBlur(r.id, 'vin')}
-                              className="w-32 px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono text-slate-800 focus:outline-none text-xs tracking-tighter"
+                              className="w-28 px-1 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded font-mono text-slate-800 focus:outline-none text-xs tracking-tighter"
                             />
                           </td>
 
                           {/* Assigned Tech (Compact dropdown) */}
-                          <td className="py-1.5 px-2 min-w-[110px]">
+                          <td className="py-1 px-1 min-w-[98px]">
                             <select
                               value={r.assignedTechId || ''}
                               onChange={(e) => {
@@ -1791,7 +1791,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   assignedTechName: selectedTech ? selectedTech.name : 'Unassigned'
                                 });
                               }}
-                              className="w-[110px] px-1.5 py-1 bg-white border border-slate-300 rounded text-xs font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                              className="w-[96px] px-1 py-1 bg-white border border-slate-300 rounded text-xs font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 focus:outline-none cursor-pointer"
                             >
                               <option value="">Unassigned</option>
                               {technicians.map(t => (
@@ -1803,11 +1803,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Status Dropdown Menu */}
-                          <td className="py-1.5 px-2 min-w-[170px]">
+                          <td className="py-1 px-1 min-w-[145px]">
                             <select
                               value={r.status === 'Waiting for Payment' ? 'Waiting on Payment' : r.status}
                               onChange={(e) => handleUpdateField(r.id, { status: e.target.value as ManagerLogStatus })}
-                              className={`w-full px-2 py-1 text-xs font-black rounded border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${getStatusBadgeStyle(r.status)}`}
+                              className={`w-full px-1.5 py-1 text-xs font-black rounded border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${getStatusBadgeStyle(r.status)}`}
                             >
                               <option value="Dispatched" className="bg-white text-slate-900 font-medium">Dispatched</option>
                               <option value="In Diag" className="bg-white text-slate-900 font-medium">In Diag</option>
@@ -1829,10 +1829,10 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Tech Update / Notes & Flag Column */}
-                          <td className="py-1.5 px-2 min-w-[230px] max-w-[280px] whitespace-normal">
-                            <div className="space-y-1">
+                          <td className="py-1 px-1 min-w-[180px] max-w-[240px] whitespace-normal">
+                            <div className="space-y-0.5">
                               {r.techNeedsAttention && (
-                                <div className="flex items-center justify-between gap-1.5 px-2 py-0.5 rounded bg-amber-500 text-white text-[10px] font-black uppercase tracking-wide shadow-2xs">
+                                <div className="flex items-center justify-between gap-1 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-black uppercase tracking-wide shadow-2xs">
                                   <span className="flex items-center gap-1">
                                     <Flag className="w-3 h-3" />
                                     <span>Tech Needs Manager</span>
@@ -1856,7 +1856,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   onChange={(e) => handleTypingField(r.id, 'techNotes', { techNotes: e.target.value })}
                                   onBlur={() => markFieldBlur(r.id, 'techNotes')}
                                   placeholder="No tech update yet"
-                                  className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded text-xs font-semibold text-slate-800 focus:outline-none"
+                                  className="w-full px-1.5 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded text-xs font-semibold text-slate-800 focus:outline-none"
                                 />
                               </div>
                               {r.techNotesUpdatedAt && (
@@ -1886,11 +1886,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Parts Breakdown Summary Badge */}
-                          <td className="py-1.5 px-2 min-w-[170px]">
+                          <td className="py-1 px-1 min-w-[125px]">
                             <button
                               type="button"
                               onClick={() => toggleRowExpand(r.id)}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer font-bold text-xs ${
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border transition-colors cursor-pointer font-bold text-xs ${
                                 hasParts
                                   ? 'bg-purple-100 hover:bg-purple-200 text-purple-900 border-purple-300'
                                   : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-300 font-medium'
@@ -1905,15 +1905,15 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   </span>
                                 </>
                               ) : (
-                                <span>No Parts Ordered</span>
+                                <span>No Parts</span>
                               )}
                             </button>
                           </td>
 
                           {/* Overall ETA */}
-                          <td className="py-1.5 px-2 min-w-[160px]">
+                          <td className="py-1 px-1 min-w-[130px]">
                             {hasParts ? (
-                              <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center justify-between gap-1">
                                 <div className="min-w-0 font-mono text-xs font-bold text-slate-800">
                                   {formatEtaDisplayDate(partsList[0]?.currentEta || r.currentEta)}
                                 </div>
@@ -1924,7 +1924,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                     setNewEtaInput(partsList[0]?.currentEta || r.currentEta || '');
                                     setNewEtaNote('');
                                   }}
-                                  className="px-2 py-1 rounded bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 font-bold text-[10px] border border-slate-300 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 font-bold text-[10px] border border-slate-300 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
                                 >
                                   <History className="w-3 h-3 text-purple-600" />
                                   <span>History</span>
@@ -1936,12 +1936,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Parent Parts In Summary Toggle */}
-                          <td className="py-1.5 px-2 text-center min-w-[120px]">
+                          <td className="py-1 px-1 text-center min-w-[96px]">
                             {hasParts ? (
                               <button
                                 type="button"
                                 onClick={() => handleTogglePartsInParent(r.id)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
                                   partsInCount === partsList.length 
                                     ? 'bg-emerald-600 text-white border-emerald-700' 
                                     : partsInCount > 0 
@@ -1953,15 +1953,15 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                 {partsInCount === partsList.length ? (
                                   <span className="flex items-center gap-1 justify-center">
                                     <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>All Parts In ({partsInCount}/{partsList.length})</span>
+                                    <span>All In ({partsInCount}/{partsList.length})</span>
                                   </span>
                                 ) : partsInCount > 0 ? (
                                   <span className="flex items-center gap-1 justify-center">
                                     <Clock className="w-3.5 h-3.5" />
-                                    <span>{partsInCount}/{partsList.length} Parts In</span>
+                                    <span>{partsInCount}/{partsList.length} In</span>
                                   </span>
                                 ) : (
-                                  <span>0/{partsList.length} Parts In</span>
+                                  <span>0/{partsList.length} In</span>
                                 )}
                               </button>
                             ) : (
@@ -1970,12 +1970,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Parent Advisor Notified Summary Toggle */}
-                          <td className="py-1.5 px-2 text-center min-w-[130px]">
+                          <td className="py-1 px-1 text-center min-w-[104px]">
                             {hasParts ? (
                               <button
                                 type="button"
                                 onClick={() => handleToggleAdvisorNotifiedParent(r.id)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
                                   partsNotifiedCount === partsList.length 
                                     ? 'bg-blue-600 text-white border-blue-700' 
                                     : partsNotifiedCount > 0 
@@ -1987,12 +1987,12 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                 {partsNotifiedCount === partsList.length ? (
                                   <span className="flex items-center gap-1 justify-center">
                                     <Bell className="w-3.5 h-3.5" />
-                                    <span>All Notified ({partsNotifiedCount}/{partsList.length})</span>
+                                    <span>Notified ({partsNotifiedCount}/{partsList.length})</span>
                                   </span>
                                 ) : partsNotifiedCount > 0 ? (
                                   <span className="flex items-center gap-1 justify-center">
                                     <Bell className="w-3.5 h-3.5" />
-                                    <span>{partsNotifiedCount}/{partsList.length} Notified</span>
+                                    <span>{partsNotifiedCount}/{partsList.length} Sent</span>
                                   </span>
                                 ) : (
                                   <span>Not Notified</span>
@@ -2004,11 +2004,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Actions */}
-                          <td className="py-1.5 px-2 text-center">
+                          <td className="py-1 px-1 text-center">
                             <button
                               type="button"
                               onClick={() => handleDeleteRow(r.id, r.roNumber)}
-                              className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                               title="Remove entry"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -2020,10 +2020,10 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         {/* Expandable Sub-Rows Section (Option 2) */}
                         {isExpanded && (
                           <tr className="bg-slate-50/90 border-b-2 border-purple-200">
-                            <td colSpan={13} className="p-3 sm:p-4">
-                              <div className="w-fit max-w-[calc(100vw-3rem)] sticky left-3 bg-white rounded-xl border-2 border-purple-300 p-3 sm:p-4 shadow-sm space-y-3">
+                            <td colSpan={13} className="p-2 sm:p-2.5">
+                              <div className="w-fit max-w-[calc(100vw-2rem)] sticky left-2 bg-white rounded-xl border-2 border-purple-300 p-2.5 shadow-sm space-y-2">
                                 
-                                <div className="flex items-center justify-start pb-2">
+                                <div className="flex items-center justify-start pb-1">
                                   <button
                                     type="button"
                                     onClick={() => handleAddSubPart(r.id)}
@@ -2039,14 +2039,14 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                   <table className="w-auto text-left text-xs border border-purple-200 rounded-lg overflow-hidden">
                                     <thead className="bg-purple-100 text-purple-950 uppercase text-[10px] font-bold">
                                       <tr>
-                                        <th className="p-2 w-28 min-w-[100px]">Part Number</th>
-                                        <th className="p-2 w-44">Description</th>
-                                        <th className="p-2 text-center w-16">Qty</th>
-                                        <th className="p-2 w-32 min-w-[120px]">Order Date</th>
-                                        <th className="p-2 w-44 min-w-[165px]">Part ETA & History</th>
-                                        <th className="p-2 text-center w-24 min-w-[90px]">Parts In?</th>
-                                        <th className="p-2 text-center w-28 min-w-[105px]">Advisor Notified?</th>
-                                        <th className="p-2 text-center w-16">Action</th>
+                                        <th className="p-1.5 w-24 min-w-[90px]">Part Number</th>
+                                        <th className="p-1.5 w-36">Description</th>
+                                        <th className="p-1.5 text-center w-14">Qty</th>
+                                        <th className="p-1.5 w-28 min-w-[110px]">Order Date</th>
+                                        <th className="p-1.5 w-36 min-w-[140px]">Part ETA & History</th>
+                                        <th className="p-1.5 text-center w-20 min-w-[78px]">Parts In?</th>
+                                        <th className="p-1.5 text-center w-24 min-w-[92px]">Advisor Notified?</th>
+                                        <th className="p-1.5 text-center w-12">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-purple-100 font-sans">
@@ -2061,33 +2061,33 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                           <tr key={sp.id} className="hover:bg-purple-50/50">
                                             
                                             {/* Part Number (Compacted for ~10 digits) */}
-                                            <td className="p-1.5 font-mono w-28">
+                                            <td className="p-1 font-mono w-24">
                                               <input
                                                 type="text"
                                                 value={sp.partNumber}
                                                 onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partNumber: e.target.value })}
                                                 onBlur={() => markFieldBlur(r.id, 'parts')}
-                                                className="w-28 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
+                                                className="w-24 px-1.5 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs tracking-tight"
                                                 
                                               />
                                             </td>
 
                                             {/* Description */}
-                                            <td className="p-1.5 w-44">
+                                            <td className="p-1 w-36">
                                               <input
                                                 type="text"
                                                 value={sp.partDescription || ''}
                                                 onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { partDescription: e.target.value })}
                                                 onBlur={() => markFieldBlur(r.id, 'parts')}
-                                                className="w-40 px-2 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
+                                                className="w-36 px-1.5 py-1 border border-slate-300 rounded text-slate-800 focus:ring-1 focus:ring-purple-500 text-xs"
                                                 
                                               />
                                             </td>
 
                                             {/* Quantity */}
-                                            <td className="p-1.5 text-center">
+                                            <td className="p-1 text-center">
                                               <input
                                                 type="number"
                                                 min={1}
@@ -2103,24 +2103,24 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                                   }
                                                 }}
                                                 onBlur={() => markFieldBlur(r.id, 'parts')}
-                                                className="w-12 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
+                                                className="w-12 px-1 py-1 border border-slate-300 rounded text-center font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
                                               />
                                             </td>
 
                                             {/* Order Date */}
-                                            <td className="p-1.5 font-mono">
+                                            <td className="p-1 font-mono">
                                               <input
                                                 type="date"
                                                 value={sp.orderDate || ''}
                                                 onFocus={() => markFieldFocus(r.id, 'parts')}
                                                 onChange={(e) => handleUpdateSubPart(r.id, sp.id, { orderDate: e.target.value })}
                                                 onBlur={() => markFieldBlur(r.id, 'parts')}
-                                                className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
+                                                className="w-full px-1.5 py-1 border border-slate-300 rounded font-mono font-bold text-slate-900 focus:ring-1 focus:ring-purple-500 text-xs"
                                               />
                                             </td>
 
                                             {/* ETA & History */}
-                                            <td className="p-1.5">
+                                            <td className="p-1">
                                               <div className="flex items-center justify-between gap-1">
                                                 <span className="font-mono text-xs font-bold text-slate-900">
                                                   {formatEtaDisplayDate(sp.currentEta)}
@@ -2132,7 +2132,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                                     setNewEtaInput(sp.currentEta || '');
                                                     setNewEtaNote('');
                                                   }}
-                                                  className="px-2 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] border border-purple-300 transition-colors cursor-pointer flex items-center gap-1"
+                                                  className="px-1.5 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[10px] border border-purple-300 transition-colors cursor-pointer flex items-center gap-1"
                                                 >
                                                   <History className="w-3 h-3 text-purple-700" />
                                                   <span>ETA History</span>
@@ -2141,7 +2141,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                             </td>
 
                                             {/* Parts In Toggle */}
-                                            <td className="p-1.5 text-center">
+                                            <td className="p-1 text-center">
                                               <button
                                                 type="button"
                                                 onClick={() => handleToggleSubPartPartsIn(r.id, sp.id)}
@@ -2161,7 +2161,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                             </td>
 
                                             {/* Advisor Notified Toggle */}
-                                            <td className="p-1.5 text-center">
+                                            <td className="p-1 text-center">
                                               <button
                                                 type="button"
                                                 onClick={() => handleToggleSubPartAdvisorNotified(r.id, sp.id)}
@@ -2181,11 +2181,11 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                                             </td>
 
                                             {/* Action */}
-                                            <td className="p-1.5 text-center">
+                                            <td className="p-1 text-center">
                                               <button
                                                 type="button"
                                                 onClick={() => handleDeleteSubPart(r.id, sp.id)}
-                                                className="inline-flex items-center justify-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-md transition-colors cursor-pointer shadow-2xs"
+                                                className="inline-flex items-center justify-center p-1 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-md transition-colors cursor-pointer shadow-2xs"
                                                 title="Delete this part item"
                                               >
                                                 <Trash2 className="w-4 h-4" />

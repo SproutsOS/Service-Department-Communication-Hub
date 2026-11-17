@@ -562,9 +562,9 @@ export const TechQuickStatusBoard: React.FC = () => {
       </div>
 
       {/* Vehicle Cards List */}
-      <div className="p-4 sm:p-5 bg-slate-50 space-y-4">
+      <div className="p-3 sm:p-4 bg-slate-50 space-y-2.5">
         {displayedRows.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
             <Car className="w-10 h-10 text-slate-300 mx-auto mb-2" />
             <h3 className="text-sm font-black text-slate-800">
               {searchQuery
@@ -591,14 +591,14 @@ export const TechQuickStatusBoard: React.FC = () => {
             return (
               <div
                 key={row.id}
-                className={`bg-white rounded-xl border-2 p-4 shadow-2xs transition-all space-y-3 ${
+                className={`bg-white rounded-xl border-2 p-3 shadow-2xs transition-all space-y-2 ${
                   row.techNeedsAttention
                     ? 'border-amber-500 ring-2 ring-amber-200 bg-amber-50/20'
                     : 'border-slate-200 hover:border-purple-300'
                 }`}
               >
                 {/* Row 1: RO#, Date, Customer, VIN, Current Stage & Parts Status */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pb-2 border-b border-slate-100">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-mono text-sm font-black px-2.5 py-1 rounded-lg bg-slate-900 text-white shadow-2xs">
                       RO #{row.roNumber || '—'}
@@ -736,7 +736,7 @@ export const TechQuickStatusBoard: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
                     {TECH_QUICK_STATUSES.map((btn) => {
                       const isActive = row.status === btn.status;
                       return (
@@ -744,7 +744,7 @@ export const TechQuickStatusBoard: React.FC = () => {
                           key={btn.status}
                           type="button"
                           onClick={() => handleSetStatus(row, btn.status)}
-                          className={`px-2.5 py-2 rounded-lg text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 text-center leading-tight active:scale-98 ${
+                          className={`px-2 py-1.5 rounded-lg text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 text-center leading-tight active:scale-98 ${
                             isActive ? btn.activeClass : btn.idleClass
                           }`}
                         >
@@ -757,9 +757,9 @@ export const TechQuickStatusBoard: React.FC = () => {
                 </div>
 
                 {/* Row 3: Quick Tech Update Note + Flag Manager */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">
+                <div className="pt-1.5 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-0.5">
                       Quick Note:
                     </span>
                     {QUICK_NOTE_CHIPS.map((chip) => (
@@ -778,7 +778,7 @@ export const TechQuickStatusBoard: React.FC = () => {
                     ))}
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
                     <div className="relative flex-1">
                       <MessageSquareText className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
