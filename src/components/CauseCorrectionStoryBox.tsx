@@ -156,8 +156,24 @@ export const CauseCorrectionStoryBox: React.FC<CauseCorrectionStoryBoxProps> = (
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 404 && !data.error) {
+          const host = typeof window !== 'undefined' ? window.location.host : 'this host';
+          const isSharedHost = host.startsWith('ais-pre-');
+          let healthStatus: number | null = null;
+          try {
+            const healthRes = await fetch('/api/health');
+            healthStatus = healthRes.status;
+          } catch {
+            healthStatus = null;
+          }
+
+          if (isSharedHost) {
+            throw new Error(
+              `The Shared App link (${host}) returned 404 because its backend AI server is not active yet (health: ${healthStatus ?? 'unreachable'}). Please click Share / Republish after this update — or open the AI Studio Preview link to use the AI writer right away.`
+            );
+          }
+
           throw new Error(
-            'AI story service returned 404. Please refresh the page — or if using the Shared App link, re-share/republish the app so the backend AI route is active.'
+            `AI story endpoint (/api/generate-story) returned 404 on ${host} (health: ${healthStatus ?? 'unreachable'}). Please hard-refresh the page (Ctrl+Shift+R / Cmd+Shift+R) and try again.`
           );
         }
         throw new Error(data.error || `Failed to generate story (${response.status})`);

@@ -224,6 +224,10 @@ async function startServer() {
     }
   });
 
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'API endpoint not found on backend server.' });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -241,7 +245,16 @@ async function startServer() {
 
   const portFlagIdx = process.argv.indexOf('--port');
   const cliPort = portFlagIdx !== -1 ? Number(process.argv[portFlagIdx + 1]) : NaN;
-  const PORT = (!isNaN(cliPort) && cliPort > 0) ? cliPort : (Number(process.env.PORT) || 3000);
+  const envPort = Number(process.env.PORT);
+  const nginxPort = Number(process.env.NGINX_PORT);
+  const defaultAppPort = Number(process.env.DEFAULT_APP_PORT) || 3000;
+  const PORT =
+    !isNaN(cliPort) && cliPort > 0
+      ? cliPort
+      : envPort > 0 && (isNaN(nginxPort) || envPort !== nginxPort)
+      ? envPort
+      : defaultAppPort;
+
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
   });
