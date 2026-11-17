@@ -87,6 +87,8 @@
         "managerPasswords": { "type": "array" },
         "recallWaitingList": { "type": "array" },
         "internalExtensions": { "type": "array" },
+        "managerROPartsSpreadsheet": { "type": "array" },
+        "managerNotepadData": { "type": "object" },
         "updatedAt": { "type": "string" }
       },
       "required": ["shopName"]

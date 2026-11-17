@@ -48,6 +48,7 @@ import { LinePhotoSection } from './LinePhotoSection';
 import { LineTimePunchesSection } from './LineTimePunchesSection';
 import { TechTestDriveModal } from './TechTestDriveModal';
 import { ROStickyNoteBanner, ROStickyNoteChip, AddStickyNoteButton } from './ROStickyNoteBadge';
+import { TechQuickStatusBoard } from './TechQuickStatusBoard';
 
 interface TechCauseCorrectionSectionProps {
   ro: RepairOrder;
@@ -3946,6 +3947,9 @@ export const TechDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Live Master Log Quick Status Board (Option 1: Direct Manager <-> Tech Sync) */}
+      <TechQuickStatusBoard />
+
       {/* Search Bar & Active Repair Orders Counter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         {/* Search Bar to the left */}
@@ -3981,16 +3985,13 @@ export const TechDashboard: React.FC = () => {
 
       {/* Small Cards Grid for Each Repair Order (Opens Technician Station on Click) */}
       {displayList.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-          <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-          <h3 className="text-sm font-bold text-slate-800">
-            {searchQuery ? 'No Matching Repair Orders Found' : 'Your Work Queue is Clear'}
-          </h3>
-          <p className="text-xs text-slate-500 mt-1">
-            {searchQuery 
-              ? `No repair orders matched your search "${searchQuery}".` 
-              : 'No repair orders currently in this queue. When a Service Advisor assigns work to you, it will show up here immediately.'}
-          </p>
+        <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 text-center flex flex-col sm:flex-row items-center justify-center gap-2 text-xs text-slate-500">
+          <Wrench className="w-4 h-4 text-slate-400 shrink-0" />
+          <span>
+            {searchQuery
+              ? `No full repair order tickets matched "${searchQuery}".`
+              : 'No full Advisor Repair Order tickets open — use the Shop Dispatch & Quick Status Board above to update your assigned vehicles.'}
+          </span>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">

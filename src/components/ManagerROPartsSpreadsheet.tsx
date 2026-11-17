@@ -25,15 +25,20 @@ import {
   Package,
   Layers,
   Check,
-  CheckSquare
+  CheckSquare,
+  Flag,
+  MessageSquareText,
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ManagerSpreadsheetRow, ManagerLogStatus, EtaHistoryEntry, ManagerSubPartItem } from '../types/managerSpreadsheet';
 import { ManagerNotepadModal } from './ManagerNotepadModal';
+import { CauseCorrectionStoryBox } from './CauseCorrectionStoryBox';
 import { printIsolatedDocument } from '../utils/printUtils';
 import { 
   syncShopSettings, 
-  subscribeToShopSettings 
+  subscribeToShopSettings,
+  updateManagerSpreadsheetRowInCloud
 } from '../lib/firestoreSync';
 
 const STORAGE_KEY_MANAGER_SPREADSHEET = 'dealership_service_manager_ro_parts_spreadsheet_v2';
@@ -110,9 +115,10 @@ interface ManagerROPartsSpreadsheetProps {
 export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps> = ({ 
   onBackToDashboard 
 }) => {
-  const { repairOrders, users, setSelectedRO } = useApp();
+  const { repairOrders, users, setSelectedRO, currentUser } = useApp();
 
   const [isNotepadOpen, setIsNotepadOpen] = useState(false);
+  const [storyModalRowId, setStoryModalRowId] = useState<string | null>(null);
 
   const technicians = useMemo(() => {
     return users.filter(u => u.role === 'TECHNICIAN' && !u.isDeactivated);
@@ -164,6 +170,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ManagerLogStatus | 'ALL'>('ALL');
   const [partsInFilter, setPartsInFilter] = useState<'ALL' | 'PARTS_IN' | 'PARTS_WAITING'>('ALL');
+  const [onlyTechFlagged, setOnlyTechFlagged] = useState(false);
 
   // Column Sorting state
   type SortField = 'roNumber' | 'roDate' | 'customerName' | 'assignedTechName' | 'status';
@@ -472,21 +479,34 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     setRoUsedAlert(prev => (prev?.rowId === rowId ? null : prev));
   }, [rows, repairOrders]);
 
-  // Update a top-level field on a row
+  // Update a top-level field on a row (uses atomic cloud patch so tech updates aren't overwritten)
   const handleUpdateField = (rowId: string, updates: Partial<ManagerSpreadsheetRow>) => {
     if (updates.roNumber !== undefined) {
       checkRoNumberUsage(rowId, updates.roNumber);
     }
 
+    const now = new Date().toISOString();
     const updated = rows.map(r => {
       if (r.id !== rowId) return r;
       return {
         ...r,
         ...updates,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
       };
     });
-    saveRows(updated);
+
+    setRows(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY_MANAGER_SPREADSHEET, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    updateManagerSpreadsheetRowInCloud(rowId, { ...updates, updatedAt: now }).then((ok) => {
+      if (!ok) {
+        syncShopSettings({ managerROPartsSpreadsheet: updated });
+      }
+    });
   };
 
   // Update a specific sub-part item
@@ -748,9 +768,17 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
     return warnings;
   }, [rows, repairOrders]);
 
+  const techFlaggedCount = useMemo(
+    () => rows.filter(r => Boolean(r.techNeedsAttention)).length,
+    [rows]
+  );
+
   // Filtered & sorted rows
   const filteredRows = useMemo(() => {
     const filtered = rows.filter(r => {
+      if (onlyTechFlagged && !r.techNeedsAttention) {
+        return false;
+      }
       if (statusFilter !== 'ALL') {
         const matches = r.status === statusFilter || 
           (statusFilter === 'Waiting on Payment' && (r.status as string) === 'Waiting for Payment');
@@ -779,6 +807,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         (r.partNumber && r.partNumber !== 'N/A' && r.partNumber.toLowerCase().includes(q)) ||
         (r.partDescription && r.partDescription.toLowerCase().includes(q)) ||
         partsMatch ||
+        (r.techNotes && r.techNotes.toLowerCase().includes(q)) ||
+        (r.techCause && r.techCause.toLowerCase().includes(q)) ||
+        (r.techCorrection && r.techCorrection.toLowerCase().includes(q)) ||
         (r.notes && r.notes.toLowerCase().includes(q))
       );
     });
@@ -837,7 +868,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
 
       return 0;
     });
-  }, [rows, searchQuery, statusFilter, partsInFilter, sortField, sortDirection]);
+  }, [rows, searchQuery, statusFilter, partsInFilter, onlyTechFlagged, sortField, sortDirection]);
 
   // Active ETA modal target object
   const etaModalTargetObj = useMemo(() => {
@@ -874,6 +905,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
       'VIN',
       'Assigned Tech',
       'Status',
+      'Tech Update / Notes',
+      'Cause',
+      'Correction',
       'Part Number',
       'Part Description',
       'Order Date',
@@ -901,6 +935,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           r.vin,
           r.assignedTechName || '',
           r.status,
+          r.techNotes || '',
+          r.techCause || '',
+          r.techCorrection || '',
           'No Parts Ordered',
           '',
           '',
@@ -920,6 +957,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
             r.vin,
             r.assignedTechName || '',
             r.status,
+            r.techNotes || '',
+            r.techCause || '',
+            r.techCorrection || '',
             p.partNumber,
             p.partDescription || '',
             p.orderDate || '',
@@ -1133,6 +1173,27 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 </button>
               );
             })}
+
+            {(techFlaggedCount > 0 || onlyTechFlagged) && (
+              <button
+                type="button"
+                onClick={() => setOnlyTechFlagged(v => !v)}
+                className={`px-2.5 py-1 rounded-lg font-black text-xs transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 border ${
+                  onlyTechFlagged
+                    ? 'bg-amber-600 text-white border-amber-700 shadow-2xs'
+                    : 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-400'
+                }`}
+                title="Filter to vehicles where a technician flagged the Service Manager"
+              >
+                <Flag className="w-3 h-3" />
+                <span>Tech Flagged</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  onlyTechFlagged ? 'bg-amber-800 text-amber-100' : 'bg-amber-300 text-amber-950'
+                }`}>
+                  {techFlaggedCount}
+                </span>
+              </button>
+            )}
           </div>
 
         </div>
@@ -1298,6 +1359,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       )}
                     </button>
                   </th>
+                  <th className="py-3 px-3 min-w-[230px]">Tech Update / Notes</th>
                   <th className="py-3 px-3 min-w-[170px]">Parts Breakdown</th>
                   <th className="py-3 px-3 min-w-[160px]">Overall ETA</th>
                   <th className="py-3 px-3 text-center min-w-[120px]">Parts In?</th>
@@ -1309,7 +1371,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
               <tbody className="divide-y divide-slate-200">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-500">
+                    <td colSpan={13} className="py-12 text-center text-slate-500">
                       <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                       <p className="font-bold text-slate-700 text-sm">No spreadsheet log entries found</p>
                       <p className="text-xs text-slate-400 mt-0.5">Click "+ Add RO Row" or "Sync Active ROs" above to populate rows.</p>
@@ -1331,6 +1393,8 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         <tr className={`transition-colors whitespace-nowrap group ${
                           roWarning?.type === 'DUPLICATE_IN_LOG'
                             ? 'bg-red-50/70 hover:bg-red-100/60'
+                            : r.techNeedsAttention
+                            ? 'bg-amber-50/80 hover:bg-amber-100/60'
                             : isExpanded
                             ? 'bg-purple-50/60 font-semibold hover:bg-purple-50/80'
                             : 'hover:bg-purple-50/40'
@@ -1468,6 +1532,67 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               <option value="Finished" className="bg-white text-slate-900 font-medium">Finished</option>
                               <option value="Waiting on Payment" className="bg-white text-slate-900 font-medium">Waiting on Payment</option>
                             </select>
+                            {r.techStatusUpdatedAt && (
+                              <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5 text-purple-600" />
+                                <span>Tech {new Date(r.techStatusUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Tech Update / Notes & Flag Column */}
+                          <td className="py-1.5 px-2 min-w-[230px] max-w-[280px] whitespace-normal">
+                            <div className="space-y-1">
+                              {r.techNeedsAttention && (
+                                <div className="flex items-center justify-between gap-1.5 px-2 py-0.5 rounded bg-amber-500 text-white text-[10px] font-black uppercase tracking-wide shadow-2xs">
+                                  <span className="flex items-center gap-1">
+                                    <Flag className="w-3 h-3" />
+                                    <span>Tech Needs Manager</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateField(r.id, { techNeedsAttention: false })}
+                                    className="px-1.5 py-0.2 bg-amber-800 hover:bg-amber-900 text-white rounded text-[9px] font-bold cursor-pointer"
+                                    title="Acknowledge and clear tech flag"
+                                  >
+                                    Clear
+                                  </button>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <MessageSquareText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <input
+                                  type="text"
+                                  value={r.techNotes || ''}
+                                  onChange={(e) => handleUpdateField(r.id, { techNotes: e.target.value })}
+                                  placeholder="No tech update yet"
+                                  className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-purple-500 rounded text-xs font-semibold text-slate-800 focus:outline-none"
+                                />
+                              </div>
+                              {r.techNotesUpdatedAt && (
+                                <div className="text-[10px] text-slate-400 font-mono pl-4">
+                                  {r.techNotesUpdatedBy ? `${r.techNotesUpdatedBy} • ` : ''}
+                                  {new Date(r.techNotesUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setStoryModalRowId(r.id)}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black border transition-colors cursor-pointer ${
+                                  r.techCause?.trim() || r.techCorrection?.trim()
+                                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-300'
+                                    : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
+                                }`}
+                                title="View, edit, AI-generate, or copy Cause & Correction story for DMS"
+                              >
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>
+                                  {r.techCause?.trim() || r.techCorrection?.trim()
+                                    ? '✓ Cause & Correction Ready'
+                                    : 'Cause & Correction (AI)'}
+                                </span>
+                              </button>
+                            </div>
                           </td>
 
                           {/* Parts Breakdown Summary Badge */}
@@ -1605,7 +1730,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                         {/* Expandable Sub-Rows Section (Option 2) */}
                         {isExpanded && (
                           <tr className="bg-slate-50/90 border-b-2 border-purple-200">
-                            <td colSpan={12} className="p-3 sm:p-4">
+                            <td colSpan={13} className="p-3 sm:p-4">
                               <div className="w-fit max-w-[calc(100vw-3rem)] sticky left-3 bg-white rounded-xl border-2 border-purple-300 p-3 sm:p-4 shadow-sm space-y-3">
                                 
                                 <div className="flex items-center justify-start pb-2">
@@ -1942,6 +2067,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                 <th className="p-2">VIN</th>
                 <th className="p-2">Tech</th>
                 <th className="p-2">Status</th>
+                <th className="p-2">Tech Update</th>
                 <th className="p-2">Part #</th>
                 <th className="p-2">Description</th>
                 <th className="p-2">Order Date</th>
@@ -1961,6 +2087,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                       <td className="p-2">{r.vin}</td>
                       <td className="p-2 font-sans">{r.assignedTechName || 'Unassigned'}</td>
                       <td className="p-2 font-sans font-bold">{r.status}</td>
+                      <td className="p-2 font-sans">{r.techNotes || '-'}</td>
                       <td className="p-2 font-sans text-slate-500">No Parts Ordered</td>
                       <td className="p-2 font-sans text-slate-400">-</td>
                       <td className="p-2 font-sans text-slate-400">-</td>
@@ -1977,6 +2104,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                     <td className="p-2">{r.vin}</td>
                     <td className="p-2 font-sans">{r.assignedTechName || 'Unassigned'}</td>
                     <td className="p-2 font-sans font-bold">{r.status}</td>
+                    <td className="p-2 font-sans">{r.techNotes || '-'}</td>
                     <td className="p-2 font-bold">{p.partNumber}</td>
                     <td className="p-2 font-sans">{p.partDescription || '-'}</td>
                     <td className="p-2">{p.orderDate || '-'}</td>
@@ -1990,6 +2118,54 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
           </table>
         </div>
       </div>
+
+      {/* Cause & Correction Story Modal */}
+      {(() => {
+        const storyRow = storyModalRowId ? rows.find(r => r.id === storyModalRowId) : null;
+        if (!storyRow) return null;
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-300 max-w-3xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                  <h3 className="font-black text-sm sm:text-base text-white">
+                    RO #{storyRow.roNumber || '—'} • Cause &amp; Correction Story
+                  </h3>
+                  {storyRow.customerName && (
+                    <span className="text-xs text-slate-300 font-semibold">
+                      ({storyRow.customerName})
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStoryModalRowId(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-3">
+                <CauseCorrectionStoryBox
+                  row={storyRow}
+                  authorName={currentUser?.name || 'Service Manager'}
+                  onPatchRow={(rowId, patch) => handleUpdateField(rowId, patch)}
+                />
+              </div>
+              <div className="p-3 bg-slate-50 border-t border-slate-200 text-right">
+                <button
+                  type="button"
+                  onClick={() => setStoryModalRowId(null)}
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Personal Manager Notepad Modal */}
       <ManagerNotepadModal

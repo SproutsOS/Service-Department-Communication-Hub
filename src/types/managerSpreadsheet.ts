@@ -60,6 +60,19 @@ export interface ManagerSpreadsheetRow {
   // Multi-part sub-items for expandable sub-rows (Option 2)
   parts?: ManagerSubPartItem[];
 
+  // Tech Quick Status & Communication fields (Option 1)
+  techNotes?: string;
+  techNotesUpdatedAt?: string;
+  techNotesUpdatedBy?: string;
+  techNeedsAttention?: boolean;
+  techStatusUpdatedAt?: string;
+
+  // Cause & Correction Story fields (editable + AI-assisted)
+  techCause?: string;
+  techCorrection?: string;
+  techStoryUpdatedAt?: string;
+  techStoryUpdatedBy?: string;
+
   notes?: string;
   createdAt: string;
   updatedAt: string;

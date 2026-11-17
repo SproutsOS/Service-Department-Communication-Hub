@@ -11,7 +11,8 @@ import {
   query,
   orderBy,
   limit,
-  arrayUnion
+  arrayUnion,
+  runTransaction
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { RepairOrder, User, UrgentNotification, ShopChatMessage, Customer, StandaloneQuote } from '../types';
@@ -482,6 +483,49 @@ export async function syncShopSettings(settings: Partial<ShopSettings>) {
     await setDoc(docRef, cleanSettings, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COL}/${SHOP_SETTINGS_DOC}`);
+  }
+}
+
+/**
+ * Atomically patches a single row in settings/shop.managerROPartsSpreadsheet using a transaction
+ * so technician status updates never overwrite newly added manager rows.
+ */
+export async function updateManagerSpreadsheetRowInCloud(
+  rowId: string,
+  patch: Record<string, any>
+): Promise<boolean> {
+  try {
+    const docRef = doc(db, SETTINGS_COL, SHOP_SETTINGS_DOC);
+    const now = new Date().toISOString();
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      const data = snap.exists() ? (snap.data() as ShopSettings) : null;
+      const existingRows = Array.isArray(data?.managerROPartsSpreadsheet)
+        ? data.managerROPartsSpreadsheet
+        : [];
+
+      const updatedRows = existingRows.map((row: any) => {
+        if (row.id !== rowId) return row;
+        return sanitizeForFirestore({
+          ...row,
+          ...patch,
+          updatedAt: now,
+        });
+      });
+
+      tx.set(
+        docRef,
+        sanitizeForFirestore({
+          managerROPartsSpreadsheet: updatedRows,
+          updatedAt: now,
+        }),
+        { merge: true }
+      );
+    });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COL}/${SHOP_SETTINGS_DOC}`);
+    return false;
   }
 }
 
