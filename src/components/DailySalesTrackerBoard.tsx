@@ -13,7 +13,6 @@ import {
   Minus,
   Clock
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
 import { DailySalesRecord } from '../types/dailySales';
 import {
   computeDailyTotals,
@@ -23,12 +22,16 @@ import {
   seedInitialDailyRecords,
   ensureDailySalesRange,
   DAILY_SALES_START_DATE,
-  calculateDailySalesFromROs,
   getWedTueWeekPeriodForDate,
   getSunSatWeekPeriodForDate
 } from '../utils/dailySalesCalculations';
 import { formatCurrency } from '../utils/formatters';
 import { syncDailySalesToCloud, subscribeToDailySales } from '../lib/firestoreSync';
+import {
+  DailySalesCategoryGraphs,
+  CategoryGraphKey,
+  GraphTimeframe
+} from './DailySalesCategoryGraphs';
 
 const STORAGE_KEY_DAILY_SALES = 'dealership_daily_sales_records_v1';
 
@@ -105,7 +108,6 @@ interface DailySalesTrackerBoardProps {
 export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
   onBackToDashboard
 }) => {
-  const { repairOrders } = useApp();
 
   // Load records from persistent storage and ensure dates start Sept 1, 2025 to present
   const [records, setRecords] = useState<DailySalesRecord[]>(() => {
@@ -123,8 +125,8 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     return seedInitialDailyRecords();
   });
 
-  // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT'
-  const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT'>('DAILY');
+  // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS'
+  const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS'>('DAILY');
   const [roViewGrouping, setRoViewGrouping] = useState<'DAY' | 'WEEK' | 'MONTH'>('DAY');
   const [roWeekCycle, setRoWeekCycle] = useState<'WED_TUE' | 'SUN_SAT'>('WED_TUE');
 
@@ -138,10 +140,12 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
 
   const [selectedRODate, setSelectedRODate] = useState<string>(todayIso);
 
-  // Trend Graph Modal / View State
+  // Trend Graph Modal & Tab Shared State (Date Range + Per-Category Graphs)
   const [showGraphModal, setShowGraphModal] = useState(false);
-  const [graphMetric, setGraphMetric] = useState<'TOTAL_PARTS_LABOR' | 'LABOR_VS_PARTS' | 'TECH_HOURS' | 'AVG_PER_RO' | 'RO_COUNT'>('TOTAL_PARTS_LABOR');
-  const [graphTimeframe, setGraphTimeframe] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY'>('DAILY');
+  const [graphStartDate, setGraphStartDate] = useState<string>(DAILY_SALES_START_DATE);
+  const [graphEndDate, setGraphEndDate] = useState<string>(todayIso);
+  const [graphTimeframe, setGraphTimeframe] = useState<GraphTimeframe>('DAILY');
+  const [focusedGraphCategory, setFocusedGraphCategory] = useState<CategoryGraphKey | null>(null);
 
   // Month filter for Daily Entry sheet
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('ALL');
@@ -382,22 +386,6 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     handleUpdateRecord(dateStr, { roCount: nextCount }, { immediate: true });
   };
 
-  // Handle auto-calculating totals from repair orders for a given date
-  const handleAutoFillFromROs = (dateStr: string) => {
-    const autoData = calculateDailySalesFromROs(dateStr, repairOrders);
-    handleUpdateRecord(
-      dateStr,
-      {
-        roCount: autoData.roCount,
-        techHours: autoData.techHours,
-        laborSales: autoData.laborSales,
-        partsSales: autoData.partsSales
-      },
-      { immediate: true }
-    );
-    triggerSaveToast(`Auto-calculated figures from ROs for ${dateStr}.`);
-  };
-
   // Handle adding a new date record
   const handleAddDateRecord = () => {
     if (!newDateInput) return;
@@ -409,13 +397,12 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
       triggerSaveToast(`Selected existing record for ${newDateInput}.`);
       return;
     }
-    const autoData = calculateDailySalesFromROs(newDateInput, repairOrders);
     const newRec: DailySalesRecord = {
       date: newDateInput,
-      roCount: autoData.roCount,
-      techHours: autoData.techHours,
-      laborSales: autoData.laborSales,
-      partsSales: autoData.partsSales,
+      roCount: 0,
+      techHours: 0,
+      laborSales: 0,
+      partsSales: 0,
       updatedAt: new Date().toISOString()
     };
     saveRecords([newRec, ...records], { immediate: true });
@@ -494,55 +481,6 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     link.click();
     document.body.removeChild(link);
   };
-
-  // Generate SVG Line Graph Data Points
-  const graphDataPoints = useMemo(() => {
-    if (graphTimeframe === 'DAILY') {
-      const sortedAsc = [...records].sort((a, b) => a.date.localeCompare(b.date));
-      return sortedAsc.map(r => {
-        const c = computeDailyTotals(r);
-        return {
-          key: r.date,
-          label: r.date.substring(5), // MM-DD
-          fullLabel: r.date,
-          avgPerRO: Math.round(c.avgSalesPerRO),
-          totalSales: Math.round(c.totalSales),
-          laborSales: Math.round(c.laborSales),
-          partsSales: Math.round(c.partsSales),
-          techHours: Math.round(c.techHours * 10) / 10,
-          roCount: c.roCount,
-        };
-      });
-    } else if (graphTimeframe === 'WEEKLY_WED_TUE') {
-      const sortedAsc = [...wedTueWeeksList].sort((a, b) => a.weekEndingDate.localeCompare(b.weekEndingDate));
-      return sortedAsc.map(w => ({
-        key: w.weekId,
-        label: `${w.weekStartDate.substring(5)} - ${w.weekEndingDate.substring(5)}`,
-        fullLabel: w.weekLabel,
-        avgPerRO: Math.round(w.avgSalesPerRO),
-        totalSales: Math.round(w.totalSales),
-        laborSales: Math.round(w.totalLaborSales),
-        partsSales: Math.round(w.totalPartsSales),
-        techHours: Math.round(w.totalTechHours * 10) / 10,
-        roCount: w.totalROCount,
-      }));
-    } else {
-      const sortedAsc = [...monthlyList].sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-      return sortedAsc.map(m => ({
-        key: m.monthKey,
-        label: m.monthLabel.split(' ')[0],
-        fullLabel: m.monthLabel,
-        avgPerRO: Math.round(m.avgSalesPerRO),
-        totalSales: Math.round(m.totalSales),
-        laborSales: Math.round(m.totalLaborSales),
-        partsSales: Math.round(m.totalPartsSales),
-        techHours: Math.round(m.totalTechHours * 10) / 10,
-        roCount: m.totalROCount,
-      }));
-    }
-  }, [records, wedTueWeeksList, monthlyList, graphTimeframe]);
-
-  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-100 overflow-hidden text-slate-900">
@@ -628,6 +566,19 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
               >
                 <Hash className="w-3.5 h-3.5" />
                 <span>RO Count (Day/Wk/Mo)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('GRAPHS')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'GRAPHS'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Graphs</span>
               </button>
             </div>
 
@@ -785,14 +736,6 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
                   Day RO Count ({selectedRODate})
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleAutoFillFromROs(selectedRODate)}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 cursor-pointer"
-                  title="Auto-fill ROs, tech hours, labor & parts from ROs on this date"
-                >
-                  Auto-Fill ROs
-                </button>
               </div>
 
               <div className="flex items-center justify-between gap-2">
@@ -947,58 +890,60 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
         </div>
 
         {/* Action Controls Bar */}
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {activeTab !== 'GRAPHS' && (
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {activeTab === 'DAILY' && (
-              <>
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search date or notes..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                  />
-                </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {activeTab === 'DAILY' && (
+                <>
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search date or notes..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                    />
+                  </div>
 
-                <select
-                  value={selectedMonthFilter}
-                  onChange={(e) => setSelectedMonthFilter(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-extrabold text-slate-900 cursor-pointer focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                >
-                  <option value="ALL">All Months (From Sept 1, 2025)</option>
-                  {monthlyList.map(m => (
-                    <option key={m.monthKey} value={m.monthKey}>
-                      {m.monthLabel}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
+                  <select
+                    value={selectedMonthFilter}
+                    onChange={(e) => setSelectedMonthFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-extrabold text-slate-900 cursor-pointer focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                  >
+                    <option value="ALL">All Months (From Sept 1, 2025)</option>
+                    {monthlyList.map(m => (
+                      <option key={m.monthKey} value={m.monthKey}>
+                        {m.monthLabel}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
 
-            <button
-              type="button"
-              onClick={() => setIsAddDateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add / Select Date</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setIsAddDateModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add / Select Date</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV Report</span>
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export CSV Report</span>
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* TAB 1: DAILY ENTRY SHEET */}
         {activeTab === 'DAILY' && (
@@ -1024,13 +969,12 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     <th className="px-2 py-2.5">Total Parts Sales ($)</th>
                     <th className="px-2.5 py-2.5 text-right bg-emerald-100/60 text-emerald-900">Total Parts &amp; Labor ($)</th>
                     <th className="px-2.5 py-2.5 text-right">Avg $/RO ($)</th>
-                    <th className="px-2.5 py-2.5 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {filteredDailyRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-slate-500 font-medium">
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-500 font-medium">
                         No daily records found for this filter. Click &ldquo;Add / Select Date&rdquo; above.
                       </td>
                     </tr>
@@ -1142,18 +1086,6 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                           {/* Avg $/RO */}
                           <td className="px-2.5 py-2 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
                             {formatCurrency(computed.avgSalesPerRO)}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-2.5 py-2 text-center whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleAutoFillFromROs(record.date)}
-                              className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded border border-slate-300 text-[10px] font-bold transition-colors cursor-pointer"
-                              title="Auto-calculate RO count, tech hours, labor & parts from Repair Orders on this date"
-                            >
-                              Auto-Fill ROs
-                            </button>
                           </td>
                         </tr>
                       );
@@ -1369,7 +1301,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setGraphMetric('RO_COUNT');
+                    setFocusedGraphCategory('RO_COUNT');
                     setGraphTimeframe(
                       roViewGrouping === 'DAY'
                         ? 'DAILY'
@@ -1401,7 +1333,6 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                         <th className="px-3 py-3 text-center">Tech Hours</th>
                         <th className="px-3 py-3 text-right">Total Parts &amp; Labor</th>
                         <th className="px-3 py-3 text-right">Avg $/RO</th>
-                        <th className="px-3 py-3 text-center">Quick Fill</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
@@ -1477,15 +1408,6 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700">
                               {formatCurrency(computed.avgSalesPerRO)}
-                            </td>
-                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                              <button
-                                type="button"
-                                onClick={() => handleAutoFillFromROs(record.date)}
-                                className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded border border-slate-300 text-[10px] font-bold cursor-pointer"
-                              >
-                                Auto-Fill ROs
-                              </button>
                             </td>
                           </tr>
                         );
@@ -1651,6 +1573,23 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
           </div>
         )}
 
+        {/* TAB 5: PER-CATEGORY LINE GRAPHS WITH DATE RANGE */}
+        {activeTab === 'GRAPHS' && (
+          <DailySalesCategoryGraphs
+            records={records}
+            startDate={graphStartDate}
+            endDate={graphEndDate}
+            onChangeStartDate={setGraphStartDate}
+            onChangeEndDate={setGraphEndDate}
+            timeframe={graphTimeframe}
+            onChangeTimeframe={setGraphTimeframe}
+            focusedCategory={focusedGraphCategory}
+            onChangeFocusedCategory={setFocusedGraphCategory}
+            todayIso={todayIso}
+            variant="embedded"
+          />
+        )}
+
       </div>
 
       {/* ========================================================================= */}
@@ -1658,7 +1597,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
       {/* ========================================================================= */}
       {showGraphModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 text-white rounded-2xl border-2 border-slate-700 shadow-2xl w-full max-w-5xl flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="bg-slate-900 text-white rounded-2xl border-2 border-slate-700 shadow-2xl w-full max-w-6xl flex flex-col max-h-[92vh] overflow-hidden">
 
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
@@ -1668,10 +1607,10 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-white tracking-tight">
-                    Parts, Labor, Tech Hours &amp; RO Trend Line Graphs
+                    Category Trend Line Graphs
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Visual performance trends over time starting Sept 1, 2025.
+                    Individual line graphs for # of ROs, Tech Hours, Labor Sales, Parts Sales, Total Parts &amp; Labor, and Avg $/RO with custom date range filtering.
                   </p>
                 </div>
               </div>
@@ -1684,262 +1623,21 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
               </button>
             </div>
 
-            {/* Controls Bar */}
-            <div className="px-6 py-3 bg-slate-850 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
-
-              {/* Metric Selector */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Metric:</span>
-                <div className="bg-slate-800 p-1 rounded-lg flex items-center flex-wrap gap-0.5 border border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setGraphMetric('TOTAL_PARTS_LABOR')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphMetric === 'TOTAL_PARTS_LABOR' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Total P&amp;L ($)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGraphMetric('LABOR_VS_PARTS')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphMetric === 'LABOR_VS_PARTS' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Labor vs Parts ($)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGraphMetric('TECH_HOURS')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphMetric === 'TECH_HOURS' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Tech Hours
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGraphMetric('AVG_PER_RO')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphMetric === 'AVG_PER_RO' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Avg $/RO
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGraphMetric('RO_COUNT')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphMetric === 'RO_COUNT' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    RO Count
-                  </button>
-                </div>
-              </div>
-
-              {/* Timeframe Selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Timeframe:</span>
-                <div className="bg-slate-800 p-1 rounded-lg flex items-center border border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setGraphTimeframe('DAILY')}
-                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphTimeframe === 'DAILY' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Daily
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGraphTimeframe('WEEKLY_WED_TUE')}
-                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphTimeframe === 'WEEKLY_WED_TUE' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Wed–Tue Weeks
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGraphTimeframe('MONTHLY')}
-                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                      graphTimeframe === 'MONTHLY' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* SVG Interactive Line Chart Canvas */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
-
-              {graphDataPoints.length < 2 ? (
-                <div className="p-12 text-center text-slate-400 font-bold">
-                  Not enough data points to plot trend graph. Please add more daily records.
-                </div>
-              ) : (
-                <div className="bg-slate-950 p-4 sm:p-6 rounded-xl border border-slate-800 relative">
-
-                  {/* Legend */}
-                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2 text-xs">
-                    <div className="flex items-center gap-4 flex-wrap">
-                      {graphMetric === 'TOTAL_PARTS_LABOR' && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-emerald-400 inline-block shadow-xs" />
-                          <span className="font-extrabold text-emerald-300">Total Parts &amp; Labor ($)</span>
-                        </div>
-                      )}
-                      {graphMetric === 'LABOR_VS_PARTS' && (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
-                            <span className="font-bold text-blue-300">Total Labor Sales ($)</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
-                            <span className="font-bold text-amber-300">Total Parts Sales ($)</span>
-                          </div>
-                        </>
-                      )}
-                      {graphMetric === 'TECH_HOURS' && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-indigo-400 inline-block" />
-                          <span className="font-extrabold text-indigo-300">Tech Hours</span>
-                        </div>
-                      )}
-                      {graphMetric === 'AVG_PER_RO' && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-teal-400 inline-block shadow-xs" />
-                          <span className="font-extrabold text-teal-300">Average $/RO Trend ($)</span>
-                        </div>
-                      )}
-                      {graphMetric === 'RO_COUNT' && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-purple-400 inline-block" />
-                          <span className="font-extrabold text-purple-300">RO Count (Tickets)</span>
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-mono">
-                      {graphDataPoints.length} Data Points
-                    </span>
-                  </div>
-
-                  {/* SVG Chart Rendering */}
-                  {(() => {
-                    const width = 800;
-                    const height = 300;
-                    const padding = 40;
-
-                    const getVal = (pt: typeof graphDataPoints[0]) => {
-                      if (graphMetric === 'AVG_PER_RO') return pt.avgPerRO;
-                      if (graphMetric === 'RO_COUNT') return pt.roCount;
-                      if (graphMetric === 'TECH_HOURS') return pt.techHours;
-                      if (graphMetric === 'LABOR_VS_PARTS') return Math.max(pt.laborSales, pt.partsSales);
-                      return pt.totalSales;
-                    };
-
-                    const maxVal = Math.max(...graphDataPoints.map(getVal), 10);
-
-                    const points = graphDataPoints.map((pt, i) => {
-                      const x = padding + (i / (graphDataPoints.length - 1 || 1)) * (width - 2 * padding);
-                      const y = height - padding - (getVal(pt) / maxVal) * (height - 2 * padding);
-                      return { x, y, pt };
-                    });
-
-                    const pathD = points.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '');
-
-                    const laborPoints = graphDataPoints.map((pt, i) => {
-                      const x = padding + (i / (graphDataPoints.length - 1 || 1)) * (width - 2 * padding);
-                      const y = height - padding - (pt.laborSales / maxVal) * (height - 2 * padding);
-                      return { x, y };
-                    });
-                    const laborPathD = laborPoints.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '');
-
-                    const partsPoints = graphDataPoints.map((pt, i) => {
-                      const x = padding + (i / (graphDataPoints.length - 1 || 1)) * (width - 2 * padding);
-                      const y = height - padding - (pt.partsSales / maxVal) * (height - 2 * padding);
-                      return { x, y };
-                    });
-                    const partsPathD = partsPoints.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '');
-
-                    const strokeColor =
-                      graphMetric === 'TOTAL_PARTS_LABOR'
-                        ? '#34d399'
-                        : graphMetric === 'TECH_HOURS'
-                        ? '#818cf8'
-                        : graphMetric === 'AVG_PER_RO'
-                        ? '#2dd4bf'
-                        : '#c084fc';
-
-                    return (
-                      <div className="w-full overflow-x-auto">
-                        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-                          {/* Grid Lines */}
-                          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#334155" strokeWidth="1" />
-                          <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#334155" strokeWidth="1" />
-                          <line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} stroke="#1e293b" strokeDasharray="4,4" />
-
-                          {/* Render line(s) */}
-                          {graphMetric === 'LABOR_VS_PARTS' ? (
-                            <>
-                              <path d={laborPathD} fill="none" stroke="#3b82f6" strokeWidth="3" />
-                              <path d={partsPathD} fill="none" stroke="#f59e0b" strokeWidth="3" />
-                            </>
-                          ) : (
-                            <path
-                              d={pathD}
-                              fill="none"
-                              stroke={strokeColor}
-                              strokeWidth="4"
-                              strokeLinecap="round"
-                            />
-                          )}
-
-                          {/* Data points */}
-                          {points.map((p, idx) => (
-                            <g key={p.pt.key} className="cursor-pointer" onMouseEnter={() => setHoveredPointIndex(idx)}>
-                              <circle
-                                cx={p.x}
-                                cy={p.y}
-                                r={hoveredPointIndex === idx ? '7' : '4'}
-                                fill={graphMetric === 'LABOR_VS_PARTS' ? '#ffffff' : strokeColor}
-                                stroke="#0f172a"
-                                strokeWidth="2"
-                              />
-                            </g>
-                          ))}
-                        </svg>
-
-                        {/* Hover Tooltip Box */}
-                        {hoveredPointIndex !== null && points[hoveredPointIndex] && (
-                          <div className="mt-3 p-3 bg-slate-800 rounded-lg border border-slate-700 text-xs flex flex-wrap items-center justify-between gap-2 animate-in fade-in">
-                            <div>
-                              <span className="font-extrabold text-white text-sm">
-                                {points[hoveredPointIndex].pt.fullLabel}
-                              </span>
-                              <div className="text-slate-300 font-mono mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                                <span># of ROs: <strong>{points[hoveredPointIndex].pt.roCount}</strong></span>
-                                <span className="text-indigo-300">Tech Hrs: <strong>{points[hoveredPointIndex].pt.techHours.toFixed(1)}</strong></span>
-                                <span className="text-emerald-400 font-bold">Total P&amp;L: <strong>{formatCurrency(points[hoveredPointIndex].pt.totalSales)}</strong></span>
-                                <span>Avg $/RO: <strong>{formatCurrency(points[hoveredPointIndex].pt.avgPerRO)}</strong></span>
-                              </div>
-                            </div>
-                            <div className="text-right text-[11px] text-slate-300 font-mono">
-                              <div className="text-blue-300">Labor: {formatCurrency(points[hoveredPointIndex].pt.laborSales)}</div>
-                              <div className="text-amber-300">Parts: {formatCurrency(points[hoveredPointIndex].pt.partsSales)}</div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+            {/* Per-Category Line Graphs & Date Range Controls */}
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
+              <DailySalesCategoryGraphs
+                records={records}
+                startDate={graphStartDate}
+                endDate={graphEndDate}
+                onChangeStartDate={setGraphStartDate}
+                onChangeEndDate={setGraphEndDate}
+                timeframe={graphTimeframe}
+                onChangeTimeframe={setGraphTimeframe}
+                focusedCategory={focusedGraphCategory}
+                onChangeFocusedCategory={setFocusedGraphCategory}
+                todayIso={todayIso}
+                variant="modal"
+              />
             </div>
 
             {/* Footer */}
@@ -1987,7 +1685,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 />
               </div>
               <p className="text-[11px] text-slate-500">
-                If date already exists, this will filter to it. If it doesn&apos;t, a new record will be initialized and pre-filled.
+                If date already exists, this will filter to it. If it doesn&apos;t, a new blank record will be created.
               </p>
             </div>
 
