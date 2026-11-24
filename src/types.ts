@@ -562,7 +562,7 @@ export interface InspectionSheet {
 // Service Manager Staff Attendance & Calendar Types
 // ==========================================
 
-export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL' | 'TRAINING';
+export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL' | 'TRAINING' | 'HOLIDAY';
 
 export interface StaffLeaveEntry {
   id: string;
@@ -570,10 +570,11 @@ export interface StaffLeaveEntry {
   userName: string;
   userRole: UserRole;
   employeeNumber?: string;
+  isShopWide?: boolean;
   leaveType: StaffLeaveType;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
-  timeDetails?: string; // e.g. "Left early at 1:30 PM", "Doctor Appt"
+  timeDetails?: string; // e.g. "Left early at 1:30 PM", "Doctor Appt", "Shop Closed - Paid Holiday"
   notes?: string;
   createdAt: string;
   createdByManagerId: string;

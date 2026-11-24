@@ -79,7 +79,9 @@ export const Navbar: React.FC = () => {
   }, []);
 
   const todayAbsencesCount = useMemo(() => {
-    return (staffLeaveEntries || []).filter(e => todayStr >= e.startDate && todayStr <= e.endDate).length;
+    return (staffLeaveEntries || []).filter(
+      e => e.leaveType !== 'HOLIDAY' && todayStr >= e.startDate && todayStr <= e.endDate
+    ).length;
   }, [staffLeaveEntries, todayStr]);
 
 

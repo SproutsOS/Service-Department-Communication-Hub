@@ -59,6 +59,12 @@ const TECH_QUICK_STATUSES: {
     idleClass: 'bg-red-50 hover:bg-red-100 text-red-900 border-red-300'
   },
   {
+    status: 'Parts In – Awaiting Tech',
+    label: 'Parts In – Awaiting Tech',
+    activeClass: 'bg-teal-200 text-teal-950 border-teal-600 ring-2 ring-teal-500 shadow-xs',
+    idleClass: 'bg-teal-50 hover:bg-teal-100 text-teal-900 border-teal-300'
+  },
+  {
     status: 'In Repair',
     label: 'In Repair',
     activeClass: 'bg-blue-900 text-white border-blue-950 ring-2 ring-blue-700 shadow-xs',
@@ -532,6 +538,9 @@ export const TechQuickStatusBoard: React.FC = () => {
             </span>
             <span className="px-2.5 py-1 rounded bg-red-950/80 text-red-200 border border-red-700/60">
               Waiting on Parts: {scopeActiveRows.filter((r) => r.status === 'Waiting on Parts').length}
+            </span>
+            <span className="px-2.5 py-1 rounded bg-teal-950/80 text-teal-200 border border-teal-700/60">
+              Parts In – Awaiting Tech: {scopeActiveRows.filter((r) => r.status === 'Parts In – Awaiting Tech').length}
             </span>
             <span className="px-2.5 py-1 rounded bg-sky-950/80 text-sky-200 border border-sky-700/60">
               In Repair: {scopeActiveRows.filter((r) => r.status === 'In Repair').length}

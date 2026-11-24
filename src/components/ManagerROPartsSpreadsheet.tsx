@@ -49,6 +49,7 @@ const STATUS_OPTIONS: ManagerLogStatus[] = [
   'Pending Customer Approval',
   'Pending Warranty Approval',
   'Waiting on Parts',
+  'Parts In – Awaiting Tech',
   'Vehicle Not Here',
   'At Body Shop',
   'In Repair',
@@ -68,6 +69,8 @@ export const getStatusBadgeStyle = (status: ManagerLogStatus | string): string =
       return 'bg-emerald-600 text-white border-emerald-700 font-extrabold';
     case 'Waiting on Parts': // Light Red
       return 'bg-red-100 text-red-950 border-red-300 font-extrabold';
+    case 'Parts In – Awaiting Tech': // Teal
+      return 'bg-teal-100 text-teal-950 border-teal-400 font-extrabold';
     case 'Vehicle Not Here': // Cool Slate Gray
       return 'bg-slate-200 text-slate-900 border-slate-400 font-extrabold';
     case 'At Body Shop': // Bright Yellow
@@ -420,7 +423,9 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
         mappedStatus = 'Pending Customer Approval';
       } else if (ro.status === 'PARTS_ORDERED' || (ro.status as string) === 'WAITING_FOR_PARTS') {
         mappedStatus = 'Waiting on Parts';
-      } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'PARTS_IN_TO_TECH' || ro.status === 'APPROVED') {
+      } else if (ro.status === 'PARTS_IN_TO_TECH') {
+        mappedStatus = 'Parts In – Awaiting Tech';
+      } else if (ro.status === 'REPAIR_IN_PROGRESS' || ro.status === 'APPROVED') {
         mappedStatus = 'In Repair';
       } else if (ro.status === 'REPAIR_COMPLETE' || ro.status === 'READY_FOR_PICKUP') {
         mappedStatus = 'Finished';
@@ -1803,7 +1808,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                           </td>
 
                           {/* Status Dropdown Menu */}
-                          <td className="py-1 px-1 min-w-[145px]">
+                          <td className="py-1 px-1 min-w-[170px]">
                             <select
                               value={r.status === 'Waiting for Payment' ? 'Waiting on Payment' : r.status}
                               onChange={(e) => handleUpdateField(r.id, { status: e.target.value as ManagerLogStatus })}
@@ -1814,6 +1819,7 @@ export const ManagerROPartsSpreadsheet: React.FC<ManagerROPartsSpreadsheetProps>
                               <option value="Pending Customer Approval" className="bg-white text-slate-900 font-medium">Pending Customer Approval</option>
                               <option value="Pending Warranty Approval" className="bg-white text-slate-900 font-medium">Pending Warranty Approval</option>
                               <option value="Waiting on Parts" className="bg-white text-slate-900 font-medium">Waiting on Parts</option>
+                              <option value="Parts In – Awaiting Tech" className="bg-white text-slate-900 font-medium">Parts In – Awaiting Tech</option>
                               <option value="Vehicle Not Here" className="bg-white text-slate-900 font-medium">Vehicle Not Here</option>
                               <option value="At Body Shop" className="bg-white text-slate-900 font-medium">At Body Shop</option>
                               <option value="In Repair" className="bg-white text-slate-900 font-medium">In Repair</option>
