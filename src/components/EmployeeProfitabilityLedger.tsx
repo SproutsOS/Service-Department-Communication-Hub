@@ -28,7 +28,8 @@ import {
   Lock,
   Unlock,
   Building,
-  RotateCcw
+  RotateCcw,
+  Scale
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { 
@@ -52,6 +53,7 @@ import {
 import { formatCurrency } from '../utils/formatters';
 import { printIsolatedDocument } from '../utils/printUtils';
 import { syncProfitabilityWeeksToCloud, subscribeToProfitabilityWeeks } from '../lib/firestoreSync';
+import { FlagHoursReconciliationReport } from './FlagHoursReconciliationReport';
 
 const STORAGE_KEY_PROFITABILITY_WEEKS = 'dealership_employee_profitability_weeks_v5_techs_only';
 
@@ -82,8 +84,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
     return ensureMasterRosterOnAllWeeks(cleaned);
   });
 
-  // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'
-  const [activeTab, setActiveTab] = useState<'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS'>('SPREADSHEET');
+  // Active view tab: 'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS' | 'RECONCILIATION'
+  const [activeTab, setActiveTab] = useState<'SPREADSHEET' | 'COMPARISON' | 'RUNNING_TOTALS' | 'RECONCILIATION'>('SPREADSHEET');
 
   // Currently selected week ID
   const [selectedWeekId, setSelectedWeekId] = useState<string>(() => {
@@ -558,6 +560,19 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
               >
                 <DollarSign className="w-3.5 h-3.5" />
                 <span>Running Totals & YTD</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('RECONCILIATION')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'RECONCILIATION'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Scale className="w-3.5 h-3.5" />
+                <span>Flag Hours Audit</span>
               </button>
             </div>
 
@@ -1717,6 +1732,13 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
             </div>
 
           </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: FLAG HOURS AUDIT (LEDGER VS DAILY RO & SALES TRACKER)              */}
+        {/* ========================================================================= */}
+        {activeTab === 'RECONCILIATION' && (
+          <FlagHoursReconciliationReport weeks={weeks} />
         )}
 
       </div>
