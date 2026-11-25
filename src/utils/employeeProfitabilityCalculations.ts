@@ -510,13 +510,13 @@ const UNWANTED_NON_TECH_NAMES = [
 ];
 
 export const INITIAL_MANUAL_TECHNICIANS: EmployeeProfitabilityRow[] = [
-  { id: 'tech_branson_oneal', name: 'BRANSON ONEAL', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
-  { id: 'tech_dane_griffin', name: 'DANE GRIFFIN', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
-  { id: 'tech_donald_ingram', name: 'DONALD INGRAM', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
-  { id: 'tech_jacob_mooney', name: 'JACOB MOONEY', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
-  { id: 'tech_jesse_allman', name: 'JESSE ALLMAN', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
-  { id: 'tech_matthew_johnson', name: 'MATTHEW JOHNSON', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
-  { id: 'tech_montana_ishee', name: 'MONTANA ISHEE', role: 'Technician', payType: 'FLAT_RATE', actualHours: 40, flaggedHours: 40, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' }
+  { id: 'tech_branson_oneal', name: 'BRANSON ONEAL', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_dane_griffin', name: 'DANE GRIFFIN', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_donald_ingram', name: 'DONALD INGRAM', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_jacob_mooney', name: 'JACOB MOONEY', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_jesse_allman', name: 'JESSE ALLMAN', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_matthew_johnson', name: 'MATTHEW JOHNSON', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' },
+  { id: 'tech_montana_ishee', name: 'MONTANA ISHEE', role: 'Technician', payType: 'FLAT_RATE', actualHours: 0, flaggedHours: 0, payRate: 30, overtimeMultiplier: 1.5, laborSales: 0, grossProfit: 0, burdenType: 'PERCENT', burdenValue: 10, notes: '' }
 ];
 
 export function removeSampleEmployees(weeks: ProfitabilityWeek[]): ProfitabilityWeek[] {
@@ -585,9 +585,10 @@ export function ensureMasterRosterOnAllWeeks(weeksList: ProfitabilityWeek[]): Pr
           name: m.name,
           role: m.role || 'Technician',
           payType: m.payType || 'FLAT_RATE',
-          actualHours: m.actualHours !== undefined ? m.actualHours : 40.0,
-          flaggedHours: m.payType === 'FLAT_RATE' ? (m.flaggedHours !== undefined ? m.flaggedHours : 40.0) : 0.0,
+          actualHours: 0,
+          flaggedHours: 0,
           payRate: Number(m.payRate) || 30.0,
+          ...(m.flagRate !== undefined ? { flagRate: Number(m.flagRate) || 0 } : {}),
           overtimeMultiplier: Number(m.overtimeMultiplier) || 1.5,
           laborSales: 0.0,
           grossProfit: 0.0,
@@ -623,9 +624,10 @@ export function rolloverRosterToNewWeek(
     name: r.name,
     role: r.role || 'Technician',
     payType: r.payType || 'FLAT_RATE',
-    actualHours: r.actualHours !== undefined ? r.actualHours : 40.0,
-    flaggedHours: r.payType === 'FLAT_RATE' ? (r.flaggedHours !== undefined ? r.flaggedHours : 40.0) : 0.0,
+    actualHours: 0,
+    flaggedHours: 0,
     payRate: Number(r.payRate) || 0,
+    ...(r.flagRate !== undefined ? { flagRate: Number(r.flagRate) || 0 } : {}),
     overtimeMultiplier: Number(r.overtimeMultiplier) || 1.5,
     laborSales: 0.0,
     grossProfit: 0.0,

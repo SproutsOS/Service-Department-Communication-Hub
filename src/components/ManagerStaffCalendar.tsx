@@ -139,6 +139,18 @@ const LEAVE_TYPE_CONFIG: Record<StaffLeaveType, {
     pillBorder: 'border-red-700',
     bannerBg: 'bg-red-50 border-red-300 text-red-950',
   },
+  EVENT: {
+    label: 'Shop Event',
+    shortLabel: 'Event',
+    icon: '⭐',
+    badgeBg: 'bg-teal-100',
+    badgeText: 'text-teal-900',
+    badgeBorder: 'border-teal-300',
+    pillBg: 'bg-teal-600',
+    pillText: 'text-white',
+    pillBorder: 'border-teal-700',
+    bannerBg: 'bg-teal-50 border-teal-300 text-teal-950',
+  },
 };
 
 const HOLIDAY_NAME_PRESETS = [
@@ -160,6 +172,26 @@ const HOLIDAY_STATUS_CHIPS = [
   'Half Day - Close at 12:00 PM',
   'Half Day - Close at 2:00 PM',
   'Skeleton Crew / Reduced Hours',
+];
+
+const EVENT_NAME_PRESETS = [
+  'Christmas Party',
+  'Staff Meeting',
+  'Service Dept Lunch / Cookout',
+  'Quarterly Safety Meeting',
+  'Shop Cleanup Day',
+  'Inventory Count',
+  'Dealership Open House',
+  'Birthday / Anniversary Celebration',
+];
+
+const EVENT_TIME_CHIPS = [
+  'All Day',
+  '7:30 AM - 8:00 AM (Morning Huddle)',
+  '12:00 PM - 1:00 PM (Lunch)',
+  '5:00 PM - 7:00 PM (After Hours)',
+  '6:00 PM - 9:00 PM',
+  '6:30 PM - 10:00 PM',
 ];
 
 const QUICK_TIME_CHIPS = [
@@ -263,16 +295,23 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
     [entriesToday]
   );
 
+  const eventsToday = useMemo(
+    () => entriesToday.filter(e => e.leaveType === 'EVENT'),
+    [entriesToday]
+  );
+
   const staffAbsencesToday = useMemo(
-    () => entriesToday.filter(e => e.leaveType !== 'HOLIDAY'),
+    () => entriesToday.filter(e => e.leaveType !== 'HOLIDAY' && e.leaveType !== 'EVENT'),
     [entriesToday]
   );
 
   // Filtered entries
   const filteredEntries = useMemo(() => {
     return staffLeaveEntries.filter(entry => {
-      const isShopWideHoliday = entry.leaveType === 'HOLIDAY' && (entry.isShopWide || entry.userId === 'SHOP_HOLIDAY');
-      if (filterUser !== 'ALL' && entry.userId !== filterUser && !isShopWideHoliday) return false;
+      const isShopWideEntry =
+        (entry.leaveType === 'HOLIDAY' && (entry.isShopWide || entry.userId === 'SHOP_HOLIDAY')) ||
+        (entry.leaveType === 'EVENT' && (entry.isShopWide || entry.userId === 'SHOP_EVENT'));
+      if (filterUser !== 'ALL' && entry.userId !== filterUser && !isShopWideEntry) return false;
       if (filterType !== 'ALL' && entry.leaveType !== filterType) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -372,13 +411,10 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
       }
     });
 
-    // Sort entries on each day so Shop Holidays always appear at the top
+    // Sort entries on each day so Shop Holidays appear first, then Shop Events, then individual staff absences
+    const getSortPriority = (t: StaffLeaveType) => (t === 'HOLIDAY' ? 0 : t === 'EVENT' ? 1 : 2);
     Object.keys(map).forEach(key => {
-      map[key].sort((a, b) => {
-        if (a.leaveType === 'HOLIDAY' && b.leaveType !== 'HOLIDAY') return -1;
-        if (a.leaveType !== 'HOLIDAY' && b.leaveType === 'HOLIDAY') return 1;
-        return 0;
-      });
+      map[key].sort((a, b) => getSortPriority(a.leaveType) - getSortPriority(b.leaveType));
     });
 
     return map;
@@ -396,6 +432,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
     setFormNotes('');
     setFormTimeDetails(
       presetType === 'HOLIDAY' ? 'Shop Closed - Paid Holiday' :
+      presetType === 'EVENT' ? '' :
       presetType === 'LEFT_EARLY' ? 'Left early at 1:30 PM' : 
       presetType === 'SICK' ? 'Full Day Out Sick' : 
       presetType === 'VACATION' ? 'Approved PTO' : 
@@ -407,9 +444,10 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
 
   // Open Edit modal
   const handleOpenEditModal = (entry: StaffLeaveEntry) => {
+    const isCustomTitled = entry.leaveType === 'HOLIDAY' || entry.leaveType === 'EVENT';
     setEditingEntryId(entry.id);
-    setFormUserId(entry.leaveType === 'HOLIDAY' ? (activeStaff[0]?.id || '') : entry.userId);
-    setFormHolidayName(entry.leaveType === 'HOLIDAY' ? entry.userName : '');
+    setFormUserId(isCustomTitled ? (activeStaff[0]?.id || '') : entry.userId);
+    setFormHolidayName(isCustomTitled ? entry.userName : '');
     setFormLeaveType(entry.leaveType);
     setFormStartDate(entry.startDate);
     setFormEndDate(entry.endDate);
@@ -434,40 +472,37 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
       return;
     }
 
-    if (formLeaveType === 'HOLIDAY') {
-      const trimmedHoliday = formHolidayName.trim();
-      if (!trimmedHoliday) {
-        setFormError('Please enter a holiday name (e.g., Thanksgiving Day, Christmas Day).');
+    if (formLeaveType === 'HOLIDAY' || formLeaveType === 'EVENT') {
+      const isHoliday = formLeaveType === 'HOLIDAY';
+      const trimmedTitle = formHolidayName.trim();
+      if (!trimmedTitle) {
+        setFormError(
+          isHoliday
+            ? 'Please enter a holiday name (e.g., Thanksgiving Day, Christmas Day).'
+            : 'Please enter an event name (e.g., Christmas Party, Staff Meeting).'
+        );
         return;
       }
 
+      const payload = {
+        userId: isHoliday ? 'SHOP_HOLIDAY' : 'SHOP_EVENT',
+        userName: trimmedTitle,
+        userRole: 'SERVICE_MANAGER' as UserRole,
+        employeeNumber: undefined,
+        isShopWide: true,
+        leaveType: formLeaveType,
+        startDate: formStartDate,
+        endDate: end,
+        timeDetails: formTimeDetails.trim() || (isHoliday ? 'Shop Closed - Paid Holiday' : undefined),
+        notes: formNotes.trim() || undefined,
+      };
+
       if (editingEntryId) {
-        updateStaffLeaveEntry(editingEntryId, {
-          userId: 'SHOP_HOLIDAY',
-          userName: trimmedHoliday,
-          userRole: 'SERVICE_MANAGER',
-          employeeNumber: undefined,
-          isShopWide: true,
-          leaveType: 'HOLIDAY',
-          startDate: formStartDate,
-          endDate: end,
-          timeDetails: formTimeDetails.trim() || 'Shop Closed - Paid Holiday',
-          notes: formNotes.trim() || undefined,
-        });
-        setStatusFeedback(`Updated shop holiday: ${trimmedHoliday}`);
+        updateStaffLeaveEntry(editingEntryId, payload);
+        setStatusFeedback(`Updated ${isHoliday ? 'shop holiday' : 'shop event'}: ${trimmedTitle}`);
       } else {
-        addStaffLeaveEntry({
-          userId: 'SHOP_HOLIDAY',
-          userName: trimmedHoliday,
-          userRole: 'SERVICE_MANAGER',
-          isShopWide: true,
-          leaveType: 'HOLIDAY',
-          startDate: formStartDate,
-          endDate: end,
-          timeDetails: formTimeDetails.trim() || 'Shop Closed - Paid Holiday',
-          notes: formNotes.trim() || undefined,
-        });
-        setStatusFeedback(`Added shop holiday: ${trimmedHoliday}`);
+        addStaffLeaveEntry(payload);
+        setStatusFeedback(`Added ${isHoliday ? 'shop holiday' : 'shop event'}: ${trimmedTitle}`);
       }
 
       setIsFormOpen(false);
@@ -618,7 +653,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Log <strong>shop holidays</strong> and track when technicians, advisors, and parts staff <strong>leave early</strong>, are <strong>on vacation</strong>, or are <strong>out sick</strong> to keep shop workflow, job dispatch, and payroll aligned.
+              Log <strong>shop holidays</strong>, <strong>custom events</strong> (Christmas party, staff meetings, lunches), and track when technicians, advisors, and parts staff <strong>leave early</strong>, are <strong>on vacation</strong>, or are <strong>out sick</strong>.
             </p>
           </div>
         </div>
@@ -633,6 +668,16 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
           >
             <span>🎉</span>
             <span>Add Holiday</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenAddModal('EVENT')}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+            title="Manually add a shop event such as a Christmas Party, Staff Meeting, or Cookout"
+          >
+            <span>⭐</span>
+            <span>Add Event</span>
           </button>
 
           <button
@@ -716,6 +761,14 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                 <span className="text-slate-300">•</span>
               </>
             )}
+            {eventsToday.length > 0 && (
+              <>
+                <span className="text-teal-700 font-extrabold">
+                  ⭐ {eventsToday.length} Event{eventsToday.length > 1 ? 's' : ''} Today
+                </span>
+                <span className="text-slate-300">•</span>
+              </>
+            )}
             <span className="text-slate-500">
               {activeStaff.length} Total Staff Active
             </span>
@@ -726,10 +779,11 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
           </div>
         </div>
 
-        {holidaysToday.length > 0 && (
+        {(holidaysToday.length > 0 || eventsToday.length > 0) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {holidaysToday.map(entry => {
+            {[...holidaysToday, ...eventsToday].map(entry => {
               const config = LEAVE_TYPE_CONFIG[entry.leaveType];
+              const isHoliday = entry.leaveType === 'HOLIDAY';
               return (
                 <div
                   key={entry.id}
@@ -738,18 +792,20 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-base">{config.icon}</span>
-                      <span className="font-black text-red-950 text-xs truncate">
+                      <span className={`font-black text-xs truncate ${isHoliday ? 'text-red-950' : 'text-teal-950'}`}>
                         {entry.userName}
                       </span>
                       <span className={`text-[10px] font-black uppercase px-1.5 py-0.2 rounded border ${config.pillBg} ${config.pillText} ${config.pillBorder}`}>
-                        Shop Holiday
+                        {config.label}
                       </span>
                     </div>
-                    <div className="text-[11px] font-bold text-red-900 mt-1">
-                      {entry.timeDetails || 'Shop Closed - Paid Holiday'}
-                    </div>
+                    {(entry.timeDetails || isHoliday) && (
+                      <div className={`text-[11px] font-bold mt-1 ${isHoliday ? 'text-red-900' : 'text-teal-900'}`}>
+                        {entry.timeDetails || 'Shop Closed - Paid Holiday'}
+                      </div>
+                    )}
                     {entry.notes && (
-                      <p className="text-[10px] text-red-800/80 mt-0.5 line-clamp-1 italic">
+                      <p className={`text-[10px] mt-0.5 line-clamp-1 italic ${isHoliday ? 'text-red-800/80' : 'text-teal-800/80'}`}>
                         "{entry.notes}"
                       </p>
                     )}
@@ -759,7 +815,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                       type="button"
                       onClick={() => handleOpenEditModal(entry)}
                       className="p-1 rounded hover:bg-white/80 text-slate-700 transition-colors cursor-pointer"
-                      title="Edit holiday"
+                      title={isHoliday ? 'Edit holiday' : 'Edit event'}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -767,7 +823,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                       type="button"
                       onClick={() => handleDeleteEntry(entry.id, entry.userName)}
                       className="p-1 rounded hover:bg-white/80 text-rose-700 transition-colors cursor-pointer"
-                      title="Delete holiday"
+                      title={isHoliday ? 'Delete holiday' : 'Delete event'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -778,7 +834,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
           </div>
         )}
 
-        {staffAbsencesToday.length === 0 && holidaysToday.length === 0 ? (
+        {staffAbsencesToday.length === 0 && holidaysToday.length === 0 && eventsToday.length === 0 ? (
           <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center justify-between text-xs text-emerald-900 font-bold">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -922,8 +978,9 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
             onChange={(e) => setFilterType(e.target.value as any)}
             className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-purple-500 cursor-pointer"
           >
-            <option value="ALL">All Types & Holidays</option>
+            <option value="ALL">All Types, Holidays & Events</option>
             <option value="HOLIDAY">🎉 Shop Holiday</option>
+            <option value="EVENT">⭐ Shop Event</option>
             <option value="LEFT_EARLY">⏰ Left Early</option>
             <option value="SICK">🤒 Out Sick</option>
             <option value="VACATION">🌴 On Vacation</option>
@@ -979,7 +1036,19 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
               const isToday = cell.dateStr === todayStr;
               const entriesOnDay = dateEntriesMap[cell.dateStr] || [];
               const hasHoliday = entriesOnDay.some(e => e.leaveType === 'HOLIDAY');
-              const staffOutCount = entriesOnDay.filter(e => e.leaveType !== 'HOLIDAY').length;
+              const hasEvent = entriesOnDay.some(e => e.leaveType === 'EVENT');
+              const staffOutCount = entriesOnDay.filter(e => e.leaveType !== 'HOLIDAY' && e.leaveType !== 'EVENT').length;
+
+              const footerParts: string[] = [];
+              if (hasHoliday) footerParts.push('🎉 Holiday');
+              if (hasEvent) footerParts.push('⭐ Event');
+              if (staffOutCount > 0) {
+                footerParts.push(
+                  hasHoliday || hasEvent
+                    ? `${staffOutCount} out`
+                    : `${staffOutCount} ${staffOutCount === 1 ? 'person out' : 'people out'}`
+                );
+              }
 
               return (
                 <div
@@ -990,6 +1059,10 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                       ? cell.isCurrentMonth
                         ? 'bg-red-50/45'
                         : 'bg-red-50/25 text-slate-400'
+                      : hasEvent
+                      ? cell.isCurrentMonth
+                        ? 'bg-teal-50/45'
+                        : 'bg-teal-50/25 text-slate-400'
                       : cell.isCurrentMonth
                       ? 'bg-white'
                       : 'bg-slate-50/70 text-slate-400'
@@ -1002,6 +1075,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                         ? 'bg-blue-600 text-white shadow-xs' 
                         : hasHoliday && cell.isCurrentMonth
                         ? 'text-red-700 bg-red-100/80 group-hover:bg-red-200/80'
+                        : hasEvent && cell.isCurrentMonth
+                        ? 'text-teal-800 bg-teal-100/80 group-hover:bg-teal-200/80'
                         : cell.isCurrentMonth 
                         ? 'text-slate-900 group-hover:bg-slate-200' 
                         : 'text-slate-400'
@@ -1014,16 +1089,16 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenAddModal('LEFT_EARLY', cell.dateStr);
+                        handleOpenAddModal('EVENT', cell.dateStr);
                       }}
                       className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-opacity"
-                      title={`Add holiday or leave record for ${cell.dateStr}`}
+                      title={`Add event, holiday, or leave record for ${cell.dateStr}`}
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  {/* Badges of holidays & staff members out on this day */}
+                  {/* Badges of holidays, events & staff members out on this day */}
                   <div className="space-y-1 flex-1 overflow-y-auto max-h-[80px]">
                     {entriesOnDay.map((entry) => {
                       const cfg = LEAVE_TYPE_CONFIG[entry.leaveType];
@@ -1035,7 +1110,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                             handleOpenEditModal(entry);
                           }}
                           className={`px-1.5 py-0.5 rounded text-[10px] font-bold border truncate flex items-center gap-1 shadow-2xs transition-all hover:scale-[1.02] ${cfg.pillBg} ${cfg.pillText} ${cfg.pillBorder}`}
-                          title={`${entry.userName} - ${cfg.label} (${entry.timeDetails || ''}): ${entry.notes || 'No notes'}`}
+                          title={`${entry.userName} - ${cfg.label}${entry.timeDetails ? ` (${entry.timeDetails})` : ''}${entry.notes ? `: ${entry.notes}` : ''}`}
                         >
                           <span className="shrink-0">{cfg.icon}</span>
                           <span className="truncate">{entry.userName}</span>
@@ -1050,13 +1125,15 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   </div>
 
                   {/* Bottom Counter */}
-                  {(hasHoliday || staffOutCount > 0) && (
-                    <div className={`text-[9px] font-extrabold text-right mt-1 pt-0.5 border-t ${hasHoliday ? 'text-red-700 border-red-100' : 'text-slate-500 border-slate-100'}`}>
-                      {hasHoliday && staffOutCount > 0
-                        ? `🎉 Holiday • ${staffOutCount} out`
-                        : hasHoliday
-                        ? '🎉 Shop Holiday'
-                        : `${staffOutCount} ${staffOutCount === 1 ? 'person out' : 'people out'}`}
+                  {footerParts.length > 0 && (
+                    <div className={`text-[9px] font-extrabold text-right mt-1 pt-0.5 border-t ${
+                      hasHoliday
+                        ? 'text-red-700 border-red-100'
+                        : hasEvent
+                        ? 'text-teal-700 border-teal-100'
+                        : 'text-slate-500 border-slate-100'
+                    }`}>
+                      {footerParts.join(' • ')}
                     </div>
                   )}
                 </div>
@@ -1112,6 +1189,10 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                           {entry.leaveType === 'HOLIDAY' ? (
                             <span className="text-[11px] font-bold text-red-700 bg-red-50 px-2 py-0.2 rounded border border-red-200">
                               All Staff / Shop-Wide
+                            </span>
+                          ) : entry.leaveType === 'EVENT' ? (
+                            <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.2 rounded border border-teal-200">
+                              All Staff / Shop Event
                             </span>
                           ) : (
                             <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.2 rounded border border-slate-200">
@@ -1323,6 +1404,17 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                     onClick={() => {
                       const day = inspectedDay;
                       setInspectedDay(null);
+                      handleOpenAddModal('EVENT', day);
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors cursor-pointer shadow-xs"
+                  >
+                    ⭐ Add Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const day = inspectedDay;
+                      setInspectedDay(null);
                       handleOpenAddModal('LEFT_EARLY', day);
                     }}
                     className="px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg transition-colors cursor-pointer shadow-xs"
@@ -1384,7 +1476,13 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
             {/* Modal Header */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b-2 border-slate-700">
               <div className="flex items-center gap-2.5">
-                <span className={`p-2 rounded-lg text-white ${formLeaveType === 'HOLIDAY' ? 'bg-red-600' : 'bg-purple-600'}`}>
+                <span className={`p-2 rounded-lg text-white ${
+                  formLeaveType === 'HOLIDAY'
+                    ? 'bg-red-600'
+                    : formLeaveType === 'EVENT'
+                    ? 'bg-teal-600'
+                    : 'bg-purple-600'
+                }`}>
                   <CalendarIcon className="w-5 h-5" />
                 </span>
                 <div>
@@ -1393,6 +1491,10 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                       ? editingEntryId
                         ? 'Edit Shop Holiday'
                         : 'Add Shop Holiday'
+                      : formLeaveType === 'EVENT'
+                      ? editingEntryId
+                        ? 'Edit Shop Event'
+                        : 'Add Shop Event'
                       : editingEntryId
                       ? 'Edit Staff Absence / Out-of-Office Record'
                       : 'Log Staff Absence / Out-of-Office Record'}
@@ -1400,6 +1502,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   <p className="text-[11px] text-slate-400">
                     {formLeaveType === 'HOLIDAY'
                       ? 'Applies shop-wide across the Staff Calendar'
+                      : formLeaveType === 'EVENT'
+                      ? 'Schedule parties, meetings, lunches & custom dealership events'
                       : 'Service Manager Schedule & Payroll Documentation'}
                   </p>
                 </div>
@@ -1427,8 +1531,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
                   Calendar Entry Type *
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {(['HOLIDAY', 'LEFT_EARLY', 'SICK', 'VACATION', 'TRAINING', 'LATE_ARRIVAL', 'PERSONAL'] as StaffLeaveType[]).map((typeKey) => {
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(['HOLIDAY', 'EVENT', 'LEFT_EARLY', 'SICK', 'VACATION', 'TRAINING', 'LATE_ARRIVAL', 'PERSONAL'] as StaffLeaveType[]).map((typeKey) => {
                     const cfg = LEAVE_TYPE_CONFIG[typeKey];
                     const isSelected = formLeaveType === typeKey;
 
@@ -1442,6 +1546,13 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                           if (typeKey === 'HOLIDAY') {
                             if (!formTimeDetails || prevType !== 'HOLIDAY') {
                               setFormTimeDetails('Shop Closed - Paid Holiday');
+                            }
+                          } else if (typeKey === 'EVENT') {
+                            if (
+                              prevType === 'HOLIDAY' &&
+                              formTimeDetails === 'Shop Closed - Paid Holiday'
+                            ) {
+                              setFormTimeDetails('');
                             }
                           } else {
                             if (prevType === 'HOLIDAY' && formTimeDetails === 'Shop Closed - Paid Holiday') {
@@ -1462,45 +1573,59 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                             }
                           }
                         }}
-                        className={`p-2.5 rounded-lg border-2 text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
+                        className={`p-2 rounded-lg border-2 text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                           isSelected
                             ? `${cfg.pillBg} ${cfg.pillText} ${cfg.pillBorder} shadow-sm ring-2 ring-purple-400 scale-[1.02]`
                             : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        <span className="text-base">{cfg.icon}</span>
-                        <span>{cfg.label}</span>
+                        <span className="text-sm">{cfg.icon}</span>
+                        <span className="truncate">{cfg.shortLabel}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* 2. Holiday Name OR Staff Member Selector */}
-              {formLeaveType === 'HOLIDAY' ? (
+              {/* 2. Holiday Name / Event Name OR Staff Member Selector */}
+              {formLeaveType === 'HOLIDAY' || formLeaveType === 'EVENT' ? (
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                    Holiday Name *
+                    {formLeaveType === 'HOLIDAY' ? 'Holiday Name *' : 'Event Name *'}
                   </label>
                   <input
                     type="text"
                     value={formHolidayName}
                     onChange={(e) => setFormHolidayName(e.target.value)}
-                    placeholder="e.g. Thanksgiving Day, Christmas Day, Memorial Day"
-                    className="w-full px-3 py-2 bg-red-50/50 border border-red-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-red-500"
+                    placeholder={
+                      formLeaveType === 'HOLIDAY'
+                        ? 'e.g. Thanksgiving Day, Christmas Day, Memorial Day'
+                        : 'e.g. Christmas Party, Staff Meeting, Service Dept Cookout'
+                    }
+                    className={`w-full px-3 py-2 border rounded-lg text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 ${
+                      formLeaveType === 'HOLIDAY'
+                        ? 'bg-red-50/50 border-red-300 focus:ring-red-500'
+                        : 'bg-teal-50/50 border-teal-300 focus:ring-teal-500'
+                    }`}
                     required
                   />
                   <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
-                    <span className="text-[10px] font-bold text-slate-500">Quick holidays:</span>
-                    {HOLIDAY_NAME_PRESETS.map(preset => (
+                    <span className="text-[10px] font-bold text-slate-500">
+                      {formLeaveType === 'HOLIDAY' ? 'Quick holidays:' : 'Quick events:'}
+                    </span>
+                    {(formLeaveType === 'HOLIDAY' ? HOLIDAY_NAME_PRESETS : EVENT_NAME_PRESETS).map(preset => (
                       <button
                         key={preset}
                         type="button"
                         onClick={() => setFormHolidayName(preset)}
                         className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer ${
                           formHolidayName === preset
-                            ? 'bg-red-600 text-white border-red-700'
-                            : 'bg-red-50 hover:bg-red-100 text-red-900 border-red-200'
+                            ? formLeaveType === 'HOLIDAY'
+                              ? 'bg-red-600 text-white border-red-700'
+                              : 'bg-teal-600 text-white border-teal-700'
+                            : formLeaveType === 'HOLIDAY'
+                            ? 'bg-red-50 hover:bg-red-100 text-red-900 border-red-200'
+                            : 'bg-teal-50 hover:bg-teal-100 text-teal-900 border-teal-200'
                         }`}
                       >
                         {preset}
@@ -1533,14 +1658,25 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                    {formLeaveType === 'HOLIDAY' ? 'Holiday Date *' : 'Start Date *'}
+                    {formLeaveType === 'HOLIDAY'
+                      ? 'Holiday Date *'
+                      : formLeaveType === 'EVENT'
+                      ? 'Event Date *'
+                      : 'Start Date *'}
                   </label>
                   <input
                     type="date"
                     value={formStartDate}
                     onChange={(e) => {
                       setFormStartDate(e.target.value);
-                      if (!formEndDate || formEndDate < e.target.value || formLeaveType === 'LEFT_EARLY' || formLeaveType === 'SICK' || formLeaveType === 'HOLIDAY') {
+                      if (
+                        !formEndDate ||
+                        formEndDate < e.target.value ||
+                        formLeaveType === 'LEFT_EARLY' ||
+                        formLeaveType === 'SICK' ||
+                        formLeaveType === 'HOLIDAY' ||
+                        formLeaveType === 'EVENT'
+                      ) {
                         setFormEndDate(e.target.value);
                       }
                     }}
@@ -1551,7 +1687,9 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
 
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                    {formLeaveType === 'HOLIDAY' ? 'End Date (Optional for Multi-Day)' : 'End Date (For Vacation / Multi-Day)'}
+                    {formLeaveType === 'HOLIDAY' || formLeaveType === 'EVENT'
+                      ? 'End Date (Optional for Multi-Day)'
+                      : 'End Date (For Vacation / Multi-Day)'}
                   </label>
                   <input
                     type="date"
@@ -1563,14 +1701,22 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                 </div>
               </div>
 
-              {/* 4. Time Details / Shop Hours */}
+              {/* 4. Time Details / Shop Hours / Event Time & Location */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    {formLeaveType === 'HOLIDAY' ? 'Shop Hours / Closure Status' : 'Time Details / Departure Time'}
+                    {formLeaveType === 'HOLIDAY'
+                      ? 'Shop Hours / Closure Status'
+                      : formLeaveType === 'EVENT'
+                      ? 'Time & Location (Optional)'
+                      : 'Time Details / Departure Time'}
                   </label>
                   <span className="text-[10px] text-slate-400">
-                    {formLeaveType === 'HOLIDAY' ? 'e.g. "Shop Closed - Paid Holiday"' : 'e.g. "Left at 1:30 PM"'}
+                    {formLeaveType === 'HOLIDAY'
+                      ? 'e.g. "Shop Closed - Paid Holiday"'
+                      : formLeaveType === 'EVENT'
+                      ? 'e.g. "6:00 PM - 9:00 PM • Downtown Grill"'
+                      : 'e.g. "Left at 1:30 PM"'}
                   </span>
                 </div>
                 <input
@@ -1580,6 +1726,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   placeholder={
                     formLeaveType === 'HOLIDAY'
                       ? 'e.g. Shop Closed - Paid Holiday, Half Day - Close at 12:00 PM'
+                      : formLeaveType === 'EVENT'
+                      ? 'e.g. 6:00 PM - 9:00 PM at Main Ballroom, or 12:00 PM in Break Room'
                       : 'e.g. Left early at 1:30 PM, Half Day AM, Left at Lunch'
                   }
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
@@ -1588,7 +1736,12 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                 {/* Quick Chips */}
                 <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                   <span className="text-[10px] font-bold text-slate-500">Quick suggestions:</span>
-                  {(formLeaveType === 'HOLIDAY' ? HOLIDAY_STATUS_CHIPS : QUICK_TIME_CHIPS.slice(0, 6)).map(chip => (
+                  {(formLeaveType === 'HOLIDAY'
+                    ? HOLIDAY_STATUS_CHIPS
+                    : formLeaveType === 'EVENT'
+                    ? EVENT_TIME_CHIPS
+                    : QUICK_TIME_CHIPS.slice(0, 6)
+                  ).map(chip => (
                     <button
                       key={chip}
                       type="button"
@@ -1604,7 +1757,11 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
               {/* 5. Notes / Reason */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                  {formLeaveType === 'HOLIDAY' ? 'Holiday Notes (Optional)' : 'Reason / Notes / Coverage Details'}
+                  {formLeaveType === 'HOLIDAY'
+                    ? 'Holiday Notes (Optional)'
+                    : formLeaveType === 'EVENT'
+                    ? 'Event Details / Notes (Optional)'
+                    : 'Reason / Notes / Coverage Details'}
                 </label>
                 <textarea
                   rows={2}
@@ -1613,13 +1770,15 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   placeholder={
                     formLeaveType === 'HOLIDAY'
                       ? 'e.g. Dealership closed all day. Service resumes normal hours Friday at 7:30 AM.'
+                      : formLeaveType === 'EVENT'
+                      ? 'e.g. Spouses & guests welcome, dinner provided, gift exchange at 7:30 PM.'
                       : 'e.g. Doctor appointment for knee. Covered by Dave Martinez on diagnostic tickets.'
                   }
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500 font-semibold resize-none"
                 />
 
-                {/* Quick Chips for Common Reasons (non-holiday) */}
-                {formLeaveType !== 'HOLIDAY' && (
+                {/* Quick Chips for Common Reasons (staff leave only) */}
+                {formLeaveType !== 'HOLIDAY' && formLeaveType !== 'EVENT' && (
                   <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                     <span className="text-[10px] font-bold text-slate-500">Quick reasons:</span>
                     {QUICK_REASON_CHIPS.map(chip => (
@@ -1653,6 +1812,8 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                   className={`px-5 py-2 text-white rounded-lg text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
                     formLeaveType === 'HOLIDAY'
                       ? 'bg-red-600 hover:bg-red-500 ring-2 ring-red-400/40'
+                      : formLeaveType === 'EVENT'
+                      ? 'bg-teal-600 hover:bg-teal-500 ring-2 ring-teal-400/40'
                       : 'bg-blue-600 hover:bg-blue-500 ring-2 ring-blue-400/40'
                   }`}
                 >
@@ -1662,6 +1823,10 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                       ? editingEntryId
                         ? 'Update Holiday'
                         : 'Save Holiday'
+                      : formLeaveType === 'EVENT'
+                      ? editingEntryId
+                        ? 'Update Event'
+                        : 'Save Event'
                       : editingEntryId
                       ? 'Update Record'
                       : 'Save Attendance Record'}
@@ -1771,7 +1936,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
             <thead>
               <tr className="bg-slate-100 border-b-2 border-black text-[10px] font-black uppercase">
                 <th className="border-r border-black p-1.5 w-10 text-center">#</th>
-                <th className="border-r border-black p-1.5 w-36">Staff / Holiday</th>
+                <th className="border-r border-black p-1.5 w-36">Staff / Event / Holiday</th>
                 <th className="border-r border-black p-1.5 w-24">Scope / Role</th>
                 <th className="border-r border-black p-1.5 w-24">Type</th>
                 <th className="border-r border-black p-1.5 w-32">Date / Duration</th>
@@ -1783,7 +1948,7 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
               {filteredEntries.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-4 text-center italic font-bold">
-                    No holidays, staff absences, or leaves recorded for this schedule period.
+                    No holidays, events, staff absences, or leaves recorded for this schedule period.
                   </td>
                 </tr>
               ) : (
@@ -1798,7 +1963,9 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                         {entry.userName}
                       </td>
                       <td className="border-r border-black/40 p-1.5 uppercase font-mono text-[10px]">
-                        {entry.leaveType === 'HOLIDAY' ? 'All Staff' : (entry.userRole?.replace(/_/g, ' ') || 'Staff')}
+                        {entry.leaveType === 'HOLIDAY' || entry.leaveType === 'EVENT'
+                          ? 'All Staff'
+                          : (entry.userRole?.replace(/_/g, ' ') || 'Staff')}
                       </td>
                       <td className="border-r border-black/40 p-1.5 font-bold uppercase text-[10px]">
                         {cfg ? `${cfg.icon} ${cfg.shortLabel}` : entry.leaveType}
@@ -1807,7 +1974,9 @@ export const ManagerStaffCalendar: React.FC<ManagerStaffCalendarProps> = ({
                         {entry.startDate === entry.endDate ? entry.startDate : `${entry.startDate} to ${entry.endDate}`}
                       </td>
                       <td className="border-r border-black/40 p-1.5">
-                        <div className="font-medium text-black">{entry.timeDetails || (entry.leaveType === 'HOLIDAY' ? 'Shop Closed' : 'Scheduled absence')}</div>
+                        <div className="font-medium text-black">
+                          {entry.timeDetails || (entry.leaveType === 'HOLIDAY' ? 'Shop Closed' : entry.leaveType === 'EVENT' ? 'Scheduled shop event' : 'Scheduled absence')}
+                        </div>
                         {entry.notes && <div className="text-[10px] italic mt-0.5">Notes: {entry.notes}</div>}
                       </td>
                       <td className="p-1.5 text-center font-bold text-[10px]">

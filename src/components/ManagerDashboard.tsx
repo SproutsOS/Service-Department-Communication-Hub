@@ -158,10 +158,17 @@ export const ManagerDashboard: React.FC = () => {
     );
   }, [staffLeaveEntries, todayStr]);
 
+  // Today's shop events (Christmas Party, Staff Meetings, etc.)
+  const todayEvents = useMemo(() => {
+    return (staffLeaveEntries || []).filter(
+      e => e.leaveType === 'EVENT' && todayStr >= e.startDate && todayStr <= e.endDate
+    );
+  }, [staffLeaveEntries, todayStr]);
+
   // Today's absences (Leave early, out sick, vacation, etc.)
   const todayAbsences = useMemo(() => {
     return (staffLeaveEntries || []).filter(
-      e => e.leaveType !== 'HOLIDAY' && todayStr >= e.startDate && todayStr <= e.endDate
+      e => e.leaveType !== 'HOLIDAY' && e.leaveType !== 'EVENT' && todayStr >= e.startDate && todayStr <= e.endDate
     );
   }, [staffLeaveEntries, todayStr]);
 
@@ -814,11 +821,17 @@ export const ManagerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Today's Staff Attendance & Holiday Banner for Service Manager */}
-      {viewSection === 'FLOOR' && (todayHolidays.length > 0 || todayAbsences.length > 0) && (
+      {/* Today's Staff Attendance, Holiday & Event Banner for Service Manager */}
+      {viewSection === 'FLOOR' && (todayHolidays.length > 0 || todayEvents.length > 0 || todayAbsences.length > 0) && (
         <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-amber-50 border border-purple-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl text-white flex items-center justify-center shrink-0 shadow-xs ${todayHolidays.length > 0 && todayAbsences.length === 0 ? 'bg-red-600' : 'bg-purple-600'}`}>
+            <div className={`w-9 h-9 rounded-xl text-white flex items-center justify-center shrink-0 shadow-xs ${
+              todayHolidays.length > 0 && todayAbsences.length === 0
+                ? 'bg-red-600'
+                : todayEvents.length > 0 && todayAbsences.length === 0
+                ? 'bg-teal-600'
+                : 'bg-purple-600'
+            }`}>
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
@@ -839,9 +852,25 @@ export const ManagerDashboard: React.FC = () => {
                     ))}
                   </div>
                 )}
+                {todayEvents.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {todayEvents.map(ev => (
+                      <span
+                        key={ev.id}
+                        className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-md bg-teal-600 text-white border border-teal-700 shadow-2xs"
+                      >
+                        <span>⭐</span>
+                        <span>{ev.userName}</span>
+                        {ev.timeDetails && (
+                          <span className="text-teal-100 font-semibold">({ev.timeDetails})</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {todayAbsences.length > 0 && (
                   <>
-                    {todayHolidays.length > 0 && <span className="text-slate-300">•</span>}
+                    {(todayHolidays.length > 0 || todayEvents.length > 0) && <span className="text-slate-300">•</span>}
                     <span>Today's Staff Attendance: {todayAbsences.length} Member{todayAbsences.length > 1 ? 's' : ''} Out or Left Early</span>
                     <span className="text-slate-300">•</span>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -874,8 +903,12 @@ export const ManagerDashboard: React.FC = () => {
                 )}
               </div>
               <p className="text-[11px] text-slate-600 mt-0.5">
-                {todayHolidays.length > 0 && todayAbsences.length === 0
-                  ? 'Shop holiday scheduled on the Staff Calendar today.'
+                {todayAbsences.length === 0
+                  ? todayHolidays.length > 0 && todayEvents.length > 0
+                    ? 'Shop holiday and event scheduled on the Staff Calendar today.'
+                    : todayHolidays.length > 0
+                    ? 'Shop holiday scheduled on the Staff Calendar today.'
+                    : 'Shop event scheduled on the Staff Calendar today.'
                   : "Keep shop job dispatch and technician workload aligned with today's staff coverage."}
               </p>
             </div>

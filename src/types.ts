@@ -562,7 +562,7 @@ export interface InspectionSheet {
 // Service Manager Staff Attendance & Calendar Types
 // ==========================================
 
-export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL' | 'TRAINING' | 'HOLIDAY';
+export type StaffLeaveType = 'VACATION' | 'SICK' | 'LEFT_EARLY' | 'LATE_ARRIVAL' | 'PERSONAL' | 'TRAINING' | 'HOLIDAY' | 'EVENT';
 
 export interface StaffLeaveEntry {
   id: string;

@@ -99,6 +99,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
   const [sortRefreshTick, setSortRefreshTick] = useState(0);
   const isEditingNameRef = useRef<boolean>(false);
   const lastSortedRowOrderRef = useRef<string[]>([]);
+  const [actualHoursDrafts, setActualHoursDrafts] = useState<Record<string, string>>({});
+  const [flaggedHoursDrafts, setFlaggedHoursDrafts] = useState<Record<string, string>>({});
 
   // Comparison specific selector (compare week A vs week B)
   const [compareWeekAId, setCompareWeekAId] = useState<string>(() => weeks[0]?.id || '');
@@ -319,8 +321,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
       name: 'New Employee',
       role: 'Technician',
       payType: 'FLAT_RATE',
-      actualHours: 40.0,
-      flaggedHours: 40.0,
+      actualHours: 0,
+      flaggedHours: 0,
       payRate: 30.00,
       laborSales: 0.00,
       grossProfit: 0.00,
@@ -997,17 +999,36 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                             <td className="py-1.5 px-2 text-right min-w-[85px]">
                               <input
                                 type="number"
-                                step="0.5"
-                                value={r.actualHours}
+                                step="any"
+                                value={
+                                  actualHoursDrafts[r.id] !== undefined
+                                    ? actualHoursDrafts[r.id]
+                                    : (r.actualHours ? String(r.actualHours) : '')
+                                }
                                 onFocus={() => {
                                   focusedInputsRef.current += 1;
+                                  setActualHoursDrafts(prev => ({
+                                    ...prev,
+                                    [r.id]: r.actualHours ? String(r.actualHours) : ''
+                                  }));
                                 }}
-                                onChange={(e) => handleUpdateRow(r.id, { actualHours: Number(e.target.value) || 0 }, { immediate: false })}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  setActualHoursDrafts(prev => ({ ...prev, [r.id]: raw }));
+                                  const parsed = raw.trim() === '' ? 0 : (Number(raw) || 0);
+                                  handleUpdateRow(r.id, { actualHours: parsed }, { immediate: false });
+                                }}
                                 onBlur={() => {
                                   focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  setActualHoursDrafts(prev => {
+                                    const next = { ...prev };
+                                    delete next[r.id];
+                                    return next;
+                                  });
                                   flushCloudSync();
                                 }}
-                                className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
+                                aria-label={`Actual hours for ${r.name}`}
+                                className="w-20 px-2 py-1 text-right font-mono font-bold bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                               />
                             </td>
 
@@ -1015,17 +1036,36 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                             <td className="py-1.5 px-2 text-right min-w-[85px]">
                               <input
                                 type="number"
-                                step="0.5"
-                                value={r.flaggedHours}
+                                step="any"
+                                value={
+                                  flaggedHoursDrafts[r.id] !== undefined
+                                    ? flaggedHoursDrafts[r.id]
+                                    : (r.flaggedHours ? String(r.flaggedHours) : '')
+                                }
                                 onFocus={() => {
                                   focusedInputsRef.current += 1;
+                                  setFlaggedHoursDrafts(prev => ({
+                                    ...prev,
+                                    [r.id]: r.flaggedHours ? String(r.flaggedHours) : ''
+                                  }));
                                 }}
-                                onChange={(e) => handleUpdateRow(r.id, { flaggedHours: Number(e.target.value) || 0 }, { immediate: false })}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  setFlaggedHoursDrafts(prev => ({ ...prev, [r.id]: raw }));
+                                  const parsed = raw.trim() === '' ? 0 : (Number(raw) || 0);
+                                  handleUpdateRow(r.id, { flaggedHours: parsed }, { immediate: false });
+                                }}
                                 onBlur={() => {
                                   focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                  setFlaggedHoursDrafts(prev => {
+                                    const next = { ...prev };
+                                    delete next[r.id];
+                                    return next;
+                                  });
                                   flushCloudSync();
                                 }}
-                                className="w-20 px-2 py-1 text-right font-mono font-bold bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
+                                aria-label={`Flagged hours for ${r.name}`}
+                                className="w-20 px-2 py-1 text-right font-mono font-bold bg-white/70 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded text-slate-900 focus:outline-hidden"
                               />
                             </td>
 
@@ -1733,8 +1773,8 @@ export const EmployeeProfitabilityLedger: React.FC<EmployeeProfitabilityLedgerPr
                     <tr key={r.id}>
                       <td className="p-2 font-bold">{comp.name}</td>
                       <td className="p-2">{comp.payType}</td>
-                      <td className="p-2 text-right font-mono">{comp.actualHours.toFixed(1)}</td>
-                      <td className="p-2 text-right font-mono font-bold">{comp.flaggedHours.toFixed(1)}</td>
+                      <td className="p-2 text-right font-mono">{comp.actualHours > 0 ? comp.actualHours.toFixed(1) : ''}</td>
+                      <td className="p-2 text-right font-mono font-bold">{comp.flaggedHours > 0 ? comp.flaggedHours.toFixed(1) : ''}</td>
                       <td className="p-2 text-right font-mono">{comp.efficiencyPct.toFixed(1)}%</td>
                       <td className="p-2 text-right font-mono">${comp.payRate.toFixed(2)}</td>
                       <td className="p-2 text-right font-mono">{formatCurrency(comp.totalPay)}</td>

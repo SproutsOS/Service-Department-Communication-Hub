@@ -11,7 +11,8 @@ import {
   FileSpreadsheet,
   Hash,
   Minus,
-  Clock
+  Clock,
+  ArrowLeftRight
 } from 'lucide-react';
 import { DailySalesRecord } from '../types/dailySales';
 import {
@@ -32,6 +33,7 @@ import {
   CategoryGraphKey,
   GraphTimeframe
 } from './DailySalesCategoryGraphs';
+import { DailySalesYoYReport } from './DailySalesYoYReport';
 
 const STORAGE_KEY_DAILY_SALES = 'dealership_daily_sales_records_v1';
 
@@ -125,8 +127,8 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     return seedInitialDailyRecords();
   });
 
-  // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS'
-  const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS'>('DAILY');
+  // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS' | 'YOY_REPORT'
+  const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS' | 'YOY_REPORT'>('DAILY');
   const [roViewGrouping, setRoViewGrouping] = useState<'DAY' | 'WEEK' | 'MONTH'>('DAY');
   const [roWeekCycle, setRoWeekCycle] = useState<'WED_TUE' | 'SUN_SAT'>('WED_TUE');
 
@@ -580,6 +582,19 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Graphs</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('YOY_REPORT')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'YOY_REPORT'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+                <span>YoY Report</span>
+              </button>
             </div>
 
             {/* Line Graph Button */}
@@ -890,7 +905,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
         </div>
 
         {/* Action Controls Bar */}
-        {activeTab !== 'GRAPHS' && (
+        {activeTab !== 'GRAPHS' && activeTab !== 'YOY_REPORT' && (
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -1587,6 +1602,14 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             onChangeFocusedCategory={setFocusedGraphCategory}
             todayIso={todayIso}
             variant="embedded"
+          />
+        )}
+
+        {/* TAB 6: YEAR-OVER-YEAR (YoY) COMPARISON REPORT */}
+        {activeTab === 'YOY_REPORT' && (
+          <DailySalesYoYReport
+            records={records}
+            todayIso={todayIso}
           />
         )}
 
