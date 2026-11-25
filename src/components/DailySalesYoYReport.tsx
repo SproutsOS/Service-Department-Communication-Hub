@@ -136,13 +136,31 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
       accentBarClass: 'bg-purple-600',
     },
     {
+      key: 'actualHours',
+      label: 'Actual Hours (Clocked)',
+      currentVal: current.actualHours,
+      priorVal: prior.actualHours,
+      format: (v) => `${v.toFixed(1)} hrs`,
+      formatDelta: (d) => `${formatSignedNumber(d, 1)} hrs`,
+      accentBarClass: 'bg-slate-600',
+    },
+    {
       key: 'techHours',
-      label: 'Tech Hours',
+      label: 'Flag Hours (Billed)',
       currentVal: current.techHours,
       priorVal: prior.techHours,
       format: (v) => `${v.toFixed(1)} hrs`,
       formatDelta: (d) => `${formatSignedNumber(d, 1)} hrs`,
       accentBarClass: 'bg-indigo-600',
+    },
+    {
+      key: 'efficiencyPct',
+      label: 'Shop Efficiency % (Flag ÷ Actual)',
+      currentVal: current.efficiencyPct,
+      priorVal: prior.efficiencyPct,
+      format: (v) => `${v.toFixed(1)}%`,
+      formatDelta: (d) => `${formatSignedNumber(d, 1)} pts`,
+      accentBarClass: 'bg-sky-600',
     },
     {
       key: 'laborSales',
@@ -183,7 +201,7 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
     },
     {
       key: 'effectiveLaborRate',
-      label: 'Effective Labor Rate ($/hr)',
+      label: 'Effective Labor Rate ($/Flag Hr)',
       currentVal: current.effectiveLaborRate,
       priorVal: prior.effectiveLaborRate,
       format: (v) => `${formatCurrency(v)}/hr`,
@@ -192,7 +210,7 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
     },
     {
       key: 'hoursPerRO',
-      label: 'Hours / RO',
+      label: 'Flag Hours / RO',
       currentVal: current.hoursPerRO,
       priorVal: prior.hoursPerRO,
       format: (v) => `${v.toFixed(2)} hrs`,
@@ -235,7 +253,7 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
       lines.push('');
       lines.push('"Day-by-Day Breakdown"');
       lines.push(
-        ['Day', 'This Year Date', 'Last Year Date', 'TY ROs', 'LY ROs', 'TY Hrs', 'LY Hrs', 'TY Total ($)', 'LY Total ($)', 'Diff ($)', '% Change']
+        ['Day', 'This Year Date', 'Last Year Date', 'TY ROs', 'LY ROs', 'TY Actual Hrs', 'LY Actual Hrs', 'TY Flag Hrs', 'LY Flag Hrs', 'TY Total ($)', 'LY Total ($)', 'Diff ($)', '% Change']
           .map(h => `"${h}"`)
           .join(',')
       );
@@ -249,6 +267,8 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
             d.priorDate,
             d.current.roCount,
             d.prior.roCount,
+            d.current.actualHours.toFixed(1),
+            d.prior.actualHours.toFixed(1),
             d.current.techHours.toFixed(1),
             d.prior.techHours.toFixed(1),
             `$${d.current.totalSales.toFixed(2)}`,
@@ -705,9 +725,9 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
       )}
 
       {/* ===================================================================== */}
-      {/* 5 CORE KPI VARIANCE CARDS                                              */}
+      {/* 6 CORE KPI VARIANCE CARDS                                              */}
       {/* ===================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {[
           {
             title: 'Total Parts & Labor',
@@ -728,7 +748,16 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
             fmtDelta: (d: number) => `${formatSignedNumber(d, 0)} ROs`,
           },
           {
-            title: 'Tech Hours',
+            title: 'Actual Hours',
+            icon: <Clock className="w-4 h-4 text-slate-700" />,
+            borderClass: 'border-l-slate-600',
+            cur: current.actualHours,
+            pri: prior.actualHours,
+            fmt: (v: number) => `${v.toFixed(1)}h`,
+            fmtDelta: (d: number) => `${formatSignedNumber(d, 1)}h`,
+          },
+          {
+            title: 'Flag Hours',
             icon: <Clock className="w-4 h-4 text-indigo-700" />,
             borderClass: 'border-l-indigo-600',
             cur: current.techHours,
@@ -927,17 +956,23 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
           </div>
 
           {/* Volume mini comparison */}
-          <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
-            <div className="p-2.5 rounded-lg bg-purple-50/70 border border-purple-200/80">
-              <span className="text-[10px] font-black uppercase text-purple-800 block">RO Volume</span>
-              <div className="font-mono font-black text-slate-900 mt-0.5">
+          <div className="pt-3 border-t border-slate-100 grid grid-cols-3 gap-2 text-xs">
+            <div className="p-2 rounded-lg bg-purple-50/70 border border-purple-200/80">
+              <span className="text-[10px] font-black uppercase text-purple-800 block">ROs</span>
+              <div className="font-mono font-black text-slate-900 mt-0.5 text-[11px]">
                 {current.roCount} <span className="text-slate-400 font-normal">vs</span> {prior.roCount}
               </div>
             </div>
-            <div className="p-2.5 rounded-lg bg-indigo-50/70 border border-indigo-200/80">
-              <span className="text-[10px] font-black uppercase text-indigo-800 block">Tech Hours</span>
-              <div className="font-mono font-black text-slate-900 mt-0.5">
-                {current.techHours.toFixed(1)}h <span className="text-slate-400 font-normal">vs</span> {prior.techHours.toFixed(1)}h
+            <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[10px] font-black uppercase text-slate-700 block">Actual Hrs</span>
+              <div className="font-mono font-black text-slate-900 mt-0.5 text-[11px]">
+                {current.actualHours.toFixed(1)} <span className="text-slate-400 font-normal">vs</span> {prior.actualHours.toFixed(1)}
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-indigo-50/70 border border-indigo-200/80">
+              <span className="text-[10px] font-black uppercase text-indigo-800 block">Flag Hrs</span>
+              <div className="font-mono font-black text-slate-900 mt-0.5 text-[11px]">
+                {current.techHours.toFixed(1)} <span className="text-slate-400 font-normal">vs</span> {prior.techHours.toFixed(1)}
               </div>
             </div>
           </div>
@@ -964,7 +999,8 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                   <th className="px-3 py-2.5">This Year</th>
                   <th className="px-3 py-2.5">Last Year Match</th>
                   <th className="px-2.5 py-2.5 text-center">ROs (TY / LY)</th>
-                  <th className="px-2.5 py-2.5 text-center">Hours (TY / LY)</th>
+                  <th className="px-2.5 py-2.5 text-center">Actual Hrs (TY / LY)</th>
+                  <th className="px-2.5 py-2.5 text-center">Flag Hrs (TY / LY)</th>
                   <th className="px-3 py-2.5 text-right">TY Total P&amp;L</th>
                   <th className="px-3 py-2.5 text-right">LY Total P&amp;L</th>
                   <th className="px-3 py-2.5 text-right">Variance</th>
@@ -996,6 +1032,11 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                         <strong className="text-purple-900">{row.current.roCount}</strong>
                         <span className="text-slate-400 mx-1">/</span>
                         <span className="text-slate-600">{row.prior.roCount}</span>
+                      </td>
+                      <td className="px-2.5 py-2.5 text-center font-mono">
+                        <strong className="text-slate-800">{row.current.actualHours.toFixed(1)}</strong>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span className="text-slate-500">{row.prior.actualHours.toFixed(1)}</span>
                       </td>
                       <td className="px-2.5 py-2.5 text-center font-mono">
                         <strong className="text-indigo-900">{row.current.techHours.toFixed(1)}</strong>
@@ -1045,7 +1086,8 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                   <th className="px-3 py-2.5">This Year</th>
                   <th className="px-3 py-2.5">Last Year</th>
                   <th className="px-2.5 py-2.5 text-center">ROs (TY / LY)</th>
-                  <th className="px-2.5 py-2.5 text-center">Hours (TY / LY)</th>
+                  <th className="px-2.5 py-2.5 text-center">Actual Hrs (TY / LY)</th>
+                  <th className="px-2.5 py-2.5 text-center">Flag Hrs (TY / LY)</th>
                   <th className="px-3 py-2.5 text-right">TY Total P&amp;L</th>
                   <th className="px-3 py-2.5 text-right">LY Total P&amp;L</th>
                   <th className="px-3 py-2.5 text-right">Variance</th>
@@ -1064,6 +1106,11 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                         <strong className="text-purple-900">{row.current.roCount}</strong>
                         <span className="text-slate-400 mx-1">/</span>
                         <span className="text-slate-600">{row.prior.roCount}</span>
+                      </td>
+                      <td className="px-2.5 py-2.5 text-center font-mono">
+                        <strong className="text-slate-800">{row.current.actualHours.toFixed(1)}</strong>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span className="text-slate-500">{row.prior.actualHours.toFixed(1)}</span>
                       </td>
                       <td className="px-2.5 py-2.5 text-center font-mono">
                         <strong className="text-indigo-900">{row.current.techHours.toFixed(1)}</strong>
@@ -1098,6 +1145,11 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                     <span className="text-purple-900">{current.roCount}</span>
                     <span className="text-slate-400 mx-1">/</span>
                     <span className="text-slate-600">{prior.roCount}</span>
+                  </td>
+                  <td className="px-2.5 py-2.5 text-center font-mono">
+                    <span className="text-slate-800">{current.actualHours.toFixed(1)}</span>
+                    <span className="text-slate-400 mx-1">/</span>
+                    <span className="text-slate-500">{prior.actualHours.toFixed(1)}</span>
                   </td>
                   <td className="px-2.5 py-2.5 text-center font-mono">
                     <span className="text-indigo-900">{current.techHours.toFixed(1)}</span>
@@ -1145,7 +1197,8 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                   <tr className="bg-slate-100 text-[11px] uppercase font-black text-slate-600 border-b border-slate-200">
                     <th className="px-3.5 py-2.5">Month</th>
                     <th className="px-3 py-2.5 text-center">ROs (TY / LY)</th>
-                    <th className="px-3 py-2.5 text-center">Tech Hrs (TY / LY)</th>
+                    <th className="px-3 py-2.5 text-center">Actual Hrs (TY / LY)</th>
+                    <th className="px-3 py-2.5 text-center">Flag Hrs (TY / LY)</th>
                     <th className="px-3 py-2.5 text-right">TY Total P&amp;L</th>
                     <th className="px-3 py-2.5 text-right">LY Total P&amp;L</th>
                     <th className="px-3 py-2.5 text-right">Variance</th>
@@ -1176,6 +1229,11 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                           <strong className="text-purple-900">{row.current.roCount}</strong>
                           <span className="text-slate-400 mx-1">/</span>
                           <span className="text-slate-600">{row.prior.roCount}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-center font-mono">
+                          <strong className="text-slate-800">{row.current.actualHours.toFixed(1)}</strong>
+                          <span className="text-slate-400 mx-1">/</span>
+                          <span className="text-slate-500">{row.prior.actualHours.toFixed(1)}</span>
                         </td>
                         <td className="px-3 py-2.5 text-center font-mono">
                           <strong className="text-indigo-900">{row.current.techHours.toFixed(1)}</strong>
@@ -1220,7 +1278,8 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                     <tr className="bg-slate-100 text-[11px] uppercase font-black text-slate-600 border-b border-slate-200">
                       <th className="px-3 py-2.5">Day of Month</th>
                       <th className="px-2.5 py-2.5 text-center">ROs (TY / LY)</th>
-                      <th className="px-2.5 py-2.5 text-center">Hours (TY / LY)</th>
+                      <th className="px-2.5 py-2.5 text-center">Actual Hrs (TY / LY)</th>
+                      <th className="px-2.5 py-2.5 text-center">Flag Hrs (TY / LY)</th>
                       <th className="px-3 py-2.5 text-right">TY Total P&amp;L</th>
                       <th className="px-3 py-2.5 text-right">LY Total P&amp;L</th>
                       <th className="px-3 py-2.5 text-right">Variance</th>
@@ -1237,6 +1296,11 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                             <strong className="text-purple-900">{row.current.roCount}</strong>
                             <span className="text-slate-400 mx-1">/</span>
                             <span className="text-slate-600">{row.prior.roCount}</span>
+                          </td>
+                          <td className="px-2.5 py-2 text-center font-mono">
+                            <strong className="text-slate-800">{row.current.actualHours.toFixed(1)}</strong>
+                            <span className="text-slate-400 mx-1">/</span>
+                            <span className="text-slate-500">{row.prior.actualHours.toFixed(1)}</span>
                           </td>
                           <td className="px-2.5 py-2 text-center font-mono">
                             <strong className="text-indigo-900">{row.current.techHours.toFixed(1)}</strong>
@@ -1328,7 +1392,8 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                     <th className="p-1.5">This Year</th>
                     <th className="p-1.5">Last Year</th>
                     <th className="p-1.5 text-center">ROs (TY/LY)</th>
-                    <th className="p-1.5 text-center">Hrs (TY/LY)</th>
+                    <th className="p-1.5 text-center">Act Hrs (TY/LY)</th>
+                    <th className="p-1.5 text-center">Flag Hrs (TY/LY)</th>
                     <th className="p-1.5 text-right">TY Total</th>
                     <th className="p-1.5 text-right">LY Total</th>
                     <th className="p-1.5 text-right">Variance</th>
@@ -1341,6 +1406,7 @@ export const DailySalesYoYReport: React.FC<DailySalesYoYReportProps> = ({
                       <td className="p-1.5 font-mono">{d.currentDate}</td>
                       <td className="p-1.5 font-mono">{d.priorDate}</td>
                       <td className="p-1.5 text-center font-mono">{d.current.roCount} / {d.prior.roCount}</td>
+                      <td className="p-1.5 text-center font-mono">{d.current.actualHours.toFixed(1)} / {d.prior.actualHours.toFixed(1)}</td>
                       <td className="p-1.5 text-center font-mono">{d.current.techHours.toFixed(1)} / {d.prior.techHours.toFixed(1)}</td>
                       <td className="p-1.5 text-right font-mono">{formatCurrency(d.current.totalSales)}</td>
                       <td className="p-1.5 text-right font-mono">{formatCurrency(d.prior.totalSales)}</td>

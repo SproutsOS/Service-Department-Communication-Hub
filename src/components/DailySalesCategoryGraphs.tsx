@@ -21,7 +21,9 @@ import { formatCurrency } from '../utils/formatters';
 
 export type CategoryGraphKey =
   | 'RO_COUNT'
+  | 'ACTUAL_HOURS'
   | 'TECH_HOURS'
+  | 'EFFICIENCY_PCT'
   | 'LABOR_SALES'
   | 'PARTS_SALES'
   | 'TOTAL_PARTS_LABOR'
@@ -34,7 +36,9 @@ interface GraphDataPoint {
   shortLabel: string;
   fullLabel: string;
   roCount: number;
+  actualHours: number;
   techHours: number;
+  efficiencyPct: number;
   laborSales: number;
   partsSales: number;
   totalSales: number;
@@ -72,7 +76,9 @@ interface CategoryConfig {
 
 interface RangeSummary {
   totalROs: number;
+  totalActualHours: number;
   totalTechHours: number;
+  efficiencyPct: number;
   totalLabor: number;
   totalParts: number;
   totalSales: number;
@@ -133,7 +139,9 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
             shortLabel: r.date.slice(5),
             fullLabel: r.date,
             roCount: c.roCount,
+            actualHours: Math.round(c.actualHours * 10) / 10,
             techHours: Math.round(c.techHours * 10) / 10,
+            efficiencyPct: Math.round(c.efficiencyPct * 10) / 10,
             laborSales: Math.round(c.laborSales * 100) / 100,
             partsSales: Math.round(c.partsSales * 100) / 100,
             totalSales: Math.round(c.totalSales * 100) / 100,
@@ -151,7 +159,9 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
           shortLabel: `${w.weekStartDate.slice(5)}–${w.weekEndingDate.slice(5)}`,
           fullLabel: w.weekLabel.replace('Pay Period: ', ''),
           roCount: w.totalROCount,
+          actualHours: Math.round(w.totalActualHours * 10) / 10,
           techHours: Math.round(w.totalTechHours * 10) / 10,
+          efficiencyPct: Math.round(w.efficiencyPct * 10) / 10,
           laborSales: Math.round(w.totalLaborSales * 100) / 100,
           partsSales: Math.round(w.totalPartsSales * 100) / 100,
           totalSales: Math.round(w.totalSales * 100) / 100,
@@ -167,7 +177,9 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
         shortLabel: `${m.monthLabel.slice(0, 3)} '${String(m.year).slice(-2)}`,
         fullLabel: m.monthLabel,
         roCount: m.totalROCount,
+        actualHours: Math.round(m.totalActualHours * 10) / 10,
         techHours: Math.round(m.totalTechHours * 10) / 10,
+        efficiencyPct: Math.round(m.efficiencyPct * 10) / 10,
         laborSales: Math.round(m.totalLaborSales * 100) / 100,
         partsSales: Math.round(m.totalPartsSales * 100) / 100,
         totalSales: Math.round(m.totalSales * 100) / 100,
@@ -178,6 +190,7 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
   // Range summary across filtered records
   const rangeSummary: RangeSummary = useMemo(() => {
     let totalROs = 0;
+    let totalActualHours = 0;
     let totalTechHours = 0;
     let totalLabor = 0;
     let totalParts = 0;
@@ -185,6 +198,7 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
     filteredRecords.forEach(r => {
       const c = computeDailyTotals(r);
       totalROs += c.roCount;
+      totalActualHours += c.actualHours;
       totalTechHours += c.techHours;
       totalLabor += c.laborSales;
       totalParts += c.partsSales;
@@ -192,10 +206,13 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
 
     const totalSales = totalLabor + totalParts;
     const avgPerRO = totalROs > 0 ? totalSales / totalROs : 0;
+    const efficiencyPct = totalActualHours > 0 ? (totalTechHours / totalActualHours) * 100 : 0;
 
     return {
       totalROs,
+      totalActualHours,
       totalTechHours,
+      efficiencyPct,
       totalLabor,
       totalParts,
       totalSales,
@@ -283,9 +300,23 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
       computePeriodTotalOrAvg: (_pts, totals) => ({ label: 'Range Total', value: `${totals.totalROs} ROs` }),
     },
     {
+      key: 'ACTUAL_HOURS',
+      title: 'Actual Hours',
+      subtitle: 'Clocked / attendance technician hours',
+      stroke: isDark ? '#94a3b8' : '#475569',
+      fillStart: isDark ? 'rgba(148,163,184,0.28)' : 'rgba(71,85,105,0.16)',
+      badgeClass: isDark ? 'bg-slate-800 text-slate-200 border-slate-600' : 'bg-slate-100 text-slate-800 border-slate-300',
+      valueClass: isDark ? 'text-slate-200' : 'text-slate-800',
+      icon: <Clock className="w-4 h-4" />,
+      getValue: (pt) => pt.actualHours,
+      formatValue: (v) => `${v.toFixed(1)} hrs`,
+      formatShortAxis: (v) => `${v.toFixed(0)}h`,
+      computePeriodTotalOrAvg: (_pts, totals) => ({ label: 'Range Total', value: `${totals.totalActualHours.toFixed(1)} hrs` }),
+    },
+    {
       key: 'TECH_HOURS',
-      title: 'Tech Hours',
-      subtitle: 'Billed / turned technician hours',
+      title: 'Flag Hours',
+      subtitle: 'Billed / turned flat-rate technician hours',
       stroke: isDark ? '#818cf8' : '#4f46e5',
       fillStart: isDark ? 'rgba(129,140,248,0.28)' : 'rgba(79,70,229,0.16)',
       badgeClass: isDark ? 'bg-indigo-950 text-indigo-300 border-indigo-700/60' : 'bg-indigo-50 text-indigo-800 border-indigo-200',
@@ -295,6 +326,23 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
       formatValue: (v) => `${v.toFixed(1)} hrs`,
       formatShortAxis: (v) => `${v.toFixed(0)}h`,
       computePeriodTotalOrAvg: (_pts, totals) => ({ label: 'Range Total', value: `${totals.totalTechHours.toFixed(1)} hrs` }),
+    },
+    {
+      key: 'EFFICIENCY_PCT',
+      title: 'Shop Efficiency %',
+      subtitle: 'Flag Hours divided by Actual Hours',
+      stroke: isDark ? '#38bdf8' : '#0284c7',
+      fillStart: isDark ? 'rgba(56,189,248,0.28)' : 'rgba(2,132,199,0.16)',
+      badgeClass: isDark ? 'bg-sky-950 text-sky-300 border-sky-700/60' : 'bg-sky-50 text-sky-800 border-sky-200',
+      valueClass: isDark ? 'text-sky-300' : 'text-sky-800',
+      icon: <TrendingUp className="w-4 h-4" />,
+      getValue: (pt) => pt.efficiencyPct,
+      formatValue: (v) => `${v.toFixed(1)}%`,
+      formatShortAxis: (v) => `${Math.round(v)}%`,
+      computePeriodTotalOrAvg: (_pts, totals) => ({
+        label: 'Range Efficiency',
+        value: totals.totalActualHours > 0 ? `${totals.efficiencyPct.toFixed(1)}%` : '--',
+      }),
     },
     {
       key: 'LABOR_SALES',
@@ -491,14 +539,14 @@ export const DailySalesCategoryGraphs: React.FC<DailySalesCategoryGraphsProps> =
                 className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-bold cursor-pointer inline-flex items-center gap-1"
               >
                 <Minimize2 className="w-3.5 h-3.5" />
-                <span>Show All 6 Category Graphs</span>
+                <span>Show All 8 Category Graphs</span>
               </button>
             )}
             {activePoint ? (
               <div className={`px-3 py-1 rounded-lg border font-mono text-[11px] font-bold ${
                 isDark ? 'bg-slate-900 border-slate-700 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
               }`}>
-                Inspecting: {activePoint.fullLabel} • {activePoint.roCount} ROs • {activePoint.techHours.toFixed(1)}h • {formatCurrency(activePoint.totalSales)}
+                Inspecting: {activePoint.fullLabel} • {activePoint.roCount} ROs • Act {activePoint.actualHours.toFixed(1)}h / Flag {activePoint.techHours.toFixed(1)}h • {formatCurrency(activePoint.totalSales)}
               </div>
             ) : (
               <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>

@@ -1,7 +1,8 @@
 export interface DailySalesRecord {
   date: string; // YYYY-MM-DD
   roCount: number;
-  techHours: number;
+  actualHours?: number; // Clocked / attendance technician hours
+  techHours: number; // Flagged / billed technician hours
   laborSales: number;
   partsSales: number;
   notes?: string;
@@ -11,13 +12,15 @@ export interface DailySalesRecord {
 export interface DailySalesTotals {
   date: string;
   roCount: number;
-  techHours: number;
+  actualHours: number;
+  techHours: number; // Flag hours
+  efficiencyPct: number; // (techHours / actualHours) * 100
   laborSales: number;
   partsSales: number;
   totalSales: number; // Total Parts & Labor
   avgSalesPerRO: number;
-  effectiveLaborRate: number;
-  hoursPerRO: number;
+  effectiveLaborRate: number; // laborSales / flagHours
+  hoursPerRO: number; // flagHours / roCount
   laborPct: number;
   partsPct: number;
 }
@@ -29,13 +32,16 @@ export interface WedTueWeekSalesSummary {
   weekLabel: string;
   daysCount: number;
   totalROCount: number;
-  totalTechHours: number;
+  totalActualHours: number;
+  totalTechHours: number; // Total Flag hours
+  efficiencyPct: number;
   totalLaborSales: number;
   totalPartsSales: number;
   totalSales: number; // Total Parts & Labor
   avgSalesPerRO: number;
   avgDailySales: number;
   avgDailyROCount: number;
+  avgDailyActualHours: number;
   avgDailyTechHours: number;
   effectiveLaborRate: number;
   hoursPerRO: number;
@@ -50,13 +56,16 @@ export interface MonthlySalesSummary {
   month: number;
   daysCount: number;
   totalROCount: number;
-  totalTechHours: number;
+  totalActualHours: number;
+  totalTechHours: number; // Total Flag hours
+  efficiencyPct: number;
   totalLaborSales: number;
   totalPartsSales: number;
   totalSales: number; // Total Parts & Labor
   avgSalesPerRO: number;
   avgDailySales: number;
   avgDailyROCount: number;
+  avgDailyActualHours: number;
   avgDailyTechHours: number;
   effectiveLaborRate: number;
   hoursPerRO: number;

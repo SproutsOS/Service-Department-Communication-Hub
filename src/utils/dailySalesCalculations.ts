@@ -10,6 +10,7 @@ export function normalizeDailySalesRecord(raw: Partial<DailySalesRecord> & { dat
   return {
     date: raw.date,
     roCount: Math.max(0, Number(raw.roCount) || 0),
+    actualHours: Math.max(0, Number(raw.actualHours) || 0),
     techHours: Math.max(0, Number(raw.techHours) || 0),
     laborSales: Math.max(0, Number(raw.laborSales) || 0),
     partsSales: Math.max(0, Number(raw.partsSales) || 0),
@@ -23,6 +24,7 @@ export function normalizeDailySalesRecord(raw: Partial<DailySalesRecord> & { dat
  */
 export function computeDailyTotals(record: DailySalesRecord): DailySalesTotals {
   const roCount = Math.max(0, Number(record.roCount) || 0);
+  const actualHours = Math.max(0, Number(record.actualHours) || 0);
   const techHours = Math.max(0, Number(record.techHours) || 0);
   const laborSales = Math.max(0, Number(record.laborSales) || 0);
   const partsSales = Math.max(0, Number(record.partsSales) || 0);
@@ -31,6 +33,7 @@ export function computeDailyTotals(record: DailySalesRecord): DailySalesTotals {
   const avgSalesPerRO = roCount > 0 ? totalSales / roCount : 0;
   const effectiveLaborRate = techHours > 0 ? laborSales / techHours : 0;
   const hoursPerRO = roCount > 0 ? techHours / roCount : 0;
+  const efficiencyPct = actualHours > 0 ? (techHours / actualHours) * 100 : 0;
 
   const laborPct = totalSales > 0 ? (laborSales / totalSales) * 100 : 0;
   const partsPct = totalSales > 0 ? (partsSales / totalSales) * 100 : 0;
@@ -38,7 +41,9 @@ export function computeDailyTotals(record: DailySalesRecord): DailySalesTotals {
   return {
     date: record.date,
     roCount,
+    actualHours,
     techHours,
+    efficiencyPct,
     laborSales,
     partsSales,
     totalSales,
@@ -128,6 +133,7 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
 
   map.forEach((value, weekId) => {
     let totalROCount = 0;
+    let totalActualHours = 0;
     let totalTechHours = 0;
     let totalLaborSales = 0;
     let totalPartsSales = 0;
@@ -135,6 +141,7 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
     value.records.forEach(r => {
       const computed = computeDailyTotals(r);
       totalROCount += computed.roCount;
+      totalActualHours += computed.actualHours;
       totalTechHours += computed.techHours;
       totalLaborSales += computed.laborSales;
       totalPartsSales += computed.partsSales;
@@ -145,7 +152,9 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
     const daysCount = value.records.length;
     const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
     const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+    const avgDailyActualHours = daysCount > 0 ? totalActualHours / daysCount : 0;
     const avgDailyTechHours = daysCount > 0 ? totalTechHours / daysCount : 0;
+    const efficiencyPct = totalActualHours > 0 ? (totalTechHours / totalActualHours) * 100 : 0;
     const effectiveLaborRate = totalTechHours > 0 ? totalLaborSales / totalTechHours : 0;
     const hoursPerRO = totalROCount > 0 ? totalTechHours / totalROCount : 0;
 
@@ -159,13 +168,16 @@ export function groupRecordsByWedTueWeeks(records: DailySalesRecord[]): WedTueWe
       weekLabel: value.label,
       daysCount,
       totalROCount,
+      totalActualHours,
       totalTechHours,
+      efficiencyPct,
       totalLaborSales,
       totalPartsSales,
       totalSales,
       avgSalesPerRO,
       avgDailySales,
       avgDailyROCount,
+      avgDailyActualHours,
       avgDailyTechHours,
       effectiveLaborRate,
       hoursPerRO,
@@ -254,6 +266,7 @@ export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTue
 
   map.forEach((value, weekId) => {
     let totalROCount = 0;
+    let totalActualHours = 0;
     let totalTechHours = 0;
     let totalLaborSales = 0;
     let totalPartsSales = 0;
@@ -261,6 +274,7 @@ export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTue
     value.records.forEach(r => {
       const computed = computeDailyTotals(r);
       totalROCount += computed.roCount;
+      totalActualHours += computed.actualHours;
       totalTechHours += computed.techHours;
       totalLaborSales += computed.laborSales;
       totalPartsSales += computed.partsSales;
@@ -271,7 +285,9 @@ export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTue
     const daysCount = value.records.length;
     const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
     const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+    const avgDailyActualHours = daysCount > 0 ? totalActualHours / daysCount : 0;
     const avgDailyTechHours = daysCount > 0 ? totalTechHours / daysCount : 0;
+    const efficiencyPct = totalActualHours > 0 ? (totalTechHours / totalActualHours) * 100 : 0;
     const effectiveLaborRate = totalTechHours > 0 ? totalLaborSales / totalTechHours : 0;
     const hoursPerRO = totalROCount > 0 ? totalTechHours / totalROCount : 0;
 
@@ -285,13 +301,16 @@ export function groupRecordsByCalendarWeeks(records: DailySalesRecord[]): WedTue
       weekLabel: value.label,
       daysCount,
       totalROCount,
+      totalActualHours,
       totalTechHours,
+      efficiencyPct,
       totalLaborSales,
       totalPartsSales,
       totalSales,
       avgSalesPerRO,
       avgDailySales,
       avgDailyROCount,
+      avgDailyActualHours,
       avgDailyTechHours,
       effectiveLaborRate,
       hoursPerRO,
@@ -344,6 +363,7 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
 
   map.forEach((value, monthKey) => {
     let totalROCount = 0;
+    let totalActualHours = 0;
     let totalTechHours = 0;
     let totalLaborSales = 0;
     let totalPartsSales = 0;
@@ -351,6 +371,7 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
     value.records.forEach(r => {
       const computed = computeDailyTotals(r);
       totalROCount += computed.roCount;
+      totalActualHours += computed.actualHours;
       totalTechHours += computed.techHours;
       totalLaborSales += computed.laborSales;
       totalPartsSales += computed.partsSales;
@@ -361,7 +382,9 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
     const daysCount = value.records.length;
     const avgDailySales = daysCount > 0 ? totalSales / daysCount : 0;
     const avgDailyROCount = daysCount > 0 ? totalROCount / daysCount : 0;
+    const avgDailyActualHours = daysCount > 0 ? totalActualHours / daysCount : 0;
     const avgDailyTechHours = daysCount > 0 ? totalTechHours / daysCount : 0;
+    const efficiencyPct = totalActualHours > 0 ? (totalTechHours / totalActualHours) * 100 : 0;
     const effectiveLaborRate = totalTechHours > 0 ? totalLaborSales / totalTechHours : 0;
     const hoursPerRO = totalROCount > 0 ? totalTechHours / totalROCount : 0;
 
@@ -375,13 +398,16 @@ export function groupRecordsByMonth(records: DailySalesRecord[]): MonthlySalesSu
       month: value.month,
       daysCount,
       totalROCount,
+      totalActualHours,
       totalTechHours,
+      efficiencyPct,
       totalLaborSales,
       totalPartsSales,
       totalSales,
       avgSalesPerRO,
       avgDailySales,
       avgDailyROCount,
+      avgDailyActualHours,
       avgDailyTechHours,
       effectiveLaborRate,
       hoursPerRO,
@@ -496,6 +522,7 @@ export function ensureDailySalesRange(existingRecords?: DailySalesRecord[]): Dai
       byDate.set(dateStr, {
         date: dateStr,
         roCount: 0,
+        actualHours: 0,
         techHours: 0,
         laborSales: 0,
         partsSales: 0,
@@ -531,7 +558,9 @@ export interface YoYPeriodSummary {
   endDate: string;
   daysWithData: number;
   roCount: number;
-  techHours: number;
+  actualHours: number;
+  techHours: number; // Flag hours
+  efficiencyPct: number;
   laborSales: number;
   partsSales: number;
   totalSales: number;
@@ -623,6 +652,7 @@ function hasRecordActivity(rec?: DailySalesRecord): boolean {
   if (!rec) return false;
   return (
     (Number(rec.roCount) || 0) > 0 ||
+    (Number(rec.actualHours) || 0) > 0 ||
     (Number(rec.techHours) || 0) > 0 ||
     (Number(rec.laborSales) || 0) > 0 ||
     (Number(rec.partsSales) || 0) > 0
@@ -638,6 +668,7 @@ function summarizeDateRange(
 ): YoYPeriodSummary {
   let daysWithData = 0;
   let roCount = 0;
+  let actualHours = 0;
   let techHours = 0;
   let laborSales = 0;
   let partsSales = 0;
@@ -651,6 +682,7 @@ function summarizeDateRange(
       daysWithData += 1;
       const c = computeDailyTotals(rec);
       roCount += c.roCount;
+      actualHours += c.actualHours;
       techHours += c.techHours;
       laborSales += c.laborSales;
       partsSales += c.partsSales;
@@ -666,7 +698,9 @@ function summarizeDateRange(
     endDate,
     daysWithData,
     roCount,
+    actualHours,
     techHours,
+    efficiencyPct: actualHours > 0 ? (techHours / actualHours) * 100 : 0,
     laborSales,
     partsSales,
     totalSales,

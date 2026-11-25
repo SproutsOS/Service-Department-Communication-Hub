@@ -273,6 +273,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
   // Overall Running Metrics
   const overallTotals = useMemo(() => {
     let totalROs = 0;
+    let totalActualHours = 0;
     let totalTechHours = 0;
     let totalLabor = 0;
     let totalParts = 0;
@@ -280,6 +281,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     records.forEach(r => {
       const c = computeDailyTotals(r);
       totalROs += c.roCount;
+      totalActualHours += c.actualHours;
       totalTechHours += c.techHours;
       totalLabor += c.laborSales;
       totalParts += c.partsSales;
@@ -290,13 +292,16 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     const daysCount = records.length;
     const avgROsPerDay = daysCount > 0 ? totalROs / daysCount : 0;
     const hoursPerRO = totalROs > 0 ? totalTechHours / totalROs : 0;
+    const efficiencyPct = totalActualHours > 0 ? (totalTechHours / totalActualHours) * 100 : 0;
     const effectiveLaborRate = totalTechHours > 0 ? totalLabor / totalTechHours : 0;
 
     return {
       daysCount,
       totalROs,
       avgROsPerDay,
+      totalActualHours,
       totalTechHours,
+      efficiencyPct,
       hoursPerRO,
       effectiveLaborRate,
       totalLabor,
@@ -367,6 +372,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             {
               date: dateStr,
               roCount: 0,
+              actualHours: 0,
               techHours: 0,
               laborSales: 0,
               partsSales: 0,
@@ -402,6 +408,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     const newRec: DailySalesRecord = {
       date: newDateInput,
       roCount: 0,
+      actualHours: 0,
       techHours: 0,
       laborSales: 0,
       partsSales: 0,
@@ -438,7 +445,9 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
       'Date',
       'Wednesday-Tuesday Week',
       '# of Repair Orders',
-      'Tech Hours',
+      'Actual Hours',
+      'Flag Hours',
+      'Efficiency %',
       'Total Labor Sales ($)',
       'Total Parts Sales ($)',
       'Total Parts & Labor ($)',
@@ -461,7 +470,9 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
         r.date,
         weekInfo.label,
         c.roCount,
+        c.actualHours.toFixed(1),
         c.techHours.toFixed(1),
+        c.actualHours > 0 ? `${c.efficiencyPct.toFixed(1)}%` : '--',
         `$${c.laborSales.toFixed(2)}`,
         `$${c.partsSales.toFixed(2)}`,
         `$${c.totalSales.toFixed(2)}`,
@@ -510,7 +521,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Track daily # of Repair Orders, Tech Hours, Total Labor Sales, Total Parts Sales, Total Parts &amp; Labor, and Wed–Tue payroll weeks.
+                Track daily # of Repair Orders, Actual &amp; Flag Hours, Total Labor Sales, Total Parts Sales, Total Parts &amp; Labor, and Wed–Tue payroll weeks.
               </p>
             </div>
           </div>
@@ -625,7 +636,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
 
         {/* Metric Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
 
           {/* 1. Total Parts & Labor */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs col-span-2 sm:col-span-3 lg:col-span-2 bg-gradient-to-br from-emerald-50/50 to-white">
@@ -658,11 +669,25 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             </span>
           </div>
 
-          {/* 3. Tech Hours */}
+          {/* 3. Actual Hours */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-slate-600">
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-slate-600" />
+              <span>Actual Hours</span>
+            </span>
+            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
+              {overallTotals.totalActualHours.toFixed(1)} <span className="text-xs font-bold text-slate-500">hrs</span>
+            </div>
+            <span className="text-xs font-bold text-slate-600 mt-0.5 block">
+              {overallTotals.totalActualHours > 0 ? `${overallTotals.efficiencyPct.toFixed(1)}% Shop Eff.` : 'Clocked time'}
+            </span>
+          </div>
+
+          {/* 4. Flag Hours */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-indigo-600">
             <span className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Tech Hours</span>
+              <span>Flag Hours</span>
             </span>
             <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
               {overallTotals.totalTechHours.toFixed(1)} <span className="text-xs font-bold text-slate-500">hrs</span>
@@ -672,7 +697,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             </span>
           </div>
 
-          {/* 4. Total Labor Sales */}
+          {/* 5. Total Labor Sales */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-blue-600">
             <span className="text-xs font-black text-blue-900 uppercase tracking-wider block">
               Total Labor Sales
@@ -685,7 +710,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             </span>
           </div>
 
-          {/* 5. Total Parts Sales */}
+          {/* 6. Total Parts Sales */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-amber-600">
             <span className="text-xs font-black text-amber-900 uppercase tracking-wider block">
               Total Parts Sales
@@ -968,7 +993,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 Daily Sales &amp; RO Entry Sheet ({filteredDailyRecords.length} Days)
               </span>
               <span className="text-[11px] text-slate-500">
-                Enter # of ROs, Tech Hours, Total Labor &amp; Total Parts • Auto-calculates Total Parts &amp; Labor
+                Enter # of ROs, Actual Hrs, Flag Hrs, Total Labor &amp; Total Parts • Auto-calculates Efficiency % &amp; Total Parts &amp; Labor
               </span>
             </div>
 
@@ -979,7 +1004,9 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     <th className="px-2.5 py-2.5">Date</th>
                     <th className="px-2.5 py-2.5">Wed–Tue Pay Period</th>
                     <th className="px-2 py-2.5 text-center"># of ROs</th>
-                    <th className="px-2 py-2.5 text-center">Tech Hours</th>
+                    <th className="px-2 py-2.5 text-center">Actual Hrs</th>
+                    <th className="px-2 py-2.5 text-center">Flag Hrs</th>
+                    <th className="px-2 py-2.5 text-center">Eff %</th>
                     <th className="px-2 py-2.5">Total Labor Sales ($)</th>
                     <th className="px-2 py-2.5">Total Parts Sales ($)</th>
                     <th className="px-2.5 py-2.5 text-right bg-emerald-100/60 text-emerald-900">Total Parts &amp; Labor ($)</th>
@@ -989,7 +1016,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {filteredDailyRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-500 font-medium">
+                      <td colSpan={10} className="px-4 py-8 text-center text-slate-500 font-medium">
                         No daily records found for this filter. Click &ldquo;Add / Select Date&rdquo; above.
                       </td>
                     </tr>
@@ -1033,12 +1060,30 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                             />
                           </td>
 
-                          {/* Tech Hours */}
+                          {/* Actual Hours */}
                           <td className="px-2 py-2 text-center">
                             <NumericCellInput
-                              step="0.1"
+                              step="any"
+                              value={computed.actualHours}
+                              ariaLabel={`Actual hours for ${record.date}`}
+                              onFocusTrack={() => {
+                                focusedInputsRef.current += 1;
+                              }}
+                              onCommit={(val) => handleUpdateRecord(record.date, { actualHours: val })}
+                              onBlurTrack={() => {
+                                focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                                flushCloudSync();
+                              }}
+                              className="w-20 px-2 py-1 bg-white border border-slate-300 rounded text-center font-mono font-extrabold text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                            />
+                          </td>
+
+                          {/* Flag Hours */}
+                          <td className="px-2 py-2 text-center">
+                            <NumericCellInput
+                              step="any"
                               value={computed.techHours}
-                              ariaLabel={`Tech hours for ${record.date}`}
+                              ariaLabel={`Flag hours for ${record.date}`}
                               onFocusTrack={() => {
                                 focusedInputsRef.current += 1;
                               }}
@@ -1049,6 +1094,25 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                               }}
                               className="w-20 px-2 py-1 bg-white border border-slate-300 rounded text-center font-mono font-extrabold text-xs text-indigo-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                             />
+                          </td>
+
+                          {/* Efficiency % (Flag / Actual) */}
+                          <td className="px-2 py-2 text-center font-mono font-bold whitespace-nowrap">
+                            {computed.actualHours > 0 ? (
+                              <span
+                                className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-black ${
+                                  computed.efficiencyPct >= 100
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : computed.efficiencyPct >= 85
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-amber-50 text-amber-800'
+                                }`}
+                              >
+                                {computed.efficiencyPct.toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">--</span>
+                            )}
                           </td>
 
                           {/* Total Labor Sales */}
@@ -1131,7 +1195,9 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     <th className="px-3 py-3">Pay Period</th>
                     <th className="px-3 py-3 text-center">Days</th>
                     <th className="px-3 py-3 text-center"># of ROs</th>
-                    <th className="px-3 py-3 text-center">Tech Hours</th>
+                    <th className="px-3 py-3 text-center">Actual Hrs</th>
+                    <th className="px-3 py-3 text-center">Flag Hrs</th>
+                    <th className="px-3 py-3 text-center">Eff %</th>
                     <th className="px-3 py-3 text-right">Labor Sales ($)</th>
                     <th className="px-3 py-3 text-right">Parts Sales ($)</th>
                     <th className="px-3 py-3 text-right bg-emerald-100/60 text-emerald-900">Total Parts &amp; Labor ($)</th>
@@ -1153,11 +1219,34 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                           {week.avgDailyROCount.toFixed(1)}/day
                         </span>
                       </td>
+                      <td className="px-3 py-3 text-center font-mono font-bold text-slate-800 text-sm">
+                        {week.totalActualHours.toFixed(1)}
+                        <span className="block text-[10px] text-slate-500 font-normal">
+                          {week.avgDailyActualHours.toFixed(1)}/day
+                        </span>
+                      </td>
                       <td className="px-3 py-3 text-center font-mono font-black text-indigo-900 text-sm">
                         {week.totalTechHours.toFixed(1)}
                         <span className="block text-[10px] text-slate-500 font-normal">
                           {week.hoursPerRO.toFixed(2)} hrs/RO
                         </span>
+                      </td>
+                      <td className="px-3 py-3 text-center font-mono font-bold">
+                        {week.totalActualHours > 0 ? (
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-black ${
+                              week.efficiencyPct >= 100
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : week.efficiencyPct >= 85
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-amber-50 text-amber-800'
+                            }`}
+                          >
+                            {week.efficiencyPct.toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-right font-mono font-bold text-blue-900">
                         {formatCurrency(week.totalLaborSales)}
@@ -1189,7 +1278,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                 Monthly Sales &amp; RO Summaries ({monthlyList.length} Months)
               </span>
               <span className="text-[11px] text-slate-500 font-medium">
-                Monthly cumulative RO count, tech hours, labor, parts &amp; combined total
+                Monthly cumulative RO count, actual &amp; flag hours, efficiency, labor, parts &amp; combined total
               </span>
             </div>
 
@@ -1200,7 +1289,9 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     <th className="px-3 py-3">Month</th>
                     <th className="px-3 py-3 text-center">Days</th>
                     <th className="px-3 py-3 text-center"># of ROs</th>
-                    <th className="px-3 py-3 text-center">Tech Hours</th>
+                    <th className="px-3 py-3 text-center">Actual Hrs</th>
+                    <th className="px-3 py-3 text-center">Flag Hrs</th>
+                    <th className="px-3 py-3 text-center">Eff %</th>
                     <th className="px-3 py-3 text-right">Labor Sales ($)</th>
                     <th className="px-3 py-3 text-right">Parts Sales ($)</th>
                     <th className="px-3 py-3 text-right bg-emerald-100/60 text-emerald-900">Total Parts &amp; Labor ($)</th>
@@ -1222,11 +1313,34 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                           {month.avgDailyROCount.toFixed(1)}/day
                         </span>
                       </td>
+                      <td className="px-3 py-3 text-center font-mono font-bold text-slate-800 text-sm">
+                        {month.totalActualHours.toFixed(1)}
+                        <span className="block text-[10px] text-slate-500 font-normal">
+                          {month.avgDailyActualHours.toFixed(1)}/day
+                        </span>
+                      </td>
                       <td className="px-3 py-3 text-center font-mono font-black text-indigo-900 text-sm">
                         {month.totalTechHours.toFixed(1)}
                         <span className="block text-[10px] text-slate-500 font-normal">
                           {month.hoursPerRO.toFixed(2)} hrs/RO
                         </span>
+                      </td>
+                      <td className="px-3 py-3 text-center font-mono font-bold">
+                        {month.totalActualHours > 0 ? (
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-black ${
+                              month.efficiencyPct >= 100
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : month.efficiencyPct >= 85
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-amber-50 text-amber-800'
+                            }`}
+                          >
+                            {month.efficiencyPct.toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-right font-mono font-bold text-blue-900">
                         {formatCurrency(month.totalLaborSales)}
@@ -1345,7 +1459,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                         <th className="px-3 py-3">Week</th>
                         <th className="px-3 py-3 text-center">RO Count</th>
                         <th className="px-3 py-3 w-44">Daily Volume</th>
-                        <th className="px-3 py-3 text-center">Tech Hours</th>
+                        <th className="px-3 py-3 text-center">Actual / Flag Hrs</th>
                         <th className="px-3 py-3 text-right">Total Parts &amp; Labor</th>
                         <th className="px-3 py-3 text-right">Avg $/RO</th>
                       </tr>
@@ -1415,8 +1529,10 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                 />
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 text-center font-mono font-bold text-indigo-800">
-                              {computed.techHours.toFixed(1)}h
+                            <td className="px-3 py-2.5 text-center font-mono font-bold text-indigo-800 whitespace-nowrap">
+                              <span className="text-slate-600">{computed.actualHours.toFixed(1)}</span>
+                              <span className="text-slate-400 mx-1">/</span>
+                              <span>{computed.techHours.toFixed(1)}h</span>
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-900">
                               {formatCurrency(computed.totalSales)}
@@ -1449,7 +1565,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                         <th className="px-3 py-3 text-center">Avg ROs / Day</th>
                         <th className="px-3 py-3 text-center">vs Prior Week</th>
                         <th className="px-3 py-3 w-44">Weekly Volume</th>
-                        <th className="px-3 py-3 text-center">Tech Hours</th>
+                        <th className="px-3 py-3 text-center">Actual / Flag Hrs</th>
                         <th className="px-3 py-3 text-right">Total Parts &amp; Labor</th>
                       </tr>
                     </thead>
@@ -1496,8 +1612,10 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                 />
                               </div>
                             </td>
-                            <td className="px-3 py-3 text-center font-mono font-bold text-indigo-800">
-                              {week.totalTechHours.toFixed(1)}h
+                            <td className="px-3 py-3 text-center font-mono font-bold text-indigo-800 whitespace-nowrap">
+                              <span className="text-slate-600">{week.totalActualHours.toFixed(1)}</span>
+                              <span className="text-slate-400 mx-1">/</span>
+                              <span>{week.totalTechHours.toFixed(1)}h</span>
                             </td>
                             <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
                               {formatCurrency(week.totalSales)}
@@ -1524,7 +1642,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                         <th className="px-3 py-3 text-center">Avg ROs / Day</th>
                         <th className="px-3 py-3 text-center">vs Prior Month</th>
                         <th className="px-3 py-3 w-44">Monthly Volume</th>
-                        <th className="px-3 py-3 text-center">Tech Hours</th>
+                        <th className="px-3 py-3 text-center">Actual / Flag Hrs</th>
                         <th className="px-3 py-3 text-right">Total Parts &amp; Labor</th>
                       </tr>
                     </thead>
@@ -1571,8 +1689,10 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                                 />
                               </div>
                             </td>
-                            <td className="px-3 py-3 text-center font-mono font-bold text-indigo-800">
-                              {month.totalTechHours.toFixed(1)}h
+                            <td className="px-3 py-3 text-center font-mono font-bold text-indigo-800 whitespace-nowrap">
+                              <span className="text-slate-600">{month.totalActualHours.toFixed(1)}</span>
+                              <span className="text-slate-400 mx-1">/</span>
+                              <span>{month.totalTechHours.toFixed(1)}h</span>
                             </td>
                             <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
                               {formatCurrency(month.totalSales)}
@@ -1633,7 +1753,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                     Category Trend Line Graphs
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Individual line graphs for # of ROs, Tech Hours, Labor Sales, Parts Sales, Total Parts &amp; Labor, and Avg $/RO with custom date range filtering.
+                    Individual line graphs for # of ROs, Actual Hours, Flag Hours, Efficiency %, Labor Sales, Parts Sales, Total Parts &amp; Labor, and Avg $/RO with custom date range filtering.
                   </p>
                 </div>
               </div>
