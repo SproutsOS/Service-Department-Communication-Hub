@@ -129,8 +129,10 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
 
   // Active view tab: 'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS' | 'YOY_REPORT'
   const [activeTab, setActiveTab] = useState<'DAILY' | 'WEEKLY_WED_TUE' | 'MONTHLY' | 'RO_COUNT' | 'GRAPHS' | 'YOY_REPORT'>('DAILY');
-  const [roViewGrouping, setRoViewGrouping] = useState<'DAY' | 'WEEK' | 'MONTH'>('DAY');
+  const [roViewGrouping, setRoViewGrouping] = useState<'DAY' | 'WEEK' | 'MONTH' | 'YTD'>('DAY');
+  const [roTrackerPeriodView, setRoTrackerPeriodView] = useState<'ALL' | 'DAY' | 'WEEK' | 'MONTH' | 'YTD'>('ALL');
   const [roWeekCycle, setRoWeekCycle] = useState<'WED_TUE' | 'SUN_SAT'>('WED_TUE');
+  const [summaryPeriodFilter, setSummaryPeriodFilter] = useState<string>('YTD');
 
   const todayIso = useMemo(() => {
     const d = new Date();
@@ -140,6 +142,7 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     return `${yr}-${mo}-${dy}`;
   }, []);
 
+  const currentYear = todayIso.slice(0, 4);
   const [selectedRODate, setSelectedRODate] = useState<string>(todayIso);
 
   // Trend Graph Modal & Tab Shared State (Date Range + Per-Category Graphs)
@@ -313,10 +316,68 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     };
   }, [records]);
 
-  // Day / Week / Month RO Count Summary derived from selectedRODate
+  // Filtered Summary Metrics for Top KPI Cards (YTD, All Time, or Specific Month)
+  const summaryTotals = useMemo(() => {
+    let scopedRecords: DailySalesRecord[] = records;
+    let periodLabel = 'All Time (Sept 1, 2025+)';
+
+    if (summaryPeriodFilter === 'YTD') {
+      const ytdStart = `${currentYear}-01-01`;
+      scopedRecords = records.filter(r => r.date >= ytdStart && r.date <= todayIso);
+      periodLabel = `Year to Date (${currentYear})`;
+    } else if (summaryPeriodFilter !== 'ALL') {
+      scopedRecords = records.filter(r => r.date.startsWith(summaryPeriodFilter));
+      const matchedMonth = monthlyList.find(m => m.monthKey === summaryPeriodFilter);
+      periodLabel = matchedMonth ? matchedMonth.monthLabel : summaryPeriodFilter;
+    }
+
+    let totalROs = 0;
+    let totalActualHours = 0;
+    let totalTechHours = 0;
+    let totalLabor = 0;
+    let totalParts = 0;
+
+    scopedRecords.forEach(r => {
+      const c = computeDailyTotals(r);
+      totalROs += c.roCount;
+      totalActualHours += c.actualHours;
+      totalTechHours += c.techHours;
+      totalLabor += c.laborSales;
+      totalParts += c.partsSales;
+    });
+
+    const totalSales = totalLabor + totalParts;
+    const avgSalesPerRO = totalROs > 0 ? totalSales / totalROs : 0;
+    const daysCount = scopedRecords.length;
+    const avgROsPerDay = daysCount > 0 ? totalROs / daysCount : 0;
+    const hoursPerRO = totalROs > 0 ? totalTechHours / totalROs : 0;
+    const efficiencyPct = totalActualHours > 0 ? (totalTechHours / totalActualHours) * 100 : 0;
+    const effectiveLaborRate = totalTechHours > 0 ? totalLabor / totalTechHours : 0;
+
+    return {
+      periodLabel,
+      daysCount,
+      totalROs,
+      avgROsPerDay,
+      totalActualHours,
+      totalTechHours,
+      efficiencyPct,
+      hoursPerRO,
+      effectiveLaborRate,
+      totalLabor,
+      totalParts,
+      totalSales,
+      avgSalesPerRO,
+      laborPct: totalSales > 0 ? (totalLabor / totalSales) * 100 : 0,
+      partsPct: totalSales > 0 ? (totalParts / totalSales) * 100 : 0,
+    };
+  }, [records, summaryPeriodFilter, currentYear, todayIso, monthlyList]);
+
+  // Day / Week / Month / Year-to-Date RO Count Summary derived from selectedRODate
   const roPeriodOverview = useMemo(() => {
     const dayRecord = records.find(r => r.date === selectedRODate);
-    const dayROCount = dayRecord ? Math.max(0, Number(dayRecord.roCount) || 0) : 0;
+    const dayComputed = dayRecord ? computeDailyTotals(dayRecord) : null;
+    const dayROCount = dayComputed ? dayComputed.roCount : 0;
 
     const activeWeeks = roWeekCycle === 'WED_TUE' ? wedTueWeeksList : calendarWeeksList;
     const weekInfo =
@@ -338,21 +399,127 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
     const currentMonth = monthIdx >= 0 ? monthlyList[monthIdx] : null;
     const prevMonth = monthIdx >= 0 && monthIdx + 1 < monthlyList.length ? monthlyList[monthIdx + 1] : null;
 
+    // Year to Date (Jan 1 of focus year through selectedRODate)
+    const ytdYear = selectedRODate.slice(0, 4);
+    const ytdStartDate = `${ytdYear}-01-01`;
+    const ytdRecords = records.filter(r => r.date >= ytdStartDate && r.date <= selectedRODate);
+    let ytdROCount = 0;
+    let ytdActualHours = 0;
+    let ytdFlagHours = 0;
+    let ytdTotalSales = 0;
+    ytdRecords.forEach(r => {
+      const c = computeDailyTotals(r);
+      ytdROCount += c.roCount;
+      ytdActualHours += c.actualHours;
+      ytdFlagHours += c.techHours;
+      ytdTotalSales += c.totalSales;
+    });
+    const ytdDaysCount = ytdRecords.length;
+    const ytdAvgDailyROs = ytdDaysCount > 0 ? ytdROCount / ytdDaysCount : 0;
+
+    // Prior Year same YTD window comparison (if prior year data exists)
+    const priorYearNum = Number(ytdYear) - 1;
+    const priorYtdStart = `${priorYearNum}-01-01`;
+    const priorYtdEnd = `${priorYearNum}${selectedRODate.slice(4)}`;
+    const priorYtdRecords = records.filter(r => r.date >= priorYtdStart && r.date <= priorYtdEnd);
+    const priorYtdROCount = priorYtdRecords.reduce((sum, r) => sum + Math.max(0, Number(r.roCount) || 0), 0);
+    const ytdDeltaVsPriorYear = priorYtdRecords.length > 0 ? ytdROCount - priorYtdROCount : null;
+
+    // Monthly breakdown inside the YTD window (chronological Jan -> focus month) for the YTD table
+    const ytdMonthMap = new Map<
+      string,
+      {
+        monthKey: string;
+        monthLabel: string;
+        daysCount: number;
+        totalROCount: number;
+        totalActualHours: number;
+        totalTechHours: number;
+        totalSales: number;
+      }
+    >();
+    ytdRecords.forEach(r => {
+      const mKey = r.date.slice(0, 7);
+      const c = computeDailyTotals(r);
+      const existing = ytdMonthMap.get(mKey);
+      if (existing) {
+        existing.daysCount += 1;
+        existing.totalROCount += c.roCount;
+        existing.totalActualHours += c.actualHours;
+        existing.totalTechHours += c.techHours;
+        existing.totalSales += c.totalSales;
+      } else {
+        const [yrStr, moStr] = mKey.split('-');
+        const label = new Date(Number(yrStr), Number(moStr) - 1, 15).toLocaleDateString('en-US', {
+          month: 'long',
+          year: 'numeric',
+        });
+        ytdMonthMap.set(mKey, {
+          monthKey: mKey,
+          monthLabel: label,
+          daysCount: 1,
+          totalROCount: c.roCount,
+          totalActualHours: c.actualHours,
+          totalTechHours: c.techHours,
+          totalSales: c.totalSales,
+        });
+      }
+    });
+
+    const ytdMonthlyBreakdown = Array.from(ytdMonthMap.values())
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+      .reduce<
+        Array<{
+          monthKey: string;
+          monthLabel: string;
+          daysCount: number;
+          totalROCount: number;
+          avgDailyROCount: number;
+          runningYtdROs: number;
+          totalActualHours: number;
+          totalTechHours: number;
+          totalSales: number;
+        }>
+      >((acc, item) => {
+        const prevRunning = acc.length > 0 ? acc[acc.length - 1].runningYtdROs : 0;
+        acc.push({
+          ...item,
+          avgDailyROCount: item.daysCount > 0 ? item.totalROCount / item.daysCount : 0,
+          runningYtdROs: prevRunning + item.totalROCount,
+        });
+        return acc;
+      }, []);
+
     return {
       dayRecordExists: Boolean(dayRecord),
       dayROCount,
+      dayTotalSales: dayComputed ? dayComputed.totalSales : 0,
+      dayActualHours: dayComputed ? dayComputed.actualHours : 0,
+      dayFlagHours: dayComputed ? dayComputed.techHours : 0,
       weekLabel: weekInfo.label.replace('Pay Period: ', ''),
       weekROCount: currentWeek ? currentWeek.totalROCount : 0,
       weekDaysCount: currentWeek ? currentWeek.daysCount : 0,
       weekAvgDailyROs: currentWeek ? currentWeek.avgDailyROCount : 0,
+      weekTotalSales: currentWeek ? currentWeek.totalSales : 0,
       weekDeltaROs:
         currentWeek && prevWeek ? currentWeek.totalROCount - prevWeek.totalROCount : null,
       monthLabel: currentMonth ? currentMonth.monthLabel : monthLabelFallback,
       monthROCount: currentMonth ? currentMonth.totalROCount : 0,
       monthDaysCount: currentMonth ? currentMonth.daysCount : 0,
       monthAvgDailyROs: currentMonth ? currentMonth.avgDailyROCount : 0,
+      monthTotalSales: currentMonth ? currentMonth.totalSales : 0,
       monthDeltaROs:
         currentMonth && prevMonth ? currentMonth.totalROCount - prevMonth.totalROCount : null,
+      ytdYear,
+      ytdStartDate,
+      ytdROCount,
+      ytdDaysCount,
+      ytdAvgDailyROs,
+      ytdActualHours,
+      ytdFlagHours,
+      ytdTotalSales,
+      ytdDeltaVsPriorYear,
+      ytdMonthlyBreakdown,
     };
   }, [records, selectedRODate, roWeekCycle, wedTueWeeksList, calendarWeeksList, monthlyList]);
 
@@ -635,96 +802,131 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
       {/* Main Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
 
-        {/* Metric Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-
-          {/* 1. Total Parts & Labor */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs col-span-2 sm:col-span-3 lg:col-span-2 bg-gradient-to-br from-emerald-50/50 to-white">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
-                Total Parts &amp; Labor Sales
+        {/* Metric Summary Cards with Month / YTD Dropdown */}
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Calendar className="w-4 h-4 text-emerald-700" />
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                Sales, Hours &amp; RO Summary
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
-                {overallTotals.totalROs} Total ROs
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                {summaryTotals.periodLabel}
               </span>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-700 font-mono mt-1">
-              {formatCurrency(overallTotals.totalSales)}
+
+            <div className="flex items-center gap-2">
+              <label htmlFor="summary-period-select" className="text-[11px] font-bold text-slate-600">
+                Period:
+              </label>
+              <select
+                id="summary-period-select"
+                value={summaryPeriodFilter}
+                onChange={(e) => setSummaryPeriodFilter(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden cursor-pointer"
+              >
+                <option value="YTD">Year to Date ({currentYear})</option>
+                <option value="ALL">All Time (Sept 1, 2025+)</option>
+                <optgroup label="By Month">
+                  {monthlyList.map((m) => (
+                    <option key={m.monthKey} value={m.monthKey}>
+                      {m.monthLabel}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Combined Parts &amp; Labor across {overallTotals.daysCount} days ({formatCurrency(overallTotals.avgSalesPerRO)} avg $/RO).
-            </p>
           </div>
 
-          {/* 2. # of Repair Orders */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-purple-600">
-            <span className="text-xs font-black text-purple-900 uppercase tracking-wider block">
-              # of Repair Orders
-            </span>
-            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
-              {overallTotals.totalROs}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+            {/* 1. Total Parts & Labor */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs col-span-2 sm:col-span-3 lg:col-span-2 bg-gradient-to-br from-emerald-50/50 to-white">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
+                  Total Parts &amp; Labor Sales
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+                  {summaryTotals.totalROs} ROs
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-700 font-mono mt-1">
+                {formatCurrency(summaryTotals.totalSales)}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {summaryTotals.periodLabel} • {summaryTotals.daysCount} days ({formatCurrency(summaryTotals.avgSalesPerRO)} avg $/RO).
+              </p>
             </div>
-            <span className="text-xs font-bold text-purple-600 mt-0.5 block">
-              {overallTotals.avgROsPerDay.toFixed(1)} ROs / day
-            </span>
-          </div>
 
-          {/* 3. Actual Hours */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-slate-600">
-            <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-slate-600" />
-              <span>Actual Hours</span>
-            </span>
-            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
-              {overallTotals.totalActualHours.toFixed(1)} <span className="text-xs font-bold text-slate-500">hrs</span>
+            {/* 2. # of Repair Orders */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-purple-600">
+              <span className="text-xs font-black text-purple-900 uppercase tracking-wider block">
+                # of Repair Orders
+              </span>
+              <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
+                {summaryTotals.totalROs}
+              </div>
+              <span className="text-xs font-bold text-purple-600 mt-0.5 block">
+                {summaryTotals.avgROsPerDay.toFixed(1)} ROs / day
+              </span>
             </div>
-            <span className="text-xs font-bold text-slate-600 mt-0.5 block">
-              {overallTotals.totalActualHours > 0 ? `${overallTotals.efficiencyPct.toFixed(1)}% Shop Eff.` : 'Clocked time'}
-            </span>
-          </div>
 
-          {/* 4. Flag Hours */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-indigo-600">
-            <span className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Flag Hours</span>
-            </span>
-            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
-              {overallTotals.totalTechHours.toFixed(1)} <span className="text-xs font-bold text-slate-500">hrs</span>
+            {/* 3. Actual Hours */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-slate-600">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-slate-600" />
+                <span>Actual Hours</span>
+              </span>
+              <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
+                {summaryTotals.totalActualHours.toFixed(1)} <span className="text-xs font-bold text-slate-500">hrs</span>
+              </div>
+              <span className="text-xs font-bold text-slate-600 mt-0.5 block">
+                {summaryTotals.totalActualHours > 0 ? `${summaryTotals.efficiencyPct.toFixed(1)}% Shop Eff.` : 'Clocked time'}
+              </span>
             </div>
-            <span className="text-xs font-bold text-indigo-600 mt-0.5 block">
-              {overallTotals.hoursPerRO.toFixed(2)} hrs / RO
-            </span>
-          </div>
 
-          {/* 5. Total Labor Sales */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-blue-600">
-            <span className="text-xs font-black text-blue-900 uppercase tracking-wider block">
-              Total Labor Sales
-            </span>
-            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
-              {formatCurrency(overallTotals.totalLabor)}
+            {/* 4. Flag Hours */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-indigo-600">
+              <span className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Flag Hours</span>
+              </span>
+              <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
+                {summaryTotals.totalTechHours.toFixed(1)} <span className="text-xs font-bold text-slate-500">hrs</span>
+              </div>
+              <span className="text-xs font-bold text-indigo-600 mt-0.5 block">
+                {summaryTotals.hoursPerRO.toFixed(2)} hrs / RO
+              </span>
             </div>
-            <span className="text-xs font-bold text-blue-600 mt-0.5 block">
-              {overallTotals.laborPct.toFixed(1)}% ({formatCurrency(overallTotals.effectiveLaborRate)}/hr)
-            </span>
-          </div>
 
-          {/* 6. Total Parts Sales */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-amber-600">
-            <span className="text-xs font-black text-amber-900 uppercase tracking-wider block">
-              Total Parts Sales
-            </span>
-            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
-              {formatCurrency(overallTotals.totalParts)}
+            {/* 5. Total Labor Sales */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-blue-600">
+              <span className="text-xs font-black text-blue-900 uppercase tracking-wider block">
+                Total Labor Sales
+              </span>
+              <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
+                {formatCurrency(summaryTotals.totalLabor)}
+              </div>
+              <span className="text-xs font-bold text-blue-600 mt-0.5 block">
+                {summaryTotals.laborPct.toFixed(1)}% ({formatCurrency(summaryTotals.effectiveLaborRate)}/hr)
+              </span>
             </div>
-            <span className="text-xs font-bold text-amber-600 mt-0.5 block">
-              {overallTotals.partsPct.toFixed(1)}% of P&amp;L total
-            </span>
+
+            {/* 6. Total Parts Sales */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs border-l-4 border-l-amber-600">
+              <span className="text-xs font-black text-amber-900 uppercase tracking-wider block">
+                Total Parts Sales
+              </span>
+              <div className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-1">
+                {formatCurrency(summaryTotals.totalParts)}
+              </div>
+              <span className="text-xs font-bold text-amber-600 mt-0.5 block">
+                {summaryTotals.partsPct.toFixed(1)}% of P&amp;L total
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* RO Count by Day, Week & Month Strip */}
+        {/* RO Count by Day, Week, Month & Year to Date Strip */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -733,15 +935,33 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
               </div>
               <div>
                 <h2 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider">
-                  RO Count Tracker — Day, Week &amp; Month
+                  RO Count Tracker — Day, Week, Month &amp; YTD
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Track daily ticket volume alongside weekly and monthly totals ({overallTotals.totalROs} total ROs logged • {overallTotals.avgROsPerDay.toFixed(1)} avg/day).
+                  Track daily ticket volume alongside weekly, monthly, and year-to-date totals ({overallTotals.totalROs} all-time ROs • {overallTotals.avgROsPerDay.toFixed(1)} avg/day).
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              <label htmlFor="ro-tracker-period-select" className="text-[11px] font-bold text-slate-600">
+                View:
+              </label>
+              <select
+                id="ro-tracker-period-select"
+                value={roTrackerPeriodView}
+                onChange={(e) =>
+                  setRoTrackerPeriodView(e.target.value as 'ALL' | 'DAY' | 'WEEK' | 'MONTH' | 'YTD')
+                }
+                className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg font-bold text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden cursor-pointer"
+              >
+                <option value="ALL">All (Day, Week, Month &amp; YTD)</option>
+                <option value="DAY">Day</option>
+                <option value="WEEK">Week</option>
+                <option value="MONTH">Month</option>
+                <option value="YTD">Year to Date (YTD)</option>
+              </select>
+
               <label className="text-[11px] font-bold text-slate-600">Focus Date:</label>
               <input
                 type="date"
@@ -761,7 +981,12 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
               )}
               <button
                 type="button"
-                onClick={() => setActiveTab('RO_COUNT')}
+                onClick={() => {
+                  if (roTrackerPeriodView !== 'ALL') {
+                    setRoViewGrouping(roTrackerPeriodView);
+                  }
+                  setActiveTab('RO_COUNT');
+                }}
                 className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold cursor-pointer transition-colors"
               >
                 Open Full RO Count View
@@ -769,163 +994,224 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div
+            className={
+              roTrackerPeriodView === 'ALL'
+                ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3'
+                : 'grid grid-cols-1 gap-3'
+            }
+          >
             {/* Day RO Count Card */}
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                  Day RO Count ({selectedRODate})
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black font-mono text-slate-900">
-                    {roPeriodOverview.dayROCount}
+            {(roTrackerPeriodView === 'ALL' || roTrackerPeriodView === 'DAY') && (
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                    Day RO Count ({selectedRODate})
                   </span>
-                  <span className="text-xs font-bold text-slate-500">ROs</span>
+                  {roTrackerPeriodView === 'DAY' && (
+                    <span className="text-[11px] font-mono font-bold text-slate-600">
+                      {formatCurrency(roPeriodOverview.dayTotalSales)} P&amp;L
+                    </span>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleStepROCount(selectedRODate, -1)}
-                    className="p-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 cursor-pointer"
-                    title="Subtract 1 RO"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <NumericCellInput
-                    integer
-                    step="1"
-                    value={roPeriodOverview.dayROCount}
-                    ariaLabel="Selected day RO count"
-                    onFocusTrack={() => {
-                      focusedInputsRef.current += 1;
-                    }}
-                    onCommit={(val) => handleUpdateRecord(selectedRODate, { roCount: val })}
-                    onBlurTrack={() => {
-                      focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
-                      flushCloudSync();
-                    }}
-                    className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-mono font-black text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleStepROCount(selectedRODate, 1)}
-                    className="p-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
-                    title="Add 1 RO"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black font-mono text-slate-900">
+                      {roPeriodOverview.dayROCount}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">ROs</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleStepROCount(selectedRODate, -1)}
+                      className="p-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 cursor-pointer"
+                      title="Subtract 1 RO"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <NumericCellInput
+                      integer
+                      step="1"
+                      value={roPeriodOverview.dayROCount}
+                      ariaLabel="Selected day RO count"
+                      onFocusTrack={() => {
+                        focusedInputsRef.current += 1;
+                      }}
+                      onCommit={(val) => handleUpdateRecord(selectedRODate, { roCount: val })}
+                      onBlurTrack={() => {
+                        focusedInputsRef.current = Math.max(0, focusedInputsRef.current - 1);
+                        flushCloudSync();
+                      }}
+                      className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-mono font-black text-xs text-slate-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleStepROCount(selectedRODate, 1)}
+                      className="p-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                      title="Add 1 RO"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                  <span>
+                    {roPeriodOverview.dayRecordExists
+                      ? `Shop Avg: ${overallTotals.avgROsPerDay.toFixed(1)} ROs/day`
+                      : 'No entry yet for this date — adjust above to start'}
+                  </span>
                 </div>
               </div>
-
-              <div className="text-[11px] text-slate-500 flex items-center justify-between">
-                <span>
-                  {roPeriodOverview.dayRecordExists
-                    ? `Shop Avg: ${overallTotals.avgROsPerDay.toFixed(1)} ROs/day`
-                    : 'No entry yet for this date — adjust above to start'}
-                </span>
-              </div>
-            </div>
+            )}
 
             {/* Week RO Count Card */}
-            <div className="p-3.5 rounded-xl bg-purple-50/50 border border-purple-200 flex flex-col justify-between gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-purple-900">
-                  Week RO Count
-                </span>
-                <div className="inline-flex rounded-md bg-white border border-purple-200 p-0.5 text-[10px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setRoWeekCycle('WED_TUE')}
-                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                      roWeekCycle === 'WED_TUE' ? 'bg-purple-600 text-white' : 'text-slate-600'
-                    }`}
-                  >
-                    Wed–Tue
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoWeekCycle('SUN_SAT')}
-                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                      roWeekCycle === 'SUN_SAT' ? 'bg-purple-600 text-white' : 'text-slate-600'
-                    }`}
-                  >
-                    Sun–Sat
-                  </button>
+            {(roTrackerPeriodView === 'ALL' || roTrackerPeriodView === 'WEEK') && (
+              <div className="p-3.5 rounded-xl bg-purple-50/50 border border-purple-200 flex flex-col justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-purple-900">
+                    Week RO Count
+                  </span>
+                  <div className="inline-flex rounded-md bg-white border border-purple-200 p-0.5 text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setRoWeekCycle('WED_TUE')}
+                      className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                        roWeekCycle === 'WED_TUE' ? 'bg-purple-600 text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      Wed–Tue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoWeekCycle('SUN_SAT')}
+                      className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                        roWeekCycle === 'SUN_SAT' ? 'bg-purple-600 text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      Sun–Sat
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black font-mono text-purple-900">
+                      {roPeriodOverview.weekROCount}
+                    </span>
+                    <span className="text-xs font-bold text-purple-700">ROs</span>
+                  </div>
+                  {roPeriodOverview.weekDeltaROs !== null && (
+                    <span
+                      className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
+                        roPeriodOverview.weekDeltaROs >= 0
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {roPeriodOverview.weekDeltaROs >= 0 ? '+' : ''}
+                      {roPeriodOverview.weekDeltaROs} vs prev wk
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-purple-800/80 flex items-center justify-between gap-2">
+                  <span className="truncate font-semibold">{roPeriodOverview.weekLabel}</span>
+                  <span className="font-mono shrink-0">
+                    {roPeriodOverview.weekDaysCount}d • {roPeriodOverview.weekAvgDailyROs.toFixed(1)}/day
+                  </span>
                 </div>
               </div>
-
-              <div className="flex items-baseline justify-between gap-2">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black font-mono text-purple-900">
-                    {roPeriodOverview.weekROCount}
-                  </span>
-                  <span className="text-xs font-bold text-purple-700">ROs</span>
-                </div>
-                {roPeriodOverview.weekDeltaROs !== null && (
-                  <span
-                    className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
-                      roPeriodOverview.weekDeltaROs >= 0
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {roPeriodOverview.weekDeltaROs >= 0 ? '+' : ''}
-                    {roPeriodOverview.weekDeltaROs} vs prev wk
-                  </span>
-                )}
-              </div>
-
-              <div className="text-[11px] text-purple-800/80 flex items-center justify-between gap-2">
-                <span className="truncate font-semibold">{roPeriodOverview.weekLabel}</span>
-                <span className="font-mono shrink-0">
-                  {roPeriodOverview.weekDaysCount}d • {roPeriodOverview.weekAvgDailyROs.toFixed(1)}/day
-                </span>
-              </div>
-            </div>
+            )}
 
             {/* Month RO Count Card */}
-            <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 flex flex-col justify-between gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
-                  Month RO Count
-                </span>
-                <span className="text-[11px] font-bold text-emerald-800 truncate">
-                  {roPeriodOverview.monthLabel}
-                </span>
-              </div>
-
-              <div className="flex items-baseline justify-between gap-2">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black font-mono text-emerald-900">
-                    {roPeriodOverview.monthROCount}
+            {(roTrackerPeriodView === 'ALL' || roTrackerPeriodView === 'MONTH') && (
+              <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 flex flex-col justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-900">
+                    Month RO Count
                   </span>
-                  <span className="text-xs font-bold text-emerald-700">ROs</span>
+                  <span className="text-[11px] font-bold text-emerald-800 truncate">
+                    {roPeriodOverview.monthLabel}
+                  </span>
                 </div>
-                {roPeriodOverview.monthDeltaROs !== null && (
-                  <span
-                    className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
-                      roPeriodOverview.monthDeltaROs >= 0
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {roPeriodOverview.monthDeltaROs >= 0 ? '+' : ''}
-                    {roPeriodOverview.monthDeltaROs} vs prev mo
-                  </span>
-                )}
-              </div>
 
-              <div className="text-[11px] text-emerald-800/80 flex items-center justify-between gap-2">
-                <span>{roPeriodOverview.monthDaysCount} days logged</span>
-                <span className="font-mono font-bold">
-                  {roPeriodOverview.monthAvgDailyROs.toFixed(1)} ROs/day
-                </span>
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black font-mono text-emerald-900">
+                      {roPeriodOverview.monthROCount}
+                    </span>
+                    <span className="text-xs font-bold text-emerald-700">ROs</span>
+                  </div>
+                  {roPeriodOverview.monthDeltaROs !== null && (
+                    <span
+                      className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
+                        roPeriodOverview.monthDeltaROs >= 0
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {roPeriodOverview.monthDeltaROs >= 0 ? '+' : ''}
+                      {roPeriodOverview.monthDeltaROs} vs prev mo
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-emerald-800/80 flex items-center justify-between gap-2">
+                  <span>{roPeriodOverview.monthDaysCount} days logged</span>
+                  <span className="font-mono font-bold">
+                    {roPeriodOverview.monthAvgDailyROs.toFixed(1)} ROs/day
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Year to Date RO Count Card */}
+            {(roTrackerPeriodView === 'ALL' || roTrackerPeriodView === 'YTD') && (
+              <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200 flex flex-col justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-blue-900">
+                    Year to Date RO Count
+                  </span>
+                  <span className="text-[11px] font-bold text-blue-800 font-mono">
+                    {roPeriodOverview.ytdYear} YTD
+                  </span>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black font-mono text-blue-900">
+                      {roPeriodOverview.ytdROCount}
+                    </span>
+                    <span className="text-xs font-bold text-blue-700">ROs</span>
+                  </div>
+                  {roPeriodOverview.ytdDeltaVsPriorYear !== null && (
+                    <span
+                      className={`text-[11px] font-black px-2 py-0.5 rounded font-mono ${
+                        roPeriodOverview.ytdDeltaVsPriorYear >= 0
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {roPeriodOverview.ytdDeltaVsPriorYear >= 0 ? '+' : ''}
+                      {roPeriodOverview.ytdDeltaVsPriorYear} vs prior YTD
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-blue-800/80 flex items-center justify-between gap-2">
+                  <span>
+                    Jan 1 – {selectedRODate} ({roPeriodOverview.ytdDaysCount}d)
+                  </span>
+                  <span className="font-mono font-bold shrink-0">
+                    {roPeriodOverview.ytdAvgDailyROs.toFixed(1)}/day
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1364,43 +1650,29 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
           </div>
         )}
 
-        {/* TAB 4: DEDICATED RO COUNT TRACKER (BY DAY, WEEK & MONTH) */}
+        {/* TAB 4: DEDICATED RO COUNT TRACKER (BY DAY, WEEK, MONTH & YTD) */}
         {activeTab === 'RO_COUNT' && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
                   RO Count Breakdown
                 </span>
-                <div className="inline-flex rounded-lg bg-slate-200 p-0.5 text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setRoViewGrouping('DAY')}
-                    className={`px-3 py-1 rounded-md cursor-pointer transition-all ${
-                      roViewGrouping === 'DAY' ? 'bg-white text-purple-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    By Day ({records.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoViewGrouping('WEEK')}
-                    className={`px-3 py-1 rounded-md cursor-pointer transition-all ${
-                      roViewGrouping === 'WEEK' ? 'bg-white text-purple-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    By Week ({(roWeekCycle === 'WED_TUE' ? wedTueWeeksList : calendarWeeksList).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoViewGrouping('MONTH')}
-                    className={`px-3 py-1 rounded-md cursor-pointer transition-all ${
-                      roViewGrouping === 'MONTH' ? 'bg-white text-purple-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    By Month ({monthlyList.length})
-                  </button>
-                </div>
+                <select
+                  aria-label="RO Count Breakdown grouping"
+                  value={roViewGrouping}
+                  onChange={(e) =>
+                    setRoViewGrouping(e.target.value as 'DAY' | 'WEEK' | 'MONTH' | 'YTD')
+                  }
+                  className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-purple-900 focus:ring-2 focus:ring-purple-500 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="DAY">Day ({records.length} days)</option>
+                  <option value="WEEK">
+                    Week ({(roWeekCycle === 'WED_TUE' ? wedTueWeeksList : calendarWeeksList).length} weeks)
+                  </option>
+                  <option value="MONTH">Month ({monthlyList.length} months)</option>
+                  <option value="YTD">Year to Date ({roPeriodOverview.ytdYear})</option>
+                </select>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -1702,6 +1974,135 @@ export const DailySalesTrackerBoard: React.FC<DailySalesTrackerBoardProps> = ({
                       })}
                     </tbody>
                   </table>
+                </div>
+              );
+            })()}
+
+            {roViewGrouping === 'YTD' && (() => {
+              const ytdRows = roPeriodOverview.ytdMonthlyBreakdown;
+              const maxYtdMonthRO = Math.max(...ytdRows.map(m => m.totalROCount), 1);
+              return (
+                <div className="space-y-0">
+                  <div className="px-4 py-3 bg-blue-50/70 border-b border-blue-200 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-black text-blue-900 uppercase tracking-wider">
+                        {roPeriodOverview.ytdYear} Year-to-Date RO Progression
+                      </span>
+                      <p className="text-[11px] text-blue-800/80">
+                        Jan 1, {roPeriodOverview.ytdYear} through {selectedRODate} ({roPeriodOverview.ytdDaysCount} days logged)
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs font-mono">
+                      <div>
+                        <span className="text-blue-700 font-sans font-bold mr-1">YTD ROs:</span>
+                        <span className="font-black text-blue-950 text-sm">{roPeriodOverview.ytdROCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700 font-sans font-bold mr-1">Avg/Day:</span>
+                        <span className="font-black text-blue-950">{roPeriodOverview.ytdAvgDailyROs.toFixed(1)}</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700 font-sans font-bold mr-1">YTD P&amp;L:</span>
+                        <span className="font-black text-emerald-700">{formatCurrency(roPeriodOverview.ytdTotalSales)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-[11px] uppercase font-black text-slate-600 border-b border-slate-200">
+                          <th className="px-3 py-3">Month</th>
+                          <th className="px-3 py-3 text-center">Days</th>
+                          <th className="px-3 py-3 text-center">Month ROs</th>
+                          <th className="px-3 py-3 text-center">Running YTD ROs</th>
+                          <th className="px-3 py-3 text-center">Avg ROs / Day</th>
+                          <th className="px-3 py-3 w-44">Monthly Volume</th>
+                          <th className="px-3 py-3 text-center">Actual / Flag Hrs</th>
+                          <th className="px-3 py-3 text-right">Total Parts &amp; Labor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {ytdRows.map((month) => {
+                          const barPct = Math.min(100, Math.round((month.totalROCount / maxYtdMonthRO) * 100));
+                          return (
+                            <tr key={month.monthKey} className="hover:bg-blue-50/30 transition-colors">
+                              <td className="px-3 py-3 font-black text-slate-900 text-sm whitespace-nowrap">
+                                {month.monthLabel}
+                              </td>
+                              <td className="px-3 py-3 text-center font-mono font-bold text-slate-700">
+                                {month.daysCount}d
+                              </td>
+                              <td className="px-3 py-3 text-center font-mono font-black text-purple-900 text-sm">
+                                {month.totalROCount} ROs
+                              </td>
+                              <td className="px-3 py-3 text-center font-mono font-black text-blue-900 text-sm">
+                                {month.runningYtdROs} ROs
+                              </td>
+                              <td className="px-3 py-3 text-center font-mono font-bold text-slate-800">
+                                {month.avgDailyROCount.toFixed(1)}
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                  <div
+                                    className="bg-blue-600 h-2.5 rounded-full transition-all"
+                                    style={{ width: `${barPct}%` }}
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-center font-mono font-bold text-indigo-800 whitespace-nowrap">
+                                <span className="text-slate-600">{month.totalActualHours.toFixed(1)}</span>
+                                <span className="text-slate-400 mx-1">/</span>
+                                <span>{month.totalTechHours.toFixed(1)}h</span>
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
+                                {formatCurrency(month.totalSales)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {ytdRows.length === 0 && (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-8 text-center text-slate-500 font-semibold">
+                              No records logged in {roPeriodOverview.ytdYear} through {selectedRODate}.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                      {ytdRows.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-blue-50 border-t-2 border-blue-200 text-xs font-black text-slate-900">
+                            <td className="px-3 py-3 uppercase tracking-wider text-blue-950">
+                              {roPeriodOverview.ytdYear} YTD Total
+                            </td>
+                            <td className="px-3 py-3 text-center font-mono">
+                              {roPeriodOverview.ytdDaysCount}d
+                            </td>
+                            <td className="px-3 py-3 text-center font-mono text-purple-900 text-sm">
+                              {roPeriodOverview.ytdROCount} ROs
+                            </td>
+                            <td className="px-3 py-3 text-center font-mono text-blue-950 text-sm">
+                              {roPeriodOverview.ytdROCount} ROs
+                            </td>
+                            <td className="px-3 py-3 text-center font-mono">
+                              {roPeriodOverview.ytdAvgDailyROs.toFixed(1)}
+                            </td>
+                            <td className="px-3 py-3 text-[11px] text-blue-800 font-semibold">
+                              Cumulative YTD
+                            </td>
+                            <td className="px-3 py-3 text-center font-mono text-indigo-900 whitespace-nowrap">
+                              <span className="text-slate-700">{roPeriodOverview.ytdActualHours.toFixed(1)}</span>
+                              <span className="text-slate-400 mx-1">/</span>
+                              <span>{roPeriodOverview.ytdFlagHours.toFixed(1)}h</span>
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-emerald-700 text-sm">
+                              {formatCurrency(roPeriodOverview.ytdTotalSales)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
                 </div>
               );
             })()}
